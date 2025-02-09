@@ -1,0 +1,48 @@
+project/
+|- project/
+   |- CMakeLists.txt
+   |- src/  
+      |- project-exe/
+         |- CMakeLists.txt
+         |- main.cpp
+      |- project-sim/
+         |- CMakeLists.txt
+         |- project-sim.cpp
+         |- project-sim.hpp
+|- devops/
+   |- project.cmake
+|- builds/
+   |- project/
+      |- Debug
+         |- ./project-exe
+CMakeLists.txt
+
+main.cpp contents:
+```
+#include "project-sim/project-sim.hpp"
+
+int main() {
+    std::cout << "Hello world from main.exe" << std::endl;
+
+    // Defined in project-sim.hpp/cpp. 
+    // std::cout << "Hello world from Project-Sim" << std::endl;
+    printSim();
+}
+```
+
+Building:
+```
+cmake -P devops/project.cmake debug
+```
+
+Executing:
+```
+./builds/project/Debug/project-exe
+```
+
+Execution Output:
+```
+Hello world from main.exe
+Hello world from Project-sim
+```
+

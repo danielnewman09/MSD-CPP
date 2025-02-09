@@ -1,50 +1,56 @@
 from conan import ConanFile
-from conan.tools.cmake import CMake
-from conan.tools.files import copy
 from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
 
-from pathlib import Path
 
-local_script_abs_path = Path(__file__)
-_WORKSPACE_ROOT_DIR = local_script_abs_path.parent.absolute()
-
-
-class MyProjectConan(ConanFile):
-    name = "MyProject"
+class fooRecipe(ConanFile):
+    name = "msd-exe"
     version = "1.0"
-    settings = "os", "arch", "compiler", "build_type"
-    
-    exports_sources = "CMakeLists.txt", "msd/**"
-    
-    requires = [
-        "sfml/2.6.1",
-        "eigen/3.4.0",
-        "gtest/1.15.0"
-    ]
- 
-        
+    package_type = "application"
+
+    # Optional metadata
+    license = "<Put the package license here>"
+    author = "<Put your name here> <And your email here>"
+    url = "<Package recipe repository url here, for issues about the package>"
+    description = "<Description of foo package here>"
+    topics = ("<Put some tag here>", "<here>", "<and here>")
+
+    # Binary configuration
+    settings = "os", "compiler", "build_type", "arch"
+
+    # Sources are located in the same place as this recipe, copy them to the recipe
+    exports_sources = "CMakeLists.txt", "src/*"
+    def layout(self):
+        cmake_layout(self)
+
     def generate(self):
-        for dep in self.dependencies.values():
-            
-            if len(dep.cpp_info.libdirs) > 0:
-                installs_dir = _WORKSPACE_ROOT_DIR.joinpath('./installs/')
-                import pdb
-                pdb.set_trace()
-                copy(self, "*",dep.cpp_info.libdirs[0], dst=installs_dir.absolute(),  excludes=('conaninfo*', 'conanmanifest*'))
-                
-        copy(self, "*",self.cpp_info.libdirs[0], dst=installs_dir.absolute(),  excludes=('conaninfo*', 'conanmanifest*'))
-               
-        
+        deps = CMakeDeps(self)
+        deps.generate()
+        tc = CMakeToolchain(self)
+        tc.generate()
+
+    def build(self):
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
+
     def package(self):
         cmake = CMake(self)
         cmake.install()
-    
+
+    def requirements(self):
+        self.requires("glew/2.2.0")
+        # self.requires("glad/0.1.36")
+        self.requires("opengl/system")
+        self.requires("glfw/3.4")
+        self.requires("glm/cci.20230113")
+        self.requires("sfml/2.6.1")
+        self.requires("eigen/3.4.0")
+
     def build_requirements(self):
         self.tool_requires("cmake/3.22.6")
-            
+
     def layout(self):
         cmake_layout(self)
-        
-    # def package(self):
-    #     copy(self, "*", dst="include", src="include")
-    #     copy(self, "*", dst="lib", src="lib")
+
+    def package_info(self):
+        self.cpp_info.libs = ["msd-sim", "msd-exe"]  # Adjust based on actual library names

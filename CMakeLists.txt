@@ -1,54 +1,32 @@
 cmake_minimum_required(VERSION 3.15)
-project(msd VERSION 1.0 LANGUAGES CXX)
+project(msd-exe VERSION 1.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+include_directories(${CMAKE_SOURCE_DIR}/include)
+link_directories(${CMAKE_SOURCE_DIR}/lib)
 
-# Set the output directories for binaries
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+# Executable for the main msd
+add_executable(msd-exe src/msd-exe/main.cpp)
 
-# Needs to go before we add the subdirectories
-add_executable(msd-exe msd/src/msd-exe/main.cpp)
+# find_package(glfw3 3.4 REQUIRED)
+find_package(SFML CONFIG REQUIRED)
 
-# add_library(msd-sim STATIC
-#     # List your .cpp files here
-#     simulation.cpp
-#     simulation.hpp
-# )
+# Library for msd-sim
+add_library(msd src/msd-sim/msd-sim.cpp)
 
-# Define the main project source directories
-# add_subdirectory(msd/src/msd-sim)
-# add_subdirectory(msd/src/msd-gui)
-add_subdirectory(msd/src/msd-exe)
-
-# Include tests
-# enable_testing()
-# add_subdirectory(msd/test/msd-sim)
-# add_subdirectory(msd/test/msd-gui)
-
-message(STATUS "Parsing Debug/Release...\n")
-
-# Set up additional configurations
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_definitions(-DDEBUG)
-elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_definitions(-DRELEASE)
-endif()
+# Link the library to the executable
+target_link_libraries(${PROJECT_NAME} sfml-graphics)
+target_link_libraries(msd-exe sfml-graphics msd-sim)
 
 
+# target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics)
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 
-# target_link_libraries(msd-gui
-#     sfml-graphics
-# )
+install(TARGETS msd-exe DESTINATION "."
+        RUNTIME DESTINATION bin
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        )
 
-# target_link_libraries(msd-exe
-#     msd-gui
-#     msd-sim)
-
-install(TARGETS msd-exe DESTINATION "." 
-    RUNTIME DESTINATION bin
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib)
+# Add tests
+enable_testing()
+add_subdirectory(test)
