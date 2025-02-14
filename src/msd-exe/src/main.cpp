@@ -1,5 +1,7 @@
 #include <SFML/Graphics.hpp>
-#include "../msd-sim/msd-sim.hpp"
+// #include "../msd-sim/msd-sim.hpp"
+#include "Environment/src/WorldModel.hpp"
+#include "Environment/src/Platform.hpp"
 
 int main() {
     // Create a window

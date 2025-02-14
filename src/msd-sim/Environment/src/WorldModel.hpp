@@ -4,7 +4,7 @@
 #include <vector>
 #include <chrono>
 
-#include "msd-sim/Environment/src/Platform.hpp"
+#include "Environment/src/Platform.hpp"
 
 namespace msd_sim
 {
