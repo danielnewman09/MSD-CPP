@@ -1,0 +1,8 @@
+BasedOnStyle: LLVM
+
+ColumnLimit: 80
+
+PackConstructorInitializers: Never
+BreakBeforeBraces: GNU
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never

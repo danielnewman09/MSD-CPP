@@ -18,4 +18,5 @@ target_include_directories(${MSD_SIM_NAME} PUBLIC
 # Add all sources (adjust as needed)
 target_sources(${MSD_SIM_NAME} PRIVATE
     ${ENV_SRC_FILES}
+    ${AGENT_SRC_FILES}
 )
