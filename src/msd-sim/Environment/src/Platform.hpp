@@ -4,10 +4,8 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
-
-#include "Agent/src/BaseAgent.hpp"
-#include "Environment/src/PlatformState.hpp"
-
+#include "msd-sim/Environment/src/PlatformState.hpp"
+#include "msd-sim/Agent/src/BaseAgent.hpp"
 namespace msd_sim
 {
 

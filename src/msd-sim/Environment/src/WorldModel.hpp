@@ -4,7 +4,8 @@
 #include <chrono>
 #include <vector>
 
-#include "Environment/src/Platform.hpp"
+#include "msd-sim/Environment/src/Platform.hpp"
+// #include "Environment/src/Platform.hpp"
 
 namespace msd_sim
 {
@@ -15,7 +16,7 @@ public:
   WorldModel() = default;
   ~WorldModel() = default;
 
-  void update(); // Update the world model
+  void update(std::chrono::milliseconds simTime); // Update the world model
 
   void addPlatform(Platform &&platform);
 
@@ -26,8 +27,6 @@ private:
   //! Current time in the world
   std::chrono::milliseconds time_;
 
-  //! Time step for the world model
-  std::chrono::milliseconds timeStep_;
 };
 
 } // namespace msd_sim

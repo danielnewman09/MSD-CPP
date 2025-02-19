@@ -1,35 +1,22 @@
-#include <SFML/Graphics.hpp>
-// #include "../msd-sim/msd-sim.hpp"
-#include "Environment/src/WorldModel.hpp"
-#include "Environment/src/Platform.hpp"
+#include <chrono>
+#include "msd-sim/Environment/src/WorldModel.hpp"
+#include "msd-sim/Environment/src/Platform.hpp"
+#include "msd-sim/Engine.hpp"
+// #include "Environment/src/WorldModel.hpp"
+// #include "Environment/src/Platform.hpp"
+// #include "Engine.hpp"
 
-// 
 int main() {
-    // Create a window
-    sf::RenderWindow window(sf::VideoMode(800, 600), "SFML Circle");
+    msd_sim::Engine engine{};
 
-    // Create a circle
-    sf::CircleShape circle(50); // Radius of 50
-    circle.setFillColor(sf::Color::Green); // Fill color
-    circle.setPosition(375, 275); // Position the circle in the center
+    std::chrono::milliseconds simTime{0};
+    std::chrono::milliseconds dt{10};
 
-    // Main loop
-    while (window.isOpen()) {
-        sf::Event event;
-        while (window.pollEvent(event)) {
-            if (event.type == sf::Event::Closed)
-                window.close();
-        }
+    while(true)
+    {
+        engine.update(simTime);
 
-        // Clear the window
-        window.clear(sf::Color::Black);
-
-        // Draw the circle
-        window.draw(circle);
-
-        // Display what has been drawn
-        window.display();
+        simTime += dt;
     }
-
-    return 0;
+        return 0;
 }

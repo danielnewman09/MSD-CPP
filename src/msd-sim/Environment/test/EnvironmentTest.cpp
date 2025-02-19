@@ -1,6 +1,6 @@
 
-#include "Environment/src/Platform.hpp"
-#include "Environment/src/WorldModel.hpp"
+#include "msd-sim/Environment/src/Platform.hpp"
+#include "msd-sim/Environment/src/WorldModel.hpp"
 #include <gtest/gtest.h>
 
 TEST(EnvTestSuite, WorldModelInitialization)

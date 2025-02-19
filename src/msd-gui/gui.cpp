@@ -1,33 +1,35 @@
-#include "msd-gui/gui.hpp"
-#include <iostream>
+#include <SFML/Graphics.hpp>
+// #include "../msd-sim/msd-sim.hpp"
+#include "Environment/src/WorldModel.hpp"
+#include "Environment/src/Platform.hpp"
 
-// HelloWorldGui::HelloWorldGui()
-//     : window(sf::VideoMode(800, 600), "Hello World GUI") {
-    
-//     // Load a font
-//     if (!font.loadFromFile("path/to/your/font.ttf")) {
-//         std::cerr << "Error loading font" << std::endl;
-//         // Handle error appropriately
-//     }
+// 
+int main() {
+    // Create a window
+    sf::RenderWindow window(sf::VideoMode(800, 600), "SFML Circle");
 
-//     // Set up the text
-//     text.setFont(font);
-//     text.setString("Hello, World!");
-//     text.setCharacterSize(50); // Set the size of the text
-//     text.setFillColor(sf::Color::White); // Set the color of the text
-//     text.setPosition(200, 250); // Center the text in the window
-// }
+    // Create a circle
+    sf::CircleShape circle(50); // Radius of 50
+    circle.setFillColor(sf::Color::Green); // Fill color
+    circle.setPosition(375, 275); // Position the circle in the center
 
-// void HelloWorldGui::run() {
-//     while (window.isOpen()) {
-//         sf::Event event;
-//         while (window.pollEvent(event)) {
-//             if (event.type == sf::Event::Closed)
-//                 window.close();
-//         }
+    // Main loop
+    while (window.isOpen()) {
+        sf::Event event;
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed)
+                window.close();
+        }
 
-//         window.clear(); // Clear the window
-//         window.draw(text); // Draw the text
-//         window.display(); // Display what was drawn
-//     }
-// }
+        // Clear the window
+        window.clear(sf::Color::Black);
+
+        // Draw the circle
+        window.draw(circle);
+
+        // Display what has been drawn
+        window.display();
+    }
+
+    return 0;
+}

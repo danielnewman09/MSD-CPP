@@ -2,7 +2,13 @@
 
 #include <iostream>
 
-void printSim()
+namespace msd_sim {
+
+Engine::Engine() : worldModel_{}
+{}
+
+void Engine::update(std::chrono::milliseconds simTime)
 {
-    std::cout << "Hello From MSD-Sim!" << std::endl;
+    worldModel_.update(simTime);
+}
 }
