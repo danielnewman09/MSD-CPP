@@ -40,6 +40,7 @@ class fooRecipe(ConanFile):
     def requirements(self):
         self.requires("glew/2.2.0")
         # self.requires("glad/0.1.36")
+        self.requires("gtest/1.15.0")
         self.requires("opengl/system")
         self.requires("glfw/3.4")
         self.requires("glm/cci.20230113")

@@ -7,6 +7,7 @@ add_subdirectory(src)
 
 
 include_directories(msd_sim ${MSD_SIM_DIR}../)
+include_directories(msd_sim_test ${MSD_SIM_DIR}../)
 include_directories(msd_exe ${MSD_EXE_DIR}../)
 
 # find_package(glfw3 3.4 REQUIRED)

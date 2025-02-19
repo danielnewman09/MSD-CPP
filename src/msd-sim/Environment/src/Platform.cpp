@@ -1,5 +1,9 @@
-#include "Platform.hpp"
+#include "Environment/src/Platform.hpp"
 #include <iostream>
+
+
+namespace msd_sim
+{
 
 // Constructor
 Platform::Platform(uint32_t id)
@@ -29,3 +33,4 @@ void Platform::update(const std::chrono::milliseconds &currTime)
   // Update the last update time to current time
   lastUpdateTime_ = currTime;
 }
+} 

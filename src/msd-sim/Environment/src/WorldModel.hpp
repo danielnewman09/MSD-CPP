@@ -12,8 +12,8 @@ namespace msd_sim
 class WorldModel
 {
 public:
-  WorldModel();
-  ~WorldModel();
+  WorldModel() = default;
+  ~WorldModel() = default;
 
   void update(); // Update the world model
 
