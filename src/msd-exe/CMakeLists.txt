@@ -1,9 +1,5 @@
 
 set(MSD_EXE_NAME msd_exe)
-    
-set(MSD_HPP_FILES ${MSD_HPP_FILES}
-    ${CMAKE_CURRENT_SOURCE_DIR}/Engine.hpp
-)
 
 add_executable(${MSD_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(${MSD_EXE_NAME} PROPERTIES LINKER_LANGUAGE CXX)

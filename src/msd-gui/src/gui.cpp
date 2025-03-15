@@ -3,7 +3,6 @@
 #include "Environment/src/WorldModel.hpp"
 #include "Environment/src/Platform.hpp"
 
-// 
 int main() {
     // Create a window
     sf::RenderWindow window(sf::VideoMode(800, 600), "SFML Circle");

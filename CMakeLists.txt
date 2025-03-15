@@ -8,7 +8,6 @@ add_subdirectory(src)
 include_directories(msd_exe ${MSD_EXE_DIR}../)
 
 # find_package(glfw3 3.4 REQUIRED)
-find_package(SFML CONFIG REQUIRED)
 
 install(TARGETS ${MSD_EXE_NAME} DESTINATION "."
         RUNTIME DESTINATION bin
