@@ -1,7 +1,6 @@
 #include "Environment/src/Platform.hpp"
 #include <iostream>
 
-
 namespace msd_sim
 {
 
@@ -33,4 +32,4 @@ void Platform::update(const std::chrono::milliseconds &currTime)
   // Update the last update time to current time
   lastUpdateTime_ = currTime;
 }
-} 
+} // namespace msd_sim

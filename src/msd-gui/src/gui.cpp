@@ -1,5 +1,6 @@
 #include <SFML/Graphics.hpp>
-// #include "../msd-sim/msd-sim.hpp"
+#include <SFML/Window/Keyboard.hpp>
+
 #include "Environment/src/WorldModel.hpp"
 #include "Environment/src/Platform.hpp"
 
