@@ -1,3 +1,5 @@
 build/*
+CMakeFiles/*
 CMakeCache.txt
 CMakeUserPresets.json
+src/msd-db/src/Database.cpp

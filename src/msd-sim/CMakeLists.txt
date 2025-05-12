@@ -10,7 +10,6 @@ include_directories(msd_sim ${MSD_SIM_DIR}../)
 include_directories(msd_sim_test ${MSD_SIM_DIR}../)
 
 add_library(${MSD_SIM_NAME})
-find_package(TinyOrm CONFIG REQUIRED)
 set_target_properties(${MSD_SIM_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
 # Add all relevant include directories
