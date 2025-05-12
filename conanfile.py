@@ -48,6 +48,7 @@ class fooRecipe(ConanFile):
         self.requires("sfml/2.6.1")
         self.requires("eigen/3.4.0")
         self.requires('sqlite3/3.47.0')
+        self.requires('spdlog/1.12.0')
 
     def build_requirements(self):
         self.tool_requires("cmake/3.22.6")

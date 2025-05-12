@@ -6,9 +6,12 @@ set(MSD_DB_NAME msd_db)
 add_library(${MSD_DB_NAME} ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(SQLite3 REQUIRED)
+find_package(spdlog REQUIRED)
+
 target_link_libraries(${MSD_DB_NAME} 
   PUBLIC
     SQLite::SQLite3
+    spdlog::spdlog
   )
 
 
