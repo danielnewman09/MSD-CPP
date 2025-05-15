@@ -1,29 +1,19 @@
-# msd-db/test/CMakeLists.txt
-find_package(GTest REQUIRED)
+# src/msd-db/test/CMakeLists.txt
 
-set(MSD_DB_TEST_NAME msd_db_test)
+# Check if the root testing framework is available
+if(NOT COMMAND add_msd_test)
+  message(FATAL_ERROR "Test framework not found. Please include the top-level test/CMakeLists.txt first.")
+endif()
 
-add_executable(${MSD_DB_TEST_NAME} 
+# Database tests
+add_msd_test(
+  NAME db_unit_tests
+  SOURCES 
     DatabaseTest.cpp
-)
-
-target_link_libraries(${MSD_DB_TEST_NAME}
-    PRIVATE
-        msd_db
-    PUBLIC
-        GTest::gtest
-        GTest::gtest_main
-)
-
-target_include_directories(${MSD_DB_TEST_NAME} PUBLIC
-    ${GTEST_INCLUDE_DIRS}
+    # Add more test files here as you create them
+  LIBS 
+    ${MSD_DB_NAME}
+  INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )
-
-# Set C++17 standard for filesystem support
-target_compile_features(${MSD_DB_TEST_NAME} PUBLIC cxx_std_17)
-
-# Add test to CTest
-include(GoogleTest)
-gtest_discover_tests(${MSD_DB_TEST_NAME})

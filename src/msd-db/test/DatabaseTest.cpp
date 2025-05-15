@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "msd-db/src/Database.hpp"
+#include <msd-db/include/Database.hpp>
 #include <filesystem>
 #include <spdlog/sinks/null_sink.h>
 

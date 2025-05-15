@@ -1,4 +1,4 @@
-// Database.hpp
+// src/msd-db/include/msd-db/Database.hpp
 #ifndef DATABASE_HPP
 #define DATABASE_HPP
 
@@ -35,7 +35,7 @@ public:
    * @throws std::runtime_error if the database cannot be opened
    */
   Database(std::string dbUrl, 
-           std::shared_ptr<spdlog::logger> logger = nullptr,
+           std::shared_ptr<spdlog::logger> logger,
            DBOpenCondition openCond = DBOpenCondition::OpenReadWrite);
   
   /**
