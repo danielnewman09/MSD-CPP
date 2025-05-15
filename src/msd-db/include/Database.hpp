@@ -13,6 +13,9 @@
 namespace msd_db
 {
 
+/*!
+ * @brief Enum class for SQLite open conditions
+ */
 enum class DBOpenCondition : int
 {
   OpenReadOnly = SQLITE_OPEN_READONLY,
