@@ -1,11 +1,14 @@
 cmake_minimum_required(VERSION 3.15)
+
+set(PROJECT_NAME msd)
+
 project(msd VERSION 1.0 LANGUAGES CXX)
 
 # Enable testing at the top level
 enable_testing()
 
 # Set compiler options
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -16,9 +19,6 @@ elseif(MSVC)
   add_compile_options(/W4)
 endif()
 
-# Include the source list definitions
-include(sourcelist.cmake)
-
 # Option for building tests
 option(BUILD_TESTING "Build the testing tree" ON)
 
@@ -28,12 +28,9 @@ if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
 
-# IMPORTANT: Test framework now available before adding source directories
-add_subdirectory(src)
+add_subdirectory(msd)
 
-# Installation rules
-install(TARGETS ${MSD_EXE_NAME} DESTINATION "."
-        RUNTIME DESTINATION bin
-        ARCHIVE DESTINATION lib
-        LIBRARY DESTINATION lib
-        )
+
+set(CPACK_PROJECT_NAME ${PROJECT_NAME})
+set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
+include(CPack)

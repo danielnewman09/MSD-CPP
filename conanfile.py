@@ -2,8 +2,8 @@ from conan import ConanFile
 from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
 from conan.tools.scm import Git
 
-class fooRecipe(ConanFile):
-    name = "msd-exe"
+class msd(ConanFile):
+    name = "msd"
     version = "1.0"
     package_type = "application"
 
@@ -24,6 +24,22 @@ class fooRecipe(ConanFile):
         deps = CMakeDeps(self)
         deps.generate()
         tc = CMakeToolchain(self)
+        tc.variables["CMAKE_CXX_STANDARD"] = "20"
+        tc.variables["CMAKE_CXX_STANDARD_REQUIRED"] = "ON"
+
+        build_type = str(self.settings.build_type).lower()
+        tc.variables["CMAKE_RUNTIME_OUTPUT_DIRECTORY"] = \
+            f"${{CMAKE_BINARY_DIR}}/{build_type}"
+        tc.variables["CMAKE_LIBRARY_OUTPUT_DIRECTORY"] = \
+            f"${{CMAKE_BINARY_DIR}}/{build_type}"
+        tc.variables["CMAKE_ARCHIVE_OUTPUT_DIRECTORY"] = \
+            f"${{CMAKE_BINARY_DIR}}/{build_type}"
+
+        # Set install prefix to repository root's installs directory
+        import os
+        install_prefix = os.path.abspath(os.path.join(self.recipe_folder, "..", "..", "installs"))
+        tc.variables["CMAKE_INSTALL_PREFIX"] = install_prefix
+
         tc.generate()
 
     def build(self):
@@ -36,12 +52,8 @@ class fooRecipe(ConanFile):
         cmake.install()
 
     def requirements(self):
-        self.requires("glew/2.2.0")
         self.requires("gtest/1.15.0")
-        self.requires("opengl/system")
-        self.requires("glfw/3.4")
-        self.requires("glm/cci.20230113")
-        self.requires("sfml/2.6.1")
+        self.requires("sfml/3.0.1")
         self.requires("eigen/3.4.0")
         self.requires('sqlite3/3.47.0')
         self.requires('spdlog/1.12.0')
@@ -51,6 +63,7 @@ class fooRecipe(ConanFile):
 
     def layout(self):
         cmake_layout(self)
+        self.folders.base_install = "installs"
 
     def package_info(self):
         self.cpp_info.libs = ["msd-sim", "msd-exe"]  # Adjust based on actual library names

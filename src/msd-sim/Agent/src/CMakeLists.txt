@@ -1,6 +1,0 @@
-set(AGENT_SRC_FILES ${AGENT_SRC_FILES} 
-    BaseAgent.cpp
-)
-
-set(MSD_HPP_FILES ${MSD_HPP_FILES}
-    ${CMAKE_CURRENT_SOURCE_DIR}/BaseAgent.hpp)

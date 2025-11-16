@@ -1,18 +1,82 @@
 {
     "version": "2.0.0",
+    "inputs": [
+        {
+            "id": "buildType",
+            "description": "Build Type",
+            "type": "pickString",
+            "options": [
+                "Debug",
+                "Release"
+            ],
+            "default": "Release"
+        }
+    ],
     "tasks": [
         {
-            "label": "clang-format",
+            "label": "Conan Build",
             "type": "shell",
-            "command": "clang-format",
+            "command": "conan",
             "args": [
-                "-i", // In-place formatting
-                "--style=file", // Use the .clang-format file in the project root
-                "${file}" // The current file being edited
+                "build",
+                ".",
+                "--build=missing",
+                "-s",
+                "build_type=${input:buildType}"
             ],
             "group": {
                 "kind": "build",
                 "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Conan Install",
+            "type": "shell",
+            "command": "conan",
+            "args": [
+                "install",
+                ".",
+                "--build=missing",
+                "-s",
+                "build_type=${input:buildType}"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "CMake Build",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${command:cmake.buildDirectory}"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
             },
             "problemMatcher": [
                 "$gcc"
