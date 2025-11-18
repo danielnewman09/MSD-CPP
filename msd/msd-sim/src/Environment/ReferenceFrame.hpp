@@ -81,14 +81,6 @@ public:
   }
 
   /**
-   * @brief Get the rotation matrix of this frame
-   */
-  const Eigen::Matrix3d& getRotationMatrix() const
-  {
-    return rotation_;
-  }
-
-  /**
    * @brief Get the Eulerian angles (roll, pitch, yaw) in radians
    * @return Eigen::Vector3d with (roll, pitch, yaw)
    */

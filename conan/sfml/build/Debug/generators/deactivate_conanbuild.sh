@@ -1,1 +1,0 @@
-. "/Users/danielnewman/Documents/GitHub/MSD-CPP/conan/sfml/build/Debug/generators/deactivate_conanbuildenv-debug-armv8.sh"

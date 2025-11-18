@@ -1,6 +1,7 @@
 add_subdirectory(Agent)
 add_subdirectory(Algorithms)
 add_subdirectory(Environment)
+add_subdirectory(Utils)
 
 
 target_sources(${MSD_SIM_NAME} PRIVATE

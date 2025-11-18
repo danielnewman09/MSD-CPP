@@ -2,8 +2,6 @@
 set(MSD_SIM_NAME msd_sim)
 set(MSD_SIM_TEST_NAME msd_sim_test)
 
-
-
 # Create the library
 add_library(${MSD_SIM_NAME})
 set_target_properties(${MSD_SIM_NAME} PROPERTIES
@@ -15,6 +13,7 @@ set_target_properties(${MSD_SIM_NAME} PROPERTIES
 # Find required packages first
 find_package(spdlog REQUIRED)
 find_package(Eigen3 REQUIRED NO_MODULE)
+find_package(SDL3 REQUIRED CONFIG)
 
 # Add subdirectories to collect sources from each module
 add_subdirectory(src)
@@ -23,8 +22,9 @@ add_subdirectory(test)
 # Link libraries after finding them
 target_link_libraries(${MSD_SIM_NAME}
         PUBLIC
-                spdlog::spdlog
-                Eigen3::Eigen)
+          spdlog::spdlog
+          Eigen3::Eigen
+          SDL3::SDL3-shared)
 
 # Add include directories to support "msd-sim/src/..." includes
 target_include_directories(${MSD_SIM_NAME}

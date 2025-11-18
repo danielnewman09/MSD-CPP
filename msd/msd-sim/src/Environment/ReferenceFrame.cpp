@@ -25,13 +25,13 @@ Coordinate ReferenceFrame::globalToLocal(const Coordinate& globalCoord) const
 {
   // Translate to frame origin, then rotate to local orientation
   Coordinate translated = globalCoord - origin_;
-  return rotation_ * translated;
+  return rotation_.transpose() * translated;
 }
 
 Coordinate ReferenceFrame::localToGlobal(const Coordinate& localCoord) const
 {
   // Rotate to global orientation, then translate to global position
-  Coordinate rotated = rotation_.transpose() * localCoord;
+  Coordinate rotated = rotation_ * localCoord;
   return rotated + origin_;
 }
 

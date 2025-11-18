@@ -58,6 +58,11 @@ public:
     return normalize();
   }
 
+  void setRad(double rad)
+  {
+    rad_ = rad;
+  }
+
   /**
    * Get the angle in degrees
    */

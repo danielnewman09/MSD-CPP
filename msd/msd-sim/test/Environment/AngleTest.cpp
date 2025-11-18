@@ -1,16 +1,9 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include "msd-sim/src/Environment/Angle.hpp"
+#include "msd-sim/src/Utils/utils.hpp"
 
 using namespace msd_sim;
-
-// Helper function for comparing doubles with tolerance
-constexpr double TOLERANCE = 1e-10;
-
-bool almostEqual(double a, double b, double tolerance = TOLERANCE)
-{
-  return std::abs(a - b) < tolerance;
-}
 
 // ============================================================================
 // Constructor Tests
@@ -25,7 +18,7 @@ TEST(AngleTest, DefaultConstructor)
 
 TEST(AngleTest, ConstructorWithRadians)
 {
-  Angle angle(M_PI / 4, Angle::Norm::PI);
+  Angle angle{M_PI / 4, Angle::Norm::PI};
   EXPECT_DOUBLE_EQ(angle.getRad(), M_PI / 4);
   EXPECT_EQ(angle.getNormalization(), Angle::Norm::PI);
 }
@@ -33,17 +26,17 @@ TEST(AngleTest, ConstructorWithRadians)
 TEST(AngleTest, ConstructorWithNormalizationPI)
 {
   // Test angle that needs normalization to (-pi, pi]
-  Angle angle(5.0, Angle::Norm::PI);
+  Angle angle{5.0, Angle::Norm::PI};
   double expected = 5.0 - 2.0 * M_PI;  // Should wrap to (-pi, pi]
-  EXPECT_TRUE(almostEqual(angle.getRad(), expected));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.getRad(), expected));
 }
 
 TEST(AngleTest, ConstructorWithNormalizationTwoPI)
 {
   // Test angle that needs normalization to [0, 2pi)
-  Angle angle(-M_PI / 2, Angle::Norm::TWO_PI);
+  Angle angle{-M_PI / 2, Angle::Norm::TWO_PI};
   double expected = -M_PI / 2 + 2.0 * M_PI;  // Should wrap to [0, 2pi)
-  EXPECT_TRUE(almostEqual(angle.getRad(), expected));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.getRad(), expected));
 }
 
 TEST(AngleTest, FromRadiansFactory)
@@ -55,12 +48,8 @@ TEST(AngleTest, FromRadiansFactory)
 TEST(AngleTest, FromDegreesFactory)
 {
   Angle angle = Angle::fromDegrees(90.0, Angle::Norm::PI);
-  EXPECT_TRUE(almostEqual(angle.getRad(), M_PI / 2));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.getRad(), M_PI / 2));
 }
-
-// ============================================================================
-// Conversion Tests
-// ============================================================================
 
 TEST(AngleTest, ToRadians)
 {
@@ -71,14 +60,14 @@ TEST(AngleTest, ToRadians)
 TEST(AngleTest, ToDegrees)
 {
   Angle angle = Angle::fromRadians(M_PI);
-  EXPECT_TRUE(almostEqual(angle.toDeg(), 180.0)) << angle.toDeg();
+  EXPECT_TRUE(msd_sim::almostEqual(angle.toDeg(), 180.0)) << angle.toDeg();
 }
 
 TEST(AngleTest, DegreesRoundTrip)
 {
   double degInput = 45.0;
   Angle angle = Angle::fromDegrees(degInput);
-  EXPECT_TRUE(almostEqual(angle.toDeg(), degInput));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.toDeg(), degInput));
 }
 
 TEST(AngleTest, RadiansRoundTrip)
@@ -147,7 +136,7 @@ TEST(AngleTest, Addition)
   Angle a1 = Angle::fromRadians(M_PI / 4);
   Angle a2 = Angle::fromRadians(M_PI / 4);
   Angle result = a1 + a2;
-  EXPECT_TRUE(almostEqual(result.getRad(), M_PI / 2));
+  EXPECT_TRUE(msd_sim::almostEqual(result.getRad(), M_PI / 2));
 }
 
 TEST(AngleTest, AdditionWithNormalization)
@@ -165,7 +154,7 @@ TEST(AngleTest, Subtraction)
   Angle a1 = Angle::fromRadians(M_PI / 2);
   Angle a2 = Angle::fromRadians(M_PI / 4);
   Angle result = a1 - a2;
-  EXPECT_TRUE(almostEqual(result.getRad(), M_PI / 4));
+  EXPECT_TRUE(msd_sim::almostEqual(result.getRad(), M_PI / 4));
 }
 
 TEST(AngleTest, SubtractionWithNormalization)
@@ -182,28 +171,28 @@ TEST(AngleTest, MultiplicationByScalar)
 {
   Angle angle = Angle::fromRadians(M_PI / 4);
   Angle result = angle * 2.0;
-  EXPECT_TRUE(almostEqual(result.getRad(), M_PI / 2));
+  EXPECT_TRUE(msd_sim::almostEqual(result.getRad(), M_PI / 2));
 }
 
 TEST(AngleTest, ScalarMultiplication)
 {
   Angle angle = Angle::fromRadians(M_PI / 4);
   Angle result = 2.0 * angle;
-  EXPECT_TRUE(almostEqual(result.getRad(), M_PI / 2));
+  EXPECT_TRUE(msd_sim::almostEqual(result.getRad(), M_PI / 2));
 }
 
 TEST(AngleTest, DivisionByScalar)
 {
   Angle angle = Angle::fromRadians(M_PI);
   Angle result = angle / 2.0;
-  EXPECT_TRUE(almostEqual(result.getRad(), M_PI / 2));
+  EXPECT_TRUE(msd_sim::almostEqual(result.getRad(), M_PI / 2));
 }
 
 TEST(AngleTest, UnaryMinus)
 {
   Angle angle = Angle::fromRadians(M_PI / 4);
   Angle result = -angle;
-  EXPECT_TRUE(almostEqual(result.getRad(), -M_PI / 4));
+  EXPECT_TRUE(msd_sim::almostEqual(result.getRad(), -M_PI / 4));
 }
 
 // ============================================================================
@@ -214,28 +203,28 @@ TEST(AngleTest, CompoundAddition)
 {
   Angle angle = Angle::fromRadians(M_PI / 4);
   angle += Angle::fromRadians(M_PI / 4);
-  EXPECT_TRUE(almostEqual(angle.getRad(), M_PI / 2));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.getRad(), M_PI / 2));
 }
 
 TEST(AngleTest, CompoundSubtraction)
 {
   Angle angle = Angle::fromRadians(M_PI / 2);
   angle -= Angle::fromRadians(M_PI / 4);
-  EXPECT_TRUE(almostEqual(angle.getRad(), M_PI / 4));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.getRad(), M_PI / 4));
 }
 
 TEST(AngleTest, CompoundMultiplication)
 {
   Angle angle = Angle::fromRadians(M_PI / 4);
   angle *= 2.0;
-  EXPECT_TRUE(almostEqual(angle.getRad(), M_PI / 2));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.getRad(), M_PI / 2));
 }
 
 TEST(AngleTest, CompoundDivision)
 {
   Angle angle = Angle::fromRadians(M_PI);
   angle /= 2.0;
-  EXPECT_TRUE(almostEqual(angle.getRad(), M_PI / 2));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.getRad(), M_PI / 2));
 }
 
 // ============================================================================
@@ -322,19 +311,19 @@ TEST(AngleTest, ZeroAngle)
 TEST(AngleTest, FullCircleTwoPI)
 {
   Angle angle = Angle::fromRadians(2.0 * M_PI, Angle::Norm::TWO_PI);
-  EXPECT_TRUE(almostEqual(angle.getRad(), 0.0));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.getRad(), 0.0));
 }
 
 TEST(AngleTest, FullCirclePI)
 {
   Angle angle = Angle::fromRadians(2.0 * M_PI, Angle::Norm::PI);
-  EXPECT_TRUE(almostEqual(angle.getRad(), 0.0));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.getRad(), 0.0));
 }
 
 TEST(AngleTest, NegativeFullCircle)
 {
   Angle angle = Angle::fromRadians(-2.0 * M_PI, Angle::Norm::TWO_PI);
-  EXPECT_TRUE(almostEqual(angle.getRad(), 0.0));
+  EXPECT_TRUE(msd_sim::almostEqual(angle.getRad(), 0.0));
 }
 
 TEST(AngleTest, VeryLargeAngle)
@@ -364,23 +353,23 @@ TEST(AngleTest, AngleDifferenceWraparound)
   Angle a2 = Angle::fromDegrees(350.0, Angle::Norm::TWO_PI);
   Angle diff = a1 - a2;
   // The difference should be 20 degrees (wrapping around)
-  EXPECT_TRUE(almostEqual(std::abs(diff.toDeg()), 20.0, 1.0));
+  EXPECT_TRUE(msd_sim::almostEqual(std::abs(diff.toDeg()), 20.0, 1.0));
 }
 
 TEST(AngleTest, HeadingCalculation)
 {
   // Test typical heading/yaw angle in [0, 2pi)
   Angle heading = Angle::fromDegrees(270.0, Angle::Norm::TWO_PI);
-  EXPECT_TRUE(almostEqual(heading.toDeg(), 270.0));
-  EXPECT_TRUE(almostEqual(heading.getRad(), 3.0 * M_PI / 2.0));
+  EXPECT_TRUE(msd_sim::almostEqual(heading.toDeg(), 270.0));
+  EXPECT_TRUE(msd_sim::almostEqual(heading.getRad(), 3.0 * M_PI / 2.0));
 }
 
 TEST(AngleTest, RollPitchInPIRange)
 {
   // Roll and pitch typically use (-pi, pi] range
   Angle roll = Angle::fromDegrees(45.0, Angle::Norm::PI);
-  EXPECT_TRUE(almostEqual(roll.toDeg(), 45.0));
+  EXPECT_TRUE(msd_sim::almostEqual(roll.toDeg(), 45.0));
 
   Angle pitch = Angle::fromDegrees(-30.0, Angle::Norm::PI);
-  EXPECT_TRUE(almostEqual(pitch.toDeg(), -30.0));
+  EXPECT_TRUE(msd_sim::almostEqual(pitch.toDeg(), -30.0));
 }

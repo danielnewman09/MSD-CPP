@@ -1,1 +1,0 @@
-. "/Users/danielnewman/Documents/GitHub/MSD-CPP/conan/sfml/build/Debug/generators/conanrunenv-debug-armv8.sh"
