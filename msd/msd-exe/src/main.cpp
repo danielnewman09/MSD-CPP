@@ -1,20 +1,13 @@
 #include <chrono>
+#include "msd-gui/src/SDLApp.hpp"
 #include "msd-sim/src/Engine.hpp"
 #include "msd-sim/src/Environment/Platform.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
 
 int main()
 {
-  msd_sim::Engine engine{};
+  auto& application = msd_gui::SDLApplication::getInstance();
 
-  std::chrono::milliseconds simTime{0};
-  std::chrono::milliseconds dt{10};
-
-  while (true)
-  {
-    engine.update(simTime);
-
-    simTime += dt;
-  }
+  application.runApp();
   return 0;
 }

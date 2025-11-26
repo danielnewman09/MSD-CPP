@@ -1,7 +1,7 @@
 
 set(MSD_GUI_NAME msd_gui)
 
-add_executable(${MSD_GUI_NAME})
+add_library(${MSD_GUI_NAME})
 
 set_target_properties(${MSD_GUI_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
@@ -12,6 +12,8 @@ find_package(SDL3_image REQUIRED CONFIG)
 find_package(SDL3_mixer REQUIRED CONFIG)
 find_package(SDL3_ttf REQUIRED CONFIG)
 
+add_subdirectory(src)
+
 target_link_libraries(${MSD_GUI_NAME}
   PRIVATE
     spdlog::spdlog
@@ -21,16 +23,33 @@ target_link_libraries(${MSD_GUI_NAME}
     SDL3_mixer::SDL3_mixer-shared
     SDL3_ttf::SDL3_ttf-shared)
 
-
-# Add all relevant include directories
-target_include_directories(${MSD_GUI_NAME} PUBLIC
-$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>  
-$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../>  
+# Add include directories to support "msd-sim/src/..." includes
+target_include_directories(${MSD_GUI_NAME}
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+        $<INSTALL_INTERFACE:include>
 )
 
-# Add all sources (adjust as needed)
-target_sources(${MSD_GUI_NAME} PRIVATE
-src/gui.cpp
-    )
+# Copy Content folder to build directory (where binaries are built)
+add_custom_command(TARGET ${MSD_GUI_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Content
+        $<TARGET_FILE_DIR:${MSD_GUI_NAME}>/Content
+    COMMENT "Copying Content folder to build directory"
+)
 
+# Installation rules
+install(TARGETS ${MSD_GUI_NAME}
+        RUNTIME DESTINATION bin
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        )
+
+# Install Content folder to installation directory
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/Content
+        DESTINATION bin
+        )
+
+# Install headers using the variable
+install(FILES ${HEADER_FILES}
+        DESTINATION include/${MSD_SIM_NAME}) 

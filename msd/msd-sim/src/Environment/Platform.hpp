@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include "msd-sim/src/Agent/BaseAgent.hpp"
-#include "msd-sim/src/Environment/PlatformState.hpp"
+#include "msd-sim/src/Environment/InertialState.hpp"
 namespace msd_sim
 {
 
@@ -23,7 +23,7 @@ public:
 
 private:
   //! State of the platform
-  PlatformState state_;
+  InertialState state_;
 
   //! Agent controlling the platform
   std::unique_ptr<BaseAgent> agent_;

@@ -3,7 +3,16 @@
     "vendor": {
         "conan": {}
     },
+    "configurePresets": [
+        {
+            "name": "xcode",
+            "generator": "Xcode",
+            "binaryDir": "${sourceDir}/build-xcode",
+            "toolchainFile": "${sourceDir}/build-xcode/conan_toolchain.cmake"
+        }
+    ],
     "include": [
+        "build/Debug/generators/CMakePresets.json",
         "build/Release/generators/CMakePresets.json"
     ]
 }

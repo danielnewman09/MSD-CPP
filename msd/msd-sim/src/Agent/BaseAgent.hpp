@@ -1,7 +1,7 @@
 #ifndef BASEAGENT_HPP
 #define BASEAGENT_HPP
 
-#include "msd-sim/src/Environment/PlatformState.hpp"
+#include "msd-sim/src/Environment/InertialState.hpp"
 
 namespace msd_sim
 {
@@ -10,7 +10,7 @@ class BaseAgent
 public:
   virtual ~BaseAgent() = default;
 
-  virtual PlatformState updateState(const PlatformState& currentState) = 0;
+  virtual InertialState updateState(const InertialState& currentState) = 0;
 };
 }  // namespace msd_sim
 

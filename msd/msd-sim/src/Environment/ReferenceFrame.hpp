@@ -48,7 +48,31 @@ public:
    * @param globalCoord Coordinate in global frame
    * @return Coordinate in this local frame
    */
+  void globalToLocalInPlace(Coordinate& globalCoord) const;
+
+  /**
+   * @brief Transform a coordinate from global frame to this local frame
+   * @param globalCoord Coordinate in global frame
+   * @return Coordinate in this local frame
+   */
   Coordinate globalToLocal(const Coordinate& globalCoord) const;
+
+  /**
+   * @brief Batch transform coordinates from global frame to this local frame
+   *
+   * Efficiently transforms all coordinates in a single matrix operation.
+   * Each column represents a 3D coordinate.
+   *
+   * @param globalCoords 3xN matrix of coordinates in global frame (modified in place)
+   */
+  void globalToLocalBatch(Eigen::Matrix3Xd& globalCoords) const;
+
+  /**
+   * @brief Transform a coordinate from this local frame to global frame
+   * @param localCoord Coordinate in this local frame
+   * @return Coordinate in global frame
+   */
+  void localToGlobalInPlace(Coordinate& localCoord) const;
 
   /**
    * @brief Transform a coordinate from this local frame to global frame
@@ -56,6 +80,16 @@ public:
    * @return Coordinate in global frame
    */
   Coordinate localToGlobal(const Coordinate& localCoord) const;
+
+  /**
+   * @brief Batch transform coordinates from this local frame to global frame
+   *
+   * Efficiently transforms all coordinates in a single matrix operation.
+   * Each column represents a 3D coordinate.
+   *
+   * @param localCoords 3xN matrix of coordinates in local frame (modified in place)
+   */
+  void localToGlobalBatch(Eigen::Matrix3Xd& localCoords) const;
 
   /**
    * @brief Set the origin of this frame in global coordinates
@@ -85,6 +119,18 @@ public:
    * @return Eigen::Vector3d with (roll, pitch, yaw)
    */
   EulerAngles& getEulerAngles();
+
+  /**
+   * @brief Get the rotation matrix
+   * @return Const reference to the 3x3 rotation matrix
+   */
+  const Eigen::Matrix3d& getRotation() const { return rotation_; }
+
+  /**
+   * @brief Get the origin (const version)
+   * @return Const reference to the origin coordinate
+   */
+  const Coordinate& getOrigin() const { return origin_; }
 
 private:
   /*!

@@ -3,5 +3,57 @@
   // Hover to view descriptions of existing attributes.
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
-  "configurations": []
+  "configurations": [
+    {
+      "name": "Debug msd_gui",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Debug/debug/msd_gui",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "CMake Build",
+      "stopAtEntry": false,
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "lldb"
+    },
+    {
+      "name": "Debug msd_gui (No Build)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Debug/debug/msd_gui",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "lldb"
+    },
+    {
+      "name": "Release msd_gui",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Release/release/msd_gui",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "CMake Build",
+      "stopAtEntry": false,
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "lldb"
+    },
+    {
+      "name": "Debug msd_gui (Stop at Entry)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Debug/debug/msd_gui",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "CMake Build",
+      "stopAtEntry": true,
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "lldb"
+    }
+  ]
 }

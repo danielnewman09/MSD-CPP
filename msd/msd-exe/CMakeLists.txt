@@ -9,6 +9,7 @@ find_package(spdlog REQUIRED)
 target_link_libraries(${MSD_EXE_NAME} 
     PRIVATE 
       msd_sim
+      msd_gui
       spdlog::spdlog)
 
 # Add all relevant include directories

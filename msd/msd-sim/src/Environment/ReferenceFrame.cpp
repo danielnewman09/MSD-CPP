@@ -21,6 +21,13 @@ ReferenceFrame::ReferenceFrame(const Coordinate& origin,
   updateRotationMatrix();
 }
 
+void ReferenceFrame::globalToLocalInPlace(Coordinate& globalCoord) const
+{
+  // Translate to frame origin, then rotate to local orientation
+  globalCoord -= origin_;
+  globalCoord.applyOnTheLeft(rotation_.transpose());
+}
+
 Coordinate ReferenceFrame::globalToLocal(const Coordinate& globalCoord) const
 {
   // Translate to frame origin, then rotate to local orientation
@@ -28,11 +35,34 @@ Coordinate ReferenceFrame::globalToLocal(const Coordinate& globalCoord) const
   return rotation_.transpose() * translated;
 }
 
+void ReferenceFrame::globalToLocalBatch(Eigen::Matrix3Xd& globalCoords) const
+{
+  // Translate all coordinates to frame origin
+  globalCoords.colwise() -= origin_;
+  // Rotate all coordinates to local orientation in one matrix multiply
+  globalCoords.applyOnTheLeft(rotation_.transpose());
+}
+
+void ReferenceFrame::localToGlobalInPlace(Coordinate& localCoord) const
+{
+  // Rotate to global orientation, then translate to global position
+  localCoord.applyOnTheLeft(rotation_);
+  localCoord += origin_;
+}
+
 Coordinate ReferenceFrame::localToGlobal(const Coordinate& localCoord) const
 {
   // Rotate to global orientation, then translate to global position
   Coordinate rotated = rotation_ * localCoord;
   return rotated + origin_;
+}
+
+void ReferenceFrame::localToGlobalBatch(Eigen::Matrix3Xd& localCoords) const
+{
+  // Rotate all coordinates to global orientation in one matrix multiply
+  localCoords.applyOnTheLeft(rotation_);
+  // Translate all coordinates to global position
+  localCoords.colwise() += origin_;
 }
 
 void ReferenceFrame::setOrigin(const Coordinate& origin)
