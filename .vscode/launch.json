@@ -5,10 +5,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug msd_gui",
+      "name": "Debug msd_exe",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/build/Debug/debug/msd_gui",
+      "program": "${workspaceFolder}/build/Debug/debug/msd_exe",
       "args": [],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "CMake Build",
@@ -18,10 +18,10 @@
       "MIMode": "lldb"
     },
     {
-      "name": "Debug msd_gui (No Build)",
+      "name": "Debug msd_exe (No Build)",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/build/Debug/debug/msd_gui",
+      "program": "${workspaceFolder}/build/Debug/debug/msd_exe",
       "args": [],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
@@ -30,10 +30,10 @@
       "MIMode": "lldb"
     },
     {
-      "name": "Release msd_gui",
+      "name": "Release msd_exe",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/build/Release/release/msd_gui",
+      "program": "${workspaceFolder}/build/Release/release/msd_exe",
       "args": [],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "CMake Build",
@@ -43,10 +43,10 @@
       "MIMode": "lldb"
     },
     {
-      "name": "Debug msd_gui (Stop at Entry)",
+      "name": "Debug msd_exe (Stop at Entry)",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/build/Debug/debug/msd_gui",
+      "program": "${workspaceFolder}/build/Debug/debug/msd_exe",
       "args": [],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "CMake Build",

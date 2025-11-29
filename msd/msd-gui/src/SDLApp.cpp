@@ -60,6 +60,53 @@ void SDLApplication::handleEvents()
       case SDL_EVENT_QUIT:
         status_ = Status::Exiting;
         break;
+      case SDL_EVENT_KEY_DOWN:
+        switch (event.key.key)
+        {
+          case SDLK_W:
+            cameraPosZ_ -= moveSpeed_;  // Move forward (toward negative Z)
+            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            break;
+          case SDLK_S:
+            cameraPosZ_ += moveSpeed_;  // Move backward (toward positive Z)
+            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            break;
+          case SDLK_A:
+            cameraPosX_ -= moveSpeed_;
+            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            break;
+          case SDLK_D:
+            cameraPosX_ += moveSpeed_;
+            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            break;
+          case SDLK_UP:
+            cameraRotX_ += rotSpeed_;
+            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            break;
+          case SDLK_DOWN:
+            cameraRotX_ -= rotSpeed_;
+            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            break;
+          case SDLK_LEFT:
+            cameraRotY_ -= rotSpeed_;
+            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            break;
+          case SDLK_RIGHT:
+            cameraRotY_ += rotSpeed_;
+            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            break;
+          case SDLK_Q:
+            cameraPosY_ += moveSpeed_;
+            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            break;
+          case SDLK_E:
+            cameraPosY_ -= moveSpeed_;
+            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            break;
+          default:
+            break;
+        }
+        break;
       default:
         break;
     }

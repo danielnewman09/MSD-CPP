@@ -60,6 +60,14 @@ private:
 
   std::unique_ptr<SDL_Window, SDLWindowDeleter> window_;
   std::unique_ptr<GPUManager> gpuManager_;
+
+  float cameraPosX_{0.0f};
+  float cameraPosY_{0.0f};
+  float cameraPosZ_{5.0f};  // Camera starts 5 units away on positive Z
+  float cameraRotX_{0.0f};
+  float cameraRotY_{0.0f};
+  const float moveSpeed_{0.1f};
+  const float rotSpeed_{0.05f};
 };
 
 }  // namespace msd_gui

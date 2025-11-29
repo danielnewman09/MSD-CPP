@@ -14,16 +14,14 @@ class SDLException;  // Forward declaration
 
 struct Vertex
 {
-  float x, y, z;        // Position (3D for shader compatibility)
-  float r, g, b, a;     // Color (RGBA for shader compatibility)
+  float x, y, z;     // Position (3D)
+  float r, g, b;     // Color (RGB)
 };
 
 // Transform uniform buffer data (must match shader layout)
 struct TransformData
 {
-  float offsetX;
-  float offsetY;
-  float padding[2];  // Align to 16 bytes for uniform buffer
+  float mvpMatrix[16];  // 4x4 model-view-projection matrix (column-major)
 };
 
 class GPUManager
@@ -42,8 +40,8 @@ public:
 
   void render();
 
-  // Set the position offset for the triangle
-  void setPosition(float x, float y);
+  // Set the camera position and rotation
+  void setCameraTransform(float posX, float posY, float posZ, float rotX, float rotY, float rotZ);
 
 private:
   struct SDLDeviceDeleter
@@ -85,6 +83,15 @@ private:
 
   std::unique_ptr<SDL_GPUDevice, SDLDeviceDeleter> device_;
   std::string basePath_;
+
+  float cameraPosX_{0.0f};
+  float cameraPosY_{0.0f};
+  float cameraPosZ_{5.0f};  // Camera starts 5 units away on positive Z, looking toward origin
+  float cameraRotX_{0.0f};
+  float cameraRotY_{0.0f};
+  float cameraRotZ_{0.0f};
+
+  void updateTransformMatrix();
 };
 
 }  // namespace msd_gui
