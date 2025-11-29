@@ -1,4 +1,5 @@
 #include "msd-gui/src/SDLApp.hpp"
+#include "msd-gui/src/SDLUtils.hpp"
 
 #include <iostream>
 #include <vector>

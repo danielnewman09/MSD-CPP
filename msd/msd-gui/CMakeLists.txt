@@ -30,13 +30,24 @@ target_include_directories(${MSD_GUI_NAME}
         $<INSTALL_INTERFACE:include>
 )
 
-# Copy Content folder to build directory (where binaries are built)
-add_custom_command(TARGET ${MSD_GUI_NAME} POST_BUILD
+# Collect all compiled shader files
+file(GLOB_RECURSE SHADER_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Content/Shaders/Compiled/*.msl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Content/Shaders/Compiled/*.spv"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Content/Shaders/Compiled/*.dxil"
+)
+
+# Create a custom target that always runs to copy Content folder
+add_custom_target(CopyContent ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Content
         $<TARGET_FILE_DIR:${MSD_GUI_NAME}>/Content
     COMMENT "Copying Content folder to build directory"
+    DEPENDS ${SHADER_FILES}
 )
+
+# Make sure CopyContent runs after the library is built
+add_dependencies(CopyContent ${MSD_GUI_NAME})
 
 # Installation rules
 install(TARGETS ${MSD_GUI_NAME}

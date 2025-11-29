@@ -1,5 +1,7 @@
 #include "msd-gui/src/SDLGPUManager.hpp"
+#include "msd-gui/src/SDLUtils.hpp"
 
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
@@ -8,15 +10,6 @@
 
 namespace msd_gui
 {
-
-class SDLException final : public std::runtime_error
-{
-public:
-  explicit SDLException(const std::string& message)
-    : std::runtime_error(message + ": " + SDL_GetError())
-  {
-  }
-};
 
 GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
   : window_{window}, basePath_{basePath}
@@ -40,22 +33,139 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
   std::cout << "Using GPU device driver: "
             << SDL_GetGPUDeviceDriver(device_.get()) << std::endl;
 
-  vertexShader_ =
-    UniqueShader(loadShader(device_.get(), "RawTriangle.vert", 0, 0, 0, 0),
-                 ShaderDeleter{device_.get()});
+  auto vertexShader =
+    loadShader("PositionColorOffset.vert", *device_, basePath_, 0, 1, 0, 0);
 
-  if (!vertexShader_.get())
+  if (!vertexShader.get())
   {
     throw SDLException("Failed to load vertexShader");
   }
 
-  fragmentShader_ =
-    UniqueShader(loadShader(device_.get(), "SolidColor.frag", 0, 0, 0, 0),
-                 ShaderDeleter{device_.get()});
+  auto fragmentShader =
+    loadShader("SolidColor.frag", *device_, basePath_, 0, 0, 0, 0);
 
-  if (!fragmentShader_.get())
+  if (!fragmentShader.get())
   {
     throw SDLException("Failed to load fragmentShader");
+  }
+
+  // Create vertex buffer with customizable triangle vertices
+  std::vector<Vertex> vertices = {
+    {-0.25f, -0.5f, 1.0f, 0.0f, 0.0f},  // Bottom-left: Red
+    {0.25f, -0.5f, 0.0f, 1.0f, 0.0f},   // Bottom-right: Green
+    {0.0f, 0.5f, 0.0f, 0.0f, 1.0f}      // Top-center: Blue
+  };
+
+  SDL_GPUBufferCreateInfo bufferCreateInfo = {
+    .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
+    .size = static_cast<uint32_t>(vertices.size() * sizeof(Vertex))};
+
+  vertexBuffer_ =
+    UniqueBuffer(SDL_CreateGPUBuffer(device_.get(), &bufferCreateInfo),
+                 BufferDeleter{device_.get()});
+
+  if (!vertexBuffer_)
+  {
+    throw SDLException("Failed to create vertex buffer!");
+  }
+
+  // Upload vertex data to GPU
+  SDL_GPUTransferBufferCreateInfo transferBufferCreateInfo = {
+    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD, .size = bufferCreateInfo.size};
+
+  SDL_GPUTransferBuffer* transferBuffer =
+    SDL_CreateGPUTransferBuffer(device_.get(), &transferBufferCreateInfo);
+
+  if (!transferBuffer)
+  {
+    throw SDLException("Failed to create transfer buffer!");
+  }
+
+  void* transferData =
+    SDL_MapGPUTransferBuffer(device_.get(), transferBuffer, false);
+  std::memcpy(transferData, vertices.data(), bufferCreateInfo.size);
+  SDL_UnmapGPUTransferBuffer(device_.get(), transferBuffer);
+
+  SDL_GPUCommandBuffer* uploadCmdBuffer =
+    SDL_AcquireGPUCommandBuffer(device_.get());
+  SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(uploadCmdBuffer);
+
+  SDL_GPUTransferBufferLocation transferBufferLocation = {
+    .transfer_buffer = transferBuffer, .offset = 0};
+
+  SDL_GPUBufferRegion bufferRegion = {
+    .buffer = vertexBuffer_.get(), .offset = 0, .size = bufferCreateInfo.size};
+
+  SDL_UploadToGPUBuffer(
+    copyPass, &transferBufferLocation, &bufferRegion, false);
+  SDL_EndGPUCopyPass(copyPass);
+  SDL_SubmitGPUCommandBuffer(uploadCmdBuffer);
+
+  SDL_ReleaseGPUTransferBuffer(device_.get(), transferBuffer);
+
+  // Create uniform buffer for transform
+  transform_ = {0.0f, 0.0f, {0.0f, 0.0f}};  // Initialize at origin
+
+  SDL_GPUBufferCreateInfo uniformBufferCreateInfo = {
+    .usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
+    .size = sizeof(TransformData)};
+
+  uniformBuffer_ =
+    UniqueBuffer(SDL_CreateGPUBuffer(device_.get(), &uniformBufferCreateInfo),
+                 BufferDeleter{device_.get()});
+
+  if (!uniformBuffer_)
+  {
+    throw SDLException("Failed to create uniform buffer!");
+  }
+
+  // Create the pipelines
+  SDL_GPUColorTargetDescription colorTargetDesc = {
+    .format = SDL_GetGPUSwapchainTextureFormat(device_.get(), &window)};
+
+  // Define vertex input layout
+  SDL_GPUVertexAttribute vertexAttributes[] = {
+    {.location = 0,
+     .buffer_slot = 0,
+     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,  // x, y position
+     .offset = 0},
+    {.location = 1,
+     .buffer_slot = 0,
+     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // r, g, b color
+     .offset = sizeof(float) * 2}};
+
+  SDL_GPUVertexBufferDescription vertexBufferDesc = {
+    .slot = 0,
+    .pitch = sizeof(Vertex),
+    .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+    .instance_step_rate = 0};
+
+  SDL_GPUVertexInputState vertexInputState = {
+    .vertex_buffer_descriptions = &vertexBufferDesc,
+    .num_vertex_buffers = 1,
+    .vertex_attributes = vertexAttributes,
+    .num_vertex_attributes = 2};
+
+  SDL_GPUGraphicsPipelineCreateInfo pipelineCreateInfo = {
+    .vertex_input_state = vertexInputState,
+    .target_info =
+      {
+        .num_color_targets = 1,
+        .color_target_descriptions = &colorTargetDesc,
+      },
+    .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+    .vertex_shader = vertexShader.get(),
+    .fragment_shader = fragmentShader.get(),
+  };
+  pipelineCreateInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+
+  pipeline_ = UniquePipeline(
+    SDL_CreateGPUGraphicsPipeline(device_.get(), &pipelineCreateInfo),
+    PipelineDeleter{device_.get()});
+
+  if (!pipeline_)
+  {
+    throw SDLException("Failed to create line pipeline!");
   }
 }
 
@@ -68,6 +178,9 @@ void GPUManager::render()
   {
     throw SDLException("Couldn't acquire command buffer");
   }
+
+  // Upload transform data to uniform buffer
+  SDL_PushGPUVertexUniformData(commandBuffer, 0, &transform_, sizeof(TransformData));
 
   SDL_GPUTexture* swapchainTexture;
 
@@ -85,6 +198,13 @@ void GPUManager::render()
     SDL_GPURenderPass* renderPass{SDL_BeginGPURenderPass(
       commandBuffer, colorTargets.data(), colorTargets.size(), NULL)};
 
+    SDL_BindGPUGraphicsPipeline(renderPass, pipeline_.get());
+
+    SDL_GPUBufferBinding vertexBufferBinding = {.buffer = vertexBuffer_.get(),
+                                                .offset = 0};
+    SDL_BindGPUVertexBuffers(renderPass, 0, &vertexBufferBinding, 1);
+
+    SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
     SDL_EndGPURenderPass(renderPass);
   }
 
@@ -94,99 +214,11 @@ void GPUManager::render()
   }
 }
 
-SDL_GPUShader* GPUManager::loadShader(SDL_GPUDevice* device,
-                                      const char* shaderFilename,
-                                      uint32_t samplerCount,
-                                      uint32_t uniformBufferCount,
-                                      uint32_t storageBufferCount,
-                                      uint32_t storageTextureCount)
+void GPUManager::setPosition(float x, float y)
 {
-  // Auto-detect the shader stage from the file name for convenience
-  SDL_GPUShaderStage stage;
-  if (SDL_strstr(shaderFilename, ".vert"))
-  {
-    stage = SDL_GPU_SHADERSTAGE_VERTEX;
-  }
-  else if (SDL_strstr(shaderFilename, ".frag"))
-  {
-    stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-  }
-  else
-  {
-    SDL_Log("Invalid shader stage!");
-    return nullptr;
-  }
-
-  char fullPath[256];
-  SDL_GPUShaderFormat backendFormats = SDL_GetGPUShaderFormats(device_.get());
-  SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_INVALID;
-  const char* entrypoint;
-
-  if (backendFormats & SDL_GPU_SHADERFORMAT_SPIRV)
-  {
-    SDL_snprintf(fullPath,
-                 sizeof(fullPath),
-                 "%sContent/Shaders/Compiled/SPIRV/%s.spv",
-                 basePath_.c_str(),
-                 shaderFilename);
-    format = SDL_GPU_SHADERFORMAT_SPIRV;
-    entrypoint = "main";
-  }
-  else if (backendFormats & SDL_GPU_SHADERFORMAT_MSL)
-  {
-    SDL_snprintf(fullPath,
-                 sizeof(fullPath),
-                 "%sContent/Shaders/Compiled/MSL/%s.msl",
-                 basePath_.c_str(),
-                 shaderFilename);
-    format = SDL_GPU_SHADERFORMAT_MSL;
-    entrypoint = "main0";
-  }
-  else if (backendFormats & SDL_GPU_SHADERFORMAT_DXIL)
-  {
-    SDL_snprintf(fullPath,
-                 sizeof(fullPath),
-                 "%sContent/Shaders/Compiled/DXIL/%s.dxil",
-                 basePath_.c_str(),
-                 shaderFilename);
-    format = SDL_GPU_SHADERFORMAT_DXIL;
-    entrypoint = "main";
-  }
-  else
-  {
-    SDL_Log("%s", "Unrecognized backend shader format!");
-    return nullptr;
-  }
-
-  size_t codeSize;
-  void* code = SDL_LoadFile(fullPath, &codeSize);
-  if (code == nullptr)
-  {
-    SDL_Log("Failed to load shader from disk! %s", fullPath);
-    return nullptr;
-  }
-
-  SDL_GPUShaderCreateInfo shaderInfo = {
-    .code = static_cast<const uint8_t*>(code),
-    .code_size = codeSize,
-    .entrypoint = entrypoint,
-    .format = format,
-    .stage = stage,
-    .num_samplers = samplerCount,
-    .num_uniform_buffers = uniformBufferCount,
-    .num_storage_buffers = storageBufferCount,
-    .num_storage_textures = storageTextureCount};
-
-  SDL_GPUShader* shader = SDL_CreateGPUShader(device, &shaderInfo);
-  if (shader == NULL)
-  {
-    SDL_Log("Failed to create shader!");
-    SDL_free(code);
-    return NULL;
-  }
-
-  SDL_free(code);
-  return shader;
+  transform_.offsetX = x;
+  transform_.offsetY = y;
 }
+
 
 }  // namespace msd_gui

@@ -12,6 +12,20 @@ namespace msd_gui
 
 class SDLException;  // Forward declaration
 
+struct Vertex
+{
+  float x, y, z;        // Position (3D for shader compatibility)
+  float r, g, b, a;     // Color (RGBA for shader compatibility)
+};
+
+// Transform uniform buffer data (must match shader layout)
+struct TransformData
+{
+  float offsetX;
+  float offsetY;
+  float padding[2];  // Align to 16 bytes for uniform buffer
+};
+
 class GPUManager
 {
 public:
@@ -28,6 +42,9 @@ public:
 
   void render();
 
+  // Set the position offset for the triangle
+  void setPosition(float x, float y);
+
 private:
   struct SDLDeviceDeleter
   {
@@ -37,29 +54,36 @@ private:
     }
   };
 
-  struct ShaderDeleter
+  struct PipelineDeleter
   {
     SDL_GPUDevice* device;
-    void operator()(SDL_GPUShader* s) const
+    void operator()(SDL_GPUGraphicsPipeline* p) const
     {
-      SDL_ReleaseGPUShader(device, s);
+      SDL_ReleaseGPUGraphicsPipeline(device, p);
     }
   };
 
-  using UniqueShader = std::unique_ptr<SDL_GPUShader, ShaderDeleter>;
+  struct BufferDeleter
+  {
+    SDL_GPUDevice* device;
+    void operator()(SDL_GPUBuffer* b) const
+    {
+      SDL_ReleaseGPUBuffer(device, b);
+    }
+  };
+
+  using UniquePipeline =
+    std::unique_ptr<SDL_GPUGraphicsPipeline, PipelineDeleter>;
+  using UniqueBuffer = std::unique_ptr<SDL_GPUBuffer, BufferDeleter>;
 
   SDL_Window& window_;
 
-  SDL_GPUShader* loadShader(SDL_GPUDevice* device,
-                            const char* shaderFilename,
-                            uint32_t samplerCount,
-                            uint32_t uniformBufferCount,
-                            uint32_t storageBufferCount,
-                            uint32_t storageTextureCount);
+  UniquePipeline pipeline_;
+  UniqueBuffer vertexBuffer_;
+  UniqueBuffer uniformBuffer_;
+  TransformData transform_;
 
   std::unique_ptr<SDL_GPUDevice, SDLDeviceDeleter> device_;
-  UniqueShader vertexShader_;
-  UniqueShader fragmentShader_;
   std::string basePath_;
 };
 

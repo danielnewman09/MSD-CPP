@@ -53,7 +53,6 @@ class msd(ConanFile):
 
     def requirements(self):
         self.requires("gtest/1.15.0")
-        self.requires("sfml/3.0.1")
         self.requires("eigen/3.4.0")
         self.requires('sqlite3/3.47.0')
         self.requires('spdlog/1.12.0')

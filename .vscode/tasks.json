@@ -10,6 +10,16 @@
                 "Release"
             ],
             "default": "Release"
+        },
+        {
+            "id": "conanBuildPolicy",
+            "description": "Conan Build Policy",
+            "type": "pickString",
+            "options": [
+                "missing",
+                "all"
+            ],
+            "default": "missing"
         }
     ],
     "tasks": [
@@ -81,6 +91,96 @@
             "problemMatcher": [
                 "$gcc"
             ]
+        },
+        {
+            "label": "Create Conan Dependencies",
+            "type": "shell",
+            "command": [
+                "echo '=== Building Conan Dependencies ===';",
+                "conan create conan/spirv_cross --build=${input:conanBuildPolicy} -s build_type=Release;",
+                // "# conan create conan/dxc --build=${input:conanBuildPolicy} -s build_type=Release;",
+                "conan create conan/sdl_shadercross --build=${input:conanBuildPolicy} -s build_type=Release;",
+                "conan create conan/sdl --build=${input:conanBuildPolicy} -s build_type=Debug;",
+                "conan create conan/sdl --build=${input:conanBuildPolicy} -s build_type=Release;",
+                "conan create conan/sdl_image --build=${input:conanBuildPolicy} -s build_type=Release;",
+                "conan create conan/sdl_image --build=${input:conanBuildPolicy} -s build_type=Debug;",
+                "conan create conan/sdl_mixer --build=${input:conanBuildPolicy} -s build_type=Release;",
+                "conan create conan/sdl_mixer --build=${input:conanBuildPolicy} -s build_type=Debug;",
+                "conan create conan/sdl_ttf --build=${input:conanBuildPolicy} -s build_type=Release;",
+                "conan create conan/sdl_ttf --build=${input:conanBuildPolicy} -s build_type=Debug;",
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Install DXC",
+            "type": "shell",
+            "command": [
+                "conan create conan/dxc --build=${input:conanBuildPolicy} -s build_type=Release;",
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "DXC_INSTALL_DIR": "${workspaceFolder}/installs/dxc"
+                }
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Install Shadercross",
+            "type": "shell",
+            "command": [
+                "conan create conan/sdl_shadercross --build=${input:conanBuildPolicy} -s build_type=Release;",
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "SHADERCROSS_INSTALL_DIR": "${workspaceFolder}/installs/sdl_shadercross"
+                }
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Compile Shaders",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "msd/msd-gui/src/Content/Shaders/Source/compile.sh"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "PATH": "${workspaceFolder}/installs/sdl_shadercross/bin:${workspaceFolder}/installs/dxc/bin:${env:PATH}"
+                }
+            },
+            "dependsOn": [
+                "Install DXC",
+                "Install Shadercross"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
         }
     ]
 }

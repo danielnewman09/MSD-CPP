@@ -2,7 +2,6 @@
 #define SDL_APP_HPP
 
 #include <memory>
-#include <stdexcept>
 #include <string>
 
 #include <SDL3/SDL.h>
@@ -11,15 +10,6 @@
 
 namespace msd_gui
 {
-
-class SDLException final : public std::runtime_error
-{
-public:
-  explicit SDLException(const std::string& message)
-    : std::runtime_error(message + ": " + SDL_GetError())
-  {
-  }
-};
 
 class SDLApplication
 {
@@ -64,8 +54,6 @@ private:
   ~SDLApplication() = default;
 
   void handleEvents();
-
-  void render();
 
   Status status_;
   std::string basePath_;

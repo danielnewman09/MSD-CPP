@@ -1,4 +1,10 @@
+#!/bin/bash
 # Requires shadercross CLI installed from SDL_shadercross
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 for filename in *.vert.hlsl; do
     if [ -f "$filename" ]; then
         shadercross "$filename" -o "../Compiled/SPIRV/${filename/.hlsl/.spv}"

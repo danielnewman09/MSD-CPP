@@ -5,3 +5,4 @@ CMakeUserPresets.json
 src/msd-db/src/Database.cpp
 models/*
 */.DS_Store
+installs/*
