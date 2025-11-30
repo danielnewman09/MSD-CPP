@@ -155,14 +155,26 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
   transform_.mvpMatrix[15] = 1.0f;  // W (homogeneous)
 
   SDL_Log("Using simple test matrix (scale by 0.5):");
-  SDL_Log("  [%.2f %.2f %.2f %.2f]", transform_.mvpMatrix[0], transform_.mvpMatrix[1],
-          transform_.mvpMatrix[2], transform_.mvpMatrix[3]);
-  SDL_Log("  [%.2f %.2f %.2f %.2f]", transform_.mvpMatrix[4], transform_.mvpMatrix[5],
-          transform_.mvpMatrix[6], transform_.mvpMatrix[7]);
-  SDL_Log("  [%.2f %.2f %.2f %.2f]", transform_.mvpMatrix[8], transform_.mvpMatrix[9],
-          transform_.mvpMatrix[10], transform_.mvpMatrix[11]);
-  SDL_Log("  [%.2f %.2f %.2f %.2f]", transform_.mvpMatrix[12], transform_.mvpMatrix[13],
-          transform_.mvpMatrix[14], transform_.mvpMatrix[15]);
+  SDL_Log("  [%.2f %.2f %.2f %.2f]",
+          transform_.mvpMatrix[0],
+          transform_.mvpMatrix[1],
+          transform_.mvpMatrix[2],
+          transform_.mvpMatrix[3]);
+  SDL_Log("  [%.2f %.2f %.2f %.2f]",
+          transform_.mvpMatrix[4],
+          transform_.mvpMatrix[5],
+          transform_.mvpMatrix[6],
+          transform_.mvpMatrix[7]);
+  SDL_Log("  [%.2f %.2f %.2f %.2f]",
+          transform_.mvpMatrix[8],
+          transform_.mvpMatrix[9],
+          transform_.mvpMatrix[10],
+          transform_.mvpMatrix[11]);
+  SDL_Log("  [%.2f %.2f %.2f %.2f]",
+          transform_.mvpMatrix[12],
+          transform_.mvpMatrix[13],
+          transform_.mvpMatrix[14],
+          transform_.mvpMatrix[15]);
 
   // TEMPORARILY COMMENT OUT THE CAMERA TRANSFORM
   updateTransformMatrix();
@@ -213,18 +225,20 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
       {
         .num_color_targets = 1,
         .color_target_descriptions = &colorTargetDesc,
-        .has_depth_stencil_target = false,  // Disable for now
-        // .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+        .has_depth_stencil_target = true,
+        .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
       },
     .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
     .vertex_shader = vertexShader.get(),
     .fragment_shader = fragmentShader.get(),
   };
   pipelineCreateInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-  pipelineCreateInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;  // Disable backface culling for now
-  pipelineCreateInfo.depth_stencil_state.enable_depth_test = false;  // Disable depth testing for now
-  pipelineCreateInfo.depth_stencil_state.enable_depth_write = false;
-  pipelineCreateInfo.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
+  pipelineCreateInfo.rasterizer_state.cull_mode =
+    SDL_GPU_CULLMODE_NONE;  // Disable backface culling
+  pipelineCreateInfo.depth_stencil_state.enable_depth_test = true;
+  pipelineCreateInfo.depth_stencil_state.enable_depth_write = true;
+  pipelineCreateInfo.depth_stencil_state.compare_op =
+    SDL_GPU_COMPAREOP_LESS;  // Standard depth test
 
   pipeline_ = UniquePipeline(
     SDL_CreateGPUGraphicsPipeline(device_.get(), &pipelineCreateInfo),
@@ -236,7 +250,9 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
     throw SDLException("Failed to create line pipeline!");
   }
   SDL_Log("Successfully created graphics pipeline");
-  SDL_Log("Vertex count: %zu, Vertex size: %zu bytes", vertices.size(), sizeof(Vertex));
+  SDL_Log("Vertex count: %zu, Vertex size: %zu bytes",
+          vertices.size(),
+          sizeof(Vertex));
 }
 
 void GPUManager::render()
@@ -254,16 +270,29 @@ void GPUManager::render()
     commandBuffer, 0, &transform_, sizeof(TransformData));
 
   static int frameCount = 0;
-  if (frameCount == 0) {
+  if (frameCount == 0)
+  {
     SDL_Log("First frame - Matrix being sent to shader:");
-    SDL_Log("  [%.3f %.3f %.3f %.3f]", transform_.mvpMatrix[0], transform_.mvpMatrix[1],
-            transform_.mvpMatrix[2], transform_.mvpMatrix[3]);
-    SDL_Log("  [%.3f %.3f %.3f %.3f]", transform_.mvpMatrix[4], transform_.mvpMatrix[5],
-            transform_.mvpMatrix[6], transform_.mvpMatrix[7]);
-    SDL_Log("  [%.3f %.3f %.3f %.3f]", transform_.mvpMatrix[8], transform_.mvpMatrix[9],
-            transform_.mvpMatrix[10], transform_.mvpMatrix[11]);
-    SDL_Log("  [%.3f %.3f %.3f %.3f]", transform_.mvpMatrix[12], transform_.mvpMatrix[13],
-            transform_.mvpMatrix[14], transform_.mvpMatrix[15]);
+    SDL_Log("  [%.3f %.3f %.3f %.3f]",
+            transform_.mvpMatrix[0],
+            transform_.mvpMatrix[1],
+            transform_.mvpMatrix[2],
+            transform_.mvpMatrix[3]);
+    SDL_Log("  [%.3f %.3f %.3f %.3f]",
+            transform_.mvpMatrix[4],
+            transform_.mvpMatrix[5],
+            transform_.mvpMatrix[6],
+            transform_.mvpMatrix[7]);
+    SDL_Log("  [%.3f %.3f %.3f %.3f]",
+            transform_.mvpMatrix[8],
+            transform_.mvpMatrix[9],
+            transform_.mvpMatrix[10],
+            transform_.mvpMatrix[11]);
+    SDL_Log("  [%.3f %.3f %.3f %.3f]",
+            transform_.mvpMatrix[12],
+            transform_.mvpMatrix[13],
+            transform_.mvpMatrix[14],
+            transform_.mvpMatrix[15]);
   }
   frameCount++;
 
@@ -275,8 +304,6 @@ void GPUManager::render()
 
   if (swapchainTexture)
   {
-    // TEMP: Comment out depth buffer
-    /*
     // Create depth texture
     SDL_GPUTextureCreateInfo depthTextureInfo = {
       .type = SDL_GPU_TEXTURETYPE_2D,
@@ -290,28 +317,25 @@ void GPUManager::render()
     SDL_GPUTexture* depthTexture =
       SDL_CreateGPUTexture(device_.get(), &depthTextureInfo);
 
-    if (!depthTexture) {
-      SDL_Log("ERROR: Failed to create depth texture!");
-    }
-
     SDL_GPUDepthStencilTargetInfo depthTarget{};
     depthTarget.texture = depthTexture;
+    depthTarget.clear_depth = 1.0f;  // Standard depth clear (far = 1.0)
     depthTarget.load_op = SDL_GPU_LOADOP_CLEAR;
     depthTarget.store_op = SDL_GPU_STOREOP_DONT_CARE;
     depthTarget.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
     depthTarget.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
     depthTarget.cycle = true;
-    */
 
     SDL_GPUColorTargetInfo colorTarget{};
     colorTarget.texture = swapchainTexture;
     colorTarget.store_op = SDL_GPU_STOREOP_STORE;
     colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
-    colorTarget.clear_color = SDL_FColor{0.0f, 0.0f, 0.5f, 1.0f};  // Blue background
+    colorTarget.clear_color =
+      SDL_FColor{0.0f, 0.0f, 0.5f, 1.0f};  // Blue background
 
     std::vector<SDL_GPUColorTargetInfo> colorTargets{colorTarget};
     SDL_GPURenderPass* renderPass{SDL_BeginGPURenderPass(
-      commandBuffer, colorTargets.data(), colorTargets.size(), NULL)};
+      commandBuffer, colorTargets.data(), colorTargets.size(), &depthTarget)};
 
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline_.get());
 
@@ -319,12 +343,13 @@ void GPUManager::render()
                                                 .offset = 0};
     SDL_BindGPUVertexBuffers(renderPass, 0, &vertexBufferBinding, 1);
 
-    // Draw all pyramid faces (18 vertices total: 4 side faces + 2 base triangles)
+    // Draw all pyramid faces (18 vertices total: 4 side faces + 2 base
+    // triangles)
     SDL_DrawGPUPrimitives(renderPass, 18, 1, 5, 0);
 
     SDL_EndGPURenderPass(renderPass);
 
-    // SDL_ReleaseGPUTexture(device_.get(), depthTexture);
+    SDL_ReleaseGPUTexture(device_.get(), depthTexture);
   }
 
   if (!SDL_SubmitGPUCommandBuffer(commandBuffer))
@@ -357,9 +382,14 @@ void GPUManager::updateTransformMatrix()
   float aspect = static_cast<float>(width) / static_cast<float>(height);
 
   static bool firstCall = true;
-  if (firstCall) {
+  if (firstCall)
+  {
     SDL_Log("Initial camera: pos=(%.2f, %.2f, %.2f), rot=(%.2f, %.2f)",
-            cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_);
+            cameraPosX_,
+            cameraPosY_,
+            cameraPosZ_,
+            cameraRotX_,
+            cameraRotY_);
     firstCall = false;
   }
 
@@ -370,22 +400,42 @@ void GPUManager::updateTransformMatrix()
   float f = 1.0f / std::tan(fov / 2.0f);
 
   // Projection matrix (column-major) - Fixed for reverse Z
-  float proj[16] = {
-    f / aspect, 0.0f, 0.0f, 0.0f,
-    0.0f, f, 0.0f, 0.0f,
-    0.0f, 0.0f, (nearPlane + farPlane) / (nearPlane - farPlane), -1.0f,
-    0.0f, 0.0f, (2.0f * nearPlane * farPlane) / (nearPlane - farPlane), 0.0f
-  };
+  float proj[16] = {f / aspect,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    (nearPlane + farPlane) / (nearPlane - farPlane),
+                    -1.0f,
+                    0.0f,
+                    0.0f,
+                    (2.0f * nearPlane * farPlane) / (nearPlane - farPlane),
+                    0.0f};
 
   // Create view matrix with full camera translation
-  // In column-major format, translation is in the last row (elements 12, 13, 14)
-  // We negate camera position to move world in opposite direction
-  float view[16] = {
-    1.0f, 0.0f, 0.0f, 0.0f,
-    0.0f, 1.0f, 0.0f, 0.0f,
-    0.0f, 0.0f, 1.0f, 0.0f,
-    -cameraPosX_, -cameraPosY_, -cameraPosZ_, 1.0f
-  };
+  // In column-major format, translation is in the last row (elements 12, 13,
+  // 14) We negate camera position to move world in opposite direction
+  float view[16] = {1.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    1.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    1.0f,
+                    0.0f,
+                    -cameraPosX_,
+                    -cameraPosY_,
+                    -cameraPosZ_,
+                    1.0f};
 
   // Apply rotations
   float cosX = std::cos(cameraRotX_);
@@ -394,27 +444,51 @@ void GPUManager::updateTransformMatrix()
   float sinY = std::sin(cameraRotY_);
 
   // Rotation around Y axis (yaw) - column-major
-  float rotY[16] = {
-    cosY, 0.0f, -sinY, 0.0f,
-    0.0f, 1.0f, 0.0f, 0.0f,
-    sinY, 0.0f, cosY, 0.0f,
-    0.0f, 0.0f, 0.0f, 1.0f
-  };
+  float rotY[16] = {cosY,
+                    0.0f,
+                    -sinY,
+                    0.0f,
+                    0.0f,
+                    1.0f,
+                    0.0f,
+                    0.0f,
+                    sinY,
+                    0.0f,
+                    cosY,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    1.0f};
 
   // Rotation around X axis (pitch) - column-major
-  float rotX[16] = {
-    1.0f, 0.0f, 0.0f, 0.0f,
-    0.0f, cosX, sinX, 0.0f,
-    0.0f, -sinX, cosX, 0.0f,
-    0.0f, 0.0f, 0.0f, 1.0f
-  };
+  float rotX[16] = {1.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    cosX,
+                    sinX,
+                    0.0f,
+                    0.0f,
+                    -sinX,
+                    cosX,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    1.0f};
 
   // Matrix multiplication helper
-  auto multiplyMatrices = [](const float* a, const float* b, float* result) {
-    for (int i = 0; i < 4; ++i) {
-      for (int j = 0; j < 4; ++j) {
+  auto multiplyMatrices = [](const float* a, const float* b, float* result)
+  {
+    for (int i = 0; i < 4; ++i)
+    {
+      for (int j = 0; j < 4; ++j)
+      {
         result[j * 4 + i] = 0.0f;
-        for (int k = 0; k < 4; ++k) {
+        for (int k = 0; k < 4; ++k)
+        {
           result[j * 4 + i] += a[k * 4 + i] * b[j * 4 + k];
         }
       }
@@ -424,10 +498,13 @@ void GPUManager::updateTransformMatrix()
   // MVP = Projection * View (skip rotations for now)
   multiplyMatrices(proj, view, transform_.mvpMatrix);
 
-  if (firstCall) {
+  if (firstCall)
+  {
     SDL_Log("MVP Matrix (first 4 values): [%.3f, %.3f, %.3f, %.3f]",
-            transform_.mvpMatrix[0], transform_.mvpMatrix[1],
-            transform_.mvpMatrix[2], transform_.mvpMatrix[3]);
+            transform_.mvpMatrix[0],
+            transform_.mvpMatrix[1],
+            transform_.mvpMatrix[2],
+            transform_.mvpMatrix[3]);
   }
 }
 
