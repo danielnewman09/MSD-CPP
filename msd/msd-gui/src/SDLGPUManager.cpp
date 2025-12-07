@@ -1,4 +1,5 @@
 #include "msd-gui/src/SDLGPUManager.hpp"
+#include "msd-assets/src/GeometryFactory.hpp"
 #include "msd-gui/src/SDLUtils.hpp"
 
 #include <cmath>
@@ -54,46 +55,13 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
   }
   SDL_Log("Successfully loaded fragment shader: SolidColor.frag");
 
-  // Create pyramid vertices (5 vertices: 1 apex + 4 base corners)
-  // Using counter-clockwise winding for front faces
-  std::vector<Vertex> vertices = {
-    // Base (y = -0.5)
-    {-0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f},  // 0: Base front-left (Red)
-    {0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f},   // 1: Base front-right (Green)
-    {0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f},    // 2: Base back-right (Blue)
-    {-0.5f, -0.5f, 0.5f, 1.0f, 1.0f, 0.0f},   // 3: Base back-left (Yellow)
-    // Apex
-    {0.0f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f},  // 4: Apex (White)
+  // Create pyramid geometry using GeometryFactory
+  // This creates a pyramid with base size 1.0 and height 1.0
+  auto pyramidGeometry = msd_assets::GeometryFactory::createPyramid(1.0, 1.0);
 
-    // Front face (0, 1, 4)
-    {-0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f},  // 5
-    {0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f},   // 6
-    {0.0f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f},     // 7
-
-    // Right face (1, 2, 4)
-    {0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f},  // 8
-    {0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f},   // 9
-    {0.0f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f},    // 10
-
-    // Back face (2, 3, 4)
-    {0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f},   // 11
-    {-0.5f, -0.5f, 0.5f, 1.0f, 1.0f, 0.0f},  // 12
-    {0.0f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f},    // 13
-
-    // Left face (3, 0, 4)
-    {-0.5f, -0.5f, 0.5f, 1.0f, 1.0f, 0.0f},   // 14
-    {-0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f},  // 15
-    {0.0f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f},     // 16
-
-    // Base bottom face (0, 2, 1) and (0, 3, 2)
-    {-0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f},  // 17
-    {0.5f, -0.5f, 0.5f, 0.5f, 0.5f, 0.5f},    // 18
-    {0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f},   // 19
-
-    {-0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f},  // 20
-    {-0.5f, -0.5f, 0.5f, 0.5f, 0.5f, 0.5f},   // 21
-    {0.5f, -0.5f, 0.5f, 0.5f, 0.5f, 0.5f},    // 22
-  };
+  // Convert geometry to vertices with white color
+  std::vector<Vertex> vertices =
+    geometryToVertices(pyramidGeometry, 1.0f, 0.0f, 0.0f);
 
   SDL_GPUBufferCreateInfo bufferCreateInfo = {
     .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
@@ -345,7 +313,7 @@ void GPUManager::render()
 
     // Draw all pyramid faces (18 vertices total: 4 side faces + 2 base
     // triangles)
-    SDL_DrawGPUPrimitives(renderPass, 18, 1, 5, 0);
+    SDL_DrawGPUPrimitives(renderPass, 18, 1, 0, 0);
 
     SDL_EndGPURenderPass(renderPass);
 
@@ -508,5 +476,22 @@ void GPUManager::updateTransformMatrix()
   }
 }
 
+std::vector<Vertex> GPUManager::geometryToVertices(
+  const msd_assets::Geometry& geometry,
+  float r,
+  float g,
+  float b)
+{
+  const auto& coords = geometry.getVertices();
+  std::vector<Vertex> vertices;
+  vertices.reserve(coords.size());
+
+  for (const auto& coord : coords)
+  {
+    vertices.push_back({coord, r, g, b});
+  }
+
+  return vertices;
+}
 
 }  // namespace msd_gui

@@ -6,6 +6,8 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
+#include <msd-sim/src/Environment/Coordinate.hpp>
+#include <msd-assets/src/Geometry.hpp>
 
 namespace msd_gui
 {
@@ -14,8 +16,8 @@ class SDLException;  // Forward declaration
 
 struct Vertex
 {
-  float x, y, z;     // Position (3D)
-  float r, g, b;     // Color (RGB)
+  msd_sim::Coordinate position;  // Position (3D)
+  float r, g, b;                 // Color (RGB)
 };
 
 // Transform uniform buffer data (must match shader layout)
@@ -92,6 +94,19 @@ private:
   float cameraRotZ_{0.0f};
 
   void updateTransformMatrix();
+
+  /**
+   * @brief Convert Geometry to Vertex vector with colors
+   * @param geometry The geometry to convert
+   * @param r Red component (0.0-1.0)
+   * @param g Green component (0.0-1.0)
+   * @param b Blue component (0.0-1.0)
+   * @return Vector of Vertex structs ready for GPU upload
+   */
+  static std::vector<Vertex> geometryToVertices(const msd_assets::Geometry& geometry,
+                                                  float r = 1.0f,
+                                                  float g = 1.0f,
+                                                  float b = 1.0f);
 };
 
 }  // namespace msd_gui

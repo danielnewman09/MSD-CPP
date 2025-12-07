@@ -1,7 +1,6 @@
 add_subdirectory(Agent)
 add_subdirectory(Algorithms)
 add_subdirectory(Environment)
-add_subdirectory(Geometry)
 add_subdirectory(Utils)
 
 

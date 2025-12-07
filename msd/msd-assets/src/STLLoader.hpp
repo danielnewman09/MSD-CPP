@@ -4,9 +4,11 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include "msd-sim/src/Environment/Polyhedron.hpp"
+#include "msd-assets/src/Geometry.hpp"
+#include "msd-sim/src/Environment/Coordinate.hpp"
+#include <Eigen/Dense>
 
-namespace msd_sim
+namespace msd_assets
 {
 
 /**
@@ -45,17 +47,14 @@ class STLLoader
 {
 public:
   /**
-   * @brief Load an STL file and create a Polyhedron
+   * @brief Load an STL file and create a Geometry
    *
    * Automatically detects whether file is binary or ASCII format.
    *
    * @param filename Path to the STL file
-   * @param frame Optional reference frame for the polyhedron (default: origin)
-   * @return Unique pointer to Polyhedron if successful, nullptr on error
+   * @return Unique pointer to Geometry if successful, nullptr on error
    */
-  static std::unique_ptr<Polyhedron> loadSTL(
-    const std::string& filename,
-    const ReferenceFrame& frame = ReferenceFrame());
+  static std::unique_ptr<Geometry> loadSTL(const std::string& filename);
 
   /**
    * @brief Load binary STL file
@@ -63,12 +62,9 @@ public:
    * Binary format is more compact and faster to parse than ASCII.
    *
    * @param filename Path to the binary STL file
-   * @param frame Optional reference frame for the polyhedron
-   * @return Unique pointer to Polyhedron if successful, nullptr on error
+   * @return Unique pointer to Geometry if successful, nullptr on error
    */
-  static std::unique_ptr<Polyhedron> loadBinarySTL(
-    const std::string& filename,
-    const ReferenceFrame& frame = ReferenceFrame());
+  static std::unique_ptr<Geometry> loadBinarySTL(const std::string& filename);
 
   /**
    * @brief Load ASCII STL file
@@ -76,12 +72,9 @@ public:
    * ASCII format is human-readable but larger and slower to parse.
    *
    * @param filename Path to the ASCII STL file
-   * @param frame Optional reference frame for the polyhedron
-   * @return Unique pointer to Polyhedron if successful, nullptr on error
+   * @return Unique pointer to Geometry if successful, nullptr on error
    */
-  static std::unique_ptr<Polyhedron> loadASCIISTL(
-    const std::string& filename,
-    const ReferenceFrame& frame = ReferenceFrame());
+  static std::unique_ptr<Geometry> loadASCIISTL(const std::string& filename);
 
   /**
    * @brief Read raw triangle data from binary STL file
@@ -113,18 +106,15 @@ public:
   static bool isBinarySTL(const std::string& filename);
 
   /**
-   * @brief Convert triangle data to Polyhedron
+   * @brief Convert triangle data to Geometry
    *
-   * Creates a Polyhedron with vertices in the order needed for rendering.
+   * Creates a Geometry with vertices in the order needed for rendering.
    * Each triangle contributes 3 vertices.
    *
    * @param triangles Vector of STL triangles
-   * @param frame Reference frame for the polyhedron
-   * @return Polyhedron object with all triangle vertices
+   * @return Geometry object with all triangle vertices
    */
-  static Polyhedron trianglesToPolyhedron(
-    const std::vector<STLTriangle>& triangles,
-    const ReferenceFrame& frame = ReferenceFrame());
+  static Geometry trianglesToGeometry(const std::vector<STLTriangle>& triangles);
 
 private:
   /**
@@ -139,6 +129,6 @@ private:
   static bool validateBinarySTLSize(size_t fileSize, uint32_t triangleCount);
 };
 
-}  // namespace msd_sim
+}  // namespace msd_assets
 
 #endif  // STLLOADER_HPP

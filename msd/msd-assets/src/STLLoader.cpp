@@ -1,28 +1,25 @@
-#include "msd-sim/src/Geometry/STLLoader.hpp"
+#include "msd-assets/src/STLLoader.hpp"
 #include <cstring>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
-namespace msd_sim
+namespace msd_assets
 {
 
-std::unique_ptr<Polyhedron> STLLoader::loadSTL(const std::string& filename,
-                                               const ReferenceFrame& frame)
+std::unique_ptr<Geometry> STLLoader::loadSTL(const std::string& filename)
 {
   if (isBinarySTL(filename))
   {
-    return loadBinarySTL(filename, frame);
+    return loadBinarySTL(filename);
   }
   else
   {
-    return loadASCIISTL(filename, frame);
+    return loadASCIISTL(filename);
   }
 }
 
-std::unique_ptr<Polyhedron> STLLoader::loadBinarySTL(
-  const std::string& filename,
-  const ReferenceFrame& frame)
+std::unique_ptr<Geometry> STLLoader::loadBinarySTL(const std::string& filename)
 {
   std::vector<STLTriangle> triangles = readBinarySTLTriangles(filename);
 
@@ -32,11 +29,10 @@ std::unique_ptr<Polyhedron> STLLoader::loadBinarySTL(
     return nullptr;
   }
 
-  return std::make_unique<Polyhedron>(trianglesToPolyhedron(triangles, frame));
+  return std::make_unique<Geometry>(trianglesToGeometry(triangles));
 }
 
-std::unique_ptr<Polyhedron> STLLoader::loadASCIISTL(const std::string& filename,
-                                                    const ReferenceFrame& frame)
+std::unique_ptr<Geometry> STLLoader::loadASCIISTL(const std::string& filename)
 {
   std::vector<STLTriangle> triangles = readASCIISTLTriangles(filename);
 
@@ -46,7 +42,7 @@ std::unique_ptr<Polyhedron> STLLoader::loadASCIISTL(const std::string& filename,
     return nullptr;
   }
 
-  return std::make_unique<Polyhedron>(trianglesToPolyhedron(triangles, frame));
+  return std::make_unique<Geometry>(trianglesToGeometry(triangles));
 }
 
 std::vector<STLTriangle> STLLoader::readBinarySTLTriangles(
@@ -237,11 +233,9 @@ bool STLLoader::isBinarySTL(const std::string& filename)
   return true;
 }
 
-Polyhedron STLLoader::trianglesToPolyhedron(
-  const std::vector<STLTriangle>& triangles,
-  const ReferenceFrame& frame)
+Geometry STLLoader::trianglesToGeometry(const std::vector<STLTriangle>& triangles)
 {
-  std::vector<Coordinate> vertices;
+  std::vector<msd_sim::Coordinate> vertices;
   vertices.reserve(triangles.size() * 3);
 
   // Convert each triangle to 3 vertices
@@ -257,7 +251,7 @@ Polyhedron STLLoader::trianglesToPolyhedron(
       triangle.vertex3.x(), triangle.vertex3.y(), triangle.vertex3.z());
   }
 
-  return Polyhedron(vertices, frame);
+  return Geometry{vertices};
 }
 
 bool STLLoader::validateBinarySTLSize(size_t fileSize, uint32_t triangleCount)
@@ -267,4 +261,4 @@ bool STLLoader::validateBinarySTLSize(size_t fileSize, uint32_t triangleCount)
   return fileSize == expectedSize;
 }
 
-}  // namespace msd_sim
+}  // namespace msd_assets

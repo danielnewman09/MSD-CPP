@@ -5,18 +5,18 @@ namespace msd_sim
 {
 
 ReferenceFrame::ReferenceFrame()
-  : origin_{0.0, 0.0, 0.0}, euler_{}, rotation_{Eigen::Matrix3d::Identity()}
+  : origin_{0.0f, 0.0f, 0.0f}, euler_{}, rotation_{Eigen::Matrix3f::Identity()}
 {
 }
 
 ReferenceFrame::ReferenceFrame(const Coordinate& origin)
-  : origin_{origin}, euler_{}, rotation_{Eigen::Matrix3d::Identity()}
+  : origin_{origin}, euler_{}, rotation_{Eigen::Matrix3f::Identity()}
 {
 }
 
 ReferenceFrame::ReferenceFrame(const Coordinate& origin,
                                const EulerAngles& euler)
-  : origin_{origin}, euler_{euler}, rotation_{Eigen::Matrix3d::Identity()}
+  : origin_{origin}, euler_{euler}, rotation_{Eigen::Matrix3f::Identity()}
 {
   updateRotationMatrix();
 }
@@ -35,7 +35,7 @@ Coordinate ReferenceFrame::globalToLocal(const Coordinate& globalCoord) const
   return rotation_.transpose() * translated;
 }
 
-void ReferenceFrame::globalToLocalBatch(Eigen::Matrix3Xd& globalCoords) const
+void ReferenceFrame::globalToLocalBatch(Eigen::Matrix3Xf& globalCoords) const
 {
   // Translate all coordinates to frame origin
   globalCoords.colwise() -= origin_;
@@ -57,7 +57,7 @@ Coordinate ReferenceFrame::localToGlobal(const Coordinate& localCoord) const
   return rotated + origin_;
 }
 
-void ReferenceFrame::localToGlobalBatch(Eigen::Matrix3Xd& localCoords) const
+void ReferenceFrame::localToGlobalBatch(Eigen::Matrix3Xf& localCoords) const
 {
   // Rotate all coordinates to global orientation in one matrix multiply
   localCoords.applyOnTheLeft(rotation_);
@@ -85,12 +85,12 @@ void ReferenceFrame::updateRotationMatrix()
 {
   // Create rotation matrix using ZYX Euler angle convention
   // Using Eigen's AngleAxis for clarity and efficiency
-  Eigen::AngleAxisd rollAngle{euler_.roll.getRad(), Eigen::Vector3d::UnitX()};
-  Eigen::AngleAxisd pitchAngle{euler_.pitch.getRad(), Eigen::Vector3d::UnitY()};
-  Eigen::AngleAxisd yawAngle{euler_.yaw.getRad(), Eigen::Vector3d::UnitZ()};
+  Eigen::AngleAxisf rollAngle{static_cast<float>(euler_.roll.getRad()), Eigen::Vector3f::UnitX()};
+  Eigen::AngleAxisf pitchAngle{static_cast<float>(euler_.pitch.getRad()), Eigen::Vector3f::UnitY()};
+  Eigen::AngleAxisf yawAngle{static_cast<float>(euler_.yaw.getRad()), Eigen::Vector3f::UnitZ()};
 
   // Combine rotations: R = Rz(yaw) * Ry(pitch) * Rx(roll)
-  Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
+  Eigen::Quaternionf q = yawAngle * pitchAngle * rollAngle;
   rotation_ = q.matrix();
 }
 

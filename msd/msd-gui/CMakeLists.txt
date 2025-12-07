@@ -15,13 +15,15 @@ find_package(SDL3_ttf REQUIRED CONFIG)
 add_subdirectory(src)
 
 target_link_libraries(${MSD_GUI_NAME}
-  PRIVATE
-    spdlog::spdlog
+  PUBLIC
     msd_sim
+    msd_assets
     SDL3::SDL3-shared
     SDL3_image::SDL3_image-shared
     SDL3_mixer::SDL3_mixer-shared
-    SDL3_ttf::SDL3_ttf-shared)
+    SDL3_ttf::SDL3_ttf-shared
+  PRIVATE
+    spdlog::spdlog)
 
 # Add include directories to support "msd-sim/src/..." includes
 target_include_directories(${MSD_GUI_NAME}

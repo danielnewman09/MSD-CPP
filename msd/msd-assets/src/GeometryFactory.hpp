@@ -1,16 +1,18 @@
 #ifndef GEOMETRY_FACTORY_HPP
 #define GEOMETRY_FACTORY_HPP
 
+#include <array>
 #include <vector>
+#include "msd-assets/src/Geometry.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
 
-namespace msd_sim
+namespace msd_assets
 {
 
 /**
  * @brief Factory class for creating common 3D geometric shapes
  *
- * Provides static methods to generate vertex lists for standard shapes.
+ * Provides static methods to generate Geometry objects for standard shapes.
  * All geometries are triangulated and centered at the origin.
  */
 class GeometryFactory
@@ -25,9 +27,9 @@ public:
    * The cube extends from -size/2 to +size/2 in all dimensions.
    *
    * @param size Side length of the cube
-   * @return Vector of 36 vertices (12 triangles × 3 vertices)
+   * @return Geometry object containing 36 vertices (12 triangles × 3 vertices)
    */
-  static std::vector<Coordinate> createCube(double size);
+  static Geometry createCube(double size);
 
   /**
    * @brief Create a wireframe cube (edges only) centered at origin
@@ -36,9 +38,20 @@ public:
    * Returns pairs of vertices representing each edge.
    *
    * @param size Side length of the cube
-   * @return Vector of 24 vertices (12 edges × 2 vertices)
+   * @return Geometry object containing 24 vertices (12 edges × 2 vertices)
    */
-  static std::vector<Coordinate> createCubeWireframe(double size);
+  static Geometry createCubeWireframe(double size);
+
+  /**
+   * @brief Create a pyramid centered at origin
+   *
+   * Creates a pyramid with a square base and apex, triangulated.
+   *
+   * @param baseSize Side length of the square base
+   * @param height Height of the pyramid
+   * @return Geometry object containing pyramid vertices
+   */
+  static Geometry createPyramid(double baseSize, double height);
 
 private:
   /**
@@ -46,9 +59,9 @@ private:
    * @param size Side length of the cube
    * @return Array of 8 corner coordinates
    */
-  static std::array<Coordinate, 8> getCubeCorners(double size);
+  static std::array<msd_sim::Coordinate, 8> getCubeCorners(double size);
 };
 
-}  // namespace msd_sim
+}  // namespace msd_assets
 
 #endif  // GEOMETRY_FACTORY_HPP
