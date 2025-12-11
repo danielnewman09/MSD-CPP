@@ -173,7 +173,11 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
     {.location = 1,
      .buffer_slot = 0,
      .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // r, g, b color
-     .offset = sizeof(float) * 3}};
+     .offset = sizeof(float) * 3},
+    {.location = 2,
+     .buffer_slot = 0,
+     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // normal x, y, z
+     .offset = sizeof(float) * 6}};
 
   SDL_GPUVertexBufferDescription vertexBufferDesc = {
     .slot = 0,
@@ -185,7 +189,7 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
     .vertex_buffer_descriptions = &vertexBufferDesc,
     .num_vertex_buffers = 1,
     .vertex_attributes = vertexAttributes,
-    .num_vertex_attributes = 2};
+    .num_vertex_attributes = 3};
 
   SDL_GPUGraphicsPipelineCreateInfo pipelineCreateInfo = {
     .vertex_input_state = vertexInputState,
@@ -486,9 +490,24 @@ std::vector<Vertex> GPUManager::geometryToVertices(
   std::vector<Vertex> vertices;
   vertices.reserve(coords.size());
 
-  for (const auto& coord : coords)
+  // Process triangles (every 3 vertices form a triangle)
+  for (size_t i = 0; i + 2 < coords.size(); i += 3)
   {
-    vertices.push_back({coord, r, g, b});
+    const auto& v0 = coords[i];
+    const auto& v1 = coords[i + 1];
+    const auto& v2 = coords[i + 2];
+
+    // Calculate two edge vectors using Eigen operations
+    Eigen::Vector3f edge1 = v1 - v0;
+    Eigen::Vector3f edge2 = v2 - v0;
+
+    // Calculate normal using cross product and normalize
+    msd_sim::Coordinate normal = edge1.cross(edge2).normalized();
+
+    // Add all three vertices of the triangle with the same normal
+    vertices.push_back({v0, r, g, b, normal});
+    vertices.push_back({v1, r, g, b, normal});
+    vertices.push_back({v2, r, g, b, normal});
   }
 
   return vertices;

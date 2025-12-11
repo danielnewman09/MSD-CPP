@@ -18,28 +18,14 @@
         }
     ],
     "testMate.cpp.debug.configTemplate": {
-        "type": "cppdbg",
-        "MIMode": "gdb",
+        "type": "lldb",
         "program": "${exec}",
         "args": "${argsArray}",
         "env": "${envObj}",
-        "environment": "${envObjArray}",
-        "sourceFileMap": "${sourceFileMapObj}",
-        "setupCommands": [
-            {
-                "description": "Enable pretty-printing for gdb",
-                "text": "-enable-pretty-printing",
-                "ignoreFailures": true
-            },
-            {
-                "description": "Load STL pretty printers",
-                "text": "python import sys; sys.path.insert(0, '/usr/share/gcc/python'); from libstdcxx.v6.printers import register_libstdcxx_printers; register_libstdcxx_printers(None)",
-                "ignoreFailures": true
-            }
-        ],
+        "cwd": "${workspaceFolder}",
+        "sourceMap": "${sourceFileMapObj}",
         "externalConsole": false,
-        "stopAtEntry": false,
-        "cwd": "${workspaceFolder}"
+        "stopAtEntry": false
     },
     "cmake.options.statusBarVisibility": "visible",
     "files.associations": {

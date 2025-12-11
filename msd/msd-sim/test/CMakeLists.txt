@@ -5,14 +5,16 @@ find_package(GTest REQUIRED)
 add_executable(${MSD_SIM_TEST_NAME})
 
 add_subdirectory(Environment)
-    
+add_subdirectory(Physics)
+
 set_target_properties(${MSD_SIM_TEST_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
-target_link_libraries(${MSD_SIM_TEST_NAME} 
+target_link_libraries(${MSD_SIM_TEST_NAME}
     PUBLIC
         spdlog::spdlog
     PRIVATE
       msd_sim
+      msd_assets
       GTest::GTest
       GTest::Main)
 

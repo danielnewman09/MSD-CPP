@@ -11,12 +11,13 @@ struct main0_out
 struct main0_in
 {
     float4 in_var_TEXCOORD0 [[user(locn0)]];
+    float3 in_var_TEXCOORD1 [[user(locn1)]];
 };
 
 fragment main0_out main0(main0_in in [[stage_in]])
 {
     main0_out out = {};
-    out.out_var_SV_Target0 = in.in_var_TEXCOORD0;
+    out.out_var_SV_Target0 = float4((in.in_var_TEXCOORD0.xyz * 0.300000011920928955078125) + (in.in_var_TEXCOORD0.xyz * precise::max(dot(fast::normalize(in.in_var_TEXCOORD1), -fast::normalize(float3(-0.300000011920928955078125, -0.5, -0.800000011920928955078125))), 0.0)), in.in_var_TEXCOORD0.w);
     return out;
 }
 

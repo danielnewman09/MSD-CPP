@@ -14,6 +14,7 @@ set_target_properties(${MSD_SIM_NAME} PROPERTIES
 find_package(spdlog REQUIRED)
 find_package(Eigen3 REQUIRED NO_MODULE)
 find_package(SDL3 REQUIRED CONFIG)
+find_package(qhull REQUIRED CONFIG)
 
 # Add subdirectories to collect sources from each module
 add_subdirectory(src)
@@ -23,7 +24,9 @@ add_subdirectory(test)
 target_link_libraries(${MSD_SIM_NAME}
         PUBLIC
           spdlog::spdlog
-          Eigen3::Eigen)
+          Eigen3::Eigen
+          qhull::qhullcpp
+          qhull::qhullstatic_r)
 
 # Add include directories to support "msd-sim/src/..." includes
 target_include_directories(${MSD_SIM_NAME}

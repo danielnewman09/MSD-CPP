@@ -60,6 +60,7 @@ class msd(ConanFile):
         self.requires("sdl_image/3.2.4")
         self.requires("sdl_mixer/3.1.0")
         self.requires("sdl_ttf/3.2.2")
+        self.requires("qhull/8.0.2")
 
     def build_requirements(self):
         self.tool_requires("cmake/3.22.6")

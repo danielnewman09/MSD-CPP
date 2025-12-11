@@ -18,6 +18,7 @@ struct Vertex
 {
   msd_sim::Coordinate position;  // Position (3D)
   float r, g, b;                 // Color (RGB)
+  msd_sim::Coordinate normal;    // Normal vector (3D)
 };
 
 // Transform uniform buffer data (must match shader layout)
