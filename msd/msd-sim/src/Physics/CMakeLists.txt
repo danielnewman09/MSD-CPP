@@ -5,6 +5,7 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     ConvexHull.cpp
     PhysicalAsset.cpp
     RigidBodyProperties.cpp
+    GJK.cpp
 )
 
 # Header files for installation
@@ -15,6 +16,7 @@ set(
         ${CMAKE_CURRENT_SOURCE_DIR}/Force.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ForceAccumulator.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/RigidBodyProperties.hpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/GJK.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/PhysicsState.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/PhysicsUtils.hpp
     PARENT_SCOPE

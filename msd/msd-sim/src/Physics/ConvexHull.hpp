@@ -1,22 +1,25 @@
 #ifndef MSD_SIM_PHYSICS_CONVEX_HULL_HPP
 #define MSD_SIM_PHYSICS_CONVEX_HULL_HPP
 
-#include "msd-sim/src/Environment/Coordinate.hpp"
-#include <vector>
 #include <array>
 #include <memory>
 #include <optional>
+#include <vector>
+#include "msd-sim/src/Environment/Coordinate.hpp"
 
-// Forward declare Qhull classes to avoid header pollution
-namespace orgQhull {
-class Qhull;
+// Forward declare Qhull C API types
+extern "C"
+{
+  struct qhT;
 }
 
-namespace msd_assets {
+namespace msd_assets
+{
 class Geometry;
 }
 
-namespace msd_sim {
+namespace msd_sim
+{
 
 /**
  * @brief Represents a 3D convex hull computed using the Qhull library.
@@ -36,6 +39,15 @@ class ConvexHull
 {
 public:
   /**
+   * @brief Axis-aligned bounding box.
+   */
+  struct BoundingBox
+  {
+    Coordinate min;  // Minimum corner
+    Coordinate max;  // Maximum corner
+  };
+
+  /**
    * @brief Represents a triangular facet of the convex hull.
    *
    * Each facet stores indices into the hull's vertex array,
@@ -44,8 +56,8 @@ public:
   struct Facet
   {
     std::array<size_t, 3> vertexIndices;  // Indices of triangle vertices
-    Coordinate normal;                     // Outward-facing unit normal
-    float offset;                          // Distance from origin (for half-space)
+    Coordinate normal;                    // Outward-facing unit normal
+    float offset;  // Distance from origin (for half-space)
   };
 
   /**
@@ -63,31 +75,6 @@ public:
    * @throws std::runtime_error if points are degenerate or Qhull fails
    */
   explicit ConvexHull(const std::vector<Coordinate>& points);
-
-  /**
-   * @brief Copy constructor.
-   */
-  ConvexHull(const ConvexHull& other);
-
-  /**
-   * @brief Move constructor.
-   */
-  ConvexHull(ConvexHull&& other) noexcept;
-
-  /**
-   * @brief Copy assignment operator.
-   */
-  ConvexHull& operator=(const ConvexHull& other);
-
-  /**
-   * @brief Move assignment operator.
-   */
-  ConvexHull& operator=(ConvexHull&& other) noexcept;
-
-  /**
-   * @brief Destructor.
-   */
-  ~ConvexHull();
 
   /**
    * @brief Create convex hull from msd_assets::Geometry object.
@@ -113,7 +100,8 @@ public:
   /**
    * @brief Get all vertices of the convex hull.
    *
-   * Returns only the vertices that form the hull boundary (not interior points).
+   * Returns only the vertices that form the hull boundary (not interior
+   * points).
    *
    * @return Vector of hull vertex coordinates
    */
@@ -185,12 +173,13 @@ public:
   float signedDistance(const Coordinate& point) const;
 
   /**
-   * @brief Get the bounding box of the convex hull.
+   * @brief Get the axis-aligned bounding box of the convex hull.
    *
-   * @param min Output: minimum corner of bounding box
-   * @param max Output: maximum corner of bounding box
+   * The bounding box is computed directly by Qhull during hull construction.
+   *
+   * @return Bounding box containing minimum and maximum corners
    */
-  void getBoundingBox(Coordinate& min, Coordinate& max) const;
+  BoundingBox getBoundingBox() const;
 
   /**
    * @brief Check if the hull is valid (non-degenerate).
@@ -199,19 +188,26 @@ public:
   bool isValid() const;
 
   /**
-   * @brief Get the number of input points used to create this hull.
-   * @return Number of original input points
+   * @brief Test if this hull intersects with another using GJK algorithm.
+   *
+   * Uses the Gilbert-Johnson-Keerthi (GJK) algorithm to efficiently detect
+   * intersection between two convex hulls. This is typically faster than
+   * brute-force vertex containment tests and works in all cases.
+   *
+   * @param other The other convex hull to test against
+   * @param epsilon Numerical tolerance for termination (default: 1e-6)
+   * @return true if the hulls intersect, false otherwise
    */
-  size_t getInputPointCount() const;
+  bool intersects(const ConvexHull& other, float epsilon = 1e-6f) const;
 
 private:
-  std::vector<Coordinate> vertices_;     // Hull boundary vertices
-  std::vector<Facet> facets_;            // Triangular facets with normals
-  mutable float cachedVolume_;           // Cached volume (-1 if not computed)
-  mutable float cachedSurfaceArea_;      // Cached surface area (-1 if not computed)
-  mutable Coordinate cachedCentroid_;    // Cached centroid
-  mutable bool centroidValid_;           // Whether cached centroid is valid
-  size_t inputPointCount_;               // Number of original input points
+  std::vector<Coordinate> vertices_;  // Hull boundary vertices
+  std::vector<Facet> facets_;         // Triangular facets with normals
+  float volume_;                      // Volume computed by Qhull
+  float surfaceArea_;                 // Surface area computed by Qhull
+  Coordinate centroid_;               // Centroid computed during construction
+  Coordinate boundingBoxMin_;         // Bounding box minimum from Qhull
+  Coordinate boundingBoxMax_;         // Bounding box maximum from Qhull
 
   /**
    * @brief Internal method to compute the convex hull using Qhull.
@@ -224,14 +220,14 @@ private:
   /**
    * @brief Extract vertices and facets from Qhull result.
    *
-   * @param qhull Qhull object with computed hull
+   * @param qh Qhull state structure
    */
-  void extractHullData(const orgQhull::Qhull& qhull);
+  void extractHullData(qhT* qh);
 
   /**
-   * @brief Invalidate cached values (called when hull changes).
+   * @brief Compute the centroid from vertices and facets.
    */
-  void invalidateCache();
+  void computeCentroid();
 };
 
 }  // namespace msd_sim

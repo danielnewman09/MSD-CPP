@@ -373,6 +373,132 @@ Link against msd-sim:
 target_link_libraries(your_target PRIVATE msd_sim)
 ```
 
+## Coding Standards
+
+### Initialization and Construction
+
+#### Uninitialized Member Variables
+- **Always** use `std::numeric_limits<T>::quiet_NaN()` for default/uninitialized floating-point values
+- **Never** use magic numbers like `-1.0f` or `0.0f` to represent uninitialized state
+- **Rationale**: NaN propagates through calculations and makes uninitialized access immediately obvious
+
+```cpp
+// GOOD
+class Example {
+private:
+  float volume_{std::numeric_limits<float>::quiet_NaN()};
+  float area_{std::numeric_limits<float>::quiet_NaN()};
+};
+
+// BAD
+class Example {
+private:
+  float volume_{-1.0f};  // Magic number - unclear if -1 is valid or uninitialized
+  float area_{0.0f};      // Could be confused with actual zero value
+};
+```
+
+#### Brace Initialization
+- **Always** use brace initialization `{}` for constructing objects
+- **Never** use parentheses `()` for initialization
+- **Rationale**: Avoids the Most Vexing Parse problem and provides consistent syntax
+
+```cpp
+// GOOD
+Coordinate point{1.0f, 2.0f, 3.0f};
+std::vector<int> values{1, 2, 3};
+auto hull = ConvexHull{points};
+
+// BAD
+Coordinate point(1.0f, 2.0f, 3.0f);  // Can be confused with function declaration
+std::vector<int> values(10, 0);      // Ambiguous syntax
+auto hull = ConvexHull(points);      // Most Vexing Parse risk
+```
+
+### Rule of Zero/Five
+- **Prefer** the Rule of Zero: use compiler-generated special member functions when possible
+- **Only** implement copy/move constructors/assignment if you need custom behavior
+- **Use** `= default` explicitly to document that you're using the compiler's implementation
+- **Remove** manual implementations that just copy all members (let the compiler do it)
+
+```cpp
+// GOOD - Rule of Zero with explicit default
+class ConvexHull {
+public:
+  ConvexHull(const ConvexHull&) = default;
+  ConvexHull(ConvexHull&&) noexcept = default;
+  ConvexHull& operator=(const ConvexHull&) = default;
+  ConvexHull& operator=(ConvexHull&&) noexcept = default;
+  ~ConvexHull() = default;
+
+private:
+  std::vector<Coordinate> vertices_;
+  float volume_{std::numeric_limits<float>::quiet_NaN()};
+};
+
+// BAD - Unnecessary manual implementation
+class ConvexHull {
+public:
+  ConvexHull(const ConvexHull& other)
+    : vertices_(other.vertices_), volume_(other.volume_) {}
+  // ... manual implementations for all special members
+};
+```
+
+### Naming Conventions
+- **Don't** use `cached` prefix for member variables unless the value is truly cached (lazily computed)
+- **Use** descriptive names that indicate the value's purpose
+- **Distinguish** between computed-once values and lazily-cached values
+
+```cpp
+// GOOD
+class ConvexHull {
+private:
+  float volume_;                    // Computed once by Qhull
+  float surfaceArea_;               // Computed once by Qhull
+  mutable Coordinate centroid_;     // Lazily computed
+  mutable bool centroidValid_;      // Cache validity flag
+};
+
+// BAD
+class ConvexHull {
+private:
+  float cachedVolume_;              // Misleading - not cached, computed once
+  float cachedSurfaceArea_;         // Misleading - not cached, computed once
+  Coordinate cachedCentroid_;       // Correct - this IS cached
+};
+```
+
+### Function Return Values
+- **Prefer** returning values over modifying parameters passed by reference
+- **Use** return values or return structs instead of output parameters
+- **Rationale**: Makes code more functional, easier to reason about, and prevents accidental modifications
+
+```cpp
+// GOOD - Return a struct
+struct BoundingBox {
+  Coordinate min;
+  Coordinate max;
+};
+
+BoundingBox getBoundingBox() const {
+  return BoundingBox{boundingBoxMin_, boundingBoxMax_};
+}
+
+auto bbox = hull.getBoundingBox();
+float width = bbox.max.x() - bbox.min.x();
+
+// BAD - Modify parameters by reference
+void getBoundingBox(Coordinate& min, Coordinate& max) const {
+  min = boundingBoxMin_;
+  max = boundingBoxMax_;
+}
+
+Coordinate min, max;
+hull.getBoundingBox(min, max);  // Harder to understand data flow
+float width = max.x() - min.x();
+```
+
 ## Best Practices
 
 ### State Management

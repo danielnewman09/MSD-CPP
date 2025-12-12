@@ -122,6 +122,126 @@ app.runApp();
 - Not designed for multi-threaded access to the main rendering context
 - Event handling occurs on the main thread
 
+## Coding Standards
+
+### Initialization and Construction
+
+#### Uninitialized Member Variables
+- **Always** use `std::numeric_limits<T>::quiet_NaN()` for default/uninitialized floating-point values
+- **Never** use magic numbers like `-1.0f` or `0.0f` to represent uninitialized state
+- **Rationale**: NaN propagates through calculations and makes uninitialized access immediately obvious
+
+```cpp
+// GOOD
+class GPUBuffer {
+private:
+  float scale_{std::numeric_limits<float>::quiet_NaN()};
+  float offset_{std::numeric_limits<float>::quiet_NaN()};
+};
+
+// BAD
+class GPUBuffer {
+private:
+  float scale_{-1.0f};   // Magic number - unclear if -1 is valid or uninitialized
+  float offset_{0.0f};   // Could be confused with actual zero value
+};
+```
+
+#### Brace Initialization
+- **Always** use brace initialization `{}` for constructing objects
+- **Never** use parentheses `()` for initialization
+- **Rationale**: Avoids the Most Vexing Parse problem and provides consistent syntax
+
+```cpp
+// GOOD
+Vertex vertex{position, 1.0f, 0.0f, 0.0f, normal};
+std::vector<Vertex> vertices{vertex1, vertex2, vertex3};
+auto manager = GPUManager{window, basePath};
+
+// BAD
+Vertex vertex(position, 1.0f, 0.0f, 0.0f, normal);  // Can be confused with function
+std::vector<Vertex> vertices(3);                     // Ambiguous syntax
+auto manager = GPUManager(window, basePath);        // Most Vexing Parse risk
+```
+
+### Rule of Zero/Five
+- **Prefer** the Rule of Zero: use compiler-generated special member functions when possible
+- **Only** implement copy/move constructors/assignment if you need custom behavior
+- **Use** `= default` explicitly to document that you're using the compiler's implementation
+- **Delete** copy/move operations when they don't make sense (e.g., singletons, GPU resources)
+
+```cpp
+// GOOD - Rule of Zero with explicit default
+struct Vertex {
+  msd_sim::Coordinate position;
+  float r, g, b;
+  msd_sim::Coordinate normal;
+  // Compiler-generated copy/move is perfect
+};
+
+// GOOD - Deleted for resource management
+class GPUManager {
+public:
+  GPUManager(const GPUManager&) = delete;
+  GPUManager& operator=(const GPUManager&) = delete;
+  GPUManager(GPUManager&&) = delete;
+  GPUManager& operator=(GPUManager&&) = delete;
+};
+```
+
+### Naming Conventions
+- **Don't** use `cached` prefix for member variables unless the value is truly cached (lazily computed)
+- **Use** descriptive names that indicate the value's purpose
+- **Distinguish** between computed-once values and lazily-cached values
+
+```cpp
+// GOOD
+class RenderState {
+private:
+  SDL_GPUTexture* depthTexture_;        // Active depth texture
+  uint32_t width_;                      // Current viewport width
+  mutable Matrix4x4 viewMatrix_;        // Lazily computed view matrix
+  mutable bool viewMatrixValid_;        // Cache validity flag
+};
+
+// BAD
+class RenderState {
+private:
+  SDL_GPUTexture* cachedDepthTexture_;  // Misleading - not cached
+  uint32_t cachedWidth_;                // Misleading - not cached
+};
+```
+
+### Function Return Values
+- **Prefer** returning values over modifying parameters passed by reference
+- **Use** return values or return structs instead of output parameters
+- **Rationale**: Makes code more functional, easier to reason about, and prevents accidental modifications
+
+```cpp
+// GOOD - Return a struct
+struct Viewport {
+  uint32_t width;
+  uint32_t height;
+};
+
+Viewport getViewport() const {
+  return Viewport{width_, height_};
+}
+
+auto viewport = manager.getViewport();
+float aspectRatio = static_cast<float>(viewport.width) / viewport.height;
+
+// BAD - Modify parameters by reference
+void getViewport(uint32_t& width, uint32_t& height) const {
+  width = width_;
+  height = height_;
+}
+
+uint32_t width, height;
+manager.getViewport(width, height);  // Harder to understand data flow
+float aspectRatio = static_cast<float>(width) / height;
+```
+
 ## Future Considerations
 
 ### Potential Extensions

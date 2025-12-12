@@ -78,7 +78,6 @@ TEST(ConvexHullTest, ConstructorRemovesInteriorPoints)
 
   // Hull should have 8 vertices (cube corners), not 9 (interior removed)
   EXPECT_EQ(hull.getVertexCount(), 8);
-  EXPECT_EQ(hull.getInputPointCount(), 9);
 }
 
 TEST(ConvexHullTest, ConstructorThrowsOnEmptyPoints)
@@ -183,16 +182,6 @@ TEST(ConvexHullTest, SurfaceAreaOfCube)
   EXPECT_NEAR(actualArea, expectedArea, 1e-3f);
 }
 
-TEST(ConvexHullTest, SurfaceAreaCachedCorrectly)
-{
-  auto points = createCubePoints(2.0f);
-  ConvexHull hull(points);
-
-  float area1 = hull.surfaceArea();
-  float area2 = hull.surfaceArea();  // Should use cached value
-
-  EXPECT_FLOAT_EQ(area1, area2);
-}
 
 // ============================================================================
 // Centroid Tests
@@ -335,17 +324,16 @@ TEST(ConvexHullTest, BoundingBoxOfCube)
   auto points = createCubePoints(size);
   ConvexHull hull(points);
 
-  Coordinate min, max;
-  hull.getBoundingBox(min, max);
+  auto bbox = hull.getBoundingBox();
 
   float half = size / 2.0f;
-  EXPECT_NEAR(min.x(), -half, 1e-5f);
-  EXPECT_NEAR(min.y(), -half, 1e-5f);
-  EXPECT_NEAR(min.z(), -half, 1e-5f);
+  EXPECT_NEAR(bbox.min.x(), -half, 1e-5f);
+  EXPECT_NEAR(bbox.min.y(), -half, 1e-5f);
+  EXPECT_NEAR(bbox.min.z(), -half, 1e-5f);
 
-  EXPECT_NEAR(max.x(), half, 1e-5f);
-  EXPECT_NEAR(max.y(), half, 1e-5f);
-  EXPECT_NEAR(max.z(), half, 1e-5f);
+  EXPECT_NEAR(bbox.max.x(), half, 1e-5f);
+  EXPECT_NEAR(bbox.max.y(), half, 1e-5f);
+  EXPECT_NEAR(bbox.max.z(), half, 1e-5f);
 }
 
 TEST(ConvexHullTest, BoundingBoxContainsAllVertices)
@@ -353,18 +341,17 @@ TEST(ConvexHullTest, BoundingBoxContainsAllVertices)
   auto points = createCubePoints(2.0f);
   ConvexHull hull(points);
 
-  Coordinate min, max;
-  hull.getBoundingBox(min, max);
+  auto bbox = hull.getBoundingBox();
 
   for (const auto& vertex : hull.getVertices())
   {
-    EXPECT_GE(vertex.x(), min.x());
-    EXPECT_GE(vertex.y(), min.y());
-    EXPECT_GE(vertex.z(), min.z());
+    EXPECT_GE(vertex.x(), bbox.min.x());
+    EXPECT_GE(vertex.y(), bbox.min.y());
+    EXPECT_GE(vertex.z(), bbox.min.z());
 
-    EXPECT_LE(vertex.x(), max.x());
-    EXPECT_LE(vertex.y(), max.y());
-    EXPECT_LE(vertex.z(), max.z());
+    EXPECT_LE(vertex.x(), bbox.max.x());
+    EXPECT_LE(vertex.y(), bbox.max.y());
+    EXPECT_LE(vertex.z(), bbox.max.z());
   }
 }
 

@@ -13,7 +13,6 @@ set_target_properties(${MSD_SIM_NAME} PROPERTIES
 # Find required packages first
 find_package(spdlog REQUIRED)
 find_package(Eigen3 REQUIRED NO_MODULE)
-find_package(SDL3 REQUIRED CONFIG)
 find_package(qhull REQUIRED CONFIG)
 
 # Add subdirectories to collect sources from each module
@@ -25,7 +24,6 @@ target_link_libraries(${MSD_SIM_NAME}
         PUBLIC
           spdlog::spdlog
           Eigen3::Eigen
-          qhull::qhullcpp
           qhull::qhullstatic_r)
 
 # Add include directories to support "msd-sim/src/..." includes
@@ -34,7 +32,6 @@ target_include_directories(${MSD_SIM_NAME}
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
         $<INSTALL_INTERFACE:include>
 )
-
 
 # Installation rules
 install(TARGETS ${MSD_SIM_NAME}
