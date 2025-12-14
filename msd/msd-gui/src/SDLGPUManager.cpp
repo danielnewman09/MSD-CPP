@@ -168,15 +168,15 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
   SDL_GPUVertexAttribute vertexAttributes[] = {
     {.location = 0,
      .buffer_slot = 0,
-     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // x, y, z position
+     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // position (x, y, z)
      .offset = 0},
     {.location = 1,
      .buffer_slot = 0,
-     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // r, g, b color
+     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // color (r, g, b)
      .offset = sizeof(float) * 3},
     {.location = 2,
      .buffer_slot = 0,
-     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // normal x, y, z
+     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // normal (x, y, z)
      .offset = sizeof(float) * 6}};
 
   SDL_GPUVertexBufferDescription vertexBufferDesc = {
@@ -498,16 +498,29 @@ std::vector<Vertex> GPUManager::geometryToVertices(
     const auto& v2 = coords[i + 2];
 
     // Calculate two edge vectors using Eigen operations
-    Eigen::Vector3f edge1 = v1 - v0;
-    Eigen::Vector3f edge2 = v2 - v0;
+    auto edge1 = v1 - v0;
+    auto edge2 = v2 - v0;
 
     // Calculate normal using cross product and normalize
-    msd_sim::Coordinate normal = edge1.cross(edge2).normalized();
+    auto normal = edge1.cross(edge2).normalized();
 
+    // Convert double precision coordinates to float for GPU
     // Add all three vertices of the triangle with the same normal
-    vertices.push_back({v0, r, g, b, normal});
-    vertices.push_back({v1, r, g, b, normal});
-    vertices.push_back({v2, r, g, b, normal});
+    vertices.push_back({
+      {static_cast<float>(v0.x()), static_cast<float>(v0.y()), static_cast<float>(v0.z())},
+      {r, g, b},
+      {static_cast<float>(normal.x()), static_cast<float>(normal.y()), static_cast<float>(normal.z())}
+    });
+    vertices.push_back({
+      {static_cast<float>(v1.x()), static_cast<float>(v1.y()), static_cast<float>(v1.z())},
+      {r, g, b},
+      {static_cast<float>(normal.x()), static_cast<float>(normal.y()), static_cast<float>(normal.z())}
+    });
+    vertices.push_back({
+      {static_cast<float>(v2.x()), static_cast<float>(v2.y()), static_cast<float>(v2.z())},
+      {r, g, b},
+      {static_cast<float>(normal.x()), static_cast<float>(normal.y()), static_cast<float>(normal.z())}
+    });
   }
 
   return vertices;

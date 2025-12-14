@@ -208,10 +208,10 @@ TEST(ReferenceFrameTest, YawRotation90Degrees)
   Coordinate localCoord = frame.globalToLocal(globalCoord);
 
   // After 90 degree yaw rotation, should be at (0, -1, 0) in local frame
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.y(), -1.0f, 1e-9))
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.y(), -1.0, 1e-9))
     << localCoord.y();
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.z(), 0.0f, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.z(), 0.0, 1e-9));
 }
 
 TEST(ReferenceFrameTest, PitchRotation90Degrees)
@@ -229,9 +229,9 @@ TEST(ReferenceFrameTest, PitchRotation90Degrees)
   Coordinate localCoord = frame.globalToLocal(globalCoord);
 
   // After 90 degree pitch rotation, should be at (0, 0, 1) in local frame
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.y(), 0.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.z(), 1.0f, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.y(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.z(), 1.0, 1e-9));
 }
 
 TEST(ReferenceFrameTest, RollRotation90Degrees)
@@ -249,9 +249,9 @@ TEST(ReferenceFrameTest, RollRotation90Degrees)
   Coordinate localCoord = frame.globalToLocal(globalCoord);
 
   // After 90 degree roll rotation, should be at (0, 0, -1) in local frame
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.y(), 0.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.z(), -1.0f, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.y(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.z(), -1.0, 1e-9));
 }
 
 TEST(ReferenceFrameTest, RotationOnlyRoundTrip)
@@ -291,9 +291,9 @@ TEST(ReferenceFrameTest, TranslationAndRotationGlobalToLocal)
 
   // First translate: (11, 20, 30) - (10, 20, 30) = (1, 0, 0)
   // Then rotate 90 degrees about Z: (1, 0, 0) -> (0, -1, 0)
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.y(), -1.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(localCoord.z(), 0.0f, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.y(), -1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localCoord.z(), 0.0, 1e-9));
 }
 
 TEST(ReferenceFrameTest, TranslationAndRotationLocalToGlobal)
@@ -312,9 +312,9 @@ TEST(ReferenceFrameTest, TranslationAndRotationLocalToGlobal)
 
   // First rotate back: (0, -1, 0) -> (1, 0, 0)
   // Then translate: (1, 0, 0) + (10, 20, 30) = (11, 20, 30)
-  EXPECT_TRUE(msd_sim::almostEqual(globalCoord.x(), 11.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(globalCoord.y(), 20.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(globalCoord.z(), 30.0f, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalCoord.x(), 11.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalCoord.y(), 20.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalCoord.z(), 30.0, 1e-9));
 }
 
 TEST(ReferenceFrameTest, ComplexTransformationRoundTrip)
@@ -478,7 +478,7 @@ TEST(ReferenceFrameTest, SensorMountOnRobot)
 
   // Sensor should be roughly at (5, 6, 0.5) in global frame
   // (1 meter north of robot position)
-  EXPECT_TRUE(msd_sim::almostEqual(sensorInGlobal.x(), 5.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(sensorInGlobal.y(), 6.0f, 1e-9));
-  EXPECT_TRUE(msd_sim::almostEqual(sensorInGlobal.z(), 0.5f, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(sensorInGlobal.x(), 5.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(sensorInGlobal.y(), 6.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(sensorInGlobal.z(), 0.5, 1e-9));
 }

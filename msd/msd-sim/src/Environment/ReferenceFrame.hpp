@@ -63,9 +63,10 @@ public:
    * Efficiently transforms all coordinates in a single matrix operation.
    * Each column represents a 3D coordinate.
    *
-   * @param globalCoords 3xN matrix of coordinates in global frame (modified in place)
+   * @param globalCoords 3xN matrix of coordinates in global frame (modified in
+   * place)
    */
-  void globalToLocalBatch(Eigen::Matrix3Xf& globalCoords) const;
+  void globalToLocalBatch(Eigen::Matrix3Xd& globalCoords) const;
 
   /**
    * @brief Transform a coordinate from this local frame to global frame
@@ -87,9 +88,10 @@ public:
    * Efficiently transforms all coordinates in a single matrix operation.
    * Each column represents a 3D coordinate.
    *
-   * @param localCoords 3xN matrix of coordinates in local frame (modified in place)
+   * @param localCoords 3xN matrix of coordinates in local frame (modified in
+   * place)
    */
-  void localToGlobalBatch(Eigen::Matrix3Xf& localCoords) const;
+  void localToGlobalBatch(Eigen::Matrix3Xd& localCoords) const;
 
   /**
    * @brief Set the origin of this frame in global coordinates
@@ -124,13 +126,19 @@ public:
    * @brief Get the rotation matrix
    * @return Const reference to the 3x3 rotation matrix
    */
-  const Eigen::Matrix3f& getRotation() const { return rotation_; }
+  const Eigen::Matrix3d& getRotation() const
+  {
+    return rotation_;
+  }
 
   /**
    * @brief Get the origin (const version)
    * @return Const reference to the origin coordinate
    */
-  const Coordinate& getOrigin() const { return origin_; }
+  const Coordinate& getOrigin() const
+  {
+    return origin_;
+  }
 
 private:
   /*!
@@ -141,7 +149,7 @@ private:
   Coordinate origin_;  ///< Origin of this frame in global coordinates
   EulerAngles euler_;  ///< Rotation matrix from global to local frame
 
-  Eigen::Matrix3f rotation_;
+  Eigen::Matrix3d rotation_;
 };
 
 }  // namespace msd_sim

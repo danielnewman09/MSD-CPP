@@ -8,12 +8,12 @@ namespace msd_sim
 
 // GJK class implementation
 
-GJK::GJK(const ConvexHull& hullA, const ConvexHull& hullB, float epsilon)
+GJK::GJK(const ConvexHull& hullA, const ConvexHull& hullB, double epsilon)
   : hullA_{hullA},
     hullB_{hullB},
     epsilon_{epsilon},
     simplex_{},
-    direction_{0.0f, 0.0f, 0.0f}
+    direction_{0.0, 0.0, 0.0}
 {
 }
 
@@ -31,12 +31,12 @@ bool GJK::intersects(int maxIterations)
   }
 
   // Initialize: pick initial search direction (from A toward B)
-  direction_ = hullB_.centroid() - hullA_.centroid();
+  direction_ = hullB_.getCentroid() - hullA_.getCentroid();
 
   // Handle edge case where centroids are identical
   if (direction_.norm() < epsilon_)
   {
-    direction_ = Coordinate{1.0f, 0.0f, 0.0f};
+    direction_ = Coordinate{1.0, 0.0, 0.0};
   }
 
   // Get first support point
@@ -86,12 +86,12 @@ Coordinate GJK::support(const ConvexHull& hull, const Coordinate& dir) const
 {
   const auto& vertices = hull.getVertices();
 
-  float maxDot = -std::numeric_limits<float>::infinity();
-  Coordinate furthest{0.0f, 0.0f, 0.0f};
+  double maxDot = -std::numeric_limits<double>::infinity();
+  Coordinate furthest{0.0, 0.0, 0.0};
 
   for (const auto& vertex : vertices)
   {
-    float dotProduct = vertex.dot(dir);
+    double dotProduct = vertex.dot(dir);
     if (dotProduct > maxDot)
     {
       maxDot = dotProduct;
@@ -242,14 +242,14 @@ bool GJK::handleTetrahedron()
 
 bool GJK::sameDirection(const Coordinate& direction, const Coordinate& ao)
 {
-  return direction.dot(ao) > 0.0f;
+  return direction.dot(ao) > 0.0;
 }
 
 // Convenience function implementation
 
 bool gjkIntersects(const ConvexHull& hullA,
                    const ConvexHull& hullB,
-                   float epsilon,
+                   double epsilon,
                    int maxIterations)
 {
   GJK gjk{hullA, hullB, epsilon};

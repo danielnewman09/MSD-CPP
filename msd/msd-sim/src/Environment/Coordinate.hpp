@@ -7,34 +7,34 @@ namespace msd_sim
 {
 
 /**
- * @brief A 3D coordinate class that inherits from Eigen::Vector3f
+ * @brief A 3D coordinate class that inherits from Eigen::Vector3d
  *
- * This class provides a convenient wrapper around Eigen::Vector3f with
+ * This class provides a convenient wrapper around Eigen::Vector3d with
  * additional constructors and methods specific to coordinate operations.
- * Uses float precision which is sufficient for rendering and most simulations.
+ * Uses double precision for numerical stability in physics simulations.
  */
-class Coordinate : public Eigen::Vector3f
+class Coordinate : public Eigen::Vector3d
 {
 public:
   // Default constructor - initializes to (0, 0, 0)
-  Coordinate() : Eigen::Vector3f{0.0f, 0.0f, 0.0f}
+  Coordinate() : Eigen::Vector3d{0.0, 0.0, 0.0}
   {
   }
 
   // Constructor with x, y, z values
-  Coordinate(float x, float y, float z) : Eigen::Vector3f{x, y, z}
+  Coordinate(double x, double y, double z) : Eigen::Vector3d{x, y, z}
   {
   }
 
-  // Constructor from Eigen::Vector3f
-  Coordinate(const Eigen::Vector3f& vec) : Eigen::Vector3f{vec}
+  // Constructor from Eigen::Vector3d
+  Coordinate(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec}
   {
   }
 
   // This constructor allows you to construct Coordinate from Eigen expressions
   template <typename OtherDerived>
   Coordinate(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3f{other}
+    : Eigen::Vector3d{other}
   {
   }
 
@@ -42,7 +42,7 @@ public:
   template <typename OtherDerived>
   Coordinate& operator=(const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3f::operator=(other);
+    this->Eigen::Vector3d::operator=(other);
     return *this;
   }
 };

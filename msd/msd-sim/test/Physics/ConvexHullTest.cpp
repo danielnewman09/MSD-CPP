@@ -4,7 +4,7 @@
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-assets/src/GeometryFactory.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Physics/ConvexHull.hpp"
+#include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 
 using namespace msd_sim;
 
@@ -100,7 +100,7 @@ TEST(ConvexHullTest, ConstructorThrowsOnTooFewPoints)
 TEST(ConvexHullTest, FromGeometry)
 {
   auto geometry = msd_assets::GeometryFactory::createCube(2.0);
-  ConvexHull hull = ConvexHull::fromGeometry(geometry);
+  ConvexHull hull(geometry.getVertices());
 
   EXPECT_TRUE(hull.isValid());
   EXPECT_GT(hull.getVertexCount(), 0);
@@ -110,7 +110,7 @@ TEST(ConvexHullTest, FromGeometry)
 TEST(ConvexHullTest, FromGeometryPyramid)
 {
   auto geometry = msd_assets::GeometryFactory::createPyramid(2.0, 3.0);
-  ConvexHull hull = ConvexHull::fromGeometry(geometry);
+  ConvexHull hull(geometry.getVertices());
 
   EXPECT_TRUE(hull.isValid());
   EXPECT_EQ(hull.getVertexCount(), 5);  // 4 base + 1 apex
@@ -119,7 +119,7 @@ TEST(ConvexHullTest, FromGeometryPyramid)
 TEST(ConvexHullTest, FromPoints)
 {
   auto points = createTetrahedronPoints();
-  ConvexHull hull = ConvexHull::fromPoints(points);
+  ConvexHull hull(points);
 
   EXPECT_TRUE(hull.isValid());
   EXPECT_EQ(hull.getVertexCount(), 4);
@@ -136,7 +136,7 @@ TEST(ConvexHullTest, VolumeOfCube)
   ConvexHull hull(points);
 
   float expectedVolume = size * size * size;  // 2^3 = 8
-  float actualVolume = hull.volume();
+  float actualVolume = hull.getVolume();
 
   EXPECT_NEAR(actualVolume, expectedVolume, 1e-4f);
 }
@@ -147,7 +147,7 @@ TEST(ConvexHullTest, VolumeOfTetrahedron)
   auto points = createTetrahedronPoints();
   ConvexHull hull(points);
 
-  float volume = hull.volume();
+  float volume = hull.getVolume();
 
   // Volume formula: V = (edge^3) / (6*sqrt(2))
   // For our tetrahedron: edge ≈ 2.828, V ≈ 3.771
@@ -160,8 +160,8 @@ TEST(ConvexHullTest, VolumeCachedCorrectly)
   auto points = createCubePoints(2.0f);
   ConvexHull hull(points);
 
-  float vol1 = hull.volume();
-  float vol2 = hull.volume();  // Should use cached value
+  float vol1 = hull.getVolume();
+  float vol2 = hull.getVolume();  // Should use cached value
 
   EXPECT_FLOAT_EQ(vol1, vol2);
 }
@@ -177,7 +177,7 @@ TEST(ConvexHullTest, SurfaceAreaOfCube)
   ConvexHull hull(points);
 
   float expectedArea = 6.0f * size * size;  // 6 faces * 4 = 24
-  float actualArea = hull.surfaceArea();
+  float actualArea = hull.getSurfaceArea();
 
   EXPECT_NEAR(actualArea, expectedArea, 1e-3f);
 }
@@ -192,7 +192,7 @@ TEST(ConvexHullTest, CentroidOfCubeCenteredAtOrigin)
   auto points = createCubePoints(2.0f);
   ConvexHull hull(points);
 
-  Coordinate centroid = hull.centroid();
+  Coordinate centroid = hull.getCentroid();
 
   // Cube centered at origin should have centroid at origin
   EXPECT_NEAR(centroid.x(), 0.0f, 1e-4f);
@@ -213,7 +213,7 @@ TEST(ConvexHullTest, CentroidOfOffsetCube)
                                     Coordinate(0.0f, 2.0f, 2.0f)};
   ConvexHull hull(points);
 
-  Coordinate centroid = hull.centroid();
+  Coordinate centroid = hull.getCentroid();
 
   // Centroid should be at (1, 1, 1)
   EXPECT_NEAR(centroid.x(), 1.0f, 1e-4f);
@@ -434,7 +434,7 @@ TEST(ConvexHullTest, CopyConstructor)
 
   EXPECT_EQ(hull1.getVertexCount(), hull2.getVertexCount());
   EXPECT_EQ(hull1.getFacetCount(), hull2.getFacetCount());
-  EXPECT_FLOAT_EQ(hull1.volume(), hull2.volume());
+  EXPECT_FLOAT_EQ(hull1.getVolume(), hull2.getVolume());
 }
 
 TEST(ConvexHullTest, CopyAssignment)
@@ -446,7 +446,7 @@ TEST(ConvexHullTest, CopyAssignment)
   hull2 = hull1;
 
   EXPECT_EQ(hull1.getVertexCount(), hull2.getVertexCount());
-  EXPECT_FLOAT_EQ(hull1.volume(), hull2.volume());
+  EXPECT_FLOAT_EQ(hull1.getVolume(), hull2.getVolume());
 }
 
 TEST(ConvexHullTest, MoveConstructor)
@@ -509,21 +509,21 @@ TEST(ConvexHullTest, HandlesDuplicatePoints)
 TEST(ConvexHullTest, WorksWithGeometryFactoryCube)
 {
   auto geometry = msd_assets::GeometryFactory::createCube(2.0);
-  ConvexHull hull = ConvexHull::fromGeometry(geometry);
+  ConvexHull hull(geometry.getVertices());
 
   EXPECT_TRUE(hull.isValid());
   EXPECT_EQ(hull.getVertexCount(), 8);
-  EXPECT_NEAR(hull.volume(), 8.0f, 1e-3f);
+  EXPECT_NEAR(hull.getVolume(), 8.0f, 1e-3f);
 }
 
 TEST(ConvexHullTest, WorksWithGeometryFactoryPyramid)
 {
   auto geometry = msd_assets::GeometryFactory::createPyramid(2.0, 3.0);
-  ConvexHull hull = ConvexHull::fromGeometry(geometry);
+  ConvexHull hull(geometry.getVertices());
 
   EXPECT_TRUE(hull.isValid());
 
   // Pyramid volume = (1/3) * base_area * height = (1/3) * 4 * 3 = 4
   float expectedVolume = 4.0f;
-  EXPECT_NEAR(hull.volume(), expectedVolume, 0.1f);
+  EXPECT_NEAR(hull.getVolume(), expectedVolume, 0.1f);
 }

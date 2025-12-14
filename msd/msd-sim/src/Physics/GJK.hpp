@@ -2,7 +2,7 @@
 #define MSD_SIM_PHYSICS_GJK_HPP
 
 #include <vector>
-#include "msd-sim/src/Physics/ConvexHull.hpp"
+#include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 
 namespace msd_sim
 {
@@ -32,7 +32,7 @@ public:
    * @param hullB Second convex hull
    * @param epsilon Numerical tolerance for convergence (default: 1e-6)
    */
-  GJK(const ConvexHull& hullA, const ConvexHull& hullB, float epsilon = 1e-6f);
+  GJK(const ConvexHull& hullA, const ConvexHull& hullB, double epsilon = 1e-6);
 
   /**
    * @brief Test if the two hulls intersect.
@@ -45,7 +45,7 @@ public:
 private:
   const ConvexHull& hullA_;
   const ConvexHull& hullB_;
-  float epsilon_;
+  double epsilon_;
 
   std::vector<Coordinate> simplex_;
   Coordinate direction_;
@@ -98,7 +98,7 @@ private:
  */
 bool gjkIntersects(const ConvexHull& hullA,
                    const ConvexHull& hullB,
-                   float epsilon = 1e-6f,
+                   double epsilon = 1e-6,
                    int maxIterations = 64);
 
 }  // namespace msd_sim

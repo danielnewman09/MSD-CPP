@@ -16,9 +16,9 @@ class SDLException;  // Forward declaration
 
 struct Vertex
 {
-  msd_sim::Coordinate position;  // Position (3D)
-  float r, g, b;                 // Color (RGB)
-  msd_sim::Coordinate normal;    // Normal vector (3D)
+  float position[3];  // Position (x, y, z)
+  float color[3];     // Color (r, g, b)
+  float normal[3];    // Normal vector (x, y, z)
 };
 
 // Transform uniform buffer data (must match shader layout)

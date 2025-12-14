@@ -22,18 +22,21 @@ namespace msd_sim
 {
 
 /**
- * @brief Represents a 3D convex hull computed using the Qhull library.
+ * @brief Represents a 3D convex hull for collision detection.
  *
- * This class wraps Qhull functionality to compute and query convex hulls
- * from point clouds or geometry objects. The convex hull is the smallest
- * convex polyhedron that contains all input points.
+ * This class wraps Qhull functionality to compute convex hulls from point
+ * clouds or geometry objects. It provides the minimal data required for
+ * collision detection algorithms (GJK, EPA, etc.).
  *
  * Key features:
  * - Construct from point clouds or msd_assets::Geometry objects
- * - Query hull properties (volume, centroid, surface area)
- * - Point containment testing
  * - Access to hull vertices and facets
+ * - Point containment testing
  * - Support for geometric intersection operations
+ * - Axis-aligned bounding box for broad-phase collision detection
+ *
+ * Note: For inertial properties (mass, centroid, moment of inertia), use
+ * AssetInertial which contains a ConvexHull along with physics properties.
  */
 class ConvexHull
 {
@@ -57,7 +60,7 @@ public:
   {
     std::array<size_t, 3> vertexIndices;  // Indices of triangle vertices
     Coordinate normal;                    // Outward-facing unit normal
-    float offset;  // Distance from origin (for half-space)
+    double offset;  // Distance from origin (for half-space)
   };
 
   /**
@@ -85,17 +88,7 @@ public:
    * @return ConvexHull of the geometry's vertices
    * @throws std::runtime_error if geometry is empty or degenerate
    */
-  static ConvexHull fromGeometry(const msd_assets::Geometry& geometry);
-
-  /**
-   * @brief Create convex hull from a point cloud.
-   *
-   * Alternative factory method for clarity.
-   *
-   * @param points Vector of 3D coordinates
-   * @return ConvexHull of the points
-   */
-  static ConvexHull fromPoints(const std::vector<Coordinate>& points);
+  explicit ConvexHull(const msd_assets::Geometry& geometry);
 
   /**
    * @brief Get all vertices of the convex hull.
@@ -129,25 +122,32 @@ public:
   size_t getFacetCount() const;
 
   /**
-   * @brief Compute the volume enclosed by the convex hull.
+   * @brief Get the volume enclosed by the convex hull.
+   *
+   * Volume is computed by Qhull during hull construction.
+   *
    * @return Volume in cubic units
    */
-  float volume() const;
+  double getVolume() const;
 
   /**
-   * @brief Compute the surface area of the convex hull.
+   * @brief Get the surface area of the convex hull.
+   *
+   * Surface area is computed by Qhull during hull construction.
+   *
    * @return Surface area in square units
    */
-  float surfaceArea() const;
+  double getSurfaceArea() const;
 
   /**
-   * @brief Compute the geometric centroid of the convex hull.
+   * @brief Get the geometric centroid of the convex hull.
    *
    * The centroid is the center of mass assuming uniform density.
+   * Computed during hull construction using tetrahedron decomposition.
    *
    * @return Centroid coordinate
    */
-  Coordinate centroid() const;
+  Coordinate getCentroid() const;
 
   /**
    * @brief Test if a point is contained within the convex hull.
@@ -159,7 +159,7 @@ public:
    * @param epsilon Tolerance for numerical precision (default: 1e-6)
    * @return true if point is inside or on the boundary, false otherwise
    */
-  bool contains(const Coordinate& point, float epsilon = 1e-6f) const;
+  bool contains(const Coordinate& point, double epsilon = 1e-6) const;
 
   /**
    * @brief Compute signed distance from a point to the hull surface.
@@ -170,7 +170,7 @@ public:
    * @param point Point to compute distance from
    * @return Signed distance to hull surface
    */
-  float signedDistance(const Coordinate& point) const;
+  double signedDistance(const Coordinate& point) const;
 
   /**
    * @brief Get the axis-aligned bounding box of the convex hull.
@@ -198,16 +198,16 @@ public:
    * @param epsilon Numerical tolerance for termination (default: 1e-6)
    * @return true if the hulls intersect, false otherwise
    */
-  bool intersects(const ConvexHull& other, float epsilon = 1e-6f) const;
+  bool intersects(const ConvexHull& other, double epsilon = 1e-6) const;
 
 private:
   std::vector<Coordinate> vertices_;  // Hull boundary vertices
   std::vector<Facet> facets_;         // Triangular facets with normals
-  float volume_;                      // Volume computed by Qhull
-  float surfaceArea_;                 // Surface area computed by Qhull
-  Coordinate centroid_;               // Centroid computed during construction
+  double volume_;                     // Volume computed by Qhull
+  double surfaceArea_;                // Surface area computed by Qhull
   Coordinate boundingBoxMin_;         // Bounding box minimum from Qhull
   Coordinate boundingBoxMax_;         // Bounding box maximum from Qhull
+  Coordinate centroid_;               // The centroid of the convex hull
 
   /**
    * @brief Internal method to compute the convex hull using Qhull.
@@ -224,8 +224,13 @@ private:
    */
   void extractHullData(qhT* qh);
 
+
   /**
-   * @brief Compute the centroid from vertices and facets.
+   * @brief Compute and cache the geometric centroid.
+   *
+   * The centroid is the center of mass assuming uniform density.
+   * Uses tetrahedron decomposition for accurate volume-weighted calculation.
+   * Called during hull construction.
    */
   void computeCentroid();
 };
