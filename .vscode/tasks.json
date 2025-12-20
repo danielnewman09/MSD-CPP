@@ -20,20 +20,23 @@
                 "all"
             ],
             "default": "missing"
+        },
+        {
+            "id": "enableCoverage",
+            "description": "Enable Code Coverage",
+            "type": "pickString",
+            "options": [
+                "False",
+                "True"
+            ],
+            "default": "False"
         }
     ],
     "tasks": [
         {
             "label": "Conan Build",
             "type": "shell",
-            "command": "conan",
-            "args": [
-                "build",
-                ".",
-                "--build=missing",
-                "-s",
-                "build_type=${input:buildType}"
-            ],
+            "command": "conan build . --build=missing -s build_type=${input:buildType} -o \"&:enable_coverage=${input:enableCoverage}\"",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -57,7 +60,9 @@
                 ".",
                 "--build=missing",
                 "-s",
-                "build_type=${input:buildType}"
+                "build_type=${input:buildType}",
+                "-o",
+                "\"&:enable_coverage=${input:enableCoverage}\""
             ],
             "group": {
                 "kind": "build",
@@ -91,6 +96,40 @@
             "problemMatcher": [
                 "$gcc"
             ]
+        },
+        {
+            "label": "Generate Coverage Report",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${command:cmake.buildDirectory}",
+                "--target",
+                "coverage-msd-sim"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Open Coverage Report",
+            "type": "shell",
+            "command": "open",
+            "args": [
+                "${command:cmake.buildDirectory}/coverage/msd-sim/index.html"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
         },
         {
             "label": "Create Conan Dependencies",

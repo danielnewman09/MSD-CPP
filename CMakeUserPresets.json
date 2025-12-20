@@ -3,16 +3,24 @@
     "vendor": {
         "conan": {}
     },
+    "include": [
+        "build/Release/generators/CMakePresets.json",
+        "build/Debug/generators/CMakePresets.json"
+    ],
     "configurePresets": [
         {
             "name": "xcode",
             "generator": "Xcode",
             "binaryDir": "${sourceDir}/build-xcode",
             "toolchainFile": "${sourceDir}/build-xcode/conan_toolchain.cmake"
+        },
+        {
+            "name": "coverage-debug",
+            "inherits": "conan-debug",
+            "displayName": "Debug with Coverage",
+            "description": "Debug build with code coverage enabled (use: conan install . -o \"&:enable_coverage=True\")",
+            "toolchainFile": "generators/conan_toolchain.cmake",
+            "binaryDir": "/Users/danielnewman/Documents/GitHub/MSD-CPP/build/Debug-Coverage"
         }
-    ],
-    "include": [
-        "build/Release/generators/CMakePresets.json",
-        "build/Debug/generators/CMakePresets.json"
     ]
 }

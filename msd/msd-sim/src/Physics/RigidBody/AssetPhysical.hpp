@@ -93,7 +93,7 @@ protected:
   msd_assets::Geometry visualGeometry_;
 
   // Collision hull (computed lazily, then cached)
-  std::unique_ptr<ConvexHull> collisionHull_;
+  std::shared_ptr<ConvexHull> collisionHull_;
 
   // Reference frame defining position and orientation in world space
   ReferenceFrame referenceFrame_;

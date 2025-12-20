@@ -17,6 +17,14 @@ class msd(ConanFile):
     # Binary configuration
     settings = "os", "compiler", "build_type", "arch"
 
+    # Options
+    options = {
+        "enable_coverage": [True, False]
+    }
+    default_options = {
+        "enable_coverage": False
+    }
+
     # Sources are located in the same place as this recipe, copy them to the recipe
     exports_sources = "../../CMakeLists.txt", "../../src/*", "../../test/*", "../../*.cmake"
 
@@ -26,6 +34,9 @@ class msd(ConanFile):
         tc = CMakeToolchain(self)
         tc.variables["CMAKE_CXX_STANDARD"] = "20"
         tc.variables["CMAKE_CXX_STANDARD_REQUIRED"] = "ON"
+
+        # Pass coverage option to CMake
+        tc.variables["ENABLE_COVERAGE"] = self.options.enable_coverage
 
         build_type = str(self.settings.build_type).lower()
         tc.variables["CMAKE_RUNTIME_OUTPUT_DIRECTORY"] = \

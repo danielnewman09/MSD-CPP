@@ -55,20 +55,23 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
   }
   SDL_Log("Successfully loaded fragment shader: SolidColor.frag");
 
-  // Create pyramid geometry using GeometryFactory
+  // Create base pyramid geometry (will be instanced)
   // This creates a pyramid with base size 1.0 and height 1.0
   auto pyramidGeometry = msd_assets::GeometryFactory::createPyramid(1.0, 1.0);
 
-  // Convert geometry to vertices with white color
-  std::vector<Vertex> vertices =
-    geometryToVertices(pyramidGeometry, 1.0f, 0.0f, 0.0f);
+  // Convert geometry to vertices (color will come from instance data, so use white)
+  std::vector<Vertex> pyramidVertices =
+    geometryToVertices(pyramidGeometry, 1.0f, 1.0f, 1.0f);
 
-  SDL_GPUBufferCreateInfo bufferCreateInfo = {
+  pyramidVertexCount_ = pyramidVertices.size();
+
+  // Create vertex buffer for base pyramid mesh
+  SDL_GPUBufferCreateInfo vertexBufferCreateInfo = {
     .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
-    .size = static_cast<uint32_t>(vertices.size() * sizeof(Vertex))};
+    .size = static_cast<uint32_t>(pyramidVertices.size() * sizeof(Vertex))};
 
   vertexBuffer_ =
-    UniqueBuffer(SDL_CreateGPUBuffer(device_.get(), &bufferCreateInfo),
+    UniqueBuffer(SDL_CreateGPUBuffer(device_.get(), &vertexBufferCreateInfo),
                  BufferDeleter{device_.get()});
 
   if (!vertexBuffer_)
@@ -76,39 +79,62 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
     throw SDLException("Failed to create vertex buffer!");
   }
 
-  // Upload vertex data to GPU
-  SDL_GPUTransferBufferCreateInfo transferBufferCreateInfo = {
-    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD, .size = bufferCreateInfo.size};
+  // Upload pyramid vertex data to GPU
+  SDL_GPUTransferBufferCreateInfo vertexTransferCreateInfo = {
+    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+    .size = vertexBufferCreateInfo.size};
 
-  SDL_GPUTransferBuffer* transferBuffer =
-    SDL_CreateGPUTransferBuffer(device_.get(), &transferBufferCreateInfo);
+  SDL_GPUTransferBuffer* vertexTransferBuffer =
+    SDL_CreateGPUTransferBuffer(device_.get(), &vertexTransferCreateInfo);
 
-  if (!transferBuffer)
+  if (!vertexTransferBuffer)
   {
-    throw SDLException("Failed to create transfer buffer!");
+    throw SDLException("Failed to create vertex transfer buffer!");
   }
 
-  void* transferData =
-    SDL_MapGPUTransferBuffer(device_.get(), transferBuffer, false);
-  std::memcpy(transferData, vertices.data(), bufferCreateInfo.size);
-  SDL_UnmapGPUTransferBuffer(device_.get(), transferBuffer);
+  void* vertexTransferData =
+    SDL_MapGPUTransferBuffer(device_.get(), vertexTransferBuffer, false);
+  std::memcpy(vertexTransferData, pyramidVertices.data(), vertexBufferCreateInfo.size);
+  SDL_UnmapGPUTransferBuffer(device_.get(), vertexTransferBuffer);
 
-  SDL_GPUCommandBuffer* uploadCmdBuffer =
+  SDL_GPUCommandBuffer* vertexUploadCmd =
     SDL_AcquireGPUCommandBuffer(device_.get());
-  SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(uploadCmdBuffer);
+  SDL_GPUCopyPass* vertexCopyPass = SDL_BeginGPUCopyPass(vertexUploadCmd);
 
-  SDL_GPUTransferBufferLocation transferBufferLocation = {
-    .transfer_buffer = transferBuffer, .offset = 0};
+  SDL_GPUTransferBufferLocation vertexTransferLocation = {
+    .transfer_buffer = vertexTransferBuffer, .offset = 0};
 
-  SDL_GPUBufferRegion bufferRegion = {
-    .buffer = vertexBuffer_.get(), .offset = 0, .size = bufferCreateInfo.size};
+  SDL_GPUBufferRegion vertexBufferRegion = {
+    .buffer = vertexBuffer_.get(), .offset = 0, .size = vertexBufferCreateInfo.size};
 
   SDL_UploadToGPUBuffer(
-    copyPass, &transferBufferLocation, &bufferRegion, false);
-  SDL_EndGPUCopyPass(copyPass);
-  SDL_SubmitGPUCommandBuffer(uploadCmdBuffer);
+    vertexCopyPass, &vertexTransferLocation, &vertexBufferRegion, false);
+  SDL_EndGPUCopyPass(vertexCopyPass);
+  SDL_SubmitGPUCommandBuffer(vertexUploadCmd);
 
-  SDL_ReleaseGPUTransferBuffer(device_.get(), transferBuffer);
+  SDL_ReleaseGPUTransferBuffer(device_.get(), vertexTransferBuffer);
+
+  // Initialize instances with two pyramids (for compatibility with existing demo)
+  instances_.push_back({{0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}});  // Red at origin
+  instances_.push_back({{2.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}});  // Green at x=2
+
+  // Create instance buffer (pre-allocate space for many instances)
+  const size_t maxInstances = 1000;
+  SDL_GPUBufferCreateInfo instanceBufferCreateInfo = {
+    .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
+    .size = static_cast<uint32_t>(maxInstances * sizeof(InstanceData))};
+
+  instanceBuffer_ =
+    UniqueBuffer(SDL_CreateGPUBuffer(device_.get(), &instanceBufferCreateInfo),
+                 BufferDeleter{device_.get()});
+
+  if (!instanceBuffer_)
+  {
+    throw SDLException("Failed to create instance buffer!");
+  }
+
+  // Upload initial instance data
+  uploadInstanceBuffer();
 
   // Create uniform buffer for transform
   // TEMPORARY: Use simple orthographic-like projection for testing
@@ -164,32 +190,48 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
   SDL_GPUColorTargetDescription colorTargetDesc = {
     .format = SDL_GetGPUSwapchainTextureFormat(device_.get(), &window)};
 
-  // Define vertex input layout for 3D vertices
+  // Define vertex input layout for 3D vertices and instanced data
   SDL_GPUVertexAttribute vertexAttributes[] = {
+    // Per-vertex attributes (buffer slot 0)
     {.location = 0,
      .buffer_slot = 0,
      .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // position (x, y, z)
      .offset = 0},
     {.location = 1,
      .buffer_slot = 0,
-     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // color (r, g, b)
+     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // color (r, g, b) - unused but kept for compatibility
      .offset = sizeof(float) * 3},
     {.location = 2,
      .buffer_slot = 0,
      .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // normal (x, y, z)
-     .offset = sizeof(float) * 6}};
+     .offset = sizeof(float) * 6},
+    // Per-instance attributes (buffer slot 1)
+    {.location = 3,
+     .buffer_slot = 1,
+     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // instance position
+     .offset = 0},
+    {.location = 4,
+     .buffer_slot = 1,
+     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // instance color
+     .offset = sizeof(float) * 3}};
 
-  SDL_GPUVertexBufferDescription vertexBufferDesc = {
-    .slot = 0,
-    .pitch = sizeof(Vertex),
-    .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-    .instance_step_rate = 0};
+  SDL_GPUVertexBufferDescription bufferDescriptions[] = {
+    // Slot 0: Per-vertex data
+    {.slot = 0,
+     .pitch = sizeof(Vertex),
+     .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+     .instance_step_rate = 0},
+    // Slot 1: Per-instance data
+    {.slot = 1,
+     .pitch = sizeof(InstanceData),
+     .input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE,
+     .instance_step_rate = 0}};
 
   SDL_GPUVertexInputState vertexInputState = {
-    .vertex_buffer_descriptions = &vertexBufferDesc,
-    .num_vertex_buffers = 1,
+    .vertex_buffer_descriptions = bufferDescriptions,
+    .num_vertex_buffers = 2,
     .vertex_attributes = vertexAttributes,
-    .num_vertex_attributes = 3};
+    .num_vertex_attributes = 5};
 
   SDL_GPUGraphicsPipelineCreateInfo pipelineCreateInfo = {
     .vertex_input_state = vertexInputState,
@@ -222,9 +264,12 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
     throw SDLException("Failed to create line pipeline!");
   }
   SDL_Log("Successfully created graphics pipeline");
-  SDL_Log("Vertex count: %zu, Vertex size: %zu bytes",
-          vertices.size(),
-          sizeof(Vertex));
+  SDL_Log("Pyramid vertex count: %zu, Initial instance count: %zu, "
+          "Vertex size: %zu bytes, Instance size: %zu bytes",
+          pyramidVertexCount_,
+          instances_.size(),
+          sizeof(Vertex),
+          sizeof(InstanceData));
 }
 
 void GPUManager::render()
@@ -311,13 +356,24 @@ void GPUManager::render()
 
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline_.get());
 
-    SDL_GPUBufferBinding vertexBufferBinding = {.buffer = vertexBuffer_.get(),
-                                                .offset = 0};
-    SDL_BindGPUVertexBuffers(renderPass, 0, &vertexBufferBinding, 1);
+    // Bind vertex buffer (slot 0) and instance buffer (slot 1)
+    SDL_GPUBufferBinding bufferBindings[] = {
+      {.buffer = vertexBuffer_.get(), .offset = 0},   // Slot 0: vertex data
+      {.buffer = instanceBuffer_.get(), .offset = 0}  // Slot 1: instance data
+    };
+    SDL_BindGPUVertexBuffers(renderPass, 0, bufferBindings, 2);
 
-    // Draw all pyramid faces (18 vertices total: 4 side faces + 2 base
-    // triangles)
-    SDL_DrawGPUPrimitives(renderPass, 18, 1, 0, 0);
+    // Draw all instances with a single instanced draw call
+    // SDL_DrawGPUPrimitives parameters: (renderPass, vertexCount, instanceCount, firstVertex, firstInstance)
+    if (!instances_.empty())
+    {
+      SDL_DrawGPUPrimitives(
+        renderPass,
+        static_cast<uint32_t>(pyramidVertexCount_),  // Number of vertices per instance
+        static_cast<uint32_t>(instances_.size()),     // Number of instances
+        0,  // First vertex
+        0); // First instance
+    }
 
     SDL_EndGPURenderPass(renderPass);
 
@@ -506,24 +562,114 @@ std::vector<Vertex> GPUManager::geometryToVertices(
 
     // Convert double precision coordinates to float for GPU
     // Add all three vertices of the triangle with the same normal
-    vertices.push_back({
-      {static_cast<float>(v0.x()), static_cast<float>(v0.y()), static_cast<float>(v0.z())},
-      {r, g, b},
-      {static_cast<float>(normal.x()), static_cast<float>(normal.y()), static_cast<float>(normal.z())}
-    });
-    vertices.push_back({
-      {static_cast<float>(v1.x()), static_cast<float>(v1.y()), static_cast<float>(v1.z())},
-      {r, g, b},
-      {static_cast<float>(normal.x()), static_cast<float>(normal.y()), static_cast<float>(normal.z())}
-    });
-    vertices.push_back({
-      {static_cast<float>(v2.x()), static_cast<float>(v2.y()), static_cast<float>(v2.z())},
-      {r, g, b},
-      {static_cast<float>(normal.x()), static_cast<float>(normal.y()), static_cast<float>(normal.z())}
-    });
+    vertices.push_back({{static_cast<float>(v0.x()),
+                         static_cast<float>(v0.y()),
+                         static_cast<float>(v0.z())},
+                        {r, g, b},
+                        {static_cast<float>(normal.x()),
+                         static_cast<float>(normal.y()),
+                         static_cast<float>(normal.z())}});
+    vertices.push_back({{static_cast<float>(v1.x()),
+                         static_cast<float>(v1.y()),
+                         static_cast<float>(v1.z())},
+                        {r, g, b},
+                        {static_cast<float>(normal.x()),
+                         static_cast<float>(normal.y()),
+                         static_cast<float>(normal.z())}});
+    vertices.push_back({{static_cast<float>(v2.x()),
+                         static_cast<float>(v2.y()),
+                         static_cast<float>(v2.z())},
+                        {r, g, b},
+                        {static_cast<float>(normal.x()),
+                         static_cast<float>(normal.y()),
+                         static_cast<float>(normal.z())}});
   }
 
   return vertices;
+}
+
+void GPUManager::uploadInstanceBuffer()
+{
+  if (instances_.empty())
+  {
+    return;
+  }
+
+  SDL_GPUTransferBufferCreateInfo transferCreateInfo = {
+    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+    .size = static_cast<uint32_t>(instances_.size() * sizeof(InstanceData))};
+
+  SDL_GPUTransferBuffer* transferBuffer =
+    SDL_CreateGPUTransferBuffer(device_.get(), &transferCreateInfo);
+
+  if (!transferBuffer)
+  {
+    throw SDLException("Failed to create instance transfer buffer!");
+  }
+
+  void* transferData =
+    SDL_MapGPUTransferBuffer(device_.get(), transferBuffer, false);
+  std::memcpy(transferData, instances_.data(), transferCreateInfo.size);
+  SDL_UnmapGPUTransferBuffer(device_.get(), transferBuffer);
+
+  SDL_GPUCommandBuffer* uploadCmd =
+    SDL_AcquireGPUCommandBuffer(device_.get());
+  SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(uploadCmd);
+
+  SDL_GPUTransferBufferLocation transferLocation = {
+    .transfer_buffer = transferBuffer, .offset = 0};
+
+  SDL_GPUBufferRegion bufferRegion = {
+    .buffer = instanceBuffer_.get(), .offset = 0, .size = transferCreateInfo.size};
+
+  SDL_UploadToGPUBuffer(copyPass, &transferLocation, &bufferRegion, false);
+  SDL_EndGPUCopyPass(copyPass);
+  SDL_SubmitGPUCommandBuffer(uploadCmd);
+
+  SDL_ReleaseGPUTransferBuffer(device_.get(), transferBuffer);
+
+  instanceBufferNeedsUpdate_ = false;
+}
+
+void GPUManager::addInstance(float posX, float posY, float posZ, float r, float g, float b)
+{
+  instances_.push_back({{posX, posY, posZ}, {r, g, b}});
+  uploadInstanceBuffer();
+  SDL_Log("Added instance at (%.2f, %.2f, %.2f) with color (%.2f, %.2f, %.2f). Total instances: %zu",
+          posX, posY, posZ, r, g, b, instances_.size());
+}
+
+void GPUManager::removeInstance(size_t index)
+{
+  if (index >= instances_.size())
+  {
+    SDL_Log("ERROR: Cannot remove instance %zu, only %zu instances exist", index, instances_.size());
+    return;
+  }
+
+  instances_.erase(instances_.begin() + index);
+  uploadInstanceBuffer();
+  SDL_Log("Removed instance %zu. Remaining instances: %zu", index, instances_.size());
+}
+
+void GPUManager::updateInstance(size_t index, float posX, float posY, float posZ, float r, float g, float b)
+{
+  if (index >= instances_.size())
+  {
+    SDL_Log("ERROR: Cannot update instance %zu, only %zu instances exist", index, instances_.size());
+    return;
+  }
+
+  instances_[index] = {{posX, posY, posZ}, {r, g, b}};
+  uploadInstanceBuffer();
+  SDL_Log("Updated instance %zu to position (%.2f, %.2f, %.2f) with color (%.2f, %.2f, %.2f)",
+          index, posX, posY, posZ, r, g, b);
+}
+
+void GPUManager::clearInstances()
+{
+  instances_.clear();
+  SDL_Log("Cleared all instances");
 }
 
 }  // namespace msd_gui

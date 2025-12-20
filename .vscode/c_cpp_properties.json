@@ -4,7 +4,10 @@
       "name": "Mac",
       "includePath": [
         "${workspaceFolder}/**",
-        "${workspaceFolder}/msd",
+        "${workspaceFolder}/msd/msd-sim",
+        "${workspaceFolder}/msd/msd-gui",
+        "${workspaceFolder}/msd/msd-assets",
+        "${workspaceFolder}/msd/msd-exe",
         "${workspaceFolder}/test",
         "/Users/danielnewman/.conan2/p/*/p/include",
         "/opt/homebrew/include",

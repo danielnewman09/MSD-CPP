@@ -21,6 +21,19 @@ endif()
 
 # Option for building tests
 option(BUILD_TESTING "Build the testing tree" ON)
+option(ENABLE_COVERAGE "Enable code coverage" OFF)
+
+# Coverage configuration
+if(ENABLE_COVERAGE)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    # Add coverage flags
+    add_compile_options(--coverage -O0 -fno-inline -fno-elide-constructors)
+    add_link_options(--coverage)
+    message(STATUS "Code coverage enabled")
+  else()
+    message(WARNING "Code coverage is only supported with GCC or Clang")
+  endif()
+endif()
 
 # Always include the test directory first to define testing functions
 # This ensures the testing framework is available to all modules

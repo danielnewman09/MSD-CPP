@@ -21,6 +21,13 @@ struct Vertex
   float normal[3];    // Normal vector (x, y, z)
 };
 
+// Per-instance data for instanced rendering
+struct InstanceData
+{
+  float position[3];  // World position offset for this instance
+  float color[3];     // Color for this instance
+};
+
 // Transform uniform buffer data (must match shader layout)
 struct TransformData
 {
@@ -45,6 +52,13 @@ public:
 
   // Set the camera position and rotation
   void setCameraTransform(float posX, float posY, float posZ, float rotX, float rotY, float rotZ);
+
+  // Instance management methods
+  void addInstance(float posX, float posY, float posZ, float r, float g, float b);
+  void removeInstance(size_t index);
+  void updateInstance(size_t index, float posX, float posY, float posZ, float r, float g, float b);
+  void clearInstances();
+  size_t getInstanceCount() const { return instances_.size(); }
 
 private:
   struct SDLDeviceDeleter
@@ -80,9 +94,14 @@ private:
   SDL_Window& window_;
 
   UniquePipeline pipeline_;
-  UniqueBuffer vertexBuffer_;
+  UniqueBuffer vertexBuffer_;   // Vertex buffer for base mesh geometry
+  UniqueBuffer instanceBuffer_; // Instance buffer for per-instance data
   UniqueBuffer uniformBuffer_;
   TransformData transform_;
+
+  std::vector<InstanceData> instances_;  // CPU-side instance data
+  size_t pyramidVertexCount_{0};         // Number of vertices in base pyramid mesh
+  bool instanceBufferNeedsUpdate_{false}; // Flag to track if instance buffer needs upload
 
   std::unique_ptr<SDL_GPUDevice, SDLDeviceDeleter> device_;
   std::string basePath_;
@@ -95,6 +114,7 @@ private:
   float cameraRotZ_{0.0f};
 
   void updateTransformMatrix();
+  void uploadInstanceBuffer();
 
   /**
    * @brief Convert Geometry to Vertex vector with colors
