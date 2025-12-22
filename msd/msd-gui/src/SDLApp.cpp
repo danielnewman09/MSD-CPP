@@ -2,6 +2,7 @@
 #include "msd-gui/src/SDLUtils.hpp"
 
 #include <cstdlib>
+#include <format>
 #include <iostream>
 #include <vector>
 
@@ -56,6 +57,9 @@ void SDLApplication::handleEvents()
   SDL_Event event;
   while (SDL_PollEvent(&event))
   {
+    auto& camera = gpuManager_->getCamera();
+    auto& cameraFrame = camera.getReferenceFrame();
+    auto newOrigin = cameraFrame.getOrigin();
     switch (event.type)
     {
       case SDL_EVENT_QUIT:
@@ -65,54 +69,54 @@ void SDLApplication::handleEvents()
         switch (event.key.key)
         {
           case SDLK_W:
-            cameraPosZ_ -= moveSpeed_;  // Move forward (toward negative Z)
-            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            // Move forward in camera's local Z direction
+            newOrigin -= cameraFrame.localToGlobalRelative(unitZ_);
             break;
           case SDLK_S:
-            cameraPosZ_ += moveSpeed_;  // Move backward (toward positive Z)
-            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            // Move backward in camera's local Z direction
+            newOrigin += cameraFrame.localToGlobalRelative(unitZ_);
             break;
           case SDLK_A:
-            cameraPosX_ -= moveSpeed_;
-            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            // Move left in camera's local X direction (negative X)
+            newOrigin -= cameraFrame.localToGlobalRelative(unitX_);
             break;
           case SDLK_D:
-            cameraPosX_ += moveSpeed_;
-            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            // Move right in camera's local X direction (positive X)
+            newOrigin += cameraFrame.localToGlobalRelative(unitX_);
             break;
           case SDLK_UP:
-            cameraRotX_ += rotSpeed_;
-            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            // Pitch up (look up)
+            cameraFrame.getEulerAngles().pitch += rotSpeed_;
             break;
           case SDLK_DOWN:
-            cameraRotX_ -= rotSpeed_;
-            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            // Pitch down (look down)
+            cameraFrame.getEulerAngles().pitch -= rotSpeed_;
             break;
           case SDLK_LEFT:
-            cameraRotY_ -= rotSpeed_;
-            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            // Yaw left (turn left)
+            cameraFrame.getEulerAngles().yaw += rotSpeed_;
             break;
           case SDLK_RIGHT:
-            cameraRotY_ += rotSpeed_;
-            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            // Yaw right (turn right)
+            cameraFrame.getEulerAngles().yaw -= rotSpeed_;
             break;
           case SDLK_Q:
-            cameraPosY_ += moveSpeed_;
-            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            // Move up in camera's local Y direction
+            newOrigin += cameraFrame.localToGlobalRelative(unitY_);
             break;
           case SDLK_E:
-            cameraPosY_ -= moveSpeed_;
-            gpuManager_->setCameraTransform(cameraPosX_, cameraPosY_, cameraPosZ_, cameraRotX_, cameraRotY_, 0.0f);
+            // Move down in camera's local Y direction
+            newOrigin -= cameraFrame.localToGlobalRelative(unitY_);
             break;
           case SDLK_Z:
             // Add a new random pyramid instance
             gpuManager_->addInstance(
-              static_cast<float>(rand() % 10 - 5),  // Random X: -5 to 5
-              static_cast<float>(rand() % 10 - 5),  // Random Y: -5 to 5
-              static_cast<float>(rand() % 10 - 5),  // Random Z: -5 to 5
-              static_cast<float>(rand()) / RAND_MAX, // Random R
-              static_cast<float>(rand()) / RAND_MAX, // Random G
-              static_cast<float>(rand()) / RAND_MAX  // Random B
+              static_cast<float>(rand() % 10 - 5),    // Random X: -5 to 5
+              static_cast<float>(rand() % 10 - 5),    // Random Y: -5 to 5
+              static_cast<float>(rand() % 10 - 5),    // Random Z: -5 to 5
+              static_cast<float>(rand()) / RAND_MAX,  // Random R
+              static_cast<float>(rand()) / RAND_MAX,  // Random G
+              static_cast<float>(rand()) / RAND_MAX   // Random B
             );
             break;
           case SDLK_X:
@@ -133,6 +137,12 @@ void SDLApplication::handleEvents()
       default:
         break;
     }
+
+    cameraFrame.setOrigin(newOrigin);
+
+    // Log camera position using std::format
+    auto logMsg = std::format("Camera at {:.2f}", cameraFrame.getOrigin());
+    SDL_Log("%s", logMsg.c_str());
   }
 }
 

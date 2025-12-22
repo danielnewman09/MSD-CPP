@@ -9,17 +9,15 @@
         "${workspaceFolder}/msd/msd-assets",
         "${workspaceFolder}/msd/msd-exe",
         "${workspaceFolder}/test",
-        "/Users/danielnewman/.conan2/p/*/p/include",
+        "/Users/danielnewman/.conan2/p/**/p/include",
         "/opt/homebrew/include",
-        "/usr/local/include"
       ],
       "defines": [],
       "compilerPath": "/usr/bin/clang++",
       "cStandard": "c17",
       "cppStandard": "c++20",
       "intelliSenseMode": "macos-clang-arm64",
-      "configurationProvider": "ms-vscode.cmake-tools",
-      "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+      "configurationProvider": "ms-vscode.cmake-tools"
     },
     {
       "name": "Linux",

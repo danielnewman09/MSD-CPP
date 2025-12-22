@@ -14,7 +14,9 @@ namespace msd_gui
 {
 
 GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
-  : window_{window}, basePath_{basePath}
+  : window_{window},
+    basePath_{basePath},
+    camera_{msd_sim::Coordinate{0., 0., 5.}}
 {
   device_.reset(SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL |
                                       SDL_GPU_SHADERFORMAT_DXIL |
@@ -59,16 +61,17 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
   // This creates a pyramid with base size 1.0 and height 1.0
   auto pyramidGeometry = msd_assets::GeometryFactory::createPyramid(1.0, 1.0);
 
-  // Convert geometry to vertices (color will come from instance data, so use white)
-  std::vector<Vertex> pyramidVertices =
-    geometryToVertices(pyramidGeometry, 1.0f, 1.0f, 1.0f);
+  // Convert geometry to vertices (color will come from instance data, so use
+  // white)
+  auto pyramidVertices = pyramidGeometry.toGUIVertices(1.0f, 1.0f, 1.0f);
 
   pyramidVertexCount_ = pyramidVertices.size();
 
   // Create vertex buffer for base pyramid mesh
   SDL_GPUBufferCreateInfo vertexBufferCreateInfo = {
     .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
-    .size = static_cast<uint32_t>(pyramidVertices.size() * sizeof(Vertex))};
+    .size = static_cast<uint32_t>(pyramidVertices.size() *
+                                  sizeof(msd_assets::Vertex))};
 
   vertexBuffer_ =
     UniqueBuffer(SDL_CreateGPUBuffer(device_.get(), &vertexBufferCreateInfo),
@@ -94,7 +97,8 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
 
   void* vertexTransferData =
     SDL_MapGPUTransferBuffer(device_.get(), vertexTransferBuffer, false);
-  std::memcpy(vertexTransferData, pyramidVertices.data(), vertexBufferCreateInfo.size);
+  std::memcpy(
+    vertexTransferData, pyramidVertices.data(), vertexBufferCreateInfo.size);
   SDL_UnmapGPUTransferBuffer(device_.get(), vertexTransferBuffer);
 
   SDL_GPUCommandBuffer* vertexUploadCmd =
@@ -105,7 +109,9 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
     .transfer_buffer = vertexTransferBuffer, .offset = 0};
 
   SDL_GPUBufferRegion vertexBufferRegion = {
-    .buffer = vertexBuffer_.get(), .offset = 0, .size = vertexBufferCreateInfo.size};
+    .buffer = vertexBuffer_.get(),
+    .offset = 0,
+    .size = vertexBufferCreateInfo.size};
 
   SDL_UploadToGPUBuffer(
     vertexCopyPass, &vertexTransferLocation, &vertexBufferRegion, false);
@@ -114,9 +120,12 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
 
   SDL_ReleaseGPUTransferBuffer(device_.get(), vertexTransferBuffer);
 
-  // Initialize instances with two pyramids (for compatibility with existing demo)
-  instances_.push_back({{0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}});  // Red at origin
-  instances_.push_back({{2.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}});  // Green at x=2
+  // Initialize instances with two pyramids (for compatibility with existing
+  // demo)
+  instances_.push_back(
+    {{0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}});  // Red at origin
+  instances_.push_back(
+    {{2.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}});  // Green at x=2
 
   // Create instance buffer (pre-allocate space for many instances)
   const size_t maxInstances = 1000;
@@ -136,46 +145,9 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
   // Upload initial instance data
   uploadInstanceBuffer();
 
-  // Create uniform buffer for transform
-  // TEMPORARY: Use simple orthographic-like projection for testing
-  // Just scale down by 2 to fit in NDC space
-  for (int i = 0; i < 16; ++i)
-  {
-    transform_.mvpMatrix[i] = 0.0f;
-  }
-  transform_.mvpMatrix[0] = 0.5f;   // Scale X
-  transform_.mvpMatrix[5] = 0.5f;   // Scale Y
-  transform_.mvpMatrix[10] = 0.5f;  // Scale Z
-  transform_.mvpMatrix[15] = 1.0f;  // W (homogeneous)
-
-  SDL_Log("Using simple test matrix (scale by 0.5):");
-  SDL_Log("  [%.2f %.2f %.2f %.2f]",
-          transform_.mvpMatrix[0],
-          transform_.mvpMatrix[1],
-          transform_.mvpMatrix[2],
-          transform_.mvpMatrix[3]);
-  SDL_Log("  [%.2f %.2f %.2f %.2f]",
-          transform_.mvpMatrix[4],
-          transform_.mvpMatrix[5],
-          transform_.mvpMatrix[6],
-          transform_.mvpMatrix[7]);
-  SDL_Log("  [%.2f %.2f %.2f %.2f]",
-          transform_.mvpMatrix[8],
-          transform_.mvpMatrix[9],
-          transform_.mvpMatrix[10],
-          transform_.mvpMatrix[11]);
-  SDL_Log("  [%.2f %.2f %.2f %.2f]",
-          transform_.mvpMatrix[12],
-          transform_.mvpMatrix[13],
-          transform_.mvpMatrix[14],
-          transform_.mvpMatrix[15]);
-
-  // TEMPORARILY COMMENT OUT THE CAMERA TRANSFORM
-  updateTransformMatrix();
-
   SDL_GPUBufferCreateInfo uniformBufferCreateInfo = {
     .usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
-    .size = sizeof(TransformData)};
+    .size = sizeof(Eigen::Matrix4f)};
 
   uniformBuffer_ =
     UniqueBuffer(SDL_CreateGPUBuffer(device_.get(), &uniformBufferCreateInfo),
@@ -199,7 +171,9 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
      .offset = 0},
     {.location = 1,
      .buffer_slot = 0,
-     .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // color (r, g, b) - unused but kept for compatibility
+     .format =
+       SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,  // color (r, g, b) - unused but kept
+                                            // for compatibility
      .offset = sizeof(float) * 3},
     {.location = 2,
      .buffer_slot = 0,
@@ -218,7 +192,7 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
   SDL_GPUVertexBufferDescription bufferDescriptions[] = {
     // Slot 0: Per-vertex data
     {.slot = 0,
-     .pitch = sizeof(Vertex),
+     .pitch = sizeof(msd_assets::Vertex),
      .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
      .instance_step_rate = 0},
     // Slot 1: Per-instance data
@@ -268,12 +242,29 @@ GPUManager::GPUManager(SDL_Window& window, const std::string& basePath)
           "Vertex size: %zu bytes, Instance size: %zu bytes",
           pyramidVertexCount_,
           instances_.size(),
-          sizeof(Vertex),
+          sizeof(msd_assets::Vertex),
           sizeof(InstanceData));
+}
+
+
+Camera3D& GPUManager::getCamera()
+{
+  return camera_;
 }
 
 void GPUManager::render()
 {
+  {
+    // Update camera aspect ratio based on current window size
+    int width, height;
+    SDL_GetWindowSize(&window_, &width, &height);
+    if (height > 0)
+    {
+      camera_.setAspectRatio(static_cast<float>(width) /
+                             static_cast<float>(height));
+    }
+  }
+
   SDL_GPUCommandBuffer* commandBuffer{
     SDL_AcquireGPUCommandBuffer(device_.get())};
 
@@ -282,35 +273,15 @@ void GPUManager::render()
     throw SDLException("Couldn't acquire command buffer");
   }
 
+  // Get the MVP matrix from the camera
+  Eigen::Matrix4f mvpMatrix = camera_.getMVPMatrix();
+
   // Upload transform data to uniform buffer
   SDL_PushGPUVertexUniformData(
-    commandBuffer, 0, &transform_, sizeof(TransformData));
+    commandBuffer, 0, mvpMatrix.data(), sizeof(Eigen::Matrix4f));
 
   static int frameCount = 0;
-  if (frameCount == 0)
-  {
-    SDL_Log("First frame - Matrix being sent to shader:");
-    SDL_Log("  [%.3f %.3f %.3f %.3f]",
-            transform_.mvpMatrix[0],
-            transform_.mvpMatrix[1],
-            transform_.mvpMatrix[2],
-            transform_.mvpMatrix[3]);
-    SDL_Log("  [%.3f %.3f %.3f %.3f]",
-            transform_.mvpMatrix[4],
-            transform_.mvpMatrix[5],
-            transform_.mvpMatrix[6],
-            transform_.mvpMatrix[7]);
-    SDL_Log("  [%.3f %.3f %.3f %.3f]",
-            transform_.mvpMatrix[8],
-            transform_.mvpMatrix[9],
-            transform_.mvpMatrix[10],
-            transform_.mvpMatrix[11]);
-    SDL_Log("  [%.3f %.3f %.3f %.3f]",
-            transform_.mvpMatrix[12],
-            transform_.mvpMatrix[13],
-            transform_.mvpMatrix[14],
-            transform_.mvpMatrix[15]);
-  }
+
   frameCount++;
 
   SDL_GPUTexture* swapchainTexture;
@@ -364,15 +335,17 @@ void GPUManager::render()
     SDL_BindGPUVertexBuffers(renderPass, 0, bufferBindings, 2);
 
     // Draw all instances with a single instanced draw call
-    // SDL_DrawGPUPrimitives parameters: (renderPass, vertexCount, instanceCount, firstVertex, firstInstance)
+    // SDL_DrawGPUPrimitives parameters: (renderPass, vertexCount,
+    // instanceCount, firstVertex, firstInstance)
     if (!instances_.empty())
     {
       SDL_DrawGPUPrimitives(
         renderPass,
-        static_cast<uint32_t>(pyramidVertexCount_),  // Number of vertices per instance
-        static_cast<uint32_t>(instances_.size()),     // Number of instances
-        0,  // First vertex
-        0); // First instance
+        static_cast<uint32_t>(
+          pyramidVertexCount_),  // Number of vertices per instance
+        static_cast<uint32_t>(instances_.size()),  // Number of instances
+        0,                                         // First vertex
+        0);                                        // First instance
     }
 
     SDL_EndGPURenderPass(renderPass);
@@ -386,207 +359,6 @@ void GPUManager::render()
   }
 }
 
-void GPUManager::setCameraTransform(float posX,
-                                    float posY,
-                                    float posZ,
-                                    float rotX,
-                                    float rotY,
-                                    float rotZ)
-{
-  cameraPosX_ = posX;
-  cameraPosY_ = posY;
-  cameraPosZ_ = posZ;
-  cameraRotX_ = rotX;
-  cameraRotY_ = rotY;
-  cameraRotZ_ = rotZ;
-  updateTransformMatrix();
-}
-
-void GPUManager::updateTransformMatrix()
-{
-  // Get window dimensions for aspect ratio
-  int width, height;
-  SDL_GetWindowSize(&window_, &width, &height);
-  float aspect = static_cast<float>(width) / static_cast<float>(height);
-
-  static bool firstCall = true;
-  if (firstCall)
-  {
-    SDL_Log("Initial camera: pos=(%.2f, %.2f, %.2f), rot=(%.2f, %.2f)",
-            cameraPosX_,
-            cameraPosY_,
-            cameraPosZ_,
-            cameraRotX_,
-            cameraRotY_);
-    firstCall = false;
-  }
-
-  // Create perspective projection matrix (column-major for Metal/HLSL)
-  float fov = 60.0f * 3.14159f / 180.0f;
-  float nearPlane = 0.1f;
-  float farPlane = 100.0f;
-  float f = 1.0f / std::tan(fov / 2.0f);
-
-  // Projection matrix (column-major) - Fixed for reverse Z
-  float proj[16] = {f / aspect,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    (nearPlane + farPlane) / (nearPlane - farPlane),
-                    -1.0f,
-                    0.0f,
-                    0.0f,
-                    (2.0f * nearPlane * farPlane) / (nearPlane - farPlane),
-                    0.0f};
-
-  // Create view matrix with full camera translation
-  // In column-major format, translation is in the last row (elements 12, 13,
-  // 14) We negate camera position to move world in opposite direction
-  float view[16] = {1.0f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    1.0f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    1.0f,
-                    0.0f,
-                    -cameraPosX_,
-                    -cameraPosY_,
-                    -cameraPosZ_,
-                    1.0f};
-
-  // Apply rotations
-  float cosX = std::cos(cameraRotX_);
-  float sinX = std::sin(cameraRotX_);
-  float cosY = std::cos(cameraRotY_);
-  float sinY = std::sin(cameraRotY_);
-
-  // Rotation around Y axis (yaw) - column-major
-  float rotY[16] = {cosY,
-                    0.0f,
-                    -sinY,
-                    0.0f,
-                    0.0f,
-                    1.0f,
-                    0.0f,
-                    0.0f,
-                    sinY,
-                    0.0f,
-                    cosY,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    1.0f};
-
-  // Rotation around X axis (pitch) - column-major
-  float rotX[16] = {1.0f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    cosX,
-                    sinX,
-                    0.0f,
-                    0.0f,
-                    -sinX,
-                    cosX,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    1.0f};
-
-  // Matrix multiplication helper
-  auto multiplyMatrices = [](const float* a, const float* b, float* result)
-  {
-    for (int i = 0; i < 4; ++i)
-    {
-      for (int j = 0; j < 4; ++j)
-      {
-        result[j * 4 + i] = 0.0f;
-        for (int k = 0; k < 4; ++k)
-        {
-          result[j * 4 + i] += a[k * 4 + i] * b[j * 4 + k];
-        }
-      }
-    }
-  };
-
-  // MVP = Projection * View (skip rotations for now)
-  multiplyMatrices(proj, view, transform_.mvpMatrix);
-
-  if (firstCall)
-  {
-    SDL_Log("MVP Matrix (first 4 values): [%.3f, %.3f, %.3f, %.3f]",
-            transform_.mvpMatrix[0],
-            transform_.mvpMatrix[1],
-            transform_.mvpMatrix[2],
-            transform_.mvpMatrix[3]);
-  }
-}
-
-std::vector<Vertex> GPUManager::geometryToVertices(
-  const msd_assets::Geometry& geometry,
-  float r,
-  float g,
-  float b)
-{
-  const auto& coords = geometry.getVertices();
-  std::vector<Vertex> vertices;
-  vertices.reserve(coords.size());
-
-  // Process triangles (every 3 vertices form a triangle)
-  for (size_t i = 0; i + 2 < coords.size(); i += 3)
-  {
-    const auto& v0 = coords[i];
-    const auto& v1 = coords[i + 1];
-    const auto& v2 = coords[i + 2];
-
-    // Calculate two edge vectors using Eigen operations
-    auto edge1 = v1 - v0;
-    auto edge2 = v2 - v0;
-
-    // Calculate normal using cross product and normalize
-    auto normal = edge1.cross(edge2).normalized();
-
-    // Convert double precision coordinates to float for GPU
-    // Add all three vertices of the triangle with the same normal
-    vertices.push_back({{static_cast<float>(v0.x()),
-                         static_cast<float>(v0.y()),
-                         static_cast<float>(v0.z())},
-                        {r, g, b},
-                        {static_cast<float>(normal.x()),
-                         static_cast<float>(normal.y()),
-                         static_cast<float>(normal.z())}});
-    vertices.push_back({{static_cast<float>(v1.x()),
-                         static_cast<float>(v1.y()),
-                         static_cast<float>(v1.z())},
-                        {r, g, b},
-                        {static_cast<float>(normal.x()),
-                         static_cast<float>(normal.y()),
-                         static_cast<float>(normal.z())}});
-    vertices.push_back({{static_cast<float>(v2.x()),
-                         static_cast<float>(v2.y()),
-                         static_cast<float>(v2.z())},
-                        {r, g, b},
-                        {static_cast<float>(normal.x()),
-                         static_cast<float>(normal.y()),
-                         static_cast<float>(normal.z())}});
-  }
-
-  return vertices;
-}
 
 void GPUManager::uploadInstanceBuffer()
 {
@@ -612,15 +384,15 @@ void GPUManager::uploadInstanceBuffer()
   std::memcpy(transferData, instances_.data(), transferCreateInfo.size);
   SDL_UnmapGPUTransferBuffer(device_.get(), transferBuffer);
 
-  SDL_GPUCommandBuffer* uploadCmd =
-    SDL_AcquireGPUCommandBuffer(device_.get());
+  SDL_GPUCommandBuffer* uploadCmd = SDL_AcquireGPUCommandBuffer(device_.get());
   SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(uploadCmd);
 
   SDL_GPUTransferBufferLocation transferLocation = {
     .transfer_buffer = transferBuffer, .offset = 0};
 
-  SDL_GPUBufferRegion bufferRegion = {
-    .buffer = instanceBuffer_.get(), .offset = 0, .size = transferCreateInfo.size};
+  SDL_GPUBufferRegion bufferRegion = {.buffer = instanceBuffer_.get(),
+                                      .offset = 0,
+                                      .size = transferCreateInfo.size};
 
   SDL_UploadToGPUBuffer(copyPass, &transferLocation, &bufferRegion, false);
   SDL_EndGPUCopyPass(copyPass);
@@ -631,39 +403,69 @@ void GPUManager::uploadInstanceBuffer()
   instanceBufferNeedsUpdate_ = false;
 }
 
-void GPUManager::addInstance(float posX, float posY, float posZ, float r, float g, float b)
+void GPUManager::addInstance(float posX,
+                             float posY,
+                             float posZ,
+                             float r,
+                             float g,
+                             float b)
 {
   instances_.push_back({{posX, posY, posZ}, {r, g, b}});
   uploadInstanceBuffer();
-  SDL_Log("Added instance at (%.2f, %.2f, %.2f) with color (%.2f, %.2f, %.2f). Total instances: %zu",
-          posX, posY, posZ, r, g, b, instances_.size());
+  SDL_Log("Added instance at (%.2f, %.2f, %.2f) with color (%.2f, %.2f, %.2f). "
+          "Total instances: %zu",
+          posX,
+          posY,
+          posZ,
+          r,
+          g,
+          b,
+          instances_.size());
 }
 
 void GPUManager::removeInstance(size_t index)
 {
   if (index >= instances_.size())
   {
-    SDL_Log("ERROR: Cannot remove instance %zu, only %zu instances exist", index, instances_.size());
+    SDL_Log("ERROR: Cannot remove instance %zu, only %zu instances exist",
+            index,
+            instances_.size());
     return;
   }
 
   instances_.erase(instances_.begin() + index);
   uploadInstanceBuffer();
-  SDL_Log("Removed instance %zu. Remaining instances: %zu", index, instances_.size());
+  SDL_Log(
+    "Removed instance %zu. Remaining instances: %zu", index, instances_.size());
 }
 
-void GPUManager::updateInstance(size_t index, float posX, float posY, float posZ, float r, float g, float b)
+void GPUManager::updateInstance(size_t index,
+                                float posX,
+                                float posY,
+                                float posZ,
+                                float r,
+                                float g,
+                                float b)
 {
   if (index >= instances_.size())
   {
-    SDL_Log("ERROR: Cannot update instance %zu, only %zu instances exist", index, instances_.size());
+    SDL_Log("ERROR: Cannot update instance %zu, only %zu instances exist",
+            index,
+            instances_.size());
     return;
   }
 
   instances_[index] = {{posX, posY, posZ}, {r, g, b}};
   uploadInstanceBuffer();
-  SDL_Log("Updated instance %zu to position (%.2f, %.2f, %.2f) with color (%.2f, %.2f, %.2f)",
-          index, posX, posY, posZ, r, g, b);
+  SDL_Log("Updated instance %zu to position (%.2f, %.2f, %.2f) with color "
+          "(%.2f, %.2f, %.2f)",
+          index,
+          posX,
+          posY,
+          posZ,
+          r,
+          g,
+          b);
 }
 
 void GPUManager::clearInstances()

@@ -66,12 +66,13 @@ class msd(ConanFile):
         self.requires("gtest/1.15.0")
         self.requires("eigen/3.4.0")
         self.requires('sqlite3/3.47.0')
-        self.requires('spdlog/1.12.0')
+        self.requires('spdlog/1.14.1')
         self.requires('sdl/3.3.3')
         self.requires("sdl_image/3.2.4")
         self.requires("sdl_mixer/3.1.0")
         self.requires("sdl_ttf/3.2.2")
         self.requires("qhull/8.0.2")
+        self.requires("cpp_sqlite/0.1.0")
 
     def build_requirements(self):
         self.tool_requires("cmake/3.22.6")

@@ -7,6 +7,14 @@
 namespace msd_assets
 {
 
+struct Vertex
+{
+  float position[3];  // Position (x, y, z)
+  float color[3];     // Color (r, g, b)
+  float normal[3];    // Normal vector (x, y, z)
+};
+
+
 /**
  * @brief Simple 3D geometry container storing a collection of vertices
  *
@@ -32,16 +40,15 @@ public:
   explicit Geometry(const std::vector<msd_sim::Coordinate>& vertices);
 
   /**
-   * @brief Set all vertices
-   * @param vertices Vector of 3D coordinates
+   * @brief Convert Geometry to Vertex vector with colors
+   * @param r Red component (0.0-1.0)
+   * @param g Green component (0.0-1.0)
+   * @param b Blue component (0.0-1.0)
+   * @return Vector of Vertex structs ready for GPU upload
    */
-  void setVertices(const std::vector<msd_sim::Coordinate>& vertices);
-
-  /**
-   * @brief Add a single vertex to the geometry
-   * @param vertex 3D coordinate to add
-   */
-  void addVertex(const msd_sim::Coordinate& vertex);
+  std::vector<Vertex> toGUIVertices(float r = 1.0f,
+                                    float g = 1.0f,
+                                    float b = 1.0f);
 
   /**
    * @brief Get all vertices
@@ -54,17 +61,6 @@ public:
    * @return Number of vertices in the geometry
    */
   size_t getVertexCount() const;
-
-  /**
-   * @brief Clear all vertices
-   */
-  void clear();
-
-  /**
-   * @brief Reserve space for vertices (optimization for large geometries)
-   * @param count Number of vertices to reserve space for
-   */
-  void reserve(size_t count);
 
 private:
   std::vector<msd_sim::Coordinate> vertices_;

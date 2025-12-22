@@ -5,18 +5,29 @@ namespace msd_sim
 {
 
 ReferenceFrame::ReferenceFrame()
-  : origin_{0.0, 0.0, 0.0}, euler_{}, rotation_{Eigen::Matrix3d::Identity()}
+  : origin_{0.0, 0.0, 0.0},
+    euler_{},
+    rotation_{Eigen::Matrix3d::Identity()},
+    updated_{false}
 {
+  updateRotationMatrix();
 }
 
 ReferenceFrame::ReferenceFrame(const Coordinate& origin)
-  : origin_{origin}, euler_{}, rotation_{Eigen::Matrix3d::Identity()}
+  : origin_{origin},
+    euler_{},
+    rotation_{Eigen::Matrix3d::Identity()},
+    updated_{false}
 {
+  updateRotationMatrix();
 }
 
 ReferenceFrame::ReferenceFrame(const Coordinate& origin,
                                const EulerAngles& euler)
-  : origin_{origin}, euler_{euler}, rotation_{Eigen::Matrix3d::Identity()}
+  : origin_{origin},
+    euler_{euler},
+    rotation_{Eigen::Matrix3d::Identity()},
+    updated_{false}
 {
   updateRotationMatrix();
 }
@@ -26,13 +37,6 @@ void ReferenceFrame::globalToLocalInPlace(Coordinate& globalCoord) const
   // Translate to frame origin, then rotate to local orientation
   globalCoord -= origin_;
   globalCoord.applyOnTheLeft(rotation_.transpose());
-}
-
-Coordinate ReferenceFrame::globalToLocal(const Coordinate& globalCoord) const
-{
-  // Translate to frame origin, then rotate to local orientation
-  Coordinate translated = globalCoord - origin_;
-  return rotation_.transpose() * translated;
 }
 
 void ReferenceFrame::globalToLocalBatch(Eigen::Matrix3Xd& globalCoords) const
@@ -50,19 +54,42 @@ void ReferenceFrame::localToGlobalInPlace(Coordinate& localCoord) const
   localCoord += origin_;
 }
 
-Coordinate ReferenceFrame::localToGlobal(const Coordinate& localCoord) const
-{
-  // Rotate to global orientation, then translate to global position
-  Coordinate rotated = rotation_ * localCoord;
-  return rotated + origin_;
-}
-
 void ReferenceFrame::localToGlobalBatch(Eigen::Matrix3Xd& localCoords) const
 {
   // Rotate all coordinates to global orientation in one matrix multiply
   localCoords.applyOnTheLeft(rotation_);
   // Translate all coordinates to global position
   localCoords.colwise() += origin_;
+}
+
+Coordinate ReferenceFrame::globalToLocalRelative(
+  const Coordinate& globalVector) const
+{
+  // Apply only rotation (transpose for inverse), no translation
+  return rotation_.transpose() * globalVector;
+}
+
+Coordinate ReferenceFrame::localToGlobalRelative(
+  const Coordinate& localVector) const
+{
+  // Apply only rotation, no translation
+  return rotation_ * localVector;
+}
+
+Coordinate ReferenceFrame::globalToLocalAbsolute(
+  const Coordinate& globalPoint) const
+{
+  // Translate to frame origin, then rotate to local orientation
+  Coordinate translated = globalPoint - origin_;
+  return rotation_.transpose() * translated;
+}
+
+Coordinate ReferenceFrame::localToGlobalAbsolute(
+  const Coordinate& localPoint) const
+{
+  // Rotate to global orientation, then translate to global position
+  Coordinate rotated = rotation_ * localPoint;
+  return rotated + origin_;
 }
 
 void ReferenceFrame::setOrigin(const Coordinate& origin)
@@ -78,10 +105,11 @@ void ReferenceFrame::setRotation(const EulerAngles& euler)
 
 EulerAngles& ReferenceFrame::getEulerAngles()
 {
+  updated_ = false;
   return euler_;
 }
 
-void ReferenceFrame::updateRotationMatrix()
+void ReferenceFrame::updateRotationMatrix() const
 {
   // Create rotation matrix using ZYX Euler angle convention
   // Using Eigen's AngleAxis for clarity and efficiency
@@ -92,6 +120,7 @@ void ReferenceFrame::updateRotationMatrix()
   // Combine rotations: R = Rz(yaw) * Ry(pitch) * Rx(roll)
   Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
   rotation_ = q.matrix();
+  updated_ = true;
 }
 
 }  // namespace msd_sim

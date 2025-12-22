@@ -94,6 +94,56 @@ public:
   void localToGlobalBatch(Eigen::Matrix3Xd& localCoords) const;
 
   /**
+   * @brief Transform a direction vector from global frame to local frame
+   * (relative transformation)
+   *
+   * This applies only rotation, not translation. Use this for transforming
+   * direction vectors, velocities, or any vector that represents a direction
+   * rather than a position.
+   *
+   * @param globalVector Direction vector in global frame
+   * @return Direction vector in local frame
+   */
+  Coordinate globalToLocalRelative(const Coordinate& globalVector) const;
+
+  /**
+   * @brief Transform a direction vector from local frame to global frame
+   * (relative transformation)
+   *
+   * This applies only rotation, not translation. Use this for transforming
+   * direction vectors, velocities, or any vector that represents a direction
+   * rather than a position.
+   *
+   * @param localVector Direction vector in local frame
+   * @return Direction vector in global frame
+   */
+  Coordinate localToGlobalRelative(const Coordinate& localVector) const;
+
+  /**
+   * @brief Transform a point from global frame to local frame (absolute
+   * transformation)
+   *
+   * This applies both rotation and translation. Use this for transforming
+   * positions/points. This is an alias for globalToLocal() for clarity.
+   *
+   * @param globalPoint Point in global frame
+   * @return Point in local frame
+   */
+  Coordinate globalToLocalAbsolute(const Coordinate& globalPoint) const;
+
+  /**
+   * @brief Transform a point from local frame to global frame (absolute
+   * transformation)
+   *
+   * This applies both rotation and translation. Use this for transforming
+   * positions/points. This is an alias for localToGlobal() for clarity.
+   *
+   * @param localPoint Point in local frame
+   * @return Point in global frame
+   */
+  Coordinate localToGlobalAbsolute(const Coordinate& localPoint) const;
+
+  /**
    * @brief Set the origin of this frame in global coordinates
    * @param origin New origin position
    */
@@ -128,6 +178,10 @@ public:
    */
   const Eigen::Matrix3d& getRotation() const
   {
+    if (!updated_)
+    {
+      updateRotationMatrix();
+    }
     return rotation_;
   }
 
@@ -144,12 +198,14 @@ private:
   /*!
    * @brief Update rotation matrix from Eulerian angles
    */
-  void updateRotationMatrix();
+  void updateRotationMatrix() const;
 
   Coordinate origin_;  ///< Origin of this frame in global coordinates
   EulerAngles euler_;  ///< Rotation matrix from global to local frame
 
-  Eigen::Matrix3d rotation_;
+  mutable Eigen::Matrix3d rotation_;
+
+  mutable bool updated_;
 };
 
 }  // namespace msd_sim

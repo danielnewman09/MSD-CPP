@@ -1,0 +1,27 @@
+@startuml msd-assets-architecture
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontName Arial
+
+title MSD-Assets Library Architecture (Current State)
+
+package "msd-assets" {
+    struct Facet {
+        + vertexIndices: std::array<std::size_t, 3>
+        + normal: eigen::Vector3d 
+    }
+
+    ' Core Classes
+    class Geometry {
+        - vertices: vector<eigen::Vector3d>
+        --
+        + Geometry()
+        + Geometry(vector<Coordinate>)
+        + toGUIVertices(): vector<Vertex>
+        + getVertices(): vector<Coordinate>
+        --
+        Note: Pure data container
+        No rendering logic
+    }
+}
+
+@enduml
