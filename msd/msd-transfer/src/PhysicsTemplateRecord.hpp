@@ -9,7 +9,6 @@
 #include <cpp_sqlite/sqlite_db/DBBaseTransferObject.hpp>
 #include <cpp_sqlite/sqlite_db/DBForeignKey.hpp>
 
-#include "msd-transfer/src/CollisionHullRecord.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
 
 namespace msd_transfer
@@ -18,17 +17,16 @@ namespace msd_transfer
 /**
  * @brief Database record for complete physics object templates
  *
- * Combines visual mesh reference, collision hull reference, and physical
- * properties (mass, friction, etc.) into a reusable template for creating
- * rigid body instances.
+ * Combines mesh reference (which contains both visual and collision data)
+ * and physical properties (mass, friction, etc.) into a reusable template
+ * for creating rigid body instances.
  */
 struct PhysicsTemplateRecord : public cpp_sqlite::BaseTransferObject
 {
   std::string name;  // Unique template name (e.g., "pyramid_standard")
 
-  // References to geometry data (lazy-loaded via ForeignKey)
-  cpp_sqlite::ForeignKey<MeshRecord> visual_mesh;
-  cpp_sqlite::ForeignKey<CollisionHullRecord> collision_hull;
+  // Reference to geometry data (contains both visual mesh and collision hull)
+  cpp_sqlite::ForeignKey<MeshRecord> mesh;
 
   // Physical properties
   double mass{1.0};
@@ -47,8 +45,7 @@ struct PhysicsTemplateRecord : public cpp_sqlite::BaseTransferObject
 BOOST_DESCRIBE_STRUCT(msd_transfer::PhysicsTemplateRecord,
                       (cpp_sqlite::BaseTransferObject),
                       (name,
-                       visual_mesh,
-                       collision_hull,
+                       mesh,
                        mass,
                        friction,
                        restitution,

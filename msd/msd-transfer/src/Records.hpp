@@ -9,7 +9,6 @@
  * Use this when you need access to the complete database schema.
  */
 
-#include "msd-transfer/src/CollisionHullRecord.hpp"
 #include "msd-transfer/src/MaterialRecord.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
 #include "msd-transfer/src/PhysicsTemplateRecord.hpp"

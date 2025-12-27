@@ -6,26 +6,47 @@
 #include <vector>
 
 #include <boost/describe.hpp>
-#include <cpp_sqlite/sqlite_db/DBBaseTransferObject.hpp>
+#include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
 
 namespace msd_transfer
 {
 
 /**
- * @brief Database record for visual mesh geometry
+ * @brief Database record for complete geometry (visual mesh + collision hull)
  *
- * Stores rendering mesh data (vertices, normals, colors) as a BLOB.
- * Used for GPU rendering only - NOT for physics collision.
+ * Stores both the visual rendering mesh and the collision hull in a single
+ * record. This ensures that mesh and hull are always synchronized by ID.
+ *
+ * Visual mesh data contains positions and normals for rendering.
+ * Collision hull data contains simplified convex hull vertices for physics.
  */
 struct MeshRecord : public cpp_sqlite::BaseTransferObject
 {
-  std::string name;            // Unique mesh name (e.g., "pyramid_visual")
-  std::string category;        // Category for grouping (e.g., "primitive")
-  std::vector<uint8_t> vertex_data;  // Serialized Vertex[] array (BLOB)
-  uint32_t vertex_count;       // Number of vertices in the mesh
-  uint32_t triangle_count;     // Number of triangles (vertex_count / 3)
+  std::string name;      // Unique mesh name (e.g., "pyramid")
+  std::string category;  // Category for grouping (e.g., "primitives")
 
-  // Bounding box for culling/spatial queries
+  // Visual mesh data (for rendering)
+  // BLOB format: array of Vertex structs (position[3], color[3], normal[3])
+  std::vector<uint8_t> vertex_data;
+  uint32_t vertex_count{0};
+  uint32_t triangle_count{0};
+};
+
+
+// Register with Boost.Describe for cpp_sqlite ORM
+BOOST_DESCRIBE_STRUCT(
+  msd_transfer::MeshRecord,
+  (cpp_sqlite::BaseTransferObject),
+  (name, category, vertex_data, vertex_count, triangle_count));
+
+struct CollisionMeshRecord : public MeshRecord
+{
+  // Collision hull data (for physics)
+  // BLOB format: array of ConvexHull vertices (x, y, z doubles)
+  std::vector<uint8_t> hull_data;
+  uint32_t hull_vertex_count{0};
+
+  // Bounding volume metadata (computed from visual mesh)
   float aabb_min_x{0.0f};
   float aabb_min_y{0.0f};
   float aabb_min_z{0.0f};
@@ -35,16 +56,11 @@ struct MeshRecord : public cpp_sqlite::BaseTransferObject
   float bounding_radius{0.0f};
 };
 
-}  // namespace msd_transfer
-
 // Register with Boost.Describe for cpp_sqlite ORM
-BOOST_DESCRIBE_STRUCT(msd_transfer::MeshRecord,
-                      (cpp_sqlite::BaseTransferObject),
-                      (name,
-                       category,
-                       vertex_data,
-                       vertex_count,
-                       triangle_count,
+BOOST_DESCRIBE_STRUCT(msd_transfer::CollisionMeshRecord,
+                      (msd_transfer::MeshRecord),
+                      (hull_data,
+                       hull_vertex_count,
                        aabb_min_x,
                        aabb_min_y,
                        aabb_min_z,
@@ -52,5 +68,9 @@ BOOST_DESCRIBE_STRUCT(msd_transfer::MeshRecord,
                        aabb_max_y,
                        aabb_max_z,
                        bounding_radius));
+
+
+}  // namespace msd_transfer
+
 
 #endif  // MSD_TRANSFER_MESH_RECORD_HPP

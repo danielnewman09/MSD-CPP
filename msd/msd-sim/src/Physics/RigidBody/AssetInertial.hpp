@@ -54,7 +54,7 @@ namespace msd_sim
 class AssetInertial : public AssetPhysical
 {
 public:
-  AssetInertial(std::shared_ptr<msd_assets::Geometry> geometry,
+  AssetInertial(std::shared_ptr<msd_assets::CollisionGeometry> geometry,
                 double mass,
                 const ReferenceFrame& frame);
 

@@ -1,12 +1,11 @@
 #ifndef STLLOADER_HPP
 #define STLLOADER_HPP
 
+#include <Eigen/Dense>
 #include <memory>
 #include <string>
 #include <vector>
 #include "msd-assets/src/Geometry.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
-#include <Eigen/Dense>
 
 namespace msd_assets
 {
@@ -54,7 +53,7 @@ public:
    * @param filename Path to the STL file
    * @return Unique pointer to Geometry if successful, nullptr on error
    */
-  static std::unique_ptr<Geometry> loadSTL(const std::string& filename);
+  static std::unique_ptr<BaseGeometry> loadSTL(const std::string& filename);
 
   /**
    * @brief Load binary STL file
@@ -64,7 +63,8 @@ public:
    * @param filename Path to the binary STL file
    * @return Unique pointer to Geometry if successful, nullptr on error
    */
-  static std::unique_ptr<Geometry> loadBinarySTL(const std::string& filename);
+  static std::unique_ptr<BaseGeometry> loadBinarySTL(
+    const std::string& filename);
 
   /**
    * @brief Load ASCII STL file
@@ -74,7 +74,8 @@ public:
    * @param filename Path to the ASCII STL file
    * @return Unique pointer to Geometry if successful, nullptr on error
    */
-  static std::unique_ptr<Geometry> loadASCIISTL(const std::string& filename);
+  static std::unique_ptr<BaseGeometry> loadASCIISTL(
+    const std::string& filename);
 
   /**
    * @brief Read raw triangle data from binary STL file
@@ -114,7 +115,8 @@ public:
    * @param triangles Vector of STL triangles
    * @return Geometry object with all triangle vertices
    */
-  static Geometry trianglesToGeometry(const std::vector<STLTriangle>& triangles);
+  static BaseGeometry trianglesToGeometry(
+    const std::vector<STLTriangle>& triangles);
 
 private:
   /**

@@ -1,8 +1,6 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <sstream>
-#include <stdexcept>
 #include <unordered_map>
 
 extern "C"
@@ -11,7 +9,6 @@ extern "C"
 #include <libqhull_r/libqhull_r.h>
 }
 
-#include "msd-assets/src/Geometry.hpp"
 #include "msd-sim/src/Physics/GJK.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 
@@ -27,14 +24,16 @@ ConvexHull::ConvexHull()
 {
 }
 
-ConvexHull::ConvexHull(const std::vector<Coordinate>& points) : ConvexHull()
+ConvexHull::ConvexHull(const msd_assets::CollisionGeometry& geometry)
+  : volume_{std::numeric_limits<double>::quiet_NaN()},
+    surfaceArea_{std::numeric_limits<double>::quiet_NaN()},
+    boundingBoxMin_{0.0, 0.0, 0.0},
+    boundingBoxMax_{0.0, 0.0, 0.0},
+    centroid_{0.0, 0.0, 0.0}
 {
-  if (points.empty())
-  {
-    throw std::runtime_error("Cannot create convex hull from empty point set");
-  }
-  computeHull(points);
+  computeHull(geometry.getHullVertices());
 }
+
 
 const std::vector<Coordinate>& ConvexHull::getVertices() const
 {
@@ -130,94 +129,7 @@ bool ConvexHull::intersects(const ConvexHull& other, double epsilon) const
   return gjkIntersects(*this, other, epsilon);
 }
 
-void ConvexHull::computeHull(const std::vector<Coordinate>& points)
-{
-  if (points.size() < 4)
-  {
-    throw std::runtime_error(
-      "Cannot create 3D convex hull from fewer than 4 points");
-  }
-
-  // Convert points to Qhull format (flat array of doubles)
-  std::vector<double> qhullPoints;
-  qhullPoints.reserve(points.size() * 3);
-
-  for (const auto& point : points)
-  {
-    qhullPoints.push_back(point.x());
-    qhullPoints.push_back(point.y());
-    qhullPoints.push_back(point.z());
-  }
-
-  // Initialize thread-local Qhull state
-  qhT qh_qh;
-  qhT* qh = &qh_qh;
-
-  QHULL_LIB_CHECK
-  qh_zero(qh, stderr);
-
-  try
-  {
-    // Run Qhull with reentrant API
-    // "qhull" = required command prefix
-    // "Qt" = triangulated output (ensures all facets are triangles)
-    // "Pp" = suppress progress messages
-    char options[] = "qhull Qt Pp";
-    int exitcode =
-      qh_new_qhull(qh,
-                   3,                                // dimension
-                   static_cast<int>(points.size()),  // numpoints
-                   qhullPoints.data(),               // points array
-                   False,    // ismalloc (we manage memory)
-                   options,  // options (non-const for qhull's parsing)
-                   stderr,   // outfile
-                   stderr);  // errfile
-
-    if (exitcode != 0)
-    {
-      int curlong, totlong;
-      qh_freeqhull(qh, !qh_ALL);
-      qh_memfreeshort(qh, &curlong, &totlong);
-
-      std::ostringstream oss;
-      oss << "Qhull failed with exit code " << exitcode;
-      throw std::runtime_error(oss.str());
-    }
-
-    // Calculate volume and surface area
-    qh_getarea(qh, qh->facet_list);
-    volume_ = qh->totvol;
-    surfaceArea_ = qh->totarea;
-
-    // Extract bounding box from Qhull
-    boundingBoxMin_ =
-      Coordinate{qh->lower_bound[0], qh->lower_bound[1], qh->lower_bound[2]};
-    boundingBoxMax_ =
-      Coordinate{qh->upper_bound[0], qh->upper_bound[1], qh->upper_bound[2]};
-
-    // Extract hull data
-    extractHullData(qh);
-
-    // Clean up Qhull
-    int curlong, totlong;
-    qh_freeqhull(qh, !qh_ALL);
-    qh_memfreeshort(qh, &curlong, &totlong);
-
-    // Compute centroid after hull data is extracted
-    computeCentroid();
-  }
-  catch (const std::exception& e)
-  {
-    // Ensure cleanup on exception
-    int curlong, totlong;
-    qh_freeqhull(qh, !qh_ALL);
-    qh_memfreeshort(qh, &curlong, &totlong);
-
-    std::ostringstream oss;
-    oss << "Failed to compute convex hull: " << e.what();
-    throw std::runtime_error(oss.str());
-  }
-}
+// computeHull is now a template defined in the header file
 
 void ConvexHull::extractHullData(qhT* qh)
 {

@@ -22,6 +22,7 @@ add_subdirectory(test)
 # Link libraries after finding them
 target_link_libraries(${MSD_SIM_NAME}
         PUBLIC
+          msd_assets
           spdlog::spdlog
           Eigen3::Eigen
           qhull::qhullstatic_r)

@@ -8,9 +8,10 @@
 namespace msd_sim
 {
 
-AssetInertial::AssetInertial(std::shared_ptr<msd_assets::Geometry> geometry,
-                             double mass,
-                             const ReferenceFrame& frame)
+AssetInertial::AssetInertial(
+  std::shared_ptr<msd_assets::CollisionGeometry> geometry,
+  double mass,
+  const ReferenceFrame& frame)
   : AssetPhysical{geometry, frame},
     mass_{mass},
     inertiaTensor_{Eigen::Matrix3d::Zero()},

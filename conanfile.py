@@ -25,6 +25,10 @@ class msd(ConanFile):
         "enable_coverage": False
     }
 
+    def configure(self):
+        # Set C++20 standard for all dependencies and this package
+        self.settings.compiler.cppstd = "20"
+
     # Sources are located in the same place as this recipe, copy them to the recipe
     exports_sources = "../../CMakeLists.txt", "../../src/*", "../../test/*", "../../*.cmake"
 
@@ -32,8 +36,6 @@ class msd(ConanFile):
         deps = CMakeDeps(self)
         deps.generate()
         tc = CMakeToolchain(self)
-        tc.variables["CMAKE_CXX_STANDARD"] = "20"
-        tc.variables["CMAKE_CXX_STANDARD_REQUIRED"] = "ON"
 
         # Pass coverage option to CMake
         tc.variables["ENABLE_COVERAGE"] = self.options.enable_coverage
@@ -73,6 +75,7 @@ class msd(ConanFile):
         self.requires("sdl_ttf/3.2.2")
         self.requires("qhull/8.0.2")
         self.requires("cpp_sqlite/0.1.0")
+        self.requires("boost/1.86.0")
 
     def build_requirements(self):
         self.tool_requires("cmake/3.22.6")

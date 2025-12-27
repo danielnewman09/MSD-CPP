@@ -26,14 +26,9 @@ AssetPhysical::AssetPhysical(std::shared_ptr<msd_assets::Geometry> geometry,
   }
 }
 
-const msd_assets::Geometry& AssetPhysical::getVisualGeometry() const
-{
-  return visualGeometry_;
-}
-
 const ConvexHull& AssetPhysical::getCollisionHull() const
 {
-  return collisionHull_.get();
+  return collisionGeometry_.get().;
 }
 
 const ReferenceFrame& AssetPhysical::getReferenceFrame() const

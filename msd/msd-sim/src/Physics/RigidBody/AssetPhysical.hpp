@@ -48,7 +48,7 @@ public:
    * @param customHull Optional custom collision hull (if null, computed from
    * geometry)
    */
-  AssetPhysical(std::shared_ptr<msd_assets::Geometry> geometry,
+  AssetPhysical(std::shared_ptr<msd_assets::CollisionGeometry> geometry,
                 const ReferenceFrame& frame);
 
   /**
@@ -90,10 +90,10 @@ public:
 
 protected:
   // Visual representation (shared across multiple instances)
-  msd_assets::Geometry visualGeometry_;
+  msd_assets::CollisionGeometry visualGeometry_;
 
   // Collision hull (computed lazily, then cached)
-  std::shared_ptr<ConvexHull> collisionHull_;
+  ConvexHull collisionHull_;
 
   // Reference frame defining position and orientation in world space
   ReferenceFrame referenceFrame_;

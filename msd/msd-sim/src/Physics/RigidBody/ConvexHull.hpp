@@ -4,13 +4,19 @@
 #include <array>
 #include <memory>
 #include <optional>
+#include <sstream>
+#include <stdexcept>
 #include <vector>
+#include "msd-assets/src/Geometry.hpp"
+#include "msd-assets/src/GeometryTraits.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
 
 // Forward declare Qhull C API types
 extern "C"
 {
   struct qhT;
+#include <libqhull_r/geom_r.h>
+#include <libqhull_r/libqhull_r.h>
 }
 
 namespace msd_assets
@@ -77,7 +83,18 @@ public:
    * @param points Vector of 3D coordinates
    * @throws std::runtime_error if points are degenerate or Qhull fails
    */
-  explicit ConvexHull(const std::vector<Coordinate>& points);
+
+  // Template implementation must be in header
+  template <msd_assets::IsVector3 VectorType>
+  explicit ConvexHull(const std::vector<VectorType>& points) : ConvexHull()
+  {
+    if (points.empty())
+    {
+      throw std::runtime_error(
+        "Cannot create convex hull from empty point set");
+    }
+    computeHull(points);
+  }
 
   /**
    * @brief Create convex hull from msd_assets::Geometry object.
@@ -88,7 +105,7 @@ public:
    * @return ConvexHull of the geometry's vertices
    * @throws std::runtime_error if geometry is empty or degenerate
    */
-  explicit ConvexHull(const msd_assets::Geometry& geometry);
+  explicit ConvexHull(const msd_assets::CollisionGeometry& geometry);
 
   /**
    * @brief Get all vertices of the convex hull.
@@ -210,13 +227,104 @@ private:
   Coordinate centroid_;               // The centroid of the convex hull
 
   /**
-   * @brief Internal method to compute the convex hull using Qhull.
+   * @brief Internal template method to compute the convex hull using Qhull.
    *
+   * Accepts any vector-like type that provides x(), y(), z() accessors,
+   * such as Eigen::Vector3d or msd_sim::Coordinate.
+   *
+   * @tparam VectorType Type with x(), y(), z() methods returning doubles
    * @param points Input point cloud
    * @throws std::runtime_error if Qhull computation fails
    */
-  void computeHull(const std::vector<Coordinate>& points);
+  template <msd_assets::IsVector3 VectorType>
+  void computeHull(const std::vector<VectorType>& points)
+  {
+    if (points.size() < 4)
+    {
+      throw std::runtime_error(
+        "Cannot create 3D convex hull from fewer than 4 points");
+    }
 
+    // Convert points to Qhull format (flat array of doubles)
+    std::vector<double> qhullPoints;
+    qhullPoints.reserve(points.size() * 3);
+
+    for (const auto& point : points)
+    {
+      qhullPoints.push_back(point.x());
+      qhullPoints.push_back(point.y());
+      qhullPoints.push_back(point.z());
+    }
+
+    // Initialize thread-local Qhull state
+    qhT qh_qh;
+    qhT* qh = &qh_qh;
+
+    QHULL_LIB_CHECK
+    qh_zero(qh, stderr);
+
+    try
+    {
+      // Run Qhull with reentrant API
+      // "qhull" = required command prefix
+      // "Qt" = triangulated output (ensures all facets are triangles)
+      // "Pp" = suppress progress messages
+      char options[] = "qhull Qt Pp";
+      int exitcode =
+        qh_new_qhull(qh,
+                     3,                                // dimension
+                     static_cast<int>(points.size()),  // numpoints
+                     qhullPoints.data(),               // points array
+                     False,    // ismalloc (we manage memory)
+                     options,  // options (non-const for qhull's parsing)
+                     stderr,   // outfile
+                     stderr);  // errfile
+
+      if (exitcode != 0)
+      {
+        int curlong, totlong;
+        qh_freeqhull(qh, !qh_ALL);
+        qh_memfreeshort(qh, &curlong, &totlong);
+
+        std::ostringstream oss;
+        oss << "Qhull failed with exit code " << exitcode;
+        throw std::runtime_error(oss.str());
+      }
+
+      // Calculate volume and surface area
+      qh_getarea(qh, qh->facet_list);
+      volume_ = qh->totvol;
+      surfaceArea_ = qh->totarea;
+
+      // Extract bounding box from Qhull
+      boundingBoxMin_ =
+        Coordinate{qh->lower_bound[0], qh->lower_bound[1], qh->lower_bound[2]};
+      boundingBoxMax_ =
+        Coordinate{qh->upper_bound[0], qh->upper_bound[1], qh->upper_bound[2]};
+
+      // Extract hull data
+      extractHullData(qh);
+
+      // Clean up Qhull
+      int curlong, totlong;
+      qh_freeqhull(qh, !qh_ALL);
+      qh_memfreeshort(qh, &curlong, &totlong);
+
+      // Compute centroid after hull data is extracted
+      computeCentroid();
+    }
+    catch (const std::exception& e)
+    {
+      // Ensure cleanup on exception
+      int curlong, totlong;
+      qh_freeqhull(qh, !qh_ALL);
+      qh_memfreeshort(qh, &curlong, &totlong);
+
+      std::ostringstream oss;
+      oss << "Failed to compute convex hull: " << e.what();
+      throw std::runtime_error(oss.str());
+    }
+  }
   /**
    * @brief Extract vertices and facets from Qhull result.
    *
@@ -234,6 +342,7 @@ private:
    */
   void computeCentroid();
 };
+
 
 }  // namespace msd_sim
 
