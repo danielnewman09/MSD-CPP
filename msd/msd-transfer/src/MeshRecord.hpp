@@ -35,7 +35,7 @@ struct MeshRecord : public cpp_sqlite::BaseTransferObject
 
 // Register with Boost.Describe for cpp_sqlite ORM
 BOOST_DESCRIBE_STRUCT(
-  msd_transfer::MeshRecord,
+  MeshRecord,
   (cpp_sqlite::BaseTransferObject),
   (name, category, vertex_data, vertex_count, triangle_count));
 
@@ -57,8 +57,8 @@ struct CollisionMeshRecord : public MeshRecord
 };
 
 // Register with Boost.Describe for cpp_sqlite ORM
-BOOST_DESCRIBE_STRUCT(msd_transfer::CollisionMeshRecord,
-                      (msd_transfer::MeshRecord),
+BOOST_DESCRIBE_STRUCT(CollisionMeshRecord,
+                      (MeshRecord),
                       (hull_data,
                        hull_vertex_count,
                        aabb_min_x,

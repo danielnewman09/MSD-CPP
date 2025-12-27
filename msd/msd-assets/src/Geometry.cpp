@@ -124,7 +124,8 @@ BaseGeometry BaseGeometry::fromMeshRecord(
   const msd_transfer::MeshRecord& record)
 {
   // Validate vertex_data blob size
-  if (record.vertex_data.size() % sizeof(Vertex) != 0)
+  if (record.vertex_data.size() % sizeof(Vertex) != 0 ||
+      record.vertex_data.size() == 0)
   {
     throw std::runtime_error("Invalid vertex_data BLOB size: not a multiple of "
                              "Vertex size (36 bytes)");

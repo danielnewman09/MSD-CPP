@@ -6,7 +6,7 @@
   "configurations": [
     {
       "name": "Debug msd_exe",
-      "type": "lldb",
+      "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/Debug/debug/msd_exe",
       "args": [],
@@ -19,7 +19,7 @@
     },
     {
       "name": "Debug msd_exe (No Build)",
-      "type": "lldb",
+      "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/Debug/debug/msd_exe",
       "args": [],
@@ -31,7 +31,7 @@
     },
     {
       "name": "Release msd_exe",
-      "type": "lldb",
+      "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/Release/release/msd_exe",
       "args": [],
@@ -44,7 +44,7 @@
     },
     {
       "name": "Debug msd_exe (Stop at Entry)",
-      "type": "lldb",
+      "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/Debug/debug/msd_exe",
       "args": [],

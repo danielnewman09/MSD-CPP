@@ -6,6 +6,7 @@ add_executable(${MSD_SIM_TEST_NAME})
 
 # Add test source files
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
+    GeometrySerializationTest.cpp
     GeometryDatabaseTest.cpp
 )
 

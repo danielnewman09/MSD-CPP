@@ -19,7 +19,7 @@
     ],
     "testMate.cpp.debug.configTemplate": {
         "type": "cppdbg",
-        "MIMode": "gdb",
+        "MIMode": "lldb",
         "program": "${exec}",
         "args": "${argsArray}",
         "env": "${envObj}",
@@ -27,13 +27,28 @@
         "sourceFileMap": "${sourceFileMapObj}",
         "setupCommands": [
             {
-                "description": "Enable pretty-printing for gdb",
-                "text": "-enable-pretty-printing",
+                "description": "Limit children to prevent hang on deep template types",
+                "text": "settings set target.max-children-count 50",
+                "ignoreFailures": true
+            },
+            // {
+            //     "description": "Limit string summary length",
+            //     "text": "settings set target.max-string-summary-length 100",
+            //     "ignoreFailures": true
+            // },
+            // {
+            //     "description": "Set memory read limit",
+            //     "text": "settings set target.max-memory-read-size 512",
+            //     "ignoreFailures": true
+            // },
+            {
+                "description": "Disable type summaries to reduce template inspection",
+                "text": "type summary clear",
                 "ignoreFailures": true
             },
             {
-                "description": "Load STL pretty printers",
-                "text": "python import sys; sys.path.insert(0, '/usr/share/gcc/python'); from libstdcxx.v6.printers import register_libstdcxx_printers; register_libstdcxx_printers(None)",
+                "description": "Set expression evaluation timeout",
+                "text": "settings set target.expr-prefix-timeout 1000",
                 "ignoreFailures": true
             }
         ],
