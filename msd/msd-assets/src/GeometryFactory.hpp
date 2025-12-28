@@ -14,12 +14,12 @@ namespace msd_assets
 /**
  * @brief Factory class for creating common 3D geometric shapes
  *
- * Provides static template methods to generate BaseGeometry or CollisionGeometry
+ * Provides static template methods to generate VisualGeometry or CollisionGeometry
  * objects for standard shapes. All geometries are triangulated and centered at
  * the origin.
  *
  * Usage:
- *   auto cube = GeometryFactory::createCube<BaseGeometry>(1.0);
+ *   auto cube = GeometryFactory::createCube<VisualGeometry>(1.0);
  *   auto collisionCube = GeometryFactory::createCube<CollisionGeometry>(1.0);
  */
 class GeometryFactory
@@ -33,11 +33,11 @@ public:
    *
    * The cube extends from -size/2 to +size/2 in all dimensions.
    *
-   * @tparam GeometryType Either BaseGeometry or CollisionGeometry
+   * @tparam GeometryType Either VisualGeometry or CollisionGeometry
    * @param size Side length of the cube
    * @return Geometry object containing 36 vertices (12 triangles × 3 vertices)
    */
-  template <IsBaseGeometry GeometryType = BaseGeometry>
+  template <IsGeometry GeometryType = VisualGeometry>
   static GeometryType createCube(double size)
   {
 
@@ -105,11 +105,11 @@ public:
    * Creates vertices for the 12 edges of a cube, useful for line rendering.
    * Returns pairs of vertices representing each edge.
    *
-   * @tparam GeometryType Either BaseGeometry or CollisionGeometry
+   * @tparam GeometryType Either VisualGeometry or CollisionGeometry
    * @param size Side length of the cube
    * @return Geometry object containing 24 vertices (12 edges × 2 vertices)
    */
-  template <IsBaseGeometry GeometryType = BaseGeometry>
+  template <IsGeometry GeometryType = VisualGeometry>
   static GeometryType createCubeWireframe(double size)
   {
 
@@ -155,12 +155,12 @@ public:
    *
    * Creates a pyramid with a square base and apex, triangulated.
    *
-   * @tparam GeometryType Either BaseGeometry or CollisionGeometry
+   * @tparam GeometryType Either VisualGeometry or CollisionGeometry
    * @param baseSize Side length of the square base
    * @param height Height of the pyramid
    * @return Geometry object containing pyramid vertices
    */
-  template <IsBaseGeometry GeometryType = BaseGeometry>
+  template <IsGeometry GeometryType = VisualGeometry>
   static GeometryType createPyramid(double baseSize, double height)
   {
 

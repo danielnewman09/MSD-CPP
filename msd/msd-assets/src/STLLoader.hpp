@@ -53,7 +53,7 @@ public:
    * @param filename Path to the STL file
    * @return Unique pointer to Geometry if successful, nullptr on error
    */
-  static std::unique_ptr<BaseGeometry> loadSTL(const std::string& filename);
+  static std::unique_ptr<VisualGeometry> loadSTL(const std::string& filename);
 
   /**
    * @brief Load binary STL file
@@ -63,7 +63,7 @@ public:
    * @param filename Path to the binary STL file
    * @return Unique pointer to Geometry if successful, nullptr on error
    */
-  static std::unique_ptr<BaseGeometry> loadBinarySTL(
+  static std::unique_ptr<VisualGeometry> loadBinarySTL(
     const std::string& filename);
 
   /**
@@ -74,7 +74,7 @@ public:
    * @param filename Path to the ASCII STL file
    * @return Unique pointer to Geometry if successful, nullptr on error
    */
-  static std::unique_ptr<BaseGeometry> loadASCIISTL(
+  static std::unique_ptr<VisualGeometry> loadASCIISTL(
     const std::string& filename);
 
   /**
@@ -115,7 +115,7 @@ public:
    * @param triangles Vector of STL triangles
    * @return Geometry object with all triangle vertices
    */
-  static BaseGeometry trianglesToGeometry(
+  static VisualGeometry trianglesToGeometry(
     const std::vector<STLTriangle>& triangles);
 
 private:

@@ -7,13 +7,13 @@
 namespace msd_assets
 {
 
-BaseGeometry::BaseGeometry(const std::vector<Eigen::Vector3d>& vertices)
+VisualGeometry::VisualGeometry(const std::vector<Eigen::Vector3d>& vertices)
   : cachedVertices_{computeVertexData(vertices)}
 {
 }
 
 
-std::vector<Vertex> BaseGeometry::computeVertexData(
+std::vector<Vertex> VisualGeometry::computeVertexData(
   const std::vector<Eigen::Vector3d>& vertices)
 {
   std::vector<Vertex> result;
@@ -62,12 +62,12 @@ std::vector<Vertex> BaseGeometry::computeVertexData(
   return result;
 }
 
-const std::vector<Vertex>& BaseGeometry::getVertices() const
+const std::vector<Vertex>& VisualGeometry::getVertices() const
 {
   return cachedVertices_;
 }
 
-std::vector<Vertex> BaseGeometry::toGUIVertices(float r, float g, float b)
+std::vector<Vertex> VisualGeometry::toGUIVertices(float r, float g, float b)
 {
   // Copy cached vertices and apply colors
   std::vector<Vertex> vertices = cachedVertices_;
@@ -81,7 +81,7 @@ std::vector<Vertex> BaseGeometry::toGUIVertices(float r, float g, float b)
   return vertices;
 }
 
-std::vector<uint8_t> BaseGeometry::serializeVertices() const
+std::vector<uint8_t> VisualGeometry::serializeVertices() const
 {
   const size_t blobSize = cachedVertices_.size() * sizeof(Vertex);
   std::vector<uint8_t> blob(blobSize);
@@ -89,7 +89,8 @@ std::vector<uint8_t> BaseGeometry::serializeVertices() const
   return blob;
 }
 
-BaseGeometry BaseGeometry::deserializeVertices(const std::vector<uint8_t>& blob)
+VisualGeometry VisualGeometry::deserializeVertices(
+  const std::vector<uint8_t>& blob)
 {
   if (blob.size() % sizeof(Vertex) != 0)
   {
@@ -97,19 +98,19 @@ BaseGeometry BaseGeometry::deserializeVertices(const std::vector<uint8_t>& blob)
       "Invalid BLOB size: not a multiple of Vertex size (36 bytes)");
   }
 
-  BaseGeometry geom;
+  VisualGeometry geom;
   const size_t vertexCount = blob.size() / sizeof(Vertex);
   const Vertex* vertexData = reinterpret_cast<const Vertex*>(blob.data());
   geom.cachedVertices_.assign(vertexData, vertexData + vertexCount);
   return geom;
 }
 
-size_t BaseGeometry::getVertexCount() const
+size_t VisualGeometry::getVertexCount() const
 {
   return cachedVertices_.size();
 }
 
-void BaseGeometry::populateMeshRecord(msd_transfer::MeshRecord& record) const
+void VisualGeometry::populateMeshRecord(msd_transfer::MeshRecord& record) const
 {
   // Populate vertex data
   const size_t vertexBlobSize = cachedVertices_.size() * sizeof(Vertex);
@@ -120,7 +121,7 @@ void BaseGeometry::populateMeshRecord(msd_transfer::MeshRecord& record) const
   record.triangle_count = record.vertex_count / 3;
 }
 
-BaseGeometry BaseGeometry::fromMeshRecord(
+VisualGeometry VisualGeometry::fromMeshRecord(
   const msd_transfer::MeshRecord& record)
 {
   // Validate vertex_data blob size
@@ -136,8 +137,8 @@ BaseGeometry BaseGeometry::fromMeshRecord(
   const Vertex* vertexData =
     reinterpret_cast<const Vertex*>(record.vertex_data.data());
 
-  // Create BaseGeometry with empty constructor, then populate
-  BaseGeometry geom;
+  // Create VisualGeometry with empty constructor, then populate
+  VisualGeometry geom;
   geom.cachedVertices_.assign(vertexData, vertexData + vertexCount);
 
   return geom;
@@ -147,13 +148,19 @@ BaseGeometry BaseGeometry::fromMeshRecord(
 
 CollisionGeometry::CollisionGeometry(
   const std::vector<Eigen::Vector3d>& vertices)
-  : BaseGeometry(vertices), hullVertices_{vertices}
+  : hullVertices_{vertices}
 {
+  calculateBoundingBox();
 }
 
 size_t CollisionGeometry::getVertexCount() const
 {
   return hullVertices_.size();
+}
+
+const BoundingBox& CollisionGeometry::getBoundingBox() const
+{
+  return boundingBox_;
 }
 
 std::vector<uint8_t> CollisionGeometry::serializeHullVertices() const
@@ -199,46 +206,52 @@ std::vector<Eigen::Vector3d> CollisionGeometry::deserializeHullVertices(
   return vertices;
 }
 
-BoundingBox CollisionGeometry::calculateBoundingBox() const
+void CollisionGeometry::calculateBoundingBox()
 {
-  if (cachedVertices_.empty())
+  if (hullVertices_.empty())
   {
-    return {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    boundingBox_ = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    return;
   }
 
-  BoundingBox bbox;
-  bbox.min_x = bbox.min_y = bbox.min_z = std::numeric_limits<float>::max();
-  bbox.max_x = bbox.max_y = bbox.max_z = std::numeric_limits<float>::lowest();
+  boundingBox_.min_x = boundingBox_.min_y = boundingBox_.min_z =
+    std::numeric_limits<float>::max();
+  boundingBox_.max_x = boundingBox_.max_y = boundingBox_.max_z =
+    std::numeric_limits<float>::lowest();
 
-  // Calculate AABB from vertex positions
-  for (const auto& v : cachedVertices_)
+  // Calculate AABB from hull vertices
+  for (const auto& v : hullVertices_)
   {
-    bbox.min_x = std::min(bbox.min_x, v.position[0]);
-    bbox.min_y = std::min(bbox.min_y, v.position[1]);
-    bbox.min_z = std::min(bbox.min_z, v.position[2]);
-    bbox.max_x = std::max(bbox.max_x, v.position[0]);
-    bbox.max_y = std::max(bbox.max_y, v.position[1]);
-    bbox.max_z = std::max(bbox.max_z, v.position[2]);
+    boundingBox_.min_x =
+      std::min(boundingBox_.min_x, static_cast<float>(v.x()));
+    boundingBox_.min_y =
+      std::min(boundingBox_.min_y, static_cast<float>(v.y()));
+    boundingBox_.min_z =
+      std::min(boundingBox_.min_z, static_cast<float>(v.z()));
+    boundingBox_.max_x =
+      std::max(boundingBox_.max_x, static_cast<float>(v.x()));
+    boundingBox_.max_y =
+      std::max(boundingBox_.max_y, static_cast<float>(v.y()));
+    boundingBox_.max_z =
+      std::max(boundingBox_.max_z, static_cast<float>(v.z()));
   }
 
   // Calculate bounding sphere radius (from AABB center)
-  float center_x = (bbox.min_x + bbox.max_x) * 0.5f;
-  float center_y = (bbox.min_y + bbox.max_y) * 0.5f;
-  float center_z = (bbox.min_z + bbox.max_z) * 0.5f;
+  float center_x = (boundingBox_.min_x + boundingBox_.max_x) * 0.5f;
+  float center_y = (boundingBox_.min_y + boundingBox_.max_y) * 0.5f;
+  float center_z = (boundingBox_.min_z + boundingBox_.max_z) * 0.5f;
 
   float maxDistSq = 0.0f;
-  for (const auto& v : cachedVertices_)
+  for (const auto& v : hullVertices_)
   {
-    float dx = v.position[0] - center_x;
-    float dy = v.position[1] - center_y;
-    float dz = v.position[2] - center_z;
+    float dx = static_cast<float>(v.x()) - center_x;
+    float dy = static_cast<float>(v.y()) - center_y;
+    float dz = static_cast<float>(v.z()) - center_z;
     float distSq = dx * dx + dy * dy + dz * dz;
     maxDistSq = std::max(maxDistSq, distSq);
   }
 
-  bbox.radius = std::sqrt(maxDistSq);
-
-  return bbox;
+  boundingBox_.radius = std::sqrt(maxDistSq);
 }
 
 const std::vector<Eigen::Vector3d>& CollisionGeometry::getHullVertices() const
@@ -249,57 +262,42 @@ const std::vector<Eigen::Vector3d>& CollisionGeometry::getHullVertices() const
 void CollisionGeometry::populateMeshRecord(
   msd_transfer::CollisionMeshRecord& record) const
 {
-  // First populate the base visual mesh data
-  BaseGeometry::populateMeshRecord(record);
-
-  // Now populate hull data
+  // Populate hull data
   record.hull_data = serializeHullVertices();
   record.hull_vertex_count = static_cast<uint32_t>(hullVertices_.size());
 
   // Populate bounding box metadata
-  BoundingBox bbox = calculateBoundingBox();
-  record.aabb_min_x = bbox.min_x;
-  record.aabb_min_y = bbox.min_y;
-  record.aabb_min_z = bbox.min_z;
-  record.aabb_max_x = bbox.max_x;
-  record.aabb_max_y = bbox.max_y;
-  record.aabb_max_z = bbox.max_z;
-  record.bounding_radius = bbox.radius;
+  record.aabb_min_x = boundingBox_.min_x;
+  record.aabb_min_y = boundingBox_.min_y;
+  record.aabb_min_z = boundingBox_.min_z;
+  record.aabb_max_x = boundingBox_.max_x;
+  record.aabb_max_y = boundingBox_.max_y;
+  record.aabb_max_z = boundingBox_.max_z;
+  record.bounding_radius = boundingBox_.radius;
 }
 
 CollisionGeometry CollisionGeometry::fromMeshRecord(
   const msd_transfer::CollisionMeshRecord& record)
 {
-  // Validate vertex_data blob size
-  if (record.vertex_data.size() % sizeof(Vertex) != 0)
+  // Deserialize hull vertices
+  if (record.hull_data.empty())
   {
-    throw std::runtime_error("Invalid vertex_data BLOB size: not a multiple of "
-                             "Vertex size (36 bytes)");
+    throw std::runtime_error("CollisionMeshRecord has empty hull_data");
   }
 
-  // Deserialize cached vertex data
-  const size_t vertexCount = record.vertex_data.size() / sizeof(Vertex);
-  const Vertex* vertexData =
-    reinterpret_cast<const Vertex*>(record.vertex_data.data());
+  auto hullVertices = deserializeHullVertices(record.hull_data);
 
-  // Extract visual coordinates from vertex data
-  std::vector<Eigen::Vector3d> vertices;
-  vertices.reserve(vertexCount);
-  for (size_t i = 0; i < vertexCount; ++i)
-  {
-    vertices.emplace_back(static_cast<double>(vertexData[i].position[0]),
-                          static_cast<double>(vertexData[i].position[1]),
-                          static_cast<double>(vertexData[i].position[2]));
-  }
+  // Create CollisionGeometry with hull vertices
+  CollisionGeometry geom(hullVertices);
 
-  // Create CollisionGeometry with visual vertices
-  CollisionGeometry geom(vertices);
-
-  // Deserialize hull vertices if present
-  if (!record.hull_data.empty())
-  {
-    geom.hullVertices_ = deserializeHullVertices(record.hull_data);
-  }
+  // Restore bounding box from record (instead of recalculating)
+  geom.boundingBox_.min_x = record.aabb_min_x;
+  geom.boundingBox_.min_y = record.aabb_min_y;
+  geom.boundingBox_.min_z = record.aabb_min_z;
+  geom.boundingBox_.max_x = record.aabb_max_x;
+  geom.boundingBox_.max_y = record.aabb_max_y;
+  geom.boundingBox_.max_z = record.aabb_max_z;
+  geom.boundingBox_.radius = record.bounding_radius;
 
   return geom;
 }

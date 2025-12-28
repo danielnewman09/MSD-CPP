@@ -1,4 +1,6 @@
 target_sources(${MSD_ASSETS_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/Asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/AssetRegistry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Geometry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/GeometryFactory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/STLLoader.cpp
@@ -6,6 +8,8 @@ target_sources(${MSD_ASSETS_NAME} PRIVATE
 
 set(
     HEADER_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/Asset.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/AssetRegistry.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/CoordianteTO.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Geometry.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/GeometryTO.hpp

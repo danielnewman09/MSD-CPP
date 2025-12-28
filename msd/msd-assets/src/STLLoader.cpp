@@ -8,7 +8,7 @@
 namespace msd_assets
 {
 
-std::unique_ptr<BaseGeometry> STLLoader::loadSTL(const std::string& filename)
+std::unique_ptr<VisualGeometry> STLLoader::loadSTL(const std::string& filename)
 {
   if (isBinarySTL(filename))
   {
@@ -20,7 +20,7 @@ std::unique_ptr<BaseGeometry> STLLoader::loadSTL(const std::string& filename)
   }
 }
 
-std::unique_ptr<BaseGeometry> STLLoader::loadBinarySTL(
+std::unique_ptr<VisualGeometry> STLLoader::loadBinarySTL(
   const std::string& filename)
 {
   std::vector<STLTriangle> triangles = readBinarySTLTriangles(filename);
@@ -31,10 +31,10 @@ std::unique_ptr<BaseGeometry> STLLoader::loadBinarySTL(
     return nullptr;
   }
 
-  return std::make_unique<BaseGeometry>(trianglesToGeometry(triangles));
+  return std::make_unique<VisualGeometry>(trianglesToGeometry(triangles));
 }
 
-std::unique_ptr<BaseGeometry> STLLoader::loadASCIISTL(
+std::unique_ptr<VisualGeometry> STLLoader::loadASCIISTL(
   const std::string& filename)
 {
   std::vector<STLTriangle> triangles = readASCIISTLTriangles(filename);
@@ -45,7 +45,7 @@ std::unique_ptr<BaseGeometry> STLLoader::loadASCIISTL(
     return nullptr;
   }
 
-  return std::make_unique<BaseGeometry>(trianglesToGeometry(triangles));
+  return std::make_unique<VisualGeometry>(trianglesToGeometry(triangles));
 }
 
 std::vector<STLTriangle> STLLoader::readBinarySTLTriangles(
@@ -236,7 +236,7 @@ bool STLLoader::isBinarySTL(const std::string& filename)
   return true;
 }
 
-BaseGeometry STLLoader::trianglesToGeometry(
+VisualGeometry STLLoader::trianglesToGeometry(
   const std::vector<STLTriangle>& triangles)
 {
   std::vector<Eigen::Vector3d> vertices;
@@ -255,7 +255,7 @@ BaseGeometry STLLoader::trianglesToGeometry(
       triangle.vertex3.x(), triangle.vertex3.y(), triangle.vertex3.z());
   }
 
-  return BaseGeometry{vertices};
+  return VisualGeometry{vertices};
 }
 
 bool STLLoader::validateBinarySTLSize(size_t fileSize, uint32_t triangleCount)
