@@ -59,20 +59,11 @@ protected:
 
 TEST_F(GeometryDatabaseTest, VisualGeometry_CreateAndStore_Cube)
 {
-  // Create a cube using the factory
-  auto cube =
-    msd_assets::GeometryFactory::createCube<msd_assets::VisualGeometry>(2.0);
-
-  // Verify vertex count (12 triangles × 3 vertices = 36 vertices)
-  EXPECT_EQ(cube.getVertexCount(), 36);
-
-  // Create a msd_transfer::MeshRecord and populate it
-  msd_transfer::MeshRecord meshRecord;
-  cube.populateMeshRecord(meshRecord);
+  // Create MeshRecord directly from factory
+  auto meshRecord = msd_assets::GeometryFactory::createCube(2.0);
 
   // Verify record fields
   EXPECT_EQ(meshRecord.vertex_count, 36);
-  EXPECT_EQ(meshRecord.triangle_count, 12);
   EXPECT_FALSE(meshRecord.vertex_data.empty());
   EXPECT_EQ(meshRecord.vertex_data.size(), 36 * sizeof(msd_assets::Vertex));
 
@@ -81,6 +72,12 @@ TEST_F(GeometryDatabaseTest, VisualGeometry_CreateAndStore_Cube)
   // Insert mesh into database
   meshDAO.insert(meshRecord);
   EXPECT_GT(meshRecord.id, 0);
+
+  // Reconstruct VisualGeometry from the record
+  msd_assets::VisualGeometry cube{meshRecord, 1};
+
+  // Verify vertex count (12 triangles × 3 vertices = 36 vertices)
+  EXPECT_EQ(cube.getVertexCount(), 36);
 
   // Create ObjectRecord that references the mesh
   msd_transfer::ObjectRecord objectRecord;
@@ -99,7 +96,6 @@ TEST_F(GeometryDatabaseTest, VisualGeometry_CreateAndStore_Cube)
 
   // Verify retrieved mesh data matches
   EXPECT_EQ(retrievedMesh->vertex_count, meshRecord.vertex_count);
-  EXPECT_EQ(retrievedMesh->triangle_count, meshRecord.triangle_count);
   EXPECT_EQ(retrievedMesh->vertex_data.size(), meshRecord.vertex_data.size());
   EXPECT_EQ(retrievedMesh->vertex_data, meshRecord.vertex_data);
 
@@ -121,32 +117,28 @@ TEST_F(GeometryDatabaseTest, MinimalDatabaseTest)
 
 TEST_F(GeometryDatabaseTest, VisualGeometry_RoundTrip_Pyramid)
 {
-  // Create a pyramid
-  auto pyramid =
-    msd_assets::GeometryFactory::createPyramid<msd_assets::VisualGeometry>(3.0,
-                                                                           4.0);
+  // Create MeshRecord directly from factory
+  auto record = msd_assets::GeometryFactory::createPyramid(3.0, 4.0);
 
-  // Verify vertex count (6 triangles × 3 vertices = 18 vertices)
-  EXPECT_EQ(pyramid.getVertexCount(), 18);
-
-  // Serialize to msd_transfer::MeshRecord
-  msd_transfer::MeshRecord record;
-  pyramid.populateMeshRecord(record);
-
+  // Verify record data
+  EXPECT_EQ(record.vertex_count, 18);  // 6 triangles × 3 vertices
   auto& meshDAO = db_->getDAO<msd_transfer::MeshRecord>();
-
   ASSERT_TRUE(meshDAO.isInitialized());
 
   // Store in database
   meshDAO.insert(record);
   EXPECT_GT(record.id, 0);
 
+  // Reconstruct original geometry from the record before storing
+  msd_assets::VisualGeometry pyramid{record, 1};
+  EXPECT_EQ(pyramid.getVertexCount(), 18);
+
   // Retrieve from database
   auto retrieved = meshDAO.selectById(record.id);
   ASSERT_TRUE(retrieved.has_value());
 
   // Reconstruct geometry from retrieved record
-  auto reconstructed = msd_assets::VisualGeometry::fromMeshRecord(*retrieved);
+  msd_assets::VisualGeometry reconstructed{*retrieved, 1};
 
   // Verify reconstructed geometry matches original
   EXPECT_EQ(reconstructed.getVertexCount(), pyramid.getVertexCount());
@@ -182,27 +174,20 @@ TEST_F(GeometryDatabaseTest, VisualGeometry_RoundTrip_Pyramid)
 
 TEST_F(GeometryDatabaseTest, CollisionGeometry_CreateAndStore_Cube)
 {
-  // Create a collision cube
-  auto collisionCube =
-    msd_assets::GeometryFactory::createCube<msd_assets::CollisionGeometry>(1.5);
-
-  EXPECT_EQ(collisionCube.getVertexCount(), 36);  // Hull vertices
-
-  // Create CollisionMeshRecord and populate it
-  msd_transfer::CollisionMeshRecord collisionRecord;
-  collisionCube.populateMeshRecord(collisionRecord);
+  // Create CollisionMeshRecord directly from factory
+  auto collisionRecord = msd_assets::GeometryFactory::createCube(1.5);
 
   // Verify hull data
-  EXPECT_EQ(collisionRecord.hull_vertex_count, 36);
-  EXPECT_FALSE(collisionRecord.hull_data.empty());
+  EXPECT_EQ(collisionRecord.vertex_count, 36);
+  EXPECT_FALSE(collisionRecord.vertex_data.empty());
 
-  // Verify bounding box was calculated
-  EXPECT_LT(collisionRecord.aabb_min_x, 0.0f);
-  EXPECT_GT(collisionRecord.aabb_max_x, 0.0f);
-  EXPECT_GT(collisionRecord.bounding_radius, 0.0f);
+
+  // Reconstruct CollisionGeometry from record
+  msd_assets::CollisionGeometry collisionCube{collisionRecord, 1};
+  EXPECT_EQ(collisionCube.getVertexCount(), 36);  // Hull vertices
 
   // Insert collision mesh into database
-  auto& collisionDAO = db_->getDAO<msd_transfer::CollisionMeshRecord>();
+  auto& collisionDAO = db_->getDAO<msd_transfer::MeshRecord>();
   EXPECT_TRUE(collisionDAO.insert(collisionRecord));
   EXPECT_GT(collisionRecord.id, 0);
 
@@ -220,16 +205,13 @@ TEST_F(GeometryDatabaseTest, CollisionGeometry_CreateAndStore_Cube)
 
 TEST_F(GeometryDatabaseTest, CollisionGeometry_RoundTrip_CompleteData)
 {
-  // Create a collision pyramid
-  auto pyramid =
-    msd_assets::GeometryFactory::createPyramid<msd_assets::CollisionGeometry>(
-      2.0, 3.0);
+  // Create CollisionMeshRecord directly from factory
+  auto record = msd_assets::GeometryFactory::createPyramid(2.0, 3.0);
 
-  // Serialize to CollisionMeshRecord
-  msd_transfer::CollisionMeshRecord record;
-  pyramid.populateMeshRecord(record);
+  // Reconstruct original geometry from record
+  msd_assets::CollisionGeometry pyramid{record, 1};
 
-  auto& collisionDAO = db_->getDAO<msd_transfer::CollisionMeshRecord>();
+  auto& collisionDAO = db_->getDAO<msd_transfer::MeshRecord>();
 
   // Store in database
   collisionDAO.insert(record);
@@ -240,28 +222,18 @@ TEST_F(GeometryDatabaseTest, CollisionGeometry_RoundTrip_CompleteData)
   ASSERT_TRUE(retrieved.has_value());
 
   // Verify all fields match
-  EXPECT_EQ(retrieved->hull_vertex_count, record.hull_vertex_count);
-  EXPECT_EQ(retrieved->hull_data, record.hull_data);
+  EXPECT_EQ(retrieved->vertex_count, record.vertex_count);
+  EXPECT_EQ(retrieved->vertex_data, record.vertex_data);
 
-  // Verify bounding box data
-  EXPECT_FLOAT_EQ(retrieved->aabb_min_x, record.aabb_min_x);
-  EXPECT_FLOAT_EQ(retrieved->aabb_min_y, record.aabb_min_y);
-  EXPECT_FLOAT_EQ(retrieved->aabb_min_z, record.aabb_min_z);
-  EXPECT_FLOAT_EQ(retrieved->aabb_max_x, record.aabb_max_x);
-  EXPECT_FLOAT_EQ(retrieved->aabb_max_y, record.aabb_max_y);
-  EXPECT_FLOAT_EQ(retrieved->aabb_max_z, record.aabb_max_z);
-  EXPECT_FLOAT_EQ(retrieved->bounding_radius, record.bounding_radius);
-
-  // Reconstruct geometry
-  auto reconstructed =
-    msd_assets::CollisionGeometry::fromMeshRecord(*retrieved);
+  // Reconstruct geometry from retrieved record
+  msd_assets::CollisionGeometry reconstructed{*retrieved, 1};
 
   // Verify geometry matches
   EXPECT_EQ(reconstructed.getVertexCount(), pyramid.getVertexCount());
 
   // Verify hull vertices match
-  const auto& originalHull = pyramid.getHullVertices();
-  const auto& reconstructedHull = reconstructed.getHullVertices();
+  const auto& originalHull = pyramid.getVertices();
+  const auto& reconstructedHull = reconstructed.getVertices();
 
   ASSERT_EQ(originalHull.size(), reconstructedHull.size());
 
@@ -279,20 +251,11 @@ TEST_F(GeometryDatabaseTest, CollisionGeometry_RoundTrip_CompleteData)
 
 TEST_F(GeometryDatabaseTest, QueryByName_FindsCorrectRecord)
 {
-  // Create and store multiple geometries
-  auto cube =
-    msd_assets::GeometryFactory::createCube<msd_assets::VisualGeometry>(1.0);
-  auto pyramid =
-    msd_assets::GeometryFactory::createPyramid<msd_assets::VisualGeometry>(1.5,
-                                                                           2.0);
+  // Create MeshRecords directly from factory
+  auto cubeRecord = msd_assets::GeometryFactory::createCube(1.0);
+  auto pyramidRecord = msd_assets::GeometryFactory::createPyramid(1.5, 2.0);
 
   // Store mesh data
-  msd_transfer::MeshRecord cubeRecord;
-  cube.populateMeshRecord(cubeRecord);
-
-  msd_transfer::MeshRecord pyramidRecord;
-  pyramid.populateMeshRecord(pyramidRecord);
-
   auto& meshDAO = db_->getDAO<msd_transfer::MeshRecord>();
   meshDAO.insert(cubeRecord);
   meshDAO.insert(pyramidRecord);
@@ -330,22 +293,13 @@ TEST_F(GeometryDatabaseTest, QueryByName_FindsCorrectRecord)
 
 TEST_F(GeometryDatabaseTest, QueryByCategory_FindsMultipleRecords)
 {
-  // Create and store multiple collision geometries
-  auto cube1 =
-    msd_assets::GeometryFactory::createCube<msd_assets::CollisionGeometry>(1.0);
-  auto cube2 =
-    msd_assets::GeometryFactory::createCube<msd_assets::CollisionGeometry>(2.0);
-  auto pyramid =
-    msd_assets::GeometryFactory::createPyramid<msd_assets::CollisionGeometry>(
-      1.5, 2.0);
+  // Create CollisionMeshRecords directly from factory
+  auto record1 = msd_assets::GeometryFactory::createCube(1.0);
+  auto record2 = msd_assets::GeometryFactory::createCube(2.0);
+  auto record3 = msd_assets::GeometryFactory::createPyramid(1.5, 2.0);
 
   // Store collision mesh data
-  msd_transfer::CollisionMeshRecord record1, record2, record3;
-  cube1.populateMeshRecord(record1);
-  cube2.populateMeshRecord(record2);
-  pyramid.populateMeshRecord(record3);
-
-  auto& collisionDAO = db_->getDAO<msd_transfer::CollisionMeshRecord>();
+  auto& collisionDAO = db_->getDAO<msd_transfer::MeshRecord>();
   collisionDAO.insert(record1);
   collisionDAO.insert(record2);
   collisionDAO.insert(record3);
@@ -404,28 +358,21 @@ TEST_F(GeometryDatabaseTest, InvalidBlobSize_ThrowsException)
   msd_transfer::MeshRecord invalid;
   invalid.vertex_data = std::vector<uint8_t>(10);  // Not a multiple of 36
   invalid.vertex_count = 3;
-  invalid.triangle_count = 1;
 
   // Attempt to deserialize should throw
-  EXPECT_THROW(msd_assets::VisualGeometry::fromMeshRecord(invalid),
-               std::runtime_error);
+  EXPECT_THROW(msd_assets::VisualGeometry(invalid, 1), std::runtime_error);
 }
 
 TEST_F(GeometryDatabaseTest, CollisionGeometry_InvalidHullBlob_ThrowsException)
 {
-  // Create a valid visual mesh but invalid hull
-  auto cube =
-    msd_assets::GeometryFactory::createCube<msd_assets::CollisionGeometry>(1.0);
-
-  msd_transfer::CollisionMeshRecord record;
-  cube.populateMeshRecord(record);
+  // Create a valid CollisionMeshRecord then corrupt it
+  auto record = msd_assets::GeometryFactory::createCube(1.0);
 
   // Corrupt the hull data (not a multiple of 24 bytes)
-  record.hull_data = std::vector<uint8_t>(10);
+  record.vertex_data = std::vector<uint8_t>(10);
 
   // Attempt to deserialize should throw
-  EXPECT_THROW(msd_assets::CollisionGeometry::fromMeshRecord(record),
-               std::runtime_error);
+  EXPECT_THROW(msd_assets::CollisionGeometry(record, 1), std::runtime_error);
 }
 
 TEST_F(GeometryDatabaseTest, GetNonexistentRecord_ReturnsNullopt)

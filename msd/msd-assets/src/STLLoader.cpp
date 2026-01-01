@@ -8,7 +8,8 @@
 namespace msd_assets
 {
 
-std::unique_ptr<VisualGeometry> STLLoader::loadSTL(const std::string& filename)
+std::unique_ptr<msd_transfer::MeshRecord> STLLoader::loadSTL(
+  const std::string& filename)
 {
   if (isBinarySTL(filename))
   {
@@ -20,7 +21,7 @@ std::unique_ptr<VisualGeometry> STLLoader::loadSTL(const std::string& filename)
   }
 }
 
-std::unique_ptr<VisualGeometry> STLLoader::loadBinarySTL(
+std::unique_ptr<msd_transfer::MeshRecord> STLLoader::loadBinarySTL(
   const std::string& filename)
 {
   std::vector<STLTriangle> triangles = readBinarySTLTriangles(filename);
@@ -31,10 +32,11 @@ std::unique_ptr<VisualGeometry> STLLoader::loadBinarySTL(
     return nullptr;
   }
 
-  return std::make_unique<VisualGeometry>(trianglesToGeometry(triangles));
+  return std::make_unique<msd_transfer::MeshRecord>(
+    trianglesToMeshRecord(triangles));
 }
 
-std::unique_ptr<VisualGeometry> STLLoader::loadASCIISTL(
+std::unique_ptr<msd_transfer::MeshRecord> STLLoader::loadASCIISTL(
   const std::string& filename)
 {
   std::vector<STLTriangle> triangles = readASCIISTLTriangles(filename);
@@ -45,7 +47,8 @@ std::unique_ptr<VisualGeometry> STLLoader::loadASCIISTL(
     return nullptr;
   }
 
-  return std::make_unique<VisualGeometry>(trianglesToGeometry(triangles));
+  return std::make_unique<msd_transfer::MeshRecord>(
+    trianglesToMeshRecord(triangles));
 }
 
 std::vector<STLTriangle> STLLoader::readBinarySTLTriangles(
@@ -236,26 +239,46 @@ bool STLLoader::isBinarySTL(const std::string& filename)
   return true;
 }
 
-VisualGeometry STLLoader::trianglesToGeometry(
+msd_transfer::MeshRecord STLLoader::trianglesToMeshRecord(
   const std::vector<STLTriangle>& triangles)
 {
-  std::vector<Eigen::Vector3d> vertices;
-  vertices.reserve(triangles.size() * 3);
+  msd_transfer::MeshRecord record;
 
-  // Convert each triangle to 3 vertices
-  // Note: STL stores separate vertices for each triangle (no shared vertices)
+  // Calculate vertex count (3 vertices per triangle)
+  const size_t vertexCount = triangles.size() * 3;
+  record.vertex_count = static_cast<uint32_t>(vertexCount);
+
+  // Allocate vertex_data BLOB
+  const size_t blobSize = vertexCount * sizeof(Vertex);
+  record.vertex_data.resize(blobSize);
+
+  // Get pointer to BLOB data for writing
+  Vertex* vertexData = reinterpret_cast<Vertex*>(record.vertex_data.data());
+
+  // Convert each triangle to 3 vertices with normals and default white color
+  size_t vertexIndex = 0;
   for (const auto& triangle : triangles)
   {
-    // Add the three vertices of this triangle
-    vertices.emplace_back(
-      triangle.vertex1.x(), triangle.vertex1.y(), triangle.vertex1.z());
-    vertices.emplace_back(
-      triangle.vertex2.x(), triangle.vertex2.y(), triangle.vertex2.z());
-    vertices.emplace_back(
-      triangle.vertex3.x(), triangle.vertex3.y(), triangle.vertex3.z());
+    // Vertex 1
+    vertexData[vertexIndex++] = {
+      {triangle.vertex1.x(), triangle.vertex1.y(), triangle.vertex1.z()},
+      {1.0f, 1.0f, 1.0f},  // Default white color
+      {triangle.normal.x(), triangle.normal.y(), triangle.normal.z()}};
+
+    // Vertex 2
+    vertexData[vertexIndex++] = {
+      {triangle.vertex2.x(), triangle.vertex2.y(), triangle.vertex2.z()},
+      {1.0f, 1.0f, 1.0f},  // Default white color
+      {triangle.normal.x(), triangle.normal.y(), triangle.normal.z()}};
+
+    // Vertex 3
+    vertexData[vertexIndex++] = {
+      {triangle.vertex3.x(), triangle.vertex3.y(), triangle.vertex3.z()},
+      {1.0f, 1.0f, 1.0f},  // Default white color
+      {triangle.normal.x(), triangle.normal.y(), triangle.normal.z()}};
   }
 
-  return VisualGeometry{vertices};
+  return record;
 }
 
 bool STLLoader::validateBinarySTLSize(size_t fileSize, uint32_t triangleCount)

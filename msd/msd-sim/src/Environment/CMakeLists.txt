@@ -13,6 +13,7 @@ set(
     ${CMAKE_CURRENT_SOURCE_DIR}/EulerAngles.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Platform.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/InertialState.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Object.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ReferenceFrame.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/WorldModel.hpp
     # ${CMAKE_CURRENT_SOURCE_DIR}/Polyhedron.hpp

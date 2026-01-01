@@ -31,6 +31,14 @@ struct BoundingBox
 
 
 /**
+ * @brief Compute vertex data with normals from source coordinates
+ * @param vertices Source coordinate data
+ */
+std::vector<Vertex> computeVertexData(
+  const std::vector<Eigen::Vector3d>& vertices);
+
+
+/**
  * @brief Simple 3D geometry container storing a collection of vertices
  *
  * This class represents pure geometry data - just a list of 3D coordinates.
@@ -40,39 +48,60 @@ struct BoundingBox
  * Vertices are stored as triangulated mesh data, where each group of 3
  * vertices represents a triangle.
  */
-class VisualGeometry
+template <typename T>
+class BaseGeometry
 {
 public:
   /**
-   * @brief Default constructor - creates empty geometry
-   */
-  VisualGeometry() = default;
-
-  /**
-   * @brief Constructor with vertex list
-   * @param vertices Vector of 3D coordinates representing the geometry
-   */
-  explicit VisualGeometry(const std::vector<Eigen::Vector3d>& vertices);
-
-  /**
-   * @brief Convert Geometry to Vertex vector with colors
-   * @param r Red component (0.0-1.0)
-   * @param g Green component (0.0-1.0)
-   * @param b Blue component (0.0-1.0)
-   * @return Vector of Vertex structs ready for GPU upload
+   * @brief Constructor with raw vertex data
+   * @param rawVertices Vector of 3D coordinates (Eigen::Vector3d)
+   * @param objectId Unique identifier for the geometry
    *
-   * Note: Vertex data (positions + normals) is cached after first computation.
-   * Only colors are applied per-call.
+   * For VisualGeometry (T=Vertex): Computes normals and converts to Vertex
+   * format. For CollisionGeometry (T=Eigen::Vector3d): Stores raw vertices
+   * directly.
    */
-  std::vector<Vertex> toGUIVertices(float r = 1.0f,
-                                    float g = 1.0f,
-                                    float b = 1.0f);
+  explicit BaseGeometry(const msd_transfer::MeshRecord& record,
+                        uint32_t objectId = 0)
+    : objectId_{objectId}
+  {
+    // Validate vertex_data blob size
+    if (record.vertex_data.size() % sizeof(T) != 0 ||
+        record.vertex_data.size() == 0)
+    {
+      throw std::runtime_error(
+        "Invalid vertex_data BLOB size: not a multiple of "
+        "Vertex size (36 bytes)");
+    }
+
+    // Deserialize cached vertex data using STL range constructor
+    const size_t vertexCount = record.vertex_data.size() / sizeof(T);
+    const Eigen::Vector3d* vertexBegin =
+      reinterpret_cast<const Eigen::Vector3d*>(record.vertex_data.data());
+    const Eigen::Vector3d* vertexEnd = vertexBegin + vertexCount;
+
+    std::vector<Eigen::Vector3d> vertices(vertexBegin, vertexEnd);
+
+    if constexpr (std::is_same_v<T, Vertex>)
+    {
+      // VisualGeometry: compute normals and convert to Vertex format
+      cachedVertices_ = computeVertexData(vertices);
+    }
+    else
+    {
+      // CollisionGeometry: direct assignment of raw coordinates
+      cachedVertices_ = std::move(vertices);
+    }
+  }
 
   /**
    * @brief Get number of vertices
    * @return Number of vertices in the cached vertex data
    */
-  size_t getVertexCount() const;
+  size_t getVertexCount() const
+  {
+    return cachedVertices_.size();
+  }
 
   /**
    * @brief Serialize geometry to binary BLOB for database storage
@@ -82,15 +111,14 @@ public:
    * Each Coordinate is 24 bytes: 3 doubles × 8 bytes
    * Colors and normals are computed on-demand via toGUIVertices()
    */
-  std::vector<uint8_t> serializeVertices() const;
+  std::vector<uint8_t> serializeVertices() const
+  {
+    const size_t blobSize = cachedVertices_.size() * sizeof(T);
+    std::vector<uint8_t> blob(blobSize);
+    std::memcpy(blob.data(), cachedVertices_.data(), blobSize);
+    return blob;
+  }
 
-  /**
-   * @brief Deserialize geometry from binary BLOB
-   * @param blob Binary data from database (Coordinate array)
-   * @return Reconstructed BaseGeometry object
-   * @throws std::runtime_error if blob size is not a multiple of 24 bytes
-   */
-  static VisualGeometry deserializeVertices(const std::vector<uint8_t>& blob);
 
   /**
    * @brief Get cached GUI vertices (positions + normals, no color)
@@ -99,7 +127,10 @@ public:
    * Lazily computes and caches vertex data on first access.
    * Use toGUIVertices() if you need to apply colors.
    */
-  const std::vector<Vertex>& getVertices() const;
+  const std::vector<T>& getVertices() const
+  {
+    return cachedVertices_;
+  }
 
   /**
    * @brief Populate MeshRecord with geometry data
@@ -109,113 +140,27 @@ public:
    * Note: Does not populate hull_data - use ConvexHull::serializeToBlob()
    * separately.
    */
-  void populateMeshRecord(msd_transfer::MeshRecord& record) const;
-
-  /**
-   * @brief Create VisualGeometry from MeshRecord
-   * @param record MeshRecord from database
-   * @return VisualGeometry object with pre-cached vertex data
-   */
-  static VisualGeometry fromMeshRecord(const msd_transfer::MeshRecord& record);
-
-protected:
-  /**
-   * @brief Compute vertex data with normals from source coordinates
-   * @param vertices Source coordinate data
-   */
-  static std::vector<Vertex> computeVertexData(
-    const std::vector<Eigen::Vector3d>& vertices);
-
-  std::vector<Vertex> cachedVertices_;
-};
-
-
-/**
- * @brief Collision geometry container with convex hull and visual mesh
- *
- * This class represents collision geometry with both visual mesh data
- * and collision hull vertices. It is independent from VisualGeometry
- * and stores its own visual mesh data.
- *
- * Vertices are stored as triangulated mesh data, where each group of 3
- * vertices represents a triangle.
- */
-class CollisionGeometry
-{
-public:
-  /**
-   * @brief Default constructor - creates empty geometry
-   */
-  CollisionGeometry() = default;
-
-  /**
-   * @brief Constructor with vertex list
-   * @param vertices Vector of 3D coordinates representing the geometry
-   */
-  explicit CollisionGeometry(const std::vector<Eigen::Vector3d>& vertices);
-
-  /**
-   * @brief Get number of hull vertices
-   * @return Number of vertices in the collision hull
-   */
-  size_t getVertexCount() const;
-
-  /**
-   * @brief Get the bounding box
-   * @return BoundingBox containing AABB min/max and sphere radius
-   */
-  const BoundingBox& getBoundingBox() const;
-
-  /**
-   * @brief Serialize hull vertices to binary BLOB for database storage
-   * @return Binary representation of hull vertex array (x, y, z positions)
-   *
-   * BLOB format: [x1,y1,z1][x2,y2,z2]...[xN,yN,zN]
-   * Each vertex is 24 bytes: 3 doubles × 8 bytes
-   */
-  std::vector<uint8_t> serializeHullVertices() const;
-
-  /**
-   * @brief Deserialize hull vertices from binary BLOB
-   * @param blob Binary data from database (hull vertex array)
-   * @return Vector of hull vertices
-   * @throws std::runtime_error if blob size is not a multiple of 24 bytes
-   */
-  static std::vector<Eigen::Vector3d> deserializeHullVertices(
-    const std::vector<uint8_t>& blob);
-
-  /**
-   * @brief Get hull vertices
-   * @return Vector of hull vertices
-   */
-  const std::vector<Eigen::Vector3d>& getHullVertices() const;
-
-  /**
-   * @brief Populate CollisionMeshRecord with hull data
-   * @param record CollisionMeshRecord to populate
-   *
-   * Populates hull_data and bounding box metadata.
-   */
-  void populateMeshRecord(msd_transfer::CollisionMeshRecord& record) const;
-
-  /**
-   * @brief Create CollisionGeometry from CollisionMeshRecord
-   * @param record CollisionMeshRecord from database
-   * @return CollisionGeometry object with hull vertices
-   */
-  static CollisionGeometry fromMeshRecord(
-    const msd_transfer::CollisionMeshRecord& record);
+  msd_transfer::MeshRecord populateMeshRecord() const
+  {
+    msd_transfer::MeshRecord record;
+    // Populate vertex data
+    const size_t vertexBlobSize = cachedVertices_.size() * sizeof(T);
+    record.vertex_data.resize(vertexBlobSize);
+    std::memcpy(
+      record.vertex_data.data(), cachedVertices_.data(), vertexBlobSize);
+    record.vertex_count = static_cast<uint32_t>(cachedVertices_.size());
+    return record;
+  }
 
 private:
-  /**
-   * @brief Calculate axis-aligned bounding box and bounding sphere from hull
-   * vertices
-   */
-  void calculateBoundingBox();
+  uint32_t objectId_;
 
-  std::vector<Eigen::Vector3d> hullVertices_;
-  BoundingBox boundingBox_;
+  std::vector<T> cachedVertices_;
 };
+
+using CollisionGeometry = BaseGeometry<Eigen::Vector3d>;
+using VisualGeometry = BaseGeometry<Vertex>;
+
 
 }  // namespace msd_assets
 

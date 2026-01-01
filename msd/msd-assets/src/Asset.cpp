@@ -32,14 +32,14 @@ Asset Asset::fromObjectRecord(msd_transfer::ObjectRecord& record,
   if (record.meshRecord.isSet())
   {
     visualGeom =
-      VisualGeometry::fromMeshRecord(record.meshRecord.resolve(db)->get());
+      VisualGeometry{record.meshRecord.resolve(db)->get(), record.id};
   }
 
   // Load collision geometry if foreign key is set
   if (record.collisionMeshRecord.isSet())
   {
-    collisionGeom = CollisionGeometry::fromMeshRecord(
-      record.collisionMeshRecord.resolve(db)->get());
+    collisionGeom = CollisionGeometry{
+      record.collisionMeshRecord.resolve(db)->get(), record.id};
   }
 
   return Asset{

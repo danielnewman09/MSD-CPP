@@ -16,6 +16,5 @@ set(
     ${CMAKE_CURRENT_SOURCE_DIR}/GeometryFactory.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/GeometryTraits.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/STLLoader.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/VertexTO.hpp
     PARENT_SCOPE
 )

@@ -1,6 +1,7 @@
 #ifndef MSD_ASSETS_ASSET_REGISTRY_HPP
 #define MSD_ASSETS_ASSET_REGISTRY_HPP
 
+#include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBDatabase.hpp>
 #include <functional>
 #include <memory>
@@ -26,16 +27,17 @@ namespace msd_assets
 class AssetRegistry
 {
 public:
-  /**
-   * @brief Get singleton instance
-   */
-  static AssetRegistry& getInstance();
+  // Singleton pattern: private constructor
+  AssetRegistry(const std::string& dbPath);
 
   /**
-   * @brief Initialize registry with database connection
-   * @param dbPath Path to SQLite database file
+   * @brief Load asset from database (lazy-loaded and cached)
+   * @param objectName Name of the object to load
+   * @return Optional reference to cached asset, std::nullopt if object not
+   * found
    */
-  void loadFromDatabase(const std::string& dbPath);
+  std::optional<std::reference_wrapper<const Asset>>
+  getAsset(const std::string& objectName);
 
   /**
    * @brief Load visual geometry from database (lazy-loaded and cached)
@@ -61,10 +63,12 @@ public:
    */
   size_t getCacheMemoryUsage() const;
 
-
 private:
-  // Singleton pattern: private constructor
-  AssetRegistry() = default;
+  /**
+   * @brief Initialize registry with database connection
+   * @param dbPath Path to SQLite database file
+   */
+  void loadFromDatabase();
 
   // Delete copy constructor and assignment operator
   AssetRegistry(const AssetRegistry&) = delete;
@@ -73,15 +77,10 @@ private:
   // Database connection
   std::unique_ptr<cpp_sqlite::Database> database_;
 
-  // Cached associations between the string name and record id
-  // in the database. Loaded on construction.
-  std::unordered_map<std::string, uint32_t> visualIdMap_;
-  std::unordered_map<std::string, uint32_t> collisionIdMap_;
-
-
-  std::unordered_map<std::string, VisualGeometry> visualGeometryMap_;
-  std::unordered_map<std::string, CollisionGeometry> collisionGeometryMap_;
-
+  // Cached complete assets loaded from database
+  // Key: object name, Value: complete Asset with both visual and collision
+  // geometry
+  std::unordered_map<std::string, Asset> assetCache_;
 
   // Thread safety for multi-threaded access
   mutable std::mutex cacheMutex_;

@@ -12,6 +12,7 @@ set_target_properties(${MSD_SIM_TEST_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(${MSD_SIM_TEST_NAME}
     PUBLIC
         spdlog::spdlog
+        cpp_sqlite
     PRIVATE
       msd_sim
       msd_assets

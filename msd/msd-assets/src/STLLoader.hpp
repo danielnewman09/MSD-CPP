@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include "msd-assets/src/Geometry.hpp"
+#include "msd-transfer/src/MeshRecord.hpp"
 
 namespace msd_assets
 {
@@ -46,14 +47,15 @@ class STLLoader
 {
 public:
   /**
-   * @brief Load an STL file and create a Geometry
+   * @brief Load an STL file and create a MeshRecord
    *
    * Automatically detects whether file is binary or ASCII format.
    *
    * @param filename Path to the STL file
-   * @return Unique pointer to Geometry if successful, nullptr on error
+   * @return Unique pointer to MeshRecord if successful, nullptr on error
    */
-  static std::unique_ptr<VisualGeometry> loadSTL(const std::string& filename);
+  static std::unique_ptr<msd_transfer::MeshRecord> loadSTL(
+    const std::string& filename);
 
   /**
    * @brief Load binary STL file
@@ -61,9 +63,9 @@ public:
    * Binary format is more compact and faster to parse than ASCII.
    *
    * @param filename Path to the binary STL file
-   * @return Unique pointer to Geometry if successful, nullptr on error
+   * @return Unique pointer to MeshRecord if successful, nullptr on error
    */
-  static std::unique_ptr<VisualGeometry> loadBinarySTL(
+  static std::unique_ptr<msd_transfer::MeshRecord> loadBinarySTL(
     const std::string& filename);
 
   /**
@@ -72,9 +74,9 @@ public:
    * ASCII format is human-readable but larger and slower to parse.
    *
    * @param filename Path to the ASCII STL file
-   * @return Unique pointer to Geometry if successful, nullptr on error
+   * @return Unique pointer to MeshRecord if successful, nullptr on error
    */
-  static std::unique_ptr<VisualGeometry> loadASCIISTL(
+  static std::unique_ptr<msd_transfer::MeshRecord> loadASCIISTL(
     const std::string& filename);
 
   /**
@@ -107,15 +109,16 @@ public:
   static bool isBinarySTL(const std::string& filename);
 
   /**
-   * @brief Convert triangle data to Geometry
+   * @brief Convert triangle data to MeshRecord
    *
-   * Creates a Geometry with vertices in the order needed for rendering.
-   * Each triangle contributes 3 vertices.
+   * Creates a MeshRecord with vertex_data BLOB populated from triangle data.
+   * Each triangle contributes 3 vertices with positions, normals, and colors.
    *
    * @param triangles Vector of STL triangles
-   * @return Geometry object with all triangle vertices
+   * @return MeshRecord object with populated vertex_data, vertex_count, and
+   * triangle_count
    */
-  static VisualGeometry trianglesToGeometry(
+  static msd_transfer::MeshRecord trianglesToMeshRecord(
     const std::vector<STLTriangle>& triangles);
 
 private:

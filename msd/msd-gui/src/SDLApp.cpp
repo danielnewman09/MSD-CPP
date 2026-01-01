@@ -9,14 +9,8 @@
 namespace msd_gui
 {
 
-SDLApplication& SDLApplication::getInstance()
-{
-  static SDLApplication instance;
-  return instance;
-}
-
-SDLApplication::SDLApplication()
-  : status_{Status::Starting}, basePath_{SDL_GetBasePath()}
+SDLApplication::SDLApplication(const std::string& dbPath)
+  : engine_{dbPath}, status_{Status::Starting}, basePath_{SDL_GetBasePath()}
 {
   window_.reset(
     SDL_CreateWindow("MSD Application", 800, 600, SDL_WINDOW_RESIZABLE));

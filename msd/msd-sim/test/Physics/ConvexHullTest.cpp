@@ -99,9 +99,10 @@ TEST(ConvexHullTest, ConstructorThrowsOnTooFewPoints)
 
 TEST(ConvexHullTest, FromGeometry)
 {
-  auto geometry =
-    msd_assets::GeometryFactory::createCube<msd_assets::CollisionGeometry>(2.0);
-  ConvexHull hull(geometry.getHullVertices());
+  auto record = msd_assets::GeometryFactory::createCube(2.0);
+
+  msd_assets::CollisionGeometry geometry{record};
+  ConvexHull hull{geometry};
 
   EXPECT_TRUE(hull.isValid());
   EXPECT_GT(hull.getVertexCount(), 0);
@@ -110,10 +111,9 @@ TEST(ConvexHullTest, FromGeometry)
 
 TEST(ConvexHullTest, FromGeometryPyramid)
 {
-  auto geometry =
-    msd_assets::GeometryFactory::createPyramid<msd_assets::CollisionGeometry>(
-      2.0, 3.0);
-  ConvexHull hull(geometry.getHullVertices());
+  auto record = msd_assets::GeometryFactory::createPyramid(2.0, 3.0);
+  msd_assets::CollisionGeometry geometry{record};
+  ConvexHull hull{geometry};
 
   EXPECT_TRUE(hull.isValid());
   EXPECT_EQ(hull.getVertexCount(), 5);  // 4 base + 1 apex
@@ -511,9 +511,9 @@ TEST(ConvexHullTest, HandlesDuplicatePoints)
 
 TEST(ConvexHullTest, WorksWithGeometryFactoryCube)
 {
-  auto geometry =
-    msd_assets::GeometryFactory::createCube<msd_assets::CollisionGeometry>(2.0);
-  ConvexHull hull(geometry.getHullVertices());
+  auto record = msd_assets::GeometryFactory::createCube(2.0);
+  msd_assets::CollisionGeometry geometry{record};
+  ConvexHull hull(geometry.getVertices());
 
   EXPECT_TRUE(hull.isValid());
   EXPECT_EQ(hull.getVertexCount(), 8);
@@ -522,11 +522,9 @@ TEST(ConvexHullTest, WorksWithGeometryFactoryCube)
 
 TEST(ConvexHullTest, WorksWithGeometryFactoryPyramid)
 {
-  auto geometry =
-    msd_assets::GeometryFactory::createPyramid<msd_assets::CollisionGeometry>(
-      2.0, 3.0);
-  ConvexHull hull(geometry.getHullVertices());
-
+  auto record = msd_assets::GeometryFactory::createPyramid(2.0, 3.0);
+  msd_assets::CollisionGeometry geometry{record};
+  ConvexHull hull(geometry.getVertices());
 
   EXPECT_TRUE(hull.isValid());
 

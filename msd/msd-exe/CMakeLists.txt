@@ -10,6 +10,7 @@ target_link_libraries(${MSD_EXE_NAME}
     PRIVATE 
       msd_sim
       msd_gui
+      msd_utils
       spdlog::spdlog)
 
 # Add all relevant include directories

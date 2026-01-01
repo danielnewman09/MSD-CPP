@@ -4,13 +4,11 @@ set(MSD_TRANSFER_NAME msd_transfer)
 add_library(${MSD_TRANSFER_NAME} INTERFACE)
 
 # Find dependencies
-find_package(Boost REQUIRED)
 find_package(cpp_sqlite REQUIRED)
 
 # Link dependencies (INTERFACE - header-only)
 target_link_libraries(${MSD_TRANSFER_NAME}
   INTERFACE
-    Boost::boost
     cpp_sqlite::cpp_sqlite
 )
 

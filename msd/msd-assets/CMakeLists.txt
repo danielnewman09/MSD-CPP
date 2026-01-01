@@ -14,7 +14,6 @@ set_target_properties(${MSD_ASSETS_NAME} PROPERTIES
 find_package(spdlog REQUIRED)
 find_package(cpp_sqlite REQUIRED)
 find_package(Eigen3 REQUIRED NO_MODULE)
-find_package(Boost REQUIRED)
 
 # Add subdirectories to collect sources from each module
 add_subdirectory(src)
@@ -26,7 +25,6 @@ target_link_libraries(${MSD_ASSETS_NAME}
           msd_transfer
           cpp_sqlite::cpp_sqlite
           Eigen3::Eigen
-          Boost::boost
         PRIVATE
           spdlog::spdlog)
 

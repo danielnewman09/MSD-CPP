@@ -1,47 +1,54 @@
-#include "AssetRegistry.hpp"
+#include "msd-assets/src/AssetRegistry.hpp"
 #include <cpp_sqlite/src/cpp_sqlite/DBDataAccessObject.hpp>
 #include <stdexcept>
-#include "Geometry.hpp"
+#include "msd-assets/src/Geometry.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
 
 namespace msd_assets
 {
 
-AssetRegistry& AssetRegistry::getInstance()
+
+AssetRegistry::AssetRegistry(const std::string& dbPath)
+  : database_{std::make_unique<cpp_sqlite::Database>(
+      dbPath,
+      false,
+      cpp_sqlite::Logger::getInstance().getLogger())}
+
 {
-  static AssetRegistry instance;
-  return instance;
+  loadFromDatabase();
 }
 
-void AssetRegistry::loadFromDatabase(const std::string& dbPath)
+void AssetRegistry::loadFromDatabase()
 {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
-  // Get logger instance
-  auto& logger = cpp_sqlite::Logger::getInstance();
-
-  // Create database connection (read-only mode)
-  database_ =
-    std::make_unique<cpp_sqlite::Database>(dbPath, false, logger.getLogger());
-
-  // Load all object records and build name->ID maps
+  // Load all object records and create Asset instances
   auto& objectDAO = database_->getDAO<msd_transfer::ObjectRecord>();
   auto objectRecords = objectDAO.selectAll();
 
-  for (const auto& objRecord : objectRecords)
+  for (auto objRecord : objectRecords)
   {
-    // Map visual mesh: object name -> mesh record ID
-    if (objRecord.meshRecord.id != 0)
-    {
-      visualIdMap_[objRecord.name] = objRecord.meshRecord.id;
-    }
+    // Create Asset from ObjectRecord using factory method
+    Asset asset = Asset::fromObjectRecord(objRecord, *database_);
 
-    // Map collision mesh: object name -> collision mesh record ID
-    if (objRecord.collisionMeshRecord.id != 0)
-    {
-      collisionIdMap_[objRecord.name] = objRecord.collisionMeshRecord.id;
-    }
+    // Cache the asset by name
+    assetCache_.emplace(objRecord.name, std::move(asset));
   }
+}
+
+std::optional<std::reference_wrapper<const Asset>>
+AssetRegistry::getAsset(const std::string& objectName)
+{
+  std::lock_guard<std::mutex> lock(cacheMutex_);
+
+  // Check if asset exists in cache
+  auto assetIt = assetCache_.find(objectName);
+  if (assetIt != assetCache_.end())
+  {
+    return std::cref(assetIt->second);
+  }
+
+  return std::nullopt;  // Asset not found
 }
 
 std::optional<std::reference_wrapper<const VisualGeometry>>
@@ -49,41 +56,15 @@ AssetRegistry::loadVisualGeometry(const std::string& objectName)
 {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
-  // Check if already loaded in geometry map
-  auto geomIt = visualGeometryMap_.find(objectName);
-  if (geomIt != visualGeometryMap_.end())
+  // Find asset in cache
+  auto assetIt = assetCache_.find(objectName);
+  if (assetIt == assetCache_.end())
   {
-    return std::cref(geomIt->second);
+    return std::nullopt;  // Asset not found
   }
 
-  // Not loaded yet - check if object exists in ID map
-  auto idIt = visualIdMap_.find(objectName);
-  if (idIt == visualIdMap_.end())
-  {
-    return std::nullopt;  // Object not found or has no visual mesh
-  }
-
-  // Load from database
-  if (!database_)
-  {
-    return std::nullopt;  // Database not initialized
-  }
-
-  // Load MeshRecord using the mapped ID
-  auto& meshDAO = database_->getDAO<msd_transfer::MeshRecord>();
-  auto meshRecordOpt = meshDAO.selectById(idIt->second);
-
-  if (!meshRecordOpt.has_value())
-  {
-    return std::nullopt;  // Record not found in database
-  }
-
-  // Deserialize to VisualGeometry
-  auto geometry = VisualGeometry::fromMeshRecord(meshRecordOpt.value());
-
-  // Insert into geometry map and return reference
-  auto result = visualGeometryMap_.emplace(objectName, std::move(geometry));
-  return std::cref(result.first->second);
+  // Return visual geometry from the asset
+  return assetIt->second.getVisualGeometry();
 }
 
 std::optional<std::reference_wrapper<const CollisionGeometry>>
@@ -91,42 +72,15 @@ AssetRegistry::loadCollisionGeometry(const std::string& objectName)
 {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
-  // Check if already loaded in geometry map
-  auto geomIt = collisionGeometryMap_.find(objectName);
-  if (geomIt != collisionGeometryMap_.end())
+  // Find asset in cache
+  auto assetIt = assetCache_.find(objectName);
+  if (assetIt == assetCache_.end())
   {
-    return std::cref(geomIt->second);
+    return std::nullopt;  // Asset not found
   }
 
-  // Not loaded yet - check if object exists in ID map
-  auto idIt = collisionIdMap_.find(objectName);
-  if (idIt == collisionIdMap_.end())
-  {
-    return std::nullopt;  // Object not found or has no collision mesh
-  }
-
-  // Load from database
-  if (!database_)
-  {
-    return std::nullopt;  // Database not initialized
-  }
-
-  // Load CollisionMeshRecord using the mapped ID
-  auto& collisionDAO = database_->getDAO<msd_transfer::CollisionMeshRecord>();
-  auto collisionRecordOpt = collisionDAO.selectById(idIt->second);
-
-  if (!collisionRecordOpt.has_value())
-  {
-    return std::nullopt;  // Record not found in database
-  }
-
-  // Deserialize to CollisionGeometry
-  auto geometry =
-    CollisionGeometry::fromMeshRecord(collisionRecordOpt.value());
-
-  // Insert into geometry map and return reference
-  auto result = collisionGeometryMap_.emplace(objectName, std::move(geometry));
-  return std::cref(result.first->second);
+  // Return collision geometry from the asset
+  return assetIt->second.getCollisionGeometry();
 }
 
 size_t AssetRegistry::getCacheMemoryUsage() const
@@ -135,24 +89,37 @@ size_t AssetRegistry::getCacheMemoryUsage() const
 
   size_t totalBytes = 0;
 
-  // Calculate visual geometry cache size
-  for (const auto& [name, geometry] : visualGeometryMap_)
+  // Calculate memory usage for all cached assets
+  for (const auto& [name, asset] : assetCache_)
   {
-    // Visual vertices: 36 bytes each (Vertex struct)
-    totalBytes += geometry.getVertexCount() * 36;
-    // Add string overhead
+    // Add string overhead for name
     totalBytes += name.size();
-  }
 
-  // Calculate collision geometry cache size
-  for (const auto& [name, geometry] : collisionGeometryMap_)
-  {
-    // Hull vertices: 24 bytes each (3 doubles)
-    totalBytes += geometry.getVertexCount() * 24;
-    // BoundingBox: 7 floats = 28 bytes
-    totalBytes += 28;
-    // Add string overhead
-    totalBytes += name.size();
+    // Add visual geometry if present
+    if (asset.hasVisualGeometry())
+    {
+      auto visualGeom = asset.getVisualGeometry();
+      if (visualGeom.has_value())
+      {
+        // Visual vertices: 36 bytes each (Vertex struct)
+        totalBytes += visualGeom.value().get().getVertexCount() * 36;
+      }
+    }
+
+    // Add collision geometry if present
+    if (asset.hasCollisionGeometry())
+    {
+      auto collisionGeom = asset.getCollisionGeometry();
+      if (collisionGeom.has_value())
+      {
+        // Collision vertices: 24 bytes each (3 doubles)
+        totalBytes += collisionGeom.value().get().getVertexCount() * 24;
+      }
+    }
+
+    // Add Asset object overhead (id, name, category strings)
+    totalBytes += asset.getName().size() + asset.getCategory().size() +
+                  sizeof(uint32_t);
   }
 
   return totalBytes;

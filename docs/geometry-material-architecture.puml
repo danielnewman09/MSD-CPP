@@ -1,0 +1,209 @@
+@startuml Geometry Material Architecture
+
+' Color scheme
+skinparam classBackgroundColor<<Core>> LightBlue
+skinparam classBackgroundColor<<Transfer>> LightGreen
+skinparam classBackgroundColor<<Factory>> LightYellow
+skinparam classBackgroundColor<<Material>> LightCoral
+
+' ============================================================================
+' Core Geometry Classes
+' ============================================================================
+
+package msd_assets {
+
+class Vertex {
+  + float position[3]
+  + float normal[3]
+  + float uv[2]
+}
+
+class "BaseGeometry<T>" as BaseGeometry <<Core>> {
+  - uint32_t objectId_
+  - std::vector<T> cachedVertices_
+  --
+  + BaseGeometry(MeshRecord, objectId)
+  + size_t getVertexCount() const
+  + const std::vector<T>& getVertices() const
+  + MeshRecord populateMeshRecord() const
+  + {static} BaseGeometry fromMeshRecord(record, id)
+  --
+  Uses if constexpr for type-specific
+  initialization and deserialization
+}
+
+class VisualGeometry {
+  Type alias: BaseGeometry<Vertex>
+  --
+  Stores full vertex data:
+  - positions
+  - normals
+  - UVs (for texturing)
+}
+
+class "CollisionGeometry" as CollisionGeometry <<Core>> {
+  Type alias: BaseGeometry<Eigen::Vector3d>
+  --
+  Stores only positions
+  (no normals, colors, or UVs)
+}
+
+BaseGeometry <|-- VisualGeometry : <<typedef>>
+BaseGeometry <|-- CollisionGeometry : <<typedef>>
+BaseGeometry o-- Vertex : contains (T=Vertex)
+}
+
+' ============================================================================
+' Transfer Objects (Database Records)
+' ============================================================================
+
+package msd_transfer {
+
+class MeshRecord {
+  + std::vector<uint8_t> vertex_data
+  + uint32_t vertex_count
+  + uint8_t color_mode
+  + ForeignKey<MaterialRecord> materialRecord
+  + std::string texture_path
+}
+
+enum "ColorMode" as ColorMode <<Transfer>> {
+  Uniform = 0
+  PerVertex = 1
+  Textured = 2
+  --
+  Uniform: Use MaterialRecord color
+  PerVertex: Use vertex_data colors
+  Textured: Use texture_path image
+}
+
+class MaterialRecord {
+  + std::string name
+  + std::string shader_vertex
+  + std::string shader_fragment
+  + float default_color_r
+  + float default_color_g
+  + float default_color_b
+  + float shininess
+  + float metallic
+  + float roughness
+  --
+  Stores shader references and
+  default material properties
+}
+
+class "ObjectRecord" as ObjectRecord <<Transfer>> {
+  + std::string name
+  + std::string category
+  + ForeignKey<MeshRecord> meshRecord
+  + ForeignKey<MeshRecord> collisionMeshRecord
+  --
+  Main record tying together
+  visual and collision geometry
+}
+
+class TextureRecord {
+  + std::string name
+  + uint32_t width
+  + uint32_t height
+  + uint8_t format
+  + std::vector<uint8_t> pixel_data
+  --
+  Optional: For embedded textures
+  Alternative to texture_path
+}
+
+MeshRecord *-- ColorMode : has
+MeshRecord o-- MaterialRecord : references
+MeshRecord o-- TextureRecord : optional reference
+ObjectRecord o-- MeshRecord : visual (FK)
+ObjectRecord o-- MeshRecord : collision (FK)
+
+}
+
+' ============================================================================
+' Factory & Utility Functions
+' ============================================================================
+
+class "GeometryFactory" as GeometryFactory <<Factory>> {
+  + {static} MeshRecord createCube(size)
+  + {static} MeshRecord createPyramid(base, height)
+  + {static} MeshRecord createCubeWireframe(size)
+  --
+  - {static} verticesToMeshRecord(vertices)
+  - {static} getCubeCorners(size)
+}
+
+class "computeVertexData()" as computeVertexData <<Factory>> {
+  + computeVertexData(positions, colors, uvs)
+  --
+  Computes normals from triangle data
+  Accepts optional per-vertex colors
+  Accepts optional UV coordinates
+  Returns std::vector<Vertex>
+}
+
+GeometryFactory ..> MeshRecord : creates
+GeometryFactory ..> computeVertexData : uses
+computeVertexData ..> Vertex : creates
+
+' ============================================================================
+' Data Flow
+' ============================================================================
+
+BaseGeometry ..> MeshRecord : deserializes from
+MeshRecord <.. BaseGeometry : serializes to
+
+' ============================================================================
+' Notes
+' ============================================================================
+
+note right of MeshRecord
+  Simple container for 3d vertices. Reused for visual meshes, collision
+  meshes, etc.
+end note
+
+note right of ColorMode
+  **Color Rendering Modes**
+
+  Uniform: All vertices same color
+    → Use MaterialRecord.default_color
+
+  PerVertex: Each vertex unique color
+    → Use Vertex.color from vertex_data
+
+  Textured: Apply texture image
+    → Use texture_path + Vertex.uv
+end note
+
+note bottom of BaseGeometry
+  **Template Implementation**
+
+  Uses C++20 "if constexpr" to handle
+  type-specific logic:
+
+  • VisualGeometry (T=Vertex):
+    Deserializes full 44-byte Vertex
+
+  • CollisionGeometry (T=Vector3d):
+    Deserializes only 24-byte positions
+
+  Minimal boilerplate, zero runtime cost
+end note
+
+note bottom of TextureRecord
+  **Optional Texture Storage**
+
+  Two approaches supported:
+
+  1. External files:
+     MeshRecord.texture_path = "wood.png"
+
+  2. Embedded textures:
+     Reference TextureRecord by FK
+     (stores pixel_data as BLOB)
+
+  Choice depends on use case
+end note
+
+@enduml

@@ -31,7 +31,7 @@ ConvexHull::ConvexHull(const msd_assets::CollisionGeometry& geometry)
     boundingBoxMax_{0.0, 0.0, 0.0},
     centroid_{0.0, 0.0, 0.0}
 {
-  computeHull(geometry.getHullVertices());
+  computeHull(geometry.getVertices());
 }
 
 
