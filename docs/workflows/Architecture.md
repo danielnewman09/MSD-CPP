@@ -40,12 +40,12 @@ your-project/
 │   └── async-loader.md
 ├── .claude/
 │   ├── agents/
-│   │   ├── orchestrator.md       # Reads tickets, coordinates workflow
-│   │   ├── designer.md           # Design phase agent
+│   │   ├── workflow-orchestrator.md       # Reads tickets, coordinates workflow
+│   │   ├── cpp-architect.md           # Design phase agent
 │   │   ├── design-reviewer.md    # Design review agent
-│   │   ├── prototyper.md         # Prototyping agent
-│   │   ├── implementer.md        # Implementation agent
-│   │   └── impl-reviewer.md      # Implementation review agent
+│   │   ├── cpp-prototyper.md         # Prototyping agent
+│   │   ├── cpp-implementer.md        # Implementation agent
+│   │   └── implementation-reviewer.md      # Implementation review agent
 │   ├── templates/
 │   │   ├── ticket.md.template    # Template for new tickets
 │   │   └── design.puml.template  # PlantUML template
@@ -191,11 +191,11 @@ When you run `Process ticket: my-feature`, agents will:
 ## Phase Details
 
 ### Design Phase
-**Agent:** `.claude/agents/designer.md`  
+**Agent:** `.claude/agents/cpp-architect.md`  
 **Input:** Ticket requirements  
 **Output:** Design document + PlantUML diagram
 
-The designer:
+The C++ Architect:
 - Reads your ticket's requirements and constraints
 - Analyzes existing codebase architecture
 - Creates a PlantUML diagram showing new/modified components
@@ -219,7 +219,7 @@ Produces:
 - **Prototype guidance** with success criteria and time boxes
 
 ### Prototype Phase
-**Agent:** `.claude/agents/prototyper.md`  
+**Agent:** `.claude/agents/cpp-prototyper.md`  
 **Input:** Design + prototype guidance
 
 Validates design assumptions through:
@@ -235,7 +235,7 @@ Produces:
 - Implementation ticket with validated technical decisions
 
 ### Implementation Phase
-**Agent:** `.claude/agents/implementer.md`  
+**Agent:** `.claude/agents/cpp-implementer.md`  
 **Input:** Design + prototype results + implementation ticket
 
 Implements:
@@ -245,7 +245,7 @@ Implements:
 - Updates to affected existing tests
 
 ### Implementation Review Phase
-**Agent:** `.claude/agents/impl-reviewer.md`  
+**Agent:** `.claude/agents/implementation-reviewer.md`  
 **Input:** All artifacts + implemented code
 
 Verifies:

@@ -25,6 +25,7 @@ print_usage() {
     echo "  prototype           Run the Prototype phase"
     echo "  implement           Run the Implementation phase"
     echo "  impl-review         Run the Implementation Review phase"
+    echo "  doc-update          Run the Documentation Update phase"
     echo "  status              Show current status of a feature"
     echo ""
     echo "Options:"
@@ -38,6 +39,7 @@ print_usage() {
     echo "  $0 prototype my-feature"
     echo "  $0 implement my-feature"
     echo "  $0 impl-review my-feature"
+    echo "  $0 doc-update my-feature"
     echo "  $0 status my-feature"
 }
 
@@ -124,7 +126,7 @@ run_phase() {
     
     case $phase in
         design)
-            agent_file="$PROJECT_ROOT/.claude/agents/designer.md"
+            agent_file="$PROJECT_ROOT/.claude/agents/cpp-architect.md"
             if [ -z "$description" ]; then
                 echo -e "${RED}Error: Description required for design phase${NC}"
                 echo "Use: $0 design $feature_name -d \"Description of the feature\""
@@ -140,19 +142,24 @@ run_phase() {
             input_context="Review design at docs/designs/$feature_name/design.md"
             ;;
         prototype)
-            agent_file="$PROJECT_ROOT/.claude/agents/prototyper.md"
+            agent_file="$PROJECT_ROOT/.claude/agents/cpp-prototyper.md"
             check_feature_exists "$feature_name"
             input_context="Execute prototypes based on docs/designs/$feature_name/design.md"
             ;;
         implement)
-            agent_file="$PROJECT_ROOT/.claude/agents/implementer.md"
+            agent_file="$PROJECT_ROOT/.claude/agents/cpp-implementer.md"
             check_feature_exists "$feature_name"
             input_context="Implement feature based on docs/designs/$feature_name/"
             ;;
         impl-review)
-            agent_file="$PROJECT_ROOT/.claude/agents/impl-reviewer.md"
+            agent_file="$PROJECT_ROOT/.claude/agents/implementation-reviewer.md"
             check_feature_exists "$feature_name"
             input_context="Review implementation based on docs/designs/$feature_name/"
+            ;;
+        doc-update)
+            agent_file="$PROJECT_ROOT/.claude/agents/docs-updater.md"
+            check_feature_exists "$feature_name"
+            input_context="Update the documentation for the code based on docs/designs/$feature_name/"
             ;;
         *)
             echo -e "${RED}Unknown phase: $phase${NC}"

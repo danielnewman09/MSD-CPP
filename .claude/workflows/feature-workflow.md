@@ -48,7 +48,7 @@ Each phase produces artifacts that the human operator reviews before the next ph
 ## Phase Definitions
 
 ### Phase 1: Design
-**Agent**: `.claude/agents/designer.md`  
+**Agent**: `.claude/agents/cpp-architect.md`  
 **Input**: Feature requirements from user  
 **Output**: 
 - `docs/designs/{feature-name}/design.md`
@@ -85,7 +85,7 @@ Each phase produces artifacts that the human operator reviews before the next ph
 ---
 
 ### Phase 3: Prototype
-**Agent**: `.claude/agents/prototyper.md`  
+**Agent**: `.claude/agents/cpp-prototyper.md`  
 **Input**: Design with review + prototype guidance  
 **Output**: 
 - `docs/designs/{feature-name}/prototype-results.md`
@@ -105,7 +105,7 @@ Each phase produces artifacts that the human operator reviews before the next ph
 ---
 
 ### Phase 4: Implementation
-**Agent**: `.claude/agents/implementer.md`  
+**Agent**: `.claude/agents/cpp-implementer.md`  
 **Input**: Design + prototype results + implementation ticket  
 **Output**: 
 - Implemented code in codebase
@@ -124,7 +124,7 @@ Each phase produces artifacts that the human operator reviews before the next ph
 ---
 
 ### Phase 5: Implementation Review
-**Agent**: `.claude/agents/impl-reviewer.md`  
+**Agent**: `.claude/agents/implementation-reviewer.md`  
 **Input**: All previous artifacts + implemented code  
 **Output**: `docs/designs/{feature-name}/implementation-review.md`
 
@@ -145,7 +145,7 @@ To run each phase, use the Task tool with the appropriate agent:
 
 ```
 Phase 1 - Design:
-Task: Read .claude/agents/designer.md and execute design phase
+Task: Read .claude/agents/cpp-architect.md and execute design phase
 Input: Feature "{name}": {description}
 Output: Design artifacts in docs/designs/{name}/
 
@@ -156,20 +156,20 @@ Input: Design document at docs/designs/{name}/design.md
 Output: Review appended to design document
 
 Phase 3 - Prototype:
-Task: Read .claude/agents/prototyper.md and execute prototyping
+Task: Read .claude/agents/cpp-prototyper.md and execute prototyping
 Input: Design document with review at docs/designs/{name}/design.md
 Output: Prototype results at docs/designs/{name}/prototype-results.md
         Prototype code at prototypes/{name}/
 
 Phase 4 - Implementation:
-Task: Read .claude/agents/implementer.md and execute implementation
+Task: Read .claude/agents/cpp-implementer.md and execute implementation
 Input: Design document at docs/designs/{name}/design.md
        Prototype results at docs/designs/{name}/prototype-results.md
 Output: Code changes in codebase
         Implementation notes at docs/designs/{name}/implementation-notes.md
 
 Phase 5 - Implementation Review:
-Task: Read .claude/agents/impl-reviewer.md and execute review
+Task: Read .claude/agents/implementation-reviewer.md and execute review
 Input: All artifacts in docs/designs/{name}/
        Implemented code
 Output: Implementation review at docs/designs/{name}/implementation-review.md
