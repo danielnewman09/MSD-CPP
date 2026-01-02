@@ -28,97 +28,139 @@
             "name": "debug-utils-only",
             "displayName": "Build msd-utils (Debug)",
             "configurePreset": "conan-debug",
-            "targets": ["msd_utils", "msd_utils_test"]
+            "targets": [
+                "msd_utils",
+                "msd_utils_test"
+            ]
         },
         {
             "name": "debug-transfer-only",
             "displayName": "Build msd-transfer (Debug)",
             "configurePreset": "conan-debug",
-            "targets": ["msd_transfer"]
+            "targets": [
+                "msd_transfer"
+            ]
         },
         {
             "name": "debug-sim-only",
             "displayName": "Build msd-sim (Debug)",
             "configurePreset": "conan-debug",
-            "targets": ["msd_sim", "msd_sim_test"]
+            "targets": [
+                "msd_sim",
+                "msd_sim_test"
+            ]
         },
         {
             "name": "debug-assets-only",
             "displayName": "Build msd-assets (Debug)",
             "configurePreset": "conan-debug",
-            "targets": ["msd_assets", "msd_assets_test"]
+            "targets": [
+                "msd_assets",
+                "msd_assets_test"
+            ]
         },
         {
             "name": "debug-gui-only",
             "displayName": "Build msd-gui (Debug)",
             "configurePreset": "conan-debug",
-            "targets": ["msd_gui"]
+            "targets": [
+                "msd_gui"
+            ]
         },
         {
             "name": "debug-exe-only",
             "displayName": "Build msd-exe (Debug)",
             "configurePreset": "conan-debug",
-            "targets": ["msd_exe"]
+            "targets": [
+                "msd_exe"
+            ]
         },
         {
             "name": "debug-asset-gen-only",
             "displayName": "Build msd-asset-gen (Debug)",
             "configurePreset": "conan-debug",
-            "targets": ["generate_assets"]
+            "targets": [
+                "generate_assets"
+            ]
         },
         {
             "name": "release-utils-only",
             "displayName": "Build msd-utils (Release)",
             "configurePreset": "conan-release",
-            "targets": ["msd_utils", "msd_utils_test"]
+            "targets": [
+                "msd_utils",
+                "msd_utils_test"
+            ]
         },
         {
             "name": "release-transfer-only",
             "displayName": "Build msd-transfer (Release)",
             "configurePreset": "conan-release",
-            "targets": ["msd_transfer"]
+            "targets": [
+                "msd_transfer"
+            ]
         },
         {
             "name": "release-sim-only",
             "displayName": "Build msd-sim (Release)",
             "configurePreset": "conan-release",
-            "targets": ["msd_sim", "msd_sim_test"]
+            "targets": [
+                "msd_sim",
+                "msd_sim_test"
+            ]
         },
         {
             "name": "release-assets-only",
             "displayName": "Build msd-assets (Release)",
             "configurePreset": "conan-release",
-            "targets": ["msd_assets", "msd_assets_test"]
+            "targets": [
+                "msd_assets",
+                "msd_assets_test"
+            ]
         },
         {
             "name": "release-gui-only",
             "displayName": "Build msd-gui (Release)",
             "configurePreset": "conan-release",
-            "targets": ["msd_gui"]
+            "targets": [
+                "msd_gui"
+            ]
         },
         {
             "name": "release-exe-only",
             "displayName": "Build msd-exe (Release)",
             "configurePreset": "conan-release",
-            "targets": ["msd_exe"]
+            "targets": [
+                "msd_exe"
+            ]
         },
         {
             "name": "release-asset-gen-only",
             "displayName": "Build msd-asset-gen (Release)",
             "configurePreset": "conan-release",
-            "targets": ["generate_assets"]
+            "targets": [
+                "generate_assets"
+            ]
         },
         {
             "name": "debug-tests-only",
             "displayName": "Build all tests (Debug)",
             "configurePreset": "conan-debug",
-            "targets": ["msd_utils_test", "msd_sim_test", "msd_assets_test"]
+            "targets": [
+                "msd_utils_test",
+                "msd_sim_test",
+                "msd_assets_test"
+            ]
         },
         {
             "name": "release-tests-only",
             "displayName": "Build all tests (Release)",
             "configurePreset": "conan-release",
-            "targets": ["msd_utils_test", "msd_sim_test", "msd_assets_test"]
+            "targets": [
+                "msd_utils_test",
+                "msd_sim_test",
+                "msd_assets_test"
+            ]
         }
     ]
 }

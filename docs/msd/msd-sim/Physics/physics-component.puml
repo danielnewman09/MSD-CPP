@@ -1,0 +1,195 @@
+@startuml
+' =============================================================================
+' Feature: PhysicsComponent
+' Description: Rigid body physics properties for dynamic objects
+' Date: 2026-01-01
+' =============================================================================
+
+!theme cyborg
+
+' -----------------------------------------------------------------------------
+' Styling - documenting existing components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #2d2d2d
+    BorderColor #666666
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim::Physics" {
+
+    class PhysicsComponent {
+        -mass_: double
+        -inertiaTensor_: Matrix3d
+        -inverseInertiaTensor_: Matrix3d
+        -centerOfMass_: Coordinate
+        -dynamicState_: DynamicState
+        -netForce_: Coordinate
+        -netTorque_: Vector3d
+        ..
+        ' Construction
+        +PhysicsComponent(hull: ConvexHull, mass: double)
+        ..
+        ' Mass properties
+        +getMass(): double
+        +getInertiaTensor(): Matrix3d&
+        +getInverseInertiaTensor(): Matrix3d&
+        +getCenterOfMass(): Coordinate&
+        ..
+        ' Dynamic state access
+        +getDynamicState(): DynamicState&
+        +getDynamicState() const: DynamicState&
+        +getKineticEnergy(): double
+        ..
+        ' Force and torque application
+        +applyForce(force: Coordinate): void
+        +applyForceAtPoint(force: Coordinate, localOffset: Coordinate): void
+        +applyTorque(torque: Vector3d): void
+        +clearForces(): void
+        ..
+        ' Net force/torque access
+        +getNetForce(): Coordinate&
+        +getNetTorque(): Vector3d&
+    }
+
+    class DynamicState {
+        <<value>>
+        ' Owned by PhysicsComponent
+    }
+
+    class ConvexHull {
+        ' Used for construction
+    }
+
+    class InertialCalculations {
+        <<utility>>
+        +{static} computeInertiaTensorAboutCentroid(...): Matrix3d
+    }
+}
+
+package "Eigen" {
+    class "Eigen::Matrix3d" as Matrix3d {
+        ' 3x3 inertia tensor
+    }
+
+    class "Eigen::Vector3d" as Vector3d {
+        ' Angular quantities
+    }
+}
+
+package "msd_sim::Environment" {
+    class Coordinate {
+        <<external>>
+        ' 3D position/force
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Composition
+PhysicsComponent *-- DynamicState : owns
+PhysicsComponent *-- Coordinate : centerOfMass_, netForce_
+PhysicsComponent *-- Matrix3d : inertiaTensor_, inverseInertiaTensor_
+PhysicsComponent *-- Vector3d : netTorque_
+
+' Construction dependencies
+PhysicsComponent ..> ConvexHull : constructed from
+PhysicsComponent ..> InertialCalculations : uses to compute inertia
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of PhysicsComponent
+    Thread safety: **Not thread-safe**
+    Contains mutable DynamicState
+
+    **Error Handling:**
+    - Throws invalid_argument if mass <= 0
+    - Throws invalid_argument if hull is invalid
+
+    **Memory Management:**
+    - Caches inverse inertia tensor
+    - DynamicState owned by value
+    - No heap allocations after construction
+end note
+
+note bottom of PhysicsComponent
+    **Separation of Concerns:**
+    PhysicsComponent is separated from Object
+    to allow efficient storage and iteration
+    during physics updates. Only present in
+    Inertial objects.
+end note
+
+' -----------------------------------------------------------------------------
+' Data Flow
+' -----------------------------------------------------------------------------
+note as ForceFlow
+    **Force Application Flow:**
+
+    1. External forces applied:
+       physics.applyForce(gravity)
+       physics.applyForceAtPoint(wind, sailPos)
+
+    2. Forces accumulated:
+       netForce_ += force
+       netTorque_ += r x force
+
+    3. Integration step computes accelerations:
+       a = netForce_ / mass_
+       alpha = inverseInertiaTensor_ * netTorque_
+
+    4. After integration:
+       physics.clearForces()
+end note
+
+note as TorqueCalculation
+    **Torque from Off-Center Force:**
+
+    applyForceAtPoint(force, localOffset):
+      // Vector from center of mass to point
+      r = localOffset - centerOfMass_
+      // Torque = r x F
+      netTorque_ += r.cross(force)
+      // Also adds to linear force
+      netForce_ += force
+end note
+
+note as UsageExample
+    **Usage Example:**
+
+    ConvexHull hull{geometry};
+    PhysicsComponent physics{hull, 50.0};  // 50 kg
+
+    // Apply gravity
+    Coordinate gravity{0, 0, -9.81 * physics.getMass()};
+    physics.applyForce(gravity);
+
+    // Apply wind force at sail (creates torque)
+    Coordinate wind{10.0, 0, 0};
+    Coordinate sailPos{0, 0, 2.0};  // Above CoM
+    physics.applyForceAtPoint(wind, sailPos);
+
+    // After integration
+    physics.clearForces();
+end note
+
+note as EnergyNote
+    **Kinetic Energy Calculation:**
+
+    KE = 0.5 * m * v^2 + 0.5 * omega^T * I * omega
+
+    getKineticEnergy() returns total kinetic
+    energy (linear + rotational).
+end note
+
+@enduml

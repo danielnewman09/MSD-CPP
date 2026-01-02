@@ -1,0 +1,208 @@
+@startuml
+' =============================================================================
+' Feature: ConvexHull
+' Description: 3D convex hull for collision detection and mass properties
+' Date: 2026-01-01
+' =============================================================================
+
+!theme cyborg
+
+' -----------------------------------------------------------------------------
+' Styling - documenting existing components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #2d2d2d
+    BorderColor #666666
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim::Physics" {
+
+    class ConvexHull {
+        -vertices_: vector<Coordinate>
+        -facets_: vector<Facet>
+        -volume_: double
+        -surfaceArea_: double
+        -centroid_: Coordinate
+        -boundingBoxMin_: Coordinate
+        -boundingBoxMax_: Coordinate
+        -valid_: bool
+        ..
+        ' Construction
+        +ConvexHull()
+        +ConvexHull<VectorType>(points: vector<VectorType>)
+        +ConvexHull(geometry: CollisionGeometry)
+        ..
+        ' Geometry access
+        +getVertices(): vector<Coordinate>&
+        +getFacets(): vector<Facet>&
+        +getVertexCount(): size_t
+        +getFacetCount(): size_t
+        ..
+        ' Properties (computed by Qhull)
+        +getVolume(): double
+        +getSurfaceArea(): double
+        +getCentroid(): Coordinate
+        +getBoundingBox(): BoundingBox
+        +isValid(): bool
+        ..
+        ' Collision queries
+        +contains(point: Coordinate, epsilon: double): bool
+        +signedDistance(point: Coordinate): double
+        +intersects(other: ConvexHull, epsilon: double): bool
+        ..
+        -computeHull(points: vector<Coordinate>): void
+    }
+
+    struct "ConvexHull::BoundingBox" as BoundingBox {
+        +min: Coordinate
+        +max: Coordinate
+    }
+
+    struct "ConvexHull::Facet" as Facet {
+        +vertexIndices: array<size_t, 3>
+        +normal: Coordinate
+        +offset: double
+    }
+
+    class GJK {
+        ' Used internally for intersection
+    }
+}
+
+package "External" {
+    class "Qhull" as Qhull {
+        <<external>>
+        +runQhull(): void
+        +vertices(): iterator
+        +facetList(): iterator
+        +volume(): double
+        +area(): double
+    }
+}
+
+package "msd_assets" {
+    class CollisionGeometry {
+        <<external>>
+        +vertices: vector<Vertex>
+    }
+}
+
+package "msd_sim::Environment" {
+    class Coordinate {
+        <<external>>
+        ' Eigen::Vector3d wrapper
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Composition
+ConvexHull *-- "*" Coordinate : vertices_
+ConvexHull *-- "*" Facet : facets_
+ConvexHull *-- BoundingBox : cached bounds
+
+' Usage
+ConvexHull ..> Qhull : uses for computation
+ConvexHull ..> GJK : delegates intersection
+ConvexHull ..> CollisionGeometry : can construct from
+
+' Facet uses Coordinate
+Facet o-- Coordinate : normal
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of ConvexHull
+    Thread safety: **Not thread-safe**
+    Qhull computation is not reentrant
+
+    **Error Handling:**
+    - Throws runtime_error on empty points
+    - Throws runtime_error on < 4 points
+    - Throws runtime_error on degenerate
+      geometry (coplanar points)
+    - Throws runtime_error on Qhull failure
+
+    **Memory Management:**
+    - Owns vertices and facets vectors
+    - Qhull resources cleaned via RAII
+      in computeHull()
+end note
+
+note bottom of Facet
+    **Facet Plane Equation:**
+    normal * point + offset = 0
+
+    Points with positive signed
+    distance are outside hull.
+end note
+
+' -----------------------------------------------------------------------------
+' Data Flow
+' -----------------------------------------------------------------------------
+note as ComputationFlow
+    **Hull Computation Flow:**
+
+    1. Input: Point cloud or CollisionGeometry
+       |
+    2. Pass points to Qhull library
+       |
+    3. Qhull computes convex hull
+       |
+    4. Extract vertices, facets, volume,
+       surface area, centroid
+       |
+    5. Compute axis-aligned bounding box
+       |
+    6. Store results in member variables
+end note
+
+note as UsageExample
+    **Usage Example:**
+
+    // Create from point cloud
+    std::vector<Coordinate> points = {
+      {0, 0, 0}, {1, 0, 0}, {0.5, 1, 0},
+      {0.5, 0.5, 1}  // Tetrahedron
+    };
+    ConvexHull hull{points};
+
+    // Query properties
+    double vol = hull.getVolume();
+    auto bbox = hull.getBoundingBox();
+
+    // Point containment
+    if (hull.contains({0.5, 0.5, 0.25})) {
+      // Point is inside
+    }
+
+    // Collision with another hull
+    if (hull.intersects(otherHull)) {
+      // Handle collision
+    }
+end note
+
+note as PerformanceNote
+    **Performance Considerations:**
+
+    - Hull computation: O(n log n) average
+    - contains(): O(f) where f = facet count
+    - intersects(): Uses GJK - O(1) average
+    - getBoundingBox(): O(1) - cached
+
+    **Broad Phase Optimization:**
+    Check bounding box overlap before
+    calling expensive intersects()
+end note
+
+@enduml

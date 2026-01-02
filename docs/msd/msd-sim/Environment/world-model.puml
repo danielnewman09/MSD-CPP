@@ -1,0 +1,158 @@
+@startuml
+' =============================================================================
+' Feature: WorldModel
+' Description: Container and manager for all simulation objects
+' Date: 2026-01-01
+' =============================================================================
+
+!theme cyborg
+
+' -----------------------------------------------------------------------------
+' Styling - documenting existing components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #2d2d2d
+    BorderColor #666666
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim" {
+
+    class WorldModel {
+        -objects_: vector<Object>
+        -physicsObjectIndices_: vector<size_t>
+        -collisionObjectIndices_: vector<size_t>
+        -renderObjectIndices_: vector<size_t>
+        -platforms_: vector<Platform>
+        -time_: milliseconds
+        ..
+        ' Object management
+        +spawnObject(object: Object&&): size_t
+        +getObject(index: size_t): Object&
+        +removeObject(index: size_t): void
+        +getObjectCount(): size_t
+        +clearObjects(): void
+        +getObjects(): vector<Object>&
+        ..
+        ' Efficient iteration helpers
+        +getPhysicsObjectIndices(): vector<size_t>
+        +getCollisionObjectIndices(): vector<size_t>
+        +getRenderObjectIndices(): vector<size_t>
+        ..
+        ' Simulation update
+        +update(deltaTime: milliseconds): void
+        +getTime(): milliseconds
+        ..
+        ' Legacy platform support
+        +addPlatform(platform: Platform&&): void
+        +getPlatforms(): vector<Platform>
+        ..
+        -updatePhysics(dt: double): void
+        -updateCollisions(): void
+        -rebuildIndexCaches(): void
+    }
+
+    class Object {
+        +getType(): Type
+        +hasPhysics(): bool
+        +hasCollision(): bool
+        +hasVisualGeometry(): bool
+    }
+
+    class Platform {
+        +update(currTime: milliseconds): void
+        -state_: InertialState
+        -agent_: unique_ptr<BaseAgent>
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Composition (ownership)
+WorldModel *-- "*" Object : objects_
+WorldModel *-- "*" Platform : platforms_ (legacy)
+
+' Association
+WorldModel ..> Object : manages
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of WorldModel
+    Thread safety: Not thread-safe
+    Single-threaded simulation assumed
+
+    **Cached Index Lists:**
+    Rebuilt on spawn/remove for
+    efficient iteration by type.
+
+    **Move Semantics:**
+    Objects moved into container
+    (no copies).
+end note
+
+' -----------------------------------------------------------------------------
+' Data Flow
+' -----------------------------------------------------------------------------
+note as IterationPatterns
+    **Efficient Iteration Patterns:**
+
+    // Physics update - only dynamic objects
+    for (size_t idx : world.getPhysicsObjectIndices()) {
+        Object& obj = world.getObject(idx);
+        obj.getPhysics().applyForce(...);
+    }
+
+    // Collision detection - only collidable
+    for (size_t idx : world.getCollisionObjectIndices()) {
+        // Check collisions...
+    }
+
+    // Rendering - only visible objects
+    for (size_t idx : world.getRenderObjectIndices()) {
+        // Render...
+    }
+end note
+
+note as UpdateCycle
+    **Simulation Update Cycle:**
+
+    world.update(deltaTime);
+
+    Internally:
+    1. updatePhysics(dt)
+       - Integrate forces
+       - Update positions
+    2. updateCollisions()
+       - Detect intersections
+       - Resolve collisions
+    3. Update time_
+end note
+
+note as SpawnPattern
+    **Spawn Usage:**
+
+    WorldModel world;
+
+    // Spawn and get index
+    size_t playerIdx = world.spawnObject(
+        Object::createInertial(asset, frame, 10.0)
+    );
+
+    // Access by index
+    Object& player = world.getObject(playerIdx);
+
+    // Update simulation
+    world.update(std::chrono::milliseconds{16});
+end note
+
+@enduml

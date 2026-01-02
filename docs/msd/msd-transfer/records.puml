@@ -1,0 +1,206 @@
+@startuml
+' =============================================================================
+' Feature: msd-transfer - Database Records Detail
+' Description: Detailed structure of all transfer objects
+' Date: 2026-01-01
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Component Focus
+' -----------------------------------------------------------------------------
+package "msd_transfer" {
+
+    class MeshRecord {
+        ' Inherited from BaseTransferObject
+        +id: uint32_t
+        __
+        ' Visual mesh data (for rendering)
+        +vertex_data: vector<uint8_t>
+        +vertex_count: uint32_t
+    }
+
+    class ObjectRecord {
+        ' Inherited from BaseTransferObject
+        +id: uint32_t
+        __
+        ' Object metadata
+        +name: string
+        +category: string
+        __
+        ' Foreign keys (nullable)
+        +meshRecord: ForeignKey<MeshRecord>
+        +collisionMeshRecord: ForeignKey<MeshRecord>
+    }
+
+    class MaterialRecord {
+        ' Inherited from BaseTransferObject
+        +id: uint32_t
+        __
+        ' Material identity
+        +name: string
+        __
+        ' Shader references
+        +shader_vertex: string
+        +shader_fragment: string
+        __
+        ' Default color
+        +default_color_r: float = 1.0
+        +default_color_g: float = 1.0
+        +default_color_b: float = 1.0
+        __
+        ' Material properties
+        +shininess: float = 32.0
+        +metallic: float = 0.0
+        +roughness: float = 1.0
+    }
+
+    class PhysicsTemplateRecord {
+        ' Inherited from BaseTransferObject
+        +id: uint32_t
+        __
+        ' Template identity
+        +name: string
+        __
+        ' Geometry reference
+        +mesh: ForeignKey<MeshRecord>
+        __
+        ' Physical properties
+        +mass: double = 1.0
+        +friction: double = 0.5
+        +restitution: double = 0.3
+        +linear_damping: double = 0.1
+        +angular_damping: double = 0.1
+        __
+        ' Inertia tensor (9 doubles = 72 bytes)
+        +inertia_tensor: vector<uint8_t>
+    }
+}
+
+package "cpp_sqlite" {
+    class BaseTransferObject {
+        +id: uint32_t
+    }
+
+    class "ForeignKey<T>" as ForeignKey {
+        +id: uint32_t
+        +isSet(): bool
+        +resolve(db: Database&): optional<T>
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Inheritance
+MeshRecord --|> BaseTransferObject
+ObjectRecord --|> BaseTransferObject
+MaterialRecord --|> BaseTransferObject
+PhysicsTemplateRecord --|> BaseTransferObject
+
+' Foreign key relationships
+ObjectRecord "1" *-- "0..1" MeshRecord : visual
+ObjectRecord "1" *-- "0..1" MeshRecord : collision
+PhysicsTemplateRecord "1" *-- "1" MeshRecord : geometry
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of MeshRecord
+    **Purpose:** Visual mesh geometry storage
+
+    **BLOB Format:** vertex_data contains
+    serialized array of Vertex structs:
+    - position[3] (floats)
+    - color[3] (floats)
+    - normal[3] (floats)
+
+    **Thread Safety:** Immutable after creation
+    (pure data transfer object)
+
+    **Serialization:** Handled by
+    msd-gui::AssetDatabase, not by this library
+end note
+
+note right of ObjectRecord
+    **Purpose:** Complete object definition
+
+    Ties together:
+    - Visual mesh (for rendering)
+    - Collision mesh (for physics)
+
+    **Nullable FKs:** Objects can have:
+    - Both meshes (most common)
+    - Visual only (no physics)
+    - Collision only (invisible volumes)
+
+    **Category:** Groups objects for UI
+    organization (e.g., "primitives")
+end note
+
+note right of MaterialRecord
+    **Purpose:** Rendering material definition
+
+    **Extension Point:** Future support for:
+    - PBR textures
+    - Normal maps
+    - Environment maps
+
+    **Shader Refs:** Can be file paths
+    or shader names for lookup
+end note
+
+note right of PhysicsTemplateRecord
+    **Purpose:** Reusable rigid body template
+
+    Combines:
+    - Geometry reference
+    - Physical properties
+    - Inertia tensor
+
+    **Inertia Tensor:** 3x3 matrix stored
+    as 9 doubles (72 bytes) for rigid
+    body dynamics calculation
+end note
+
+note as BlobNote
+    **BLOB Serialization:**
+
+    Transfer objects use vector<uint8_t>
+    for binary data (vertex arrays, matrices).
+
+    Serialization/deserialization is
+    performed by consuming libraries
+    (msd-gui, msd-assets), keeping
+    msd-transfer dependency-free.
+end note
+
+note as ORMNote
+    **ORM Integration:**
+
+    All records use BOOST_DESCRIBE_STRUCT
+    for automatic:
+    - Table schema generation
+    - SQL query building
+    - Type-safe field access
+
+    Example:
+    BOOST_DESCRIBE_STRUCT(MeshRecord,
+      (cpp_sqlite::BaseTransferObject),
+      (vertex_data, vertex_count))
+end note
+
+@enduml

@@ -1,0 +1,159 @@
+@startuml
+' =============================================================================
+' Physics Module - High-Level Architecture Overview
+' Description: Force-based rigid body dynamics and collision detection
+' Date: 2026-01-01
+' =============================================================================
+
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam package {
+    BackgroundColor #F5F5F5
+    BorderColor #666666
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+title Physics Module Architecture
+
+' -----------------------------------------------------------------------------
+' Physics Package
+' -----------------------------------------------------------------------------
+package "msd_sim::Physics" {
+
+    package "RigidBody" {
+        class ConvexHull {
+            +ConvexHull(points: vector<VectorType>)
+            +ConvexHull(geometry: CollisionGeometry)
+            +getVertices(): vector<Coordinate>
+            +getFacets(): vector<Facet>
+            +getVolume(): double
+            +getSurfaceArea(): double
+            +getCentroid(): Coordinate
+            +getBoundingBox(): BoundingBox
+            +contains(point: Coordinate): bool
+            +signedDistance(point: Coordinate): double
+            +intersects(other: ConvexHull): bool
+        }
+
+        class PhysicsComponent {
+            +PhysicsComponent(hull: ConvexHull, mass: double)
+            +getMass(): double
+            +getInertiaTensor(): Matrix3d
+            +getInverseInertiaTensor(): Matrix3d
+            +getCenterOfMass(): Coordinate
+            +getDynamicState(): DynamicState&
+            +getKineticEnergy(): double
+            +applyForce(force: Coordinate): void
+            +applyForceAtPoint(force, offset: Coordinate): void
+            +applyTorque(torque: Vector3d): void
+            +clearForces(): void
+        }
+
+        class DynamicState {
+            <<value>>
+            +getLinearVelocity(): Coordinate
+            +getAngularVelocity(): Vector3d
+            +getLinearAcceleration(): Coordinate
+            +getAngularAcceleration(): Vector3d
+            +getSpeed(): double
+            +isAtRest(): bool
+            +applyLinearImpulse(impulse: Coordinate): void
+            +applyAngularImpulse(impulse: Vector3d): void
+        }
+
+        class InertialCalculations {
+            <<utility>>
+            +{static} computeInertiaTensorAboutOrigin(hull, mass): Matrix3d
+            +{static} computeInertiaTensorAboutCentroid(hull, mass): Matrix3d
+        }
+    }
+
+    class GJK {
+        <<collision>>
+        +GJK(hullA, hullB: ConvexHull, epsilon: double)
+        +intersects(maxIterations: int): bool
+    }
+}
+
+' -----------------------------------------------------------------------------
+' External Dependencies
+' -----------------------------------------------------------------------------
+package "External" {
+    class "Qhull" as Qhull {
+        <<external>>
+        ' Convex hull computation
+    }
+
+    class "Eigen::Matrix3d" as Matrix3d {
+        <<external>>
+        ' 3x3 matrix (inertia tensor)
+    }
+}
+
+package "msd_assets" {
+    class CollisionGeometry {
+        <<external>>
+        +vertices: vector<Vertex>
+    }
+}
+
+package "msd_sim::Environment" {
+    class Coordinate {
+        <<external>>
+        ' 3D position/velocity
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' RigidBody internal relationships
+PhysicsComponent *-- DynamicState : owns
+PhysicsComponent o-- ConvexHull : references
+InertialCalculations ..> ConvexHull : computes from
+InertialCalculations ..> Matrix3d : produces
+
+' ConvexHull relationships
+ConvexHull ..> Qhull : uses for computation
+ConvexHull *-- Coordinate : vertices
+ConvexHull o-- CollisionGeometry : can construct from
+
+' GJK relationships
+GJK ..> ConvexHull : tests intersection
+
+' External type usage
+PhysicsComponent ..> Matrix3d : inertia tensor
+DynamicState o-- Coordinate : velocities/accelerations
+
+' -----------------------------------------------------------------------------
+' Package Note
+' -----------------------------------------------------------------------------
+note as PhysicsNote
+    **Physics Module Overview:**
+
+    The Physics module provides rigid body dynamics
+    and collision detection for the MSD simulation.
+
+    **Key Features:**
+    - Convex hull representation via Qhull
+    - GJK collision detection algorithm
+    - Inertia tensor computation
+    - Force/torque-based dynamics
+    - Impulse response
+
+    **All units are SI:**
+    - Mass: kg
+    - Force: N
+    - Torque: N*m
+    - Inertia: kg*m^2
+end note
+
+@enduml

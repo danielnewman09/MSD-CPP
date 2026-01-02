@@ -1,0 +1,220 @@
+@startuml
+' =============================================================================
+' Feature: GJK (Gilbert-Johnson-Keerthi)
+' Description: Efficient collision detection for convex shapes
+' Date: 2026-01-01
+' =============================================================================
+
+!theme cyborg
+
+' -----------------------------------------------------------------------------
+' Styling - documenting existing components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #2d2d2d
+    BorderColor #666666
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim::Physics" {
+
+    class GJK {
+        -hullA_: ConvexHull&
+        -hullB_: ConvexHull&
+        -epsilon_: double
+        -simplex_: vector<Coordinate>
+        -direction_: Coordinate
+        ..
+        ' Construction
+        +GJK(hullA: ConvexHull, hullB: ConvexHull, epsilon: double = 1e-6)
+        ..
+        ' Intersection test
+        +intersects(maxIterations: int = 64): bool
+        ..
+        ' Internal methods
+        -support(direction: Coordinate): Coordinate
+        -supportA(direction: Coordinate): Coordinate
+        -supportB(direction: Coordinate): Coordinate
+        -handleSimplex(): bool
+        -handleLine(): bool
+        -handleTriangle(): bool
+        -handleTetrahedron(): bool
+    }
+
+    class ConvexHull {
+        +getVertices(): vector<Coordinate>&
+        +intersects(other: ConvexHull): bool
+    }
+
+    ' Convenience function
+    note as ConvenienceFunc
+        **Convenience Function:**
+
+        bool gjkIntersects(
+            const ConvexHull& hullA,
+            const ConvexHull& hullB,
+            double epsilon = 1e-6,
+            int maxIterations = 64);
+    end note
+}
+
+package "msd_sim::Environment" {
+    class Coordinate {
+        <<external>>
+        ' Minkowski difference points
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' References
+GJK o-- ConvexHull : references (non-owning)
+GJK *-- Coordinate : simplex_, direction_
+
+' ConvexHull delegates to GJK
+ConvexHull ..> GJK : uses internally
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of GJK
+    Thread safety: **Thread-safe for read-only hulls**
+    GJK maintains its own state and only reads
+    from the hulls.
+
+    **Numerical Tolerance:**
+    epsilon parameter controls precision
+    of origin containment tests.
+
+    **Iteration Limit:**
+    maxIterations prevents infinite loops
+    on degenerate cases.
+end note
+
+' -----------------------------------------------------------------------------
+' Algorithm Explanation
+' -----------------------------------------------------------------------------
+note as AlgorithmNote
+    **GJK Algorithm Overview:**
+
+    Two convex shapes A and B intersect
+    if and only if their Minkowski difference
+    (A - B) contains the origin.
+
+    **Minkowski Difference:**
+    A - B = { a - b | a in A, b in B }
+
+    **Key Insight:**
+    Instead of computing full Minkowski
+    difference, iteratively build a simplex
+    that tries to enclose the origin.
+end note
+
+note as SupportFunction
+    **Support Function:**
+
+    support(d) returns the point in (A - B)
+    that is furthest in direction d:
+
+    support(d) = supportA(d) - supportB(-d)
+
+    where supportA(d) finds the vertex of A
+    furthest in direction d.
+
+    This is O(n) where n = vertex count.
+end note
+
+note as SimplexEvolution
+    **Simplex Evolution:**
+
+    The algorithm builds a simplex (0D to 3D):
+
+    1. **Point (0-simplex)**
+       First support point
+       |
+    2. **Line (1-simplex)**
+       Add second point, check if origin
+       is past the line
+       |
+    3. **Triangle (2-simplex)**
+       Add third point, determine which
+       region contains origin
+       |
+    4. **Tetrahedron (3-simplex)**
+       Add fourth point, check if origin
+       is inside or determine exit direction
+
+    If origin is enclosed -> INTERSECTION
+    If can't enclose -> NO INTERSECTION
+end note
+
+note as UsageExample
+    **Usage Example:**
+
+    ConvexHull hullA{pointsA};
+    ConvexHull hullB{pointsB};
+
+    // Method 1: Convenience function
+    if (gjkIntersects(hullA, hullB)) {
+      std::cout << "Collision!" << std::endl;
+    }
+
+    // Method 2: Via ConvexHull
+    if (hullA.intersects(hullB)) {
+      // Handle collision...
+    }
+
+    // Method 3: Direct GJK usage
+    GJK gjk{hullA, hullB, 1e-8};
+    if (gjk.intersects(128)) {  // Custom iterations
+      // ...
+    }
+end note
+
+note as PerformanceNote
+    **Performance:**
+
+    **Average Case:** O(1)
+    - Typically converges in 10-20 iterations
+    - Independent of vertex count for
+      most practical shapes
+
+    **Worst Case:** O(n) per iteration
+    - Support function scans all vertices
+    - maxIterations bounds total work
+
+    **Optimization Tips:**
+    - Check bounding box overlap first
+    - Cache support function results
+    - Use spatial partitioning for
+      many-body collision
+end note
+
+note as SimplexCases
+    **Simplex Cases:**
+
+    **handleLine():**
+    - Check if origin is beyond line ends
+    - Update direction toward origin
+
+    **handleTriangle():**
+    - Determine which Voronoi region
+      contains origin (edge or face)
+    - Update simplex and direction
+
+    **handleTetrahedron():**
+    - Check if origin inside tetrahedron
+    - If outside, reduce to triangle
+      facing origin
+end note
+
+@enduml

@@ -19,56 +19,110 @@ See: [`docs/architecture/overview.puml`](docs/architecture/overview.puml)
 
 | Component | Location | Purpose | Diagram |
 |-----------|----------|---------|---------|
-| {ComponentName} | `include/{path}/` | {Brief purpose} | [`{name}.puml`](docs/designs/{name}/{name}.puml) |
+| msd-transfer | `msd/msd-transfer/` | Database transfer objects (DTOs) | [`msd-transfer-core.puml`](docs/msd/msd-transfer/msd-transfer-core.puml) |
 
 ---
 
 ## Component Details
 
-### {Component 1 Name}
+### msd-transfer
 
-**Location**: `include/{path}/`, `src/{path}/`  
-**Diagram**: [`docs/designs/{component}/{component}.puml`](docs/designs/{component}/{component}.puml)  
-**Introduced**: [Ticket: {ticket-name}](tickets/{ticket-name}.md)
+**Location**: `msd/msd-transfer/src/`
+**Diagram**: [`docs/msd/msd-transfer/msd-transfer-core.puml`](docs/msd/msd-transfer/msd-transfer-core.puml)
+**Type**: Header-only interface library
 
 #### Purpose
-{What this component does and why it exists}
+Defines lightweight, header-only structs that represent database records for the MSD asset management system. These structs serve as pure data transfer objects (DTOs) used by `cpp_sqlite` to automatically generate SQL schema and provide type-safe ORM functionality.
+
+This library acts as the shared contract between database storage and domain logic, with no dependencies on simulation or rendering components.
 
 #### Key Classes
 
 | Class | Header | Responsibility |
 |-------|--------|----------------|
-| `ClassName` | `{path}.hpp` | {Single responsibility} |
+| `MeshRecord` | `MeshRecord.hpp` | Visual mesh geometry storage (vertex data as BLOB) |
+| `ObjectRecord` | `MeshRecord.hpp` | Complete object definition with visual/collision mesh references |
+| `MaterialRecord` | `MaterialRecord.hpp` | Rendering material properties and shader references |
+| `PhysicsTemplateRecord` | `PhysicsTemplateRecord.hpp` | Rigid body template with physical properties |
+| `Records` | `Records.hpp` | Convenience header including all record types |
 
 #### Key Interfaces
 ```cpp
-// Primary interface for {component}
-class IComponentName {
-public:
-    virtual ReturnType operation(Params) = 0;
-    // ...
+// All records inherit from BaseTransferObject
+struct MeshRecord : public cpp_sqlite::BaseTransferObject {
+    std::vector<uint8_t> vertex_data;  // Serialized vertex array
+    uint32_t vertex_count{0};
+};
+
+struct ObjectRecord : public cpp_sqlite::BaseTransferObject {
+    std::string name;
+    std::string category;
+    cpp_sqlite::ForeignKey<MeshRecord> meshRecord;           // Visual geometry
+    cpp_sqlite::ForeignKey<MeshRecord> collisionMeshRecord;  // Collision geometry
+};
+
+struct PhysicsTemplateRecord : public cpp_sqlite::BaseTransferObject {
+    std::string name;
+    cpp_sqlite::ForeignKey<MeshRecord> mesh;
+    double mass{1.0};
+    double friction{0.5};
+    double restitution{0.3};
+    // ... additional physical properties
 };
 ```
 
 #### Usage Example
 ```cpp
-// Example usage of {component}
-auto component = createComponent(config);
-auto result = component->operation(params);
+#include <msd-transfer/src/Records.hpp>
+
+// Create database connection
+cpp_sqlite::Database db{"assets.db", true};
+
+// Get DAO for record type
+auto& meshDAO = db.getDAO<msd_transfer::MeshRecord>();
+
+// Insert a mesh record
+msd_transfer::MeshRecord mesh;
+mesh.id = meshDAO.incrementIdCounter();
+mesh.vertex_count = 18;
+mesh.vertex_data = serializeVertices(pyramidVertices);
+meshDAO.insert(mesh);
+
+// Query records
+auto allMeshes = meshDAO.selectAll();
+auto singleMesh = meshDAO.selectById(1);
+
+// Work with foreign keys
+msd_transfer::ObjectRecord obj;
+obj.meshRecord.id = 1;  // Reference to mesh ID 1
+if (obj.meshRecord.isSet()) {
+    auto mesh = obj.meshRecord.resolve(db);
+}
 ```
 
 #### Thread Safety
-{Thread safety guarantees and usage constraints}
+- **Immutable after creation**: Transfer objects are pure data containers with no mutable state
+- **No synchronization needed**: Safe to read from multiple threads after construction
+- **Thread-safe database access**: Thread safety depends on `cpp_sqlite::Database` implementation
 
 #### Error Handling
-{Error handling strategy: exceptions, error codes, std::expected, etc.}
+- No exceptions thrown by transfer objects (pure data)
+- Foreign key resolution returns `std::optional<T>` (nullopt if not found)
+- Database errors propagate from `cpp_sqlite` layer
+
+#### Memory Management
+- **Value semantics**: All records use value types (strings, vectors)
+- **No ownership complexity**: Pure data containers with no pointers
+- **BLOB storage**: Binary data stored as `std::vector<uint8_t>`, serialization handled by consumers
+- **Foreign keys**: References by ID, not by pointer - resolved on demand
 
 #### Dependencies
-- `{Dependency1}` — {why it's needed}
-- `{Dependency2}` — {why it's needed}
+- `cpp_sqlite` — ORM framework for database operations
+- `Boost.Describe` — Compile-time reflection for automatic schema generation
 
 #### Related Components
-- [`{RelatedComponent}`](#related-component-name) — {relationship}
+- [`msd-assets`](#msd-assets) — Consumes records to build domain objects
+- [`msd-gui`](#msd-gui) — Uses AssetDatabase to load/save records
 
 ---
 
@@ -260,17 +314,16 @@ test/
 
 ## Recent Architectural Changes
 
-{This section is updated as features are implemented}
+### msd-transfer Documentation — 2026-01-01
+**Diagram**: [`docs/msd/msd-transfer/msd-transfer-core.puml`](docs/msd/msd-transfer/msd-transfer-core.puml)
 
-### {Feature Name} — {Date}
-**Ticket**: [{ticket-name}](tickets/{ticket-name}.md)  
-**Diagram**: [`docs/designs/{feature}/{feature}.puml`](docs/designs/{feature}/{feature}.puml)
+Added comprehensive documentation for the msd-transfer header-only library. This library defines database transfer objects (DTOs) for the MSD asset management system, providing the shared contract between database storage and domain logic.
 
-{Brief description of what was added/changed and why}
-
-**Key files added/modified**:
-- `include/{path}.hpp` — {what it does}
-- `src/{path}.cpp` — {what it does}
+**Key files documented**:
+- `msd/msd-transfer/src/Records.hpp` — Convenience header including all record types
+- `msd/msd-transfer/src/MeshRecord.hpp` — Visual mesh geometry and object records
+- `msd/msd-transfer/src/MaterialRecord.hpp` — Rendering material definitions
+- `msd/msd-transfer/src/PhysicsTemplateRecord.hpp` — Rigid body physics templates
 
 ---
 
@@ -279,7 +332,8 @@ test/
 | Diagram | Description | Last Updated |
 |---------|-------------|--------------|
 | [`overview.puml`](docs/architecture/overview.puml) | High-level system architecture | {date} |
-| [`{feature}.puml`](docs/designs/{feature}/{feature}.puml) | {description} | {date} |
+| [`msd-transfer-core.puml`](docs/msd/msd-transfer/msd-transfer-core.puml) | msd-transfer high-level architecture overview | 2026-01-01 |
+| [`records.puml`](docs/msd/msd-transfer/records.puml) | msd-transfer database records detailed design | 2026-01-01 |
 
 ---
 

@@ -1,0 +1,187 @@
+@startuml
+' =============================================================================
+' Feature: Object
+' Description: Unified simulation entity with component-based design
+' Date: 2026-01-01
+' =============================================================================
+
+!theme cyborg
+
+' -----------------------------------------------------------------------------
+' Styling - documenting existing components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #2d2d2d
+    BorderColor #666666
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim" {
+
+    class Object {
+        -type_: Type
+        -asset_: optional<reference_wrapper<Asset>>
+        -transform_: ReferenceFrame
+        -physics_: optional<PhysicsComponent>
+        -collisionHull_: optional<ConvexHull>
+        -color_[3]: float
+        ..
+        ' Factory methods (preferred construction)
+        +{static} createGraphical(asset, frame, r, g, b): Object
+        +{static} createInertial(asset, frame, mass, r, g, b): Object
+        +{static} createEnvironmental(asset, frame, r, g, b): Object
+        +{static} createBoundary(hull, frame): Object
+        ..
+        ' Component queries
+        +getType(): Type
+        +hasVisualGeometry(): bool
+        +hasCollision(): bool
+        +hasPhysics(): bool
+        ..
+        ' Component access
+        +getAsset(): optional<reference_wrapper<Asset>>
+        +getVisualGeometry(): VisualGeometry*
+        +getCollisionHull(): ConvexHull&
+        +getPhysics(): PhysicsComponent&
+        ..
+        ' Transform access
+        +getTransform(): ReferenceFrame&
+        +getPosition(): Coordinate
+        +setPosition(pos: Coordinate): void
+        +getRotation(): EulerAngles&
+        +setRotation(euler: EulerAngles): void
+        ..
+        ' Appearance
+        +setColor(r, g, b: float): void
+        +getColor(r&, g&, b&: float): void
+    }
+
+    enum "Object::Type" as ObjectType {
+        Graphical
+        Inertial
+        Environmental
+        Boundary
+    }
+
+    class ReferenceFrame {
+        +getOrigin(): Coordinate&
+        +setOrigin(origin: Coordinate): void
+        +setRotation(euler: EulerAngles): void
+    }
+}
+
+package "msd_sim::Physics" {
+    class PhysicsComponent {
+        +getMass(): double
+        +getInertiaTensor(): Matrix3d
+        +applyForce(force: Coordinate): void
+    }
+
+    class ConvexHull {
+        +getVertices(): vector<Coordinate>
+        +contains(point: Coordinate): bool
+        +intersects(other: ConvexHull): bool
+    }
+}
+
+package "msd_assets" {
+    class Asset {
+        +getVisualGeometry(): VisualGeometry
+        +getCollisionGeometry(): CollisionGeometry
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Composition
+Object *-- ObjectType : type_
+Object *-- ReferenceFrame : transform_
+Object *-- "0..1" PhysicsComponent : physics_ (optional)
+Object *-- "0..1" ConvexHull : collisionHull_ (optional)
+
+' Aggregation (non-owning reference)
+Object o-- "0..1" Asset : asset_ (reference)
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of Object
+    Thread safety: Not thread-safe
+
+    **Factory Pattern:**
+    Private constructor enforces
+    valid object creation via
+    factory methods.
+
+    **Component-Based Design:**
+    Optional components enable
+    efficient iteration by type.
+end note
+
+note bottom of ObjectType
+    **Object Types:**
+
+    **Graphical**: Visual only
+    - Asset, Transform, Color
+    - No physics, no collision
+
+    **Inertial**: Dynamic physics
+    - Asset, Transform, Color
+    - PhysicsComponent, ConvexHull
+
+    **Environmental**: Static collision
+    - Asset, Transform, Color
+    - ConvexHull (no physics)
+
+    **Boundary**: Collision only
+    - Transform, ConvexHull
+    - No asset (invisible)
+end note
+
+' -----------------------------------------------------------------------------
+' Data Flow
+' -----------------------------------------------------------------------------
+note as FactoryUsage
+    **Factory Method Usage:**
+
+    // Graphical-only (decoration)
+    auto decor = Object::createGraphical(
+        asset, frame, 0.5f, 0.5f, 0.5f);
+
+    // Dynamic physics (player)
+    auto player = Object::createInertial(
+        asset, frame, 10.0);
+
+    // Static collision (wall)
+    auto wall = Object::createEnvironmental(
+        asset, frame);
+
+    // Invisible boundary
+    auto bound = Object::createBoundary(
+        hull, frame);
+end note
+
+note as ComponentAccess
+    **Safe Component Access:**
+
+    // Check before access
+    if (obj.hasPhysics()) {
+        obj.getPhysics().applyForce(...);
+    }
+
+    // Or handle exception
+    try {
+        obj.getCollisionHull();
+    } catch (...) { }
+end note
+
+@enduml

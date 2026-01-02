@@ -5,6 +5,8 @@
 ' Date: {Date}
 ' =============================================================================
 
+!theme cyborg
+
 ' -----------------------------------------------------------------------------
 ' Styling - distinguishes new, modified, and existing components
 ' -----------------------------------------------------------------------------
@@ -13,13 +15,11 @@ skinparam class {
     BorderColor<<new>> #228B22
     BackgroundColor<<modified>> #FFFACD
     BorderColor<<modified>> #DAA520
-    BackgroundColor White
-    BorderColor Black
 }
 
 skinparam note {
-    BackgroundColor #FFFFCC
-    BorderColor #999999
+    BackgroundColor #2d2d2d
+    BorderColor #666666
 }
 
 ' -----------------------------------------------------------------------------

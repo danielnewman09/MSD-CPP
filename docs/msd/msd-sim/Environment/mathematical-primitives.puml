@@ -1,0 +1,176 @@
+@startuml
+' =============================================================================
+' Feature: Mathematical Primitives
+' Description: Core value types for 3D coordinates, angles, and kinematic state
+' Date: 2026-01-01
+' =============================================================================
+
+!theme cyborg
+
+' -----------------------------------------------------------------------------
+' Styling - documenting existing components (no new/modified highlighting)
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #2d2d2d
+    BorderColor #666666
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim" {
+
+    class Coordinate {
+        ' Inherits from Eigen::Vector3d
+        ..
+        ' Construction
+        +Coordinate()
+        +Coordinate(x: double, y: double, z: double)
+        +Coordinate(vec: Eigen::Vector3d)
+        ..
+        ' Inherited from Eigen::Vector3d
+        +x(): double
+        +y(): double
+        +z(): double
+        +norm(): double
+        +normalized(): Coordinate
+        +dot(other: Coordinate): double
+        +cross(other: Coordinate): Coordinate
+        ..
+        ' Operators
+        +operator+(other): Coordinate
+        +operator-(other): Coordinate
+        +operator*(scalar): Coordinate
+    }
+
+    class Angle {
+        -value_: double
+        -normalization_: Norm
+        ..
+        ' Factory methods
+        +{static} fromRadians(rad: double, norm: Norm): Angle
+        +{static} fromDegrees(deg: double, norm: Norm): Angle
+        ..
+        ' Access (lazy normalization)
+        +getRad(): double
+        +toDeg(): double
+        +setRad(rad: double): void
+        +getNormalization(): Norm
+        +setNormalization(norm: Norm): void
+        ..
+        ' Arithmetic operators
+        +operator+(other: Angle): Angle
+        +operator-(other: Angle): Angle
+        +operator*(scalar: double): Angle
+        +operator/(scalar: double): Angle
+        +operator-(): Angle
+        ..
+        ' Compound assignment
+        +operator+=(other: Angle): Angle&
+        +operator-=(other: Angle): Angle&
+    }
+
+    enum "Angle::Norm" as AngleNorm {
+        PI
+        TWO_PI
+    }
+
+    class EulerAngles {
+        +pitch: Angle
+        +roll: Angle
+        +yaw: Angle
+        ..
+        +EulerAngles()
+        +EulerAngles(pitch, roll, yaw: Angle)
+    }
+
+    class InertialState {
+        ' Linear components
+        +position: Coordinate
+        +velocity: Coordinate
+        +acceleration: Coordinate
+        ..
+        ' Angular components
+        +angularPosition: EulerAngles
+        +angularVelocity: EulerAngles
+        +angularAcceleration: EulerAngles
+        ..
+        +InertialState() = default
+    }
+}
+
+package "Eigen" {
+    class "Eigen::Vector3d" as EigenVector3d {
+        +x(): double
+        +y(): double
+        +z(): double
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Inheritance
+Coordinate --|> EigenVector3d : inherits
+
+' Composition
+Angle *-- AngleNorm : uses
+EulerAngles *-- "3" Angle : contains
+InertialState *-- "3" Coordinate : linear state
+InertialState *-- "3" EulerAngles : angular state
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of Coordinate
+    Thread safety: Immutable after creation
+    Value semantics: Safe to copy
+
+    **Aerospace Convention:**
+    X-axis: Forward (velocity)
+    Y-axis: Right (starboard)
+    Z-axis: Up (zenith)
+
+    Supports std::format:
+    "{:.2f}" → "(100.00, 200.00, 300.00)"
+end note
+
+note right of Angle
+    Thread safety: Immutable after creation
+
+    **Lazy Normalization:**
+    Normalization applied on access
+    (getRad(), toDeg()), not on
+    every operation.
+
+    **Norm::PI**: (-π, π]
+    **Norm::TWO_PI**: [0, 2π)
+end note
+
+note bottom of EulerAngles
+    **Rotation Convention:**
+    ZYX Intrinsic Rotations
+
+    Order: Yaw → Pitch → Roll
+
+    Roll: X-axis (forward)
+    Pitch: Y-axis (right)
+    Yaw: Z-axis (up)
+end note
+
+note bottom of InertialState
+    **Complete Kinematic State:**
+    6 DOF with first and second
+    derivatives.
+
+    Value semantics - safe to
+    copy across threads.
+end note
+
+@enduml

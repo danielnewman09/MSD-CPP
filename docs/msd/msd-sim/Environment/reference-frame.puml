@@ -1,0 +1,156 @@
+@startuml
+' =============================================================================
+' Feature: ReferenceFrame
+' Description: Coordinate transformation system between reference frames
+' Date: 2026-01-01
+' =============================================================================
+
+!theme cyborg
+
+' -----------------------------------------------------------------------------
+' Styling - documenting existing components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #2d2d2d
+    BorderColor #666666
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim" {
+
+    class ReferenceFrame {
+        -origin_: Coordinate
+        -euler_: EulerAngles
+        -rotation_: Matrix3d
+        -updated_: bool
+        ..
+        ' Construction
+        +ReferenceFrame()
+        +ReferenceFrame(origin: Coordinate)
+        +ReferenceFrame(origin: Coordinate, euler: EulerAngles)
+        ..
+        ' Single coordinate transforms
+        +globalToLocal(coord: Coordinate): Coordinate
+        +localToGlobal(coord: Coordinate): Coordinate
+        +globalToLocalInPlace(coord: Coordinate&): void
+        +localToGlobalInPlace(coord: Coordinate&): void
+        ..
+        ' Batch transforms (efficient)
+        +globalToLocalBatch(coords: Matrix3Xd&): void
+        +localToGlobalBatch(coords: Matrix3Xd&): void
+        ..
+        ' Relative transforms (rotation only)
+        +globalToLocalRelative(vec: Coordinate): Coordinate
+        +localToGlobalRelative(vec: Coordinate): Coordinate
+        ..
+        ' Absolute transforms (alias)
+        +globalToLocalAbsolute(point: Coordinate): Coordinate
+        +localToGlobalAbsolute(point: Coordinate): Coordinate
+        ..
+        ' Setters
+        +setOrigin(origin: Coordinate): void
+        +setRotation(euler: EulerAngles): void
+        ..
+        ' Getters
+        +getOrigin(): Coordinate&
+        +getEulerAngles(): EulerAngles&
+        +getRotation(): Matrix3d
+        ..
+        -updateRotationMatrix(): void
+    }
+
+    class Coordinate {
+        +x(): double
+        +y(): double
+        +z(): double
+    }
+
+    class EulerAngles {
+        +pitch: Angle
+        +roll: Angle
+        +yaw: Angle
+    }
+}
+
+package "Eigen" {
+    class "Eigen::Matrix3d" as Matrix3d {
+        ' 3x3 rotation matrix
+    }
+
+    class "Eigen::Matrix3Xd" as Matrix3Xd {
+        ' 3xN matrix for batch transforms
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Composition
+ReferenceFrame *-- Coordinate : origin_
+ReferenceFrame *-- EulerAngles : euler_
+ReferenceFrame o-- Matrix3d : rotation_ (cached)
+
+' Usage
+ReferenceFrame ..> Matrix3Xd : batch transforms
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of ReferenceFrame
+    Thread safety: Not thread-safe
+    (lazy rotation matrix caching)
+
+    **Lazy Computation:**
+    Rotation matrix computed on
+    first access after setRotation()
+
+    **Performance:**
+    - Single: Convenient
+    - Batch: 10x+ speedup for
+      large point clouds (100+)
+end note
+
+' -----------------------------------------------------------------------------
+' Data Flow
+' -----------------------------------------------------------------------------
+note as TransformPipeline
+    **Transformation Pipeline:**
+
+    Object vertices (local frame)
+        ↓ localToGlobal()
+    World coordinates (global frame)
+        ↓ globalToViewer() [camera frame]
+    Viewer coordinates (camera frame)
+        ↓ projectTo2D()
+    Screen coordinates (2D pixels)
+
+    **Transform Types:**
+    - **Absolute**: Translation + Rotation
+      (for positions/points)
+    - **Relative**: Rotation only
+      (for direction vectors, velocities)
+end note
+
+note as BatchUsage
+    **Batch Transform Usage:**
+
+    // Create 1000 points
+    Eigen::Matrix3Xd points(3, 1000);
+    // ... populate points ...
+
+    // In-place batch transform
+    frame.globalToLocalBatch(points);
+
+    Single matrix multiplication
+    instead of N transformations.
+end note
+
+@enduml

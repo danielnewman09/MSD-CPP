@@ -1,0 +1,198 @@
+@startuml
+' =============================================================================
+' msd-sim Library - High-Level Architecture Overview
+' Description: Core simulation engine for MSD project
+' Date: 2026-01-01
+' =============================================================================
+
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam package {
+    BackgroundColor #F5F5F5
+    BorderColor #666666
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+title msd-sim Library Architecture
+
+' -----------------------------------------------------------------------------
+' Core Simulation Package
+' -----------------------------------------------------------------------------
+package "msd_sim" {
+
+    class Engine {
+        +Engine(dbPath: string)
+        +update(simTime: milliseconds): void
+        +spawnInertialObject(...): void
+        +getAssetRegistry(): AssetRegistry&
+    }
+
+    class WorldModel {
+        +spawnObject(object: Object&&): size_t
+        +getObject(index: size_t): Object&
+        +removeObject(index: size_t): void
+        +getPhysicsObjectIndices(): vector<size_t>
+        +getCollisionObjectIndices(): vector<size_t>
+        +getRenderObjectIndices(): vector<size_t>
+        +update(deltaTime: milliseconds): void
+        +getTime(): milliseconds
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Environment Package
+' -----------------------------------------------------------------------------
+package "msd_sim::Environment" {
+
+    class Object {
+        <<factory>>
+        +{static} createGraphical(...): Object
+        +{static} createInertial(...): Object
+        +{static} createEnvironmental(...): Object
+        +{static} createBoundary(...): Object
+        +getType(): Type
+        +hasVisualGeometry(): bool
+        +hasCollision(): bool
+        +hasPhysics(): bool
+    }
+
+    class ReferenceFrame {
+        +globalToLocal(coord: Coordinate): Coordinate
+        +localToGlobal(coord: Coordinate): Coordinate
+        +globalToLocalBatch(coords: Matrix3Xd&): void
+        +localToGlobalBatch(coords: Matrix3Xd&): void
+        +setOrigin(origin: Coordinate): void
+        +setRotation(euler: EulerAngles): void
+    }
+
+    class InertialState {
+        +position: Coordinate
+        +velocity: Coordinate
+        +acceleration: Coordinate
+        +angularPosition: EulerAngles
+        +angularVelocity: EulerAngles
+        +angularAcceleration: EulerAngles
+    }
+
+    class Coordinate {
+        <<value>>
+        ' Inherits Eigen::Vector3d
+    }
+
+    class Angle {
+        <<value>>
+        +{static} fromRadians(rad: double): Angle
+        +{static} fromDegrees(deg: double): Angle
+        +getRad(): double
+        +toDeg(): double
+    }
+
+    class EulerAngles {
+        <<value>>
+        +pitch: Angle
+        +roll: Angle
+        +yaw: Angle
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Physics Package
+' -----------------------------------------------------------------------------
+package "msd_sim::Physics" {
+
+    class ConvexHull {
+        +ConvexHull(points: vector<VectorType>)
+        +getVertices(): vector<Coordinate>
+        +getFacets(): vector<Facet>
+        +getVolume(): double
+        +getSurfaceArea(): double
+        +getCentroid(): Coordinate
+        +contains(point: Coordinate): bool
+        +signedDistance(point: Coordinate): double
+        +intersects(other: ConvexHull): bool
+    }
+
+    class PhysicsComponent {
+        +PhysicsComponent(hull: ConvexHull, mass: double)
+        +getMass(): double
+        +getInertiaTensor(): Matrix3d
+        +getCenterOfMass(): Coordinate
+        +applyForce(force: Coordinate): void
+        +applyForceAtPoint(force, offset: Coordinate): void
+        +applyTorque(torque: Vector3d): void
+        +clearForces(): void
+    }
+
+    class DynamicState {
+        +linearVelocity: Coordinate
+        +angularVelocity: Coordinate
+        +linearAcceleration: Coordinate
+        +angularAcceleration: Coordinate
+        +getKineticEnergy(): double
+        +applyImpulse(impulse: Coordinate): void
+    }
+
+    class GJK {
+        <<utility>>
+        +{static} intersects(a, b: ConvexHull): bool
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Agent Package
+' -----------------------------------------------------------------------------
+package "msd_sim::Agent" {
+
+    interface BaseAgent {
+        +updateState(currentState: InertialState): InertialState
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Core relationships
+Engine *-- WorldModel : manages
+Engine o-- "msd_assets::AssetRegistry" : uses
+WorldModel *-- "*" Object : contains
+
+' Object composition
+Object *-- "0..1" ConvexHull : collision hull
+Object *-- "0..1" PhysicsComponent : physics
+Object *-- ReferenceFrame : transform
+
+' Physics composition
+PhysicsComponent *-- DynamicState : state
+PhysicsComponent o-- ConvexHull : references
+
+' Environment relationships
+InertialState *-- Coordinate : position/velocity
+InertialState *-- EulerAngles : angular state
+EulerAngles *-- "3" Angle : pitch/roll/yaw
+ReferenceFrame o-- EulerAngles : rotation
+
+' Agent relationship
+Object o-- "0..1" BaseAgent : controller
+
+' -----------------------------------------------------------------------------
+' Package Dependencies
+' -----------------------------------------------------------------------------
+note as Dependencies
+    **External Dependencies:**
+    - Eigen3: Linear algebra
+    - Qhull: Convex hull computation
+    - spdlog: Logging
+
+    **Internal Dependencies:**
+    - msd-assets: Asset loading
+end note
+
+@enduml

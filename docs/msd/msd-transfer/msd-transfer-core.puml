@@ -1,0 +1,107 @@
+@startuml
+' =============================================================================
+' Feature: msd-transfer - Core Architecture Overview
+' Description: Database transfer objects for the MSD asset system
+' Date: 2026-01-01
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Core Components
+' -----------------------------------------------------------------------------
+package "msd_transfer" {
+
+    ' Convenience header
+    class Records <<header-only>> {
+        {static} Includes all record types
+        using Database = cpp_sqlite::Database
+    }
+
+    ' Mesh and Object Records
+    class MeshRecord {
+        +vertex_data: vector<uint8_t>
+        +vertex_count: uint32_t
+    }
+
+    class ObjectRecord {
+        +name: string
+        +category: string
+        +meshRecord: ForeignKey<MeshRecord>
+        +collisionMeshRecord: ForeignKey<MeshRecord>
+    }
+
+    ' Material Record
+    class MaterialRecord {
+        +name: string
+        +shader_vertex: string
+        +shader_fragment: string
+        +default_color_r: float
+        +default_color_g: float
+        +default_color_b: float
+        +shininess: float
+        +metallic: float
+        +roughness: float
+    }
+
+    ' Physics Template Record
+    class PhysicsTemplateRecord {
+        +name: string
+        +mesh: ForeignKey<MeshRecord>
+        +mass: double
+        +friction: double
+        +restitution: double
+        +linear_damping: double
+        +angular_damping: double
+        +inertia_tensor: vector<uint8_t>
+    }
+}
+
+' External dependencies
+package "cpp_sqlite" {
+    class BaseTransferObject {
+        +id: uint32_t
+    }
+
+    class "ForeignKey<T>" as ForeignKey {
+        +id: uint32_t
+        +isSet(): bool
+        +resolve(db: Database&): optional<T>
+    }
+
+    class Database
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' All records extend BaseTransferObject
+MeshRecord --|> BaseTransferObject
+ObjectRecord --|> BaseTransferObject
+MaterialRecord --|> BaseTransferObject
+PhysicsTemplateRecord --|> BaseTransferObject
+
+' Foreign key relationships
+ObjectRecord o-- MeshRecord : visual mesh
+ObjectRecord o-- MeshRecord : collision mesh
+PhysicsTemplateRecord o-- MeshRecord : geometry ref
+
+' Records convenience header
+Records ..> MeshRecord : includes
+Records ..> ObjectRecord : includes
+Records ..> MaterialRecord : includes
+Records ..> PhysicsTemplateRecord : includes
+
+@enduml

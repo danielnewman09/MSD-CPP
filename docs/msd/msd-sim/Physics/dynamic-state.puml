@@ -1,0 +1,202 @@
+@startuml
+' =============================================================================
+' Feature: DynamicState
+' Description: Complete dynamic state for rigid body motion
+' Date: 2026-01-01
+' =============================================================================
+
+!theme cyborg
+
+' -----------------------------------------------------------------------------
+' Styling - documenting existing components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #2d2d2d
+    BorderColor #666666
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim::Physics" {
+
+    class DynamicState {
+        -linearVelocity_: Coordinate
+        -angularVelocity_: Vector3d
+        -linearAcceleration_: Coordinate
+        -angularAcceleration_: Vector3d
+        ..
+        ' Construction
+        +DynamicState()
+        +DynamicState(linearVelocity: Coordinate, angularVelocity: Vector3d)
+        +{static} createAtRest(): DynamicState
+        ..
+        ' Velocity access
+        +getLinearVelocity(): Coordinate&
+        +getAngularVelocity(): Vector3d&
+        +setLinearVelocity(velocity: Coordinate): void
+        +setAngularVelocity(velocity: Vector3d): void
+        ..
+        ' Acceleration access
+        +getLinearAcceleration(): Coordinate&
+        +getAngularAcceleration(): Vector3d&
+        +setLinearAcceleration(accel: Coordinate): void
+        +setAngularAcceleration(accel: Vector3d): void
+        ..
+        ' Convenience methods
+        +getSpeed(): double
+        +getAngularSpeed(): double
+        +isAtRest(linearThresh, angularThresh: double): bool
+        +reset(): void
+        ..
+        ' Kinetic energy
+        +getLinearKineticEnergy(mass: double): double
+        +getRotationalKineticEnergy(I: Matrix3d): double
+        +getTotalKineticEnergy(mass: double, I: Matrix3d): double
+        ..
+        ' Impulse application
+        +applyLinearImpulse(impulse: Coordinate, mass: double): void
+        +applyAngularImpulse(impulse: Vector3d, I_inv: Matrix3d): void
+    }
+}
+
+package "Eigen" {
+    class "Eigen::Vector3d" as Vector3d {
+        ' Angular velocity/acceleration
+    }
+
+    class "Eigen::Matrix3d" as Matrix3d {
+        ' Inertia tensor
+    }
+}
+
+package "msd_sim::Environment" {
+    class Coordinate {
+        <<external>>
+        ' Linear velocity/acceleration
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Composition
+DynamicState *-- Coordinate : linearVelocity_, linearAcceleration_
+DynamicState *-- Vector3d : angularVelocity_, angularAcceleration_
+
+' Usage
+DynamicState ..> Matrix3d : used for energy/impulse
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of DynamicState
+    Thread safety: **Value semantics**
+    Safe to copy across threads
+
+    **Design Pattern:**
+    Pure value type with no pointers
+    or references - can be freely
+    copied and moved.
+
+    **Default State:**
+    All velocities and accelerations
+    initialized to zero (at rest).
+end note
+
+' -----------------------------------------------------------------------------
+' Data Flow
+' -----------------------------------------------------------------------------
+note as IntegrationFlow
+    **Integration Flow (Euler):**
+
+    // Given: netForce, netTorque
+    // Compute accelerations
+    state.setLinearAcceleration(netForce / mass);
+    state.setAngularAcceleration(I_inv * netTorque);
+
+    // Integrate velocities
+    v_new = v + a * dt
+    omega_new = omega + alpha * dt
+
+    // Integrate positions (in Object)
+    position += v_new * dt
+    rotation += omega_new * dt
+end note
+
+note as ImpulseNote
+    **Impulse vs Force:**
+
+    **Force** (continuous):
+    - Applied each frame
+    - Produces acceleration
+    - Units: N (kg*m/s^2)
+
+    **Impulse** (instantaneous):
+    - Single velocity change
+    - Used for collision response
+    - Units: N*s (kg*m/s)
+
+    applyLinearImpulse(J, m):
+      linearVelocity_ += J / m
+
+    applyAngularImpulse(L, I_inv):
+      angularVelocity_ += I_inv * L
+end note
+
+note as UsageExample
+    **Usage Example:**
+
+    DynamicState state;
+
+    // Set initial motion
+    state.setLinearVelocity({10.0, 0, 0});  // +x
+    state.setAngularVelocity({0, 0, 1.0}); // around z
+
+    // Check motion
+    if (!state.isAtRest()) {
+      double speed = state.getSpeed();  // 10.0 m/s
+    }
+
+    // Apply collision impulse
+    state.applyLinearImpulse({0, 100, 0}, 50.0);
+    // Now velocity is {10.0, 2.0, 0} (v += J/m)
+
+    // Get energy
+    double KE = state.getTotalKineticEnergy(mass, I);
+end note
+
+note as EnergyFormulas
+    **Energy Formulas:**
+
+    **Linear KE:**
+    E_linear = 0.5 * m * v^2
+            = 0.5 * m * (vx^2 + vy^2 + vz^2)
+
+    **Rotational KE:**
+    E_rot = 0.5 * omega^T * I * omega
+
+    **Total KE:**
+    E_total = E_linear + E_rot
+end note
+
+note as RestDetection
+    **Rest Detection:**
+
+    isAtRest(linearThresh, angularThresh):
+      return getSpeed() < linearThresh
+          && getAngularSpeed() < angularThresh
+
+    Default thresholds: 1e-6
+
+    Used to skip physics updates
+    for stationary objects.
+end note
+
+@enduml
