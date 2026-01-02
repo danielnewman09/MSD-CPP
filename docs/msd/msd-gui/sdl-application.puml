@@ -1,0 +1,189 @@
+@startuml
+' =============================================================================
+' Feature: SDLApplication - Application Lifecycle Manager
+' Description: Window management, event handling, and main loop coordination
+' Date: 2026-01-01
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Component Focus
+' -----------------------------------------------------------------------------
+package "msd_gui" {
+
+    enum Status {
+        Starting
+        Running
+        Paused
+        Error
+        Exiting
+    }
+
+    class SDLApplication {
+        ' Public interface
+        +SDLApplication(dbPath: string)
+        +runApp(): int
+        +getStatus(): Status
+
+        ' Deleted operations
+        +SDLApplication(SDLApplication&) = delete
+        +operator=(SDLApplication&) = delete
+        +SDLApplication(SDLApplication&&) = delete
+        +operator=(SDLApplication&&) = delete
+
+        ' Private members
+        -status_: Status
+        -basePath_: string
+        -window_: unique_ptr<SDL_Window, SDLWindowDeleter>
+        -gpuManager_: unique_ptr<GPUManager>
+        -engine_: Engine
+
+        ' Movement constants
+        -moveSpeed_: float = 0.1f
+        -unitX_: Coordinate
+        -unitY_: Coordinate
+        -unitZ_: Coordinate
+        -rotSpeed_: Angle
+
+        ' Private helpers
+        -handleEvents(): void
+    }
+
+    struct SDLWindowDeleter {
+        +operator()(SDL_Window*): void
+    }
+
+    class GPUManager {
+        +render(): void
+        +getCamera(): Camera3D&
+        +addInstance(...): void
+        +removeInstance(index): void
+        +clearInstances(): void
+        +getInstanceCount(): size_t
+    }
+
+    class Camera3D {
+        +getReferenceFrame(): ReferenceFrame&
+    }
+}
+
+package "msd_sim" {
+    class Engine {
+        +Engine(dbPath: string)
+    }
+
+    class Coordinate {
+        +x(): double
+        +y(): double
+        +z(): double
+    }
+
+    class Angle
+}
+
+package "SDL3" {
+    class SDL_Window
+    class SDL_Event
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' SDLApplication owns its components
+SDLApplication *-- GPUManager : owns (unique_ptr)
+SDLApplication *-- Engine : owns (value)
+SDLApplication *-- SDL_Window : manages via\nSDLWindowDeleter
+
+' SDLApplication uses deleter
+SDLApplication ..> SDLWindowDeleter : uses
+
+' Status enum
+SDLApplication -- Status
+
+' Event handling
+SDLApplication ..> SDL_Event : processes
+SDLApplication ..> Camera3D : moves via\nGPUManager
+
+' Movement constants
+SDLApplication ..> Coordinate : uses for movement
+SDLApplication ..> Angle : uses for rotation
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of SDLApplication
+    **Thread Safety:** Not thread-safe
+    - Single-threaded design
+    - Event handling on main thread
+    - Copy/move operations deleted
+
+    **Pattern:** RAII Resource Management
+    - Window managed via unique_ptr with custom deleter
+    - GPUManager owned via unique_ptr
+    - Engine owned via value semantics
+
+    **Memory Management:**
+    - Owns window (unique_ptr + SDLWindowDeleter)
+    - Owns gpuManager_ (unique_ptr)
+    - Owns engine_ (value semantics)
+    - basePath_ from SDL_GetBasePath()
+
+    **Error Handling:**
+    - Throws SDLException on window creation failure
+    - Status::Error for runtime errors
+    - Returns EXIT_SUCCESS on normal exit
+end note
+
+note as EventFlow
+    **Event Handling Flow:**
+
+    1. Main loop: while status_ == Running
+    2. Poll SDL events via SDL_PollEvent
+    3. Handle events by type:
+       - SDL_EVENT_QUIT → status_ = Exiting
+       - SDL_EVENT_KEY_DOWN → process keypress
+
+    **Keyboard Controls:**
+    | Key | Action |
+    |-----|--------|
+    | W/S | Forward/backward |
+    | A/D | Left/right |
+    | Q/E | Up/down |
+    | Arrows | Pitch/yaw |
+    | Z | Add instance |
+    | X | Remove instance |
+    | C | Clear instances |
+
+    Camera movement uses local coordinate
+    transforms via ReferenceFrame.
+end note
+
+note as RenderLoop
+    **Main Loop (runApp):**
+
+    1. SDL_ShowWindow()
+    2. while (status_ == Running):
+       a. handleEvents()
+       b. gpuManager_->render()
+    3. return EXIT_SUCCESS
+
+    **Initialization:**
+    1. Create window (800x600, resizable)
+    2. Create GPUManager with window ref
+    3. Set status_ = Running
+end note
+
+@enduml

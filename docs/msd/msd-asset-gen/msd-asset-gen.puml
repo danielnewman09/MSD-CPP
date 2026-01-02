@@ -1,0 +1,204 @@
+@startuml
+' =============================================================================
+' Feature: msd-asset-gen - Asset Database Generator
+' Description: Command-line tool for generating SQLite databases with primitive geometry assets
+' Date: 2025-12-28
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling - distinguishes new, modified, and existing components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor<<new>> #90EE90
+    BorderColor<<new>> #228B22
+    BackgroundColor<<modified>> #FFFACD
+    BorderColor<<modified>> #DAA520
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Legend
+' -----------------------------------------------------------------------------
+legend right
+    |= Color |= Meaning |
+    | <#90EE90> | New component |
+    | <#FFFACD> | Modified component |
+    | <#FFFFFF> | Existing (unchanged) |
+endlegend
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd-asset-gen" <<new>> {
+
+    ' Main executable functions
+    class "generate_assets.cpp" <<new>> {
+        ' Main entry point
+        +main(argc: int, argv: char**): int
+
+        ' Asset creation functions
+        +createCubeAsset(db: Database&): void
+        +createPyramidAsset(db: Database&): void
+    }
+}
+
+package "msd_assets" {
+    ' Geometry factory (existing dependency)
+    class GeometryFactory {
+        {static} +createCube(size: double): MeshRecord
+        {static} +createPyramid(base: double, height: double): MeshRecord
+    }
+}
+
+package "msd_transfer" {
+    ' Database record structures
+    class MeshRecord {
+        +vertex_data: vector<uint8_t>
+        +vertex_count: uint32_t
+        +id: int64_t
+    }
+
+    class ObjectRecord {
+        +name: string
+        +category: string
+        +meshRecord: ForeignKey<MeshRecord>
+        +collisionMeshRecord: ForeignKey<MeshRecord>
+        +id: int64_t
+    }
+}
+
+package "cpp_sqlite" {
+    ' Database abstraction layer
+    class Database {
+        +Database(path: string, readWrite: bool, logger: Logger&)
+        +getDAO<T>(): DAO<T>&
+    }
+
+    class "DAO<T>" as DAO {
+        +insert(record: T&): int64_t
+        +select(id: int64_t): optional<T>
+        +update(record: T&): void
+    }
+
+    class Logger {
+        {static} +getInstance(): Logger&
+        +getLogger(): spdlog::logger&
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Executable uses GeometryFactory to create geometry
+"generate_assets.cpp" ..> GeometryFactory : creates primitives
+
+' Executable uses Database to store records
+"generate_assets.cpp" ..> Database : creates & manages
+
+' Executable creates and inserts MeshRecord and ObjectRecord
+"generate_assets.cpp" ..> MeshRecord : creates
+"generate_assets.cpp" ..> ObjectRecord : creates
+
+' GeometryFactory produces MeshRecord
+GeometryFactory ..> MeshRecord : returns
+
+' Database uses DAO for operations
+Database *-- DAO : contains
+
+' Database uses Logger
+Database ..> Logger : logs to
+
+' ObjectRecord references MeshRecord via foreign keys
+ObjectRecord "1" -- "2" MeshRecord : visual + collision
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of "generate_assets.cpp"
+    **Purpose:**
+    Command-line tool that generates
+    SQLite databases with primitive
+    geometry assets.
+
+    **Thread safety:** Single-threaded
+    **Exception safety:** Basic guarantee
+
+    **Key responsibilities:**
+    - Parse CLI arguments
+    - Create SQLite database
+    - Generate primitive assets
+    - Store visual & collision geometry
+end note
+
+note bottom of GeometryFactory
+    **Existing component**
+    Provides static factory methods
+    for creating primitive geometries.
+    Returns MeshRecord with vertex data
+    ready for database insertion.
+end note
+
+note right of ObjectRecord
+    **Database Schema:**
+    Represents a complete asset with:
+    - Unique name & category
+    - FK to visual MeshRecord
+    - FK to collision MeshRecord
+
+    Both FKs can be null if not needed.
+end note
+
+' -----------------------------------------------------------------------------
+' Data Flow
+' -----------------------------------------------------------------------------
+note as DataFlow
+    **Asset Generation Flow:**
+
+    1. main() validates CLI args (database path)
+    2. Create cpp_sqlite::Database instance
+    3. Create cpp_sqlite::Logger instance
+
+    For each primitive (Cube, Pyramid):
+    4. Call GeometryFactory::create{Primitive}()
+       → Returns MeshRecord with vertex data
+    5. Insert visual MeshRecord via DAO
+       → Get visual mesh ID
+    6. Create collision MeshRecord (same geometry)
+    7. Insert collision MeshRecord via DAO
+       → Get collision mesh ID
+    8. Create ObjectRecord with:
+       - name (e.g., "cube")
+       - category (e.g., "primitives")
+       - meshRecord.id = visual mesh ID
+       - collisionMeshRecord.id = collision mesh ID
+    9. Insert ObjectRecord via DAO
+       → Get object ID
+
+    10. Database persists to SQLite file
+end note
+
+' -----------------------------------------------------------------------------
+' Usage Example
+' -----------------------------------------------------------------------------
+note as UsageExample
+    **Command-line Usage:**
+
+    ./generate_assets <output_database_path>
+
+    **Example:**
+    ./generate_assets assets.db
+
+    **Output:**
+    SQLite database containing:
+    - MeshRecord table (4 entries: 2 visual, 2 collision)
+    - ObjectRecord table (2 entries: cube, pyramid)
+end note
+
+@enduml

@@ -1,0 +1,92 @@
+@startuml
+' =============================================================================
+' Feature: msd-assets - Core Architecture Overview
+' Description: High-level component structure and relationships
+' Date: 2025-12-28
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Core Components
+' -----------------------------------------------------------------------------
+package "msd_assets" {
+
+    ' Asset Management Layer
+    class AssetRegistry {
+        +getAsset(name): optional<ref<Asset>>
+        +loadVisualGeometry(name): optional<ref<VisualGeometry>>
+        +loadCollisionGeometry(name): optional<ref<CollisionGeometry>>
+    }
+
+    class Asset {
+        +getId(): uint32_t
+        +getName(): string
+        +getVisualGeometry(): optional<ref<VisualGeometry>>
+        +getCollisionGeometry(): optional<ref<CollisionGeometry>>
+    }
+
+    ' Geometry Layer
+    class "BaseGeometry<T>" {
+        +getVertexCount(): size_t
+        +getVertices(): vector<T>
+        +serializeVertices(): vector<uint8_t>
+    }
+
+    class VisualGeometry
+    class CollisionGeometry
+
+    ' Factory and Loader Layer
+    class GeometryFactory {
+        {static} +createCube(size): MeshRecord
+        {static} +createPyramid(base, height): MeshRecord
+    }
+
+    class STLLoader {
+        {static} +loadSTL(filename): unique_ptr<MeshRecord>
+        {static} +loadBinarySTL(filename): unique_ptr<MeshRecord>
+    }
+}
+
+' External dependencies
+package "msd_transfer" {
+    class MeshRecord
+    class ObjectRecord
+}
+
+package "cpp_sqlite" {
+    class Database
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Asset Management
+AssetRegistry *-- Asset : caches
+AssetRegistry o-- Database : uses
+Asset *-- VisualGeometry : optionally\ncontains
+Asset *-- CollisionGeometry : optionally\ncontains
+
+' Geometry Hierarchy
+VisualGeometry --|> "BaseGeometry<T>"
+CollisionGeometry --|> "BaseGeometry<T>"
+
+' Data Flow
+Asset ..> ObjectRecord : loads from
+"BaseGeometry<T>" ..> MeshRecord : constructs from
+GeometryFactory ..> MeshRecord : creates
+STLLoader ..> MeshRecord : creates
+
+@enduml

@@ -1,281 +1,461 @@
-# msd-gui Library
+# msd-gui Library Architecture Guide
 
-## Overview
-The `msd-gui` library provides a modern C++20 graphics user interface layer for the MSD (Multi-Spacecraft Dynamics) project. It wraps SDL3 (Simple DirectMedia Layer 3) with GPU-accelerated rendering capabilities using SDL's new GPU API.
+> This document provides architectural context for AI assistants and developers.
+> It references PlantUML diagrams in `docs/msd/msd-gui/` for detailed component relationships.
 
-## Architecture
+## Project Overview
+
+The msd-gui library provides a modern C++20 graphics user interface layer for the MSD (Multi-Spacecraft Dynamics) project. It wraps SDL3 (Simple DirectMedia Layer 3) with GPU-accelerated rendering using SDL's GPU API, supporting instanced 3D rendering with perspective projection. The library handles window management, keyboard input, camera control, and GPU pipeline management.
+
+## Architecture Overview
+
+### High-Level Architecture
+
+See: [`docs/msd/msd-gui/msd-gui-core.puml`](../../docs/msd/msd-gui/msd-gui-core.puml)
+
+The library consists of four main subsystems:
+- **Application Layer** — Window management, event handling, main loop coordination
+- **GPU Management** — Device initialization, shader loading, pipeline creation, rendering
+- **Camera System** — 3D perspective camera with MVP matrix computation
+- **Utilities** — Exception handling, shader loading, custom deleters
 
 ### Core Components
 
-#### SDLApplication (Singleton)
-- **Purpose**: Main application lifecycle manager
-- **Pattern**: Singleton pattern for single application instance
-- **Location**: `src/SDLApp.hpp`, `src/SDLApp.cpp`
-- **Responsibilities**:
-  - Window creation and management
-  - Event handling (user input, window events)
-  - Main render loop coordination
-  - Application state management (Starting, Running, Paused, Error, Exiting)
-  - Base path management for resource loading
+| Component | Location | Purpose | Diagram |
+|-----------|----------|---------|---------|
+| SDLApplication | `src/` | Application lifecycle, window management, event handling | [`sdl-application.puml`](../../docs/msd/msd-gui/sdl-application.puml) |
+| GPUManager | `src/` | GPU device, pipeline, instanced rendering | [`gpu-manager.puml`](../../docs/msd/msd-gui/gpu-manager.puml) |
+| Camera3D | `src/` | 3D camera with MVP matrix computation | [`camera3d.puml`](../../docs/msd/msd-gui/camera3d.puml) |
+| SDLUtils | `src/` | Exception class and shader loading utilities | — |
 
-#### GPUManager
-- **Purpose**: GPU device and rendering pipeline management
-- **Location**: `src/SDLGPUManager.hpp`, `src/SDLGPUManager.cpp`
-- **Responsibilities**:
-  - GPU device initialization and lifecycle
-  - Shader loading (SPIRV, MSL, DXIL formats)
-  - Render pass execution
-  - Command buffer management
-  - Resource cleanup via RAII
+---
 
-### Design Separation
-- **SDLApplication**: Handles high-level application logic, windowing, and event processing
-- **GPUManager**: Encapsulates all GPU-specific operations and rendering
-- **Relationship**: SDLApplication owns a GPUManager instance and delegates rendering operations to it
+## Component Details
 
-## Dependencies
+### SDLApplication
 
-### External Libraries
-- **SDL3**: Core windowing and event system
-- **SDL3_image**: Image loading support
-- **SDL3_mixer**: Audio mixing capabilities
-- **SDL3_ttf**: TrueType font rendering
-- **spdlog**: Logging framework
+**Location**: `src/SDLApp.hpp`, `src/SDLApp.cpp`
+**Diagram**: [`docs/msd/msd-gui/sdl-application.puml`](../../docs/msd/msd-gui/sdl-application.puml)
 
-### Internal Dependencies
-- **msd_sim**: Simulation core library
+#### Purpose
+Manages the application lifecycle including window creation, event handling, and render loop coordination. Owns the GPUManager for rendering and msd_sim::Engine for simulation.
 
-## Resource Management
+#### Key Classes
 
-### Content Directory Structure
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `SDLApplication` | `SDLApp.hpp` | Application lifecycle, window management, event handling |
+
+#### Key Interfaces
+```cpp
+class SDLApplication {
+public:
+    enum class Status : uint8_t {
+        Starting, Running, Paused, Error, Exiting
+    };
+
+    SDLApplication(const std::string& dbPath);
+    int runApp();
+    Status getStatus() const;
+};
 ```
-msd/msd-gui/src/Content/
+
+#### Usage Example
+```cpp
+msd_gui::SDLApplication app{"assets.db"};
+int result = app.runApp();  // Blocks until exit
+```
+
+#### Thread Safety
+- Not designed for multi-threaded access
+- Event handling and rendering occur on the main thread
+- Copy/move operations deleted
+
+#### Error Handling
+- Throws `SDLException` on window creation failure
+- Returns `EXIT_SUCCESS` on normal exit
+
+#### Dependencies
+- `GPUManager` — GPU rendering (owned via `std::unique_ptr`)
+- `msd_sim::Engine` — Simulation engine (owned via value semantics)
+- SDL3 — Window and event management
+
+---
+
+### GPUManager
+
+**Location**: `src/SDLGPUManager.hpp`, `src/SDLGPUManager.cpp`
+**Diagram**: [`docs/msd/msd-gui/gpu-manager.puml`](../../docs/msd/msd-gui/gpu-manager.puml)
+
+#### Purpose
+Handles all GPU-related operations including device initialization, shader loading, pipeline creation, and instanced rendering with depth buffering.
+
+#### Key Classes
+
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `GPUManager` | `SDLGPUManager.hpp` | GPU device, pipeline, instanced rendering |
+| `InstanceData` | `SDLGPUManager.hpp` | Per-instance position and color data |
+
+#### Key Interfaces
+```cpp
+struct InstanceData {
+    float position[3];  // World position offset
+    float color[3];     // Instance color
+};
+
+class GPUManager {
+public:
+    explicit GPUManager(SDL_Window& window, const std::string& basePath);
+
+    void render();
+    Camera3D& getCamera();
+
+    // Instance management
+    void addInstance(float posX, float posY, float posZ,
+                     float r, float g, float b);
+    void removeInstance(size_t index);
+    void updateInstance(size_t index, float posX, float posY, float posZ,
+                        float r, float g, float b);
+    void clearInstances();
+    size_t getInstanceCount() const;
+};
+```
+
+#### Usage Example
+```cpp
+GPUManager gpu{window, basePath};
+
+// Add pyramid instances
+gpu.addInstance(0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f);  // Red at origin
+gpu.addInstance(2.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);  // Green at x=2
+
+// Render frame
+gpu.render();
+```
+
+#### Thread Safety
+- Not designed for multi-threaded access
+- All GPU operations on main thread
+- Copy/move operations deleted
+
+#### Error Handling
+- Throws `SDLException` on device/pipeline creation failure
+- Logs errors for invalid instance operations
+
+#### Dependencies
+- SDL3 GPU API — Device, pipeline, buffer management
+- `Camera3D` — View/projection matrices (owned via value semantics)
+- `msd_assets::GeometryFactory` — Primitive geometry generation
+
+---
+
+### Camera3D
+
+**Location**: `src/Camera3D.hpp`, `src/Camera3D.cpp`
+**Diagram**: [`docs/msd/msd-gui/camera3d.puml`](../../docs/msd/msd-gui/camera3d.puml)
+
+#### Purpose
+Provides a 3D camera with perspective projection, wrapping `msd_sim::ReferenceFrame` for position and orientation. Generates Model-View-Projection (MVP) matrices for shaders.
+
+#### Key Classes
+
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `Camera3D` | `Camera3D.hpp` | 3D perspective camera with MVP matrix computation |
+
+#### Key Interfaces
+```cpp
+class Camera3D {
+public:
+    explicit Camera3D(const msd_sim::Coordinate& position,
+                      float fovDegrees = 60.0f,
+                      float aspectRatio = 16.0f / 9.0f,
+                      float nearPlane = 0.1f,
+                      float farPlane = 100.0f);
+
+    msd_sim::ReferenceFrame& getReferenceFrame();
+    const msd_sim::ReferenceFrame& getReferenceFrame() const;
+
+    void setAspectRatio(float aspectRatio);
+    void setFieldOfView(float fovDegrees);
+    void setClippingPlanes(float nearPlane, float farPlane);
+
+    Eigen::Matrix4f getViewMatrix() const;
+    Eigen::Matrix4f getProjectionMatrix() const;
+    Eigen::Matrix4f getMVPMatrix(
+        const Eigen::Matrix4f& modelMatrix = Eigen::Matrix4f::Identity()) const;
+};
+```
+
+#### Usage Example
+```cpp
+Camera3D camera{msd_sim::Coordinate{0., 0., 5.}};
+
+// Move camera via reference frame
+auto& frame = camera.getReferenceFrame();
+frame.setOrigin(newPosition);
+frame.getEulerAngles().yaw += rotationAmount;
+
+// Get MVP for rendering
+Eigen::Matrix4f mvp = camera.getMVPMatrix();
+```
+
+#### Coordinate System
+Right-handed coordinate system:
+- X: right
+- Y: up
+- Z: forward (out of screen, opposite viewing direction)
+
+#### Thread Safety
+- Not thread-safe (mutable reference frame)
+- Designed for single-threaded use on main render thread
+
+#### Error Handling
+- No exceptions; caller responsible for valid parameters
+
+#### Dependencies
+- `msd_sim::ReferenceFrame` — Position and orientation (owned via value semantics)
+- `Eigen::Matrix4f` — Matrix math
+
+---
+
+### SDLUtils
+
+**Location**: `src/SDLUtils.hpp`, `src/SDLUtils.cpp`
+
+#### Purpose
+Utility classes and functions for SDL integration, including exception handling and shader loading.
+
+#### Key Classes
+
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `SDLException` | `SDLUtils.hpp` | Exception combining message with SDL error |
+| `ShaderDeleter` | `SDLUtils.hpp` | Custom deleter for GPU shaders |
+
+#### Key Interfaces
+```cpp
+class SDLException final : public std::runtime_error {
+public:
+    explicit SDLException(const std::string& message);
+    // Message format: "{message}: {SDL_GetError()}"
+};
+
+using UniqueShader = std::unique_ptr<SDL_GPUShader, ShaderDeleter>;
+
+UniqueShader loadShader(const std::string& shaderFilename,
+                        SDL_GPUDevice& device,
+                        const std::string& basePath,
+                        uint32_t samplerCount,
+                        uint32_t uniformBufferCount,
+                        uint32_t storageBufferCount,
+                        uint32_t storageTextureCount);
+```
+
+#### Usage Example
+```cpp
+auto vertexShader = loadShader(
+    "Position3DColorTransform.vert", device, basePath, 0, 1, 0, 0);
+if (!vertexShader) {
+    throw SDLException("Failed to load vertex shader");
+}
+```
+
+#### Thread Safety
+- `loadShader` is stateless and thread-safe (but file I/O not synchronized)
+
+#### Error Handling
+- `SDLException` includes SDL error via `SDL_GetError()`
+- `loadShader` returns nullptr on failure (no exceptions)
+
+---
+
+## Design Patterns in Use
+
+### RAII Resource Management
+**Used in**: Throughout library
+**Purpose**: Custom deleters ensure proper cleanup of SDL resources
+
+Custom deleters:
+- `SDLWindowDeleter` — Window cleanup
+- `SDLDeviceDeleter` — GPU device cleanup
+- `PipelineDeleter` — Graphics pipeline cleanup
+- `BufferDeleter` — GPU buffer cleanup
+- `ShaderDeleter` — Shader cleanup
+
+### Composition
+**Used in**: `SDLApplication`, `GPUManager`
+**Purpose**: Clear ownership hierarchy with value semantics and unique_ptr
+
+Ownership chain:
+- `SDLApplication` owns `GPUManager` (unique_ptr) and `Engine` (value)
+- `GPUManager` owns `Camera3D` (value) and GPU resources (unique_ptr)
+- `Camera3D` owns `ReferenceFrame` (value)
+
+---
+
+## Cross-Cutting Concerns
+
+### Error Handling Strategy
+- **Construction**: Throw `SDLException` for initialization failures
+- **Runtime**: Log errors via `SDL_Log`, return error indicators
+- **Resources**: RAII ensures cleanup on exceptions
+
+### Memory Management
+- `std::unique_ptr` with custom deleters for SDL/GPU resources
+- Value semantics for simulation types (`Engine`, `ReferenceFrame`, `Camera3D`)
+- No `std::shared_ptr` — clear ownership hierarchy
+- Non-owning references for window access in `GPUManager`
+
+### Thread Safety Conventions
+- Single-threaded design for rendering context
+- All GPU operations on main thread
+- Copy/move deleted on resource-owning classes
+- Event handling on main thread
+
+### Coding Standards
+
+This library follows the project-wide coding standards defined in the [root CLAUDE.md](../../CLAUDE.md#coding-standards).
+
+Key standards applied in this library:
+- **Initialization**: Brace initialization `{}` used throughout
+- **Naming**: `snake_case_` for members, `PascalCase` for classes, `camelCase` for functions
+- **Return Values**: Return values preferred over output parameters
+- **Memory**: RAII via `std::unique_ptr` with custom deleters; no `std::shared_ptr`
+
+See the [root CLAUDE.md](../../CLAUDE.md#coding-standards) for complete details and examples.
+
+---
+
+## Keyboard Controls
+
+| Key | Action |
+|-----|--------|
+| W/S | Move camera forward/backward |
+| A/D | Move camera left/right |
+| Q/E | Move camera up/down |
+| ↑/↓ | Pitch camera up/down |
+| ←/→ | Yaw camera left/right |
+| Z | Add random pyramid instance |
+| X | Remove last instance |
+| C | Clear all instances |
+
+---
+
+## Build & Configuration
+
+### Build Requirements
+- C++ Standard: C++20
+- Compiler: GCC 11+, Clang 14+, or MSVC 2019+
+- Build System: CMake 3.15+ with Conan 2.x package manager
+- Dependencies (managed via Conan):
+  - SDL3, SDL3_image, SDL3_mixer, SDL3_ttf — Graphics and media
+  - spdlog — Logging
+  - Eigen3 — Matrix math (via msd_sim)
+
+### Building this Library
+
+This library is built as part of the MSD-CPP project using Conan and CMake presets. See the [root CLAUDE.md](../../CLAUDE.md#build--configuration) for complete build instructions.
+
+**Quick start:**
+```bash
+# Install dependencies with Conan
+conan install . --build=missing -s build_type=Debug
+
+# Build just this library (Debug)
+cmake --preset conan-debug
+cmake --build --preset debug-gui-only
+
+# Or for Release
+conan install . --build=missing -s build_type=Release
+cmake --preset conan-release
+cmake --build --preset release-gui-only
+```
+
+**Component-specific presets:**
+- Debug: `debug-gui-only` — Builds `msd-gui` library
+- Release: `release-gui-only` — Builds `msd-gui` library
+
+### Resource Directory
+
+CMake automatically copies the `Content/` folder to the binary output directory:
+```
+src/Content/
 ├── Images/          # Image assets
 └── Shaders/
     ├── Source/      # Shader source files (.vert, .frag)
     └── Compiled/    # Compiled shaders for different backends
-        ├── SPIRV/   # Vulkan/OpenGL shaders
-        ├── MSL/     # Metal shaders (macOS/iOS)
-        └── DXIL/    # DirectX shaders (Windows)
+        ├── SPIRV/   # Vulkan/OpenGL shaders (.spv)
+        ├── MSL/     # Metal shaders (.msl)
+        └── DXIL/    # DirectX shaders (.dxil)
 ```
 
-### Build System Integration
-- CMake automatically copies the `Content/` folder to the binary output directory during build
-- Content is also installed to the installation directory for distribution
-- Shaders are loaded at runtime based on the detected GPU backend
+Current shaders: `Position3DColorTransform.vert`, `SolidColor.frag`
 
-## Key Features
-
-### Multi-Backend Shader Support
-The GPUManager automatically detects and loads the appropriate shader format:
-- **SPIRV**: Vulkan and OpenGL backends
-- **MSL**: Metal backend (macOS/iOS)
-- **DXIL**: DirectX 12 backend (Windows)
-
-### RAII-Based Resource Management
-- Custom deleters for SDL resources (SDLWindowDeleter, SDLDeviceDeleter, ShaderDeleter)
-- Smart pointers (`std::unique_ptr`) ensure proper cleanup
-- Exception-safe initialization
-
-### Exception Handling
-- `SDLException`: Custom exception class that combines error messages with SDL error details
-- Used throughout for clear error reporting
-
-## Usage Pattern
-
-```cpp
-// Get the singleton application instance
-auto& app = msd_gui::SDLApplication::getInstance();
-
-// Run the application (blocks until exit)
-app.runApp();
-
-// Application handles:
-// - Window creation
-// - GPU initialization
-// - Event processing
-// - Rendering loop
-// - Resource cleanup
-```
-
-## Implementation Notes
-
-### Shader Loading
-- Shaders are referenced by base filename (e.g., "RawTriangle.vert")
-- The system automatically:
-  - Detects shader stage from extension (.vert or .frag)
-  - Selects appropriate backend format based on GPU capabilities
-  - Constructs full path with correct backend directory
-  - Loads and compiles the shader
-
-### Render Loop
-1. Handle SDL events (user input, window events)
-2. Acquire GPU command buffer
-3. Acquire swapchain texture
-4. Begin render pass with clear color
-5. Execute rendering commands
-6. End render pass
-7. Submit command buffer
-
-### Thread Safety
-- SDLApplication is a singleton with deleted copy/move constructors
-- Not designed for multi-threaded access to the main rendering context
-- Event handling occurs on the main thread
-
-## Coding Standards
-
-### Initialization and Construction
-
-#### Uninitialized Member Variables
-- **Always** use `std::numeric_limits<T>::quiet_NaN()` for default/uninitialized floating-point values
-- **Never** use magic numbers like `-1.0f` or `0.0f` to represent uninitialized state
-- **Rationale**: NaN propagates through calculations and makes uninitialized access immediately obvious
-
-```cpp
-// GOOD
-class GPUBuffer {
-private:
-  float scale_{std::numeric_limits<float>::quiet_NaN()};
-  float offset_{std::numeric_limits<float>::quiet_NaN()};
-};
-
-// BAD
-class GPUBuffer {
-private:
-  float scale_{-1.0f};   // Magic number - unclear if -1 is valid or uninitialized
-  float offset_{0.0f};   // Could be confused with actual zero value
-};
-```
-
-#### Brace Initialization
-- **Always** use brace initialization `{}` for constructing objects
-- **Never** use parentheses `()` for initialization
-- **Rationale**: Avoids the Most Vexing Parse problem and provides consistent syntax
-
-```cpp
-// GOOD
-Vertex vertex{position, 1.0f, 0.0f, 0.0f, normal};
-std::vector<Vertex> vertices{vertex1, vertex2, vertex3};
-auto manager = GPUManager{window, basePath};
-
-// BAD
-Vertex vertex(position, 1.0f, 0.0f, 0.0f, normal);  // Can be confused with function
-std::vector<Vertex> vertices(3);                     // Ambiguous syntax
-auto manager = GPUManager(window, basePath);        // Most Vexing Parse risk
-```
-
-### Rule of Zero/Five
-- **Prefer** the Rule of Zero: use compiler-generated special member functions when possible
-- **Only** implement copy/move constructors/assignment if you need custom behavior
-- **Use** `= default` explicitly to document that you're using the compiler's implementation
-- **Delete** copy/move operations when they don't make sense (e.g., singletons, GPU resources)
-
-```cpp
-// GOOD - Rule of Zero with explicit default
-struct Vertex {
-  msd_sim::Coordinate position;
-  float r, g, b;
-  msd_sim::Coordinate normal;
-  // Compiler-generated copy/move is perfect
-};
-
-// GOOD - Deleted for resource management
-class GPUManager {
-public:
-  GPUManager(const GPUManager&) = delete;
-  GPUManager& operator=(const GPUManager&) = delete;
-  GPUManager(GPUManager&&) = delete;
-  GPUManager& operator=(GPUManager&&) = delete;
-};
-```
-
-### Naming Conventions
-- **Don't** use `cached` prefix for member variables unless the value is truly cached (lazily computed)
-- **Use** descriptive names that indicate the value's purpose
-- **Distinguish** between computed-once values and lazily-cached values
-
-```cpp
-// GOOD
-class RenderState {
-private:
-  SDL_GPUTexture* depthTexture_;        // Active depth texture
-  uint32_t width_;                      // Current viewport width
-  mutable Matrix4x4 viewMatrix_;        // Lazily computed view matrix
-  mutable bool viewMatrixValid_;        // Cache validity flag
-};
-
-// BAD
-class RenderState {
-private:
-  SDL_GPUTexture* cachedDepthTexture_;  // Misleading - not cached
-  uint32_t cachedWidth_;                // Misleading - not cached
-};
-```
-
-### Function Return Values
-- **Prefer** returning values over modifying parameters passed by reference
-- **Use** return values or return structs instead of output parameters
-- **Rationale**: Makes code more functional, easier to reason about, and prevents accidental modifications
-
-```cpp
-// GOOD - Return a struct
-struct Viewport {
-  uint32_t width;
-  uint32_t height;
-};
-
-Viewport getViewport() const {
-  return Viewport{width_, height_};
-}
-
-auto viewport = manager.getViewport();
-float aspectRatio = static_cast<float>(viewport.width) / viewport.height;
-
-// BAD - Modify parameters by reference
-void getViewport(uint32_t& width, uint32_t& height) const {
-  width = width_;
-  height = height_;
-}
-
-uint32_t width, height;
-manager.getViewport(width, height);  // Harder to understand data flow
-float aspectRatio = static_cast<float>(width) / height;
-```
-
-## Future Considerations
-
-### Potential Extensions
-- Multiple window support
-- Render target abstraction
-- Material system
-- Scene graph integration
-- UI widget system
-- Input abstraction layer
-- Audio integration with SDL3_mixer
-- Font rendering with SDL3_ttf
-
-### Integration with msd_sim
-- The GUI layer is designed to visualize simulation data from msd_sim
-- Future work will connect simulation state to rendering pipeline
-- Consider observer pattern for simulation updates
-
-## Building
-
-The library is built as part of the main MSD CMake project:
-```bash
-cmake --build build
-```
-
-Headers are installed to support external usage:
-```cmake
-target_link_libraries(your_target PRIVATE msd_gui)
-```
+---
 
 ## Testing
 
-Currently focused on integration testing through the main executable.
-Future work should include:
-- Unit tests for resource management
-- Mock SDL for headless testing
-- Shader compilation verification
-- Performance benchmarks
+### Test Organization
+
+Currently focused on integration testing through the main executable (`msd_exe`).
+
+### Running the Application
+```bash
+# After building
+./build/Debug/msd/msd-exe/msd_exe
+```
+
+---
+
+## Conventions
+
+### Naming Conventions
+- Classes: `PascalCase`
+- Functions/Methods: `camelCase`
+- Member variables: `snake_case_` (trailing underscore)
+- Constants: `kPascalCase`
+- Namespaces: `snake_case`
+
+### Code Organization
+- Headers in `src/` (no separate include directory for this library)
+- Implementation in `.cpp` files
+- One class per header file
+- Custom deleters as nested structs
+
+### Documentation
+- Public APIs: Doxygen-style comments with `@brief`, `@param`, `@return`
+- Brief class-level documentation explaining purpose
+- Implementation comments where non-obvious
+
+---
+
+## Diagrams Index
+
+| Diagram | Description | Last Updated |
+|---------|-------------|--------------|
+| [`msd-gui-core.puml`](../../docs/msd/msd-gui/msd-gui-core.puml) | High-level architecture overview | 2026-01-01 |
+| [`sdl-application.puml`](../../docs/msd/msd-gui/sdl-application.puml) | SDLApplication lifecycle and event handling | 2026-01-01 |
+| [`gpu-manager.puml`](../../docs/msd/msd-gui/gpu-manager.puml) | GPUManager rendering pipeline | 2026-01-01 |
+| [`camera3d.puml`](../../docs/msd/msd-gui/camera3d.puml) | Camera3D MVP matrix computation | 2026-01-01 |
+
+---
+
+## Getting Help
+
+### For AI Assistants
+1. Start with this document for architectural context
+2. Reference the PlantUML diagrams in `docs/msd/msd-gui/` for component relationships:
+   - [`msd-gui-core.puml`](../../docs/msd/msd-gui/msd-gui-core.puml) for high-level overview
+   - Component-specific diagrams for detailed implementation
+3. Check header files for detailed interface documentation
+4. Refer to the main project [CLAUDE.md](../../CLAUDE.md) for overall coding standards
+5. Review `SDLApp.cpp` for event handling and main loop logic
+6. Review `SDLGPUManager.cpp` for GPU pipeline setup and rendering
+
+### For Developers
+- API documentation: See header file comments
+- Example usage: See `msd-exe` for integration example
+- Shader compilation: See `.vscode/tasks.json` for shader compilation task
+- PlantUML diagrams: `docs/msd/msd-gui/`

@@ -1,0 +1,131 @@
+@startuml
+' =============================================================================
+' Feature: {FEATURE_NAME}
+' Description: {Brief description}
+' Date: {Date}
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling - distinguishes new, modified, and existing components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor<<new>> #90EE90
+    BorderColor<<new>> #228B22
+    BackgroundColor<<modified>> #FFFACD
+    BorderColor<<modified>> #DAA520
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Legend
+' -----------------------------------------------------------------------------
+legend right
+    |= Color |= Meaning |
+    | <#90EE90> | New component |
+    | <#FFFACD> | Modified component |
+    | <#FFFFFF> | Existing (unchanged) |
+endlegend
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "project::feature" {
+    
+    ' New classes - mark with <<new>>
+    class NewComponent <<new>> {
+        ' Public interface
+        +primaryMethod(): Result
+        +secondaryMethod(param: Type): void
+        
+        ' Construction
+        +NewComponent(deps: Dependencies)
+        +~NewComponent()
+        
+        ' Private members (key ones only)
+        -impl_: unique_ptr<Impl>
+    }
+    
+    ' Another new class
+    class AnotherNewClass <<new>> {
+        +operation(): void
+    }
+}
+
+package "project::existing" {
+    
+    ' Modified existing class - mark with <<modified>>
+    class ExistingClass <<modified>> {
+        ' Existing methods (summarize)
+        +existingMethod(): void
+        ..
+        ' New additions
+        +newMethod(): NewType
+        +anotherNewMethod(): void
+    }
+    
+    ' Existing class used as dependency (unchanged)
+    class ExistingDependency {
+        +usedMethod(): Result
+        +anotherUsedMethod(x: int): bool
+    }
+    
+    ' Interface being implemented
+    interface IExistingInterface {
+        +requiredMethod(): void
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Inheritance/Implementation
+NewComponent ..|> IExistingInterface : implements
+
+' Composition (strong ownership)
+NewComponent *-- AnotherNewClass : contains
+
+' Aggregation (weak ownership)
+NewComponent o-- ExistingDependency : uses
+
+' Dependency (uses but doesn't own)
+ExistingClass ..> NewComponent : creates
+
+' Association with cardinality
+NewComponent "1" -- "*" AnotherNewClass : manages
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of NewComponent
+    Thread safety: Not thread-safe
+    Exception safety: Basic guarantee
+    
+    Key responsibility:
+    {Describe single responsibility}
+end note
+
+note bottom of ExistingClass
+    Changes:
+    - Adding newMethod() for {reason}
+    - Adding anotherNewMethod() for {reason}
+end note
+
+' -----------------------------------------------------------------------------
+' Data Flow (optional)
+' -----------------------------------------------------------------------------
+note as DataFlow
+    **Data Flow:**
+    1. Client calls ExistingClass
+    2. ExistingClass creates NewComponent
+    3. NewComponent uses ExistingDependency
+    4. Result flows back to client
+end note
+
+@enduml

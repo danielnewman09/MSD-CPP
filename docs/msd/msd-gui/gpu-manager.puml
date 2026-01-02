@@ -1,0 +1,235 @@
+@startuml
+' =============================================================================
+' Feature: GPUManager - GPU Device and Rendering Pipeline
+' Description: Device initialization, shader loading, instanced rendering
+' Date: 2026-01-01
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Component Focus
+' -----------------------------------------------------------------------------
+package "msd_gui" {
+
+    struct InstanceData {
+        +position[3]: float
+        +color[3]: float
+    }
+
+    class GPUManager {
+        ' Public interface
+        +GPUManager(window: SDL_Window&, basePath: string)
+        +~GPUManager() = default
+
+        +render(): void
+        +getCamera(): Camera3D&
+
+        ' Instance management
+        +addInstance(posX, posY, posZ, r, g, b): void
+        +removeInstance(index: size_t): void
+        +updateInstance(index, posX, posY, posZ, r, g, b): void
+        +clearInstances(): void
+        +getInstanceCount(): size_t
+
+        ' Deleted operations
+        +GPUManager(GPUManager&) = delete
+        +operator=(GPUManager&) = delete
+        +GPUManager(GPUManager&&) = delete
+        +operator=(GPUManager&&) = delete
+
+        ' Private members
+        -window_: SDL_Window&
+        -device_: unique_ptr<SDL_GPUDevice, SDLDeviceDeleter>
+        -pipeline_: UniquePipeline
+        -vertexBuffer_: UniqueBuffer
+        -instanceBuffer_: UniqueBuffer
+        -uniformBuffer_: UniqueBuffer
+        -instances_: vector<InstanceData>
+        -pyramidVertexCount_: size_t
+        -instanceBufferNeedsUpdate_: bool
+        -basePath_: string
+        -camera_: Camera3D
+
+        ' Private helpers
+        -uploadInstanceBuffer(): void
+    }
+
+    struct SDLDeviceDeleter {
+        +operator()(SDL_GPUDevice*): void
+    }
+
+    struct PipelineDeleter {
+        +device: SDL_GPUDevice*
+        +operator()(SDL_GPUGraphicsPipeline*): void
+    }
+
+    struct BufferDeleter {
+        +device: SDL_GPUDevice*
+        +operator()(SDL_GPUBuffer*): void
+    }
+
+    class Camera3D {
+        +getMVPMatrix(): Matrix4f
+        +setAspectRatio(ratio): void
+    }
+
+    class SDLException
+}
+
+package "msd_assets" {
+    class GeometryFactory {
+        {static} +createPyramid(base, height): MeshRecord
+    }
+
+    class Geometry {
+        +toGUIVertices(r, g, b): vector<Vertex>
+    }
+
+    struct Vertex {
+        +position[3]: float
+        +color[3]: float
+        +normal[3]: float
+    }
+}
+
+package "SDL3" {
+    class SDL_Window
+    class SDL_GPUDevice
+    class SDL_GPUGraphicsPipeline
+    class SDL_GPUBuffer
+    class SDL_GPUCommandBuffer
+    class SDL_GPURenderPass
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' GPUManager owns GPU resources
+GPUManager *-- SDL_GPUDevice : owns (SDLDeviceDeleter)
+GPUManager *-- SDL_GPUGraphicsPipeline : owns (PipelineDeleter)
+GPUManager *-- SDL_GPUBuffer : owns buffers\n(BufferDeleter)
+
+' GPUManager owns Camera3D
+GPUManager *-- Camera3D : owns (value)
+
+' GPUManager manages instances
+GPUManager *-- InstanceData : manages vector
+
+' Non-owning window reference
+GPUManager o-- SDL_Window : references
+
+' Deleters
+GPUManager ..> SDLDeviceDeleter : uses
+GPUManager ..> PipelineDeleter : uses
+GPUManager ..> BufferDeleter : uses
+
+' Geometry creation
+GPUManager ..> GeometryFactory : creates base mesh
+GPUManager ..> Geometry : converts to vertices
+GPUManager ..> Vertex : uploads to GPU
+
+' Rendering
+GPUManager ..> SDL_GPUCommandBuffer : acquires
+GPUManager ..> SDL_GPURenderPass : executes
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of GPUManager
+    **Thread Safety:** Not thread-safe
+    - All GPU operations on main thread
+    - Copy/move operations deleted
+    - No internal synchronization
+
+    **Pattern:** RAII Resource Management
+    - All GPU resources use custom deleters
+    - Exception-safe initialization
+    - Proper cleanup in destructor order
+
+    **Memory Management:**
+    - Owns device_ via unique_ptr + SDLDeviceDeleter
+    - Owns pipeline_ via UniquePipeline
+    - Owns buffers via UniqueBuffer
+    - Camera3D by value semantics
+    - Non-owning reference to window_
+
+    **Error Handling:**
+    - Throws SDLException on initialization failure
+    - Logs errors for invalid instance operations
+    - SDL_Log for runtime diagnostics
+end note
+
+note as InstanceRendering
+    **Instanced Rendering:**
+
+    Base mesh: Pyramid (from GeometryFactory)
+    - pyramidVertexCount_ vertices
+    - Stored in vertexBuffer_ (slot 0)
+
+    Per-instance data: InstanceData
+    - position[3]: world offset
+    - color[3]: instance color
+    - Stored in instanceBuffer_ (slot 1)
+
+    **Vertex Attributes:**
+    | Slot | Location | Data |
+    |------|----------|------|
+    | 0 | 0 | position |
+    | 0 | 1 | color (unused) |
+    | 0 | 2 | normal |
+    | 1 | 3 | instance position |
+    | 1 | 4 | instance color |
+
+    Max instances: 1000 (pre-allocated)
+end note
+
+note as RenderFlow
+    **Render Flow (per frame):**
+
+    1. Update camera aspect ratio from window size
+    2. Acquire command buffer
+    3. Push MVP matrix to uniform buffer
+    4. Acquire swapchain texture
+    5. Create depth texture (D16_UNORM)
+    6. Begin render pass:
+       - Clear color: blue (0, 0, 0.5, 1)
+       - Clear depth: 1.0
+    7. Bind pipeline
+    8. Bind vertex + instance buffers
+    9. Draw instanced: pyramidVertexCount_ x instances_.size()
+    10. End render pass
+    11. Release depth texture
+    12. Submit command buffer
+
+    **Shaders:**
+    - Vertex: Position3DColorTransform.vert
+    - Fragment: SolidColor.frag
+end note
+
+note as ShaderFormats
+    **Multi-Backend Shader Support:**
+
+    Automatically selects format based on GPU:
+    | Backend | Format | Entrypoint |
+    |---------|--------|------------|
+    | Vulkan/GL | SPIRV (.spv) | main |
+    | Metal | MSL (.msl) | main0 |
+    | DirectX | DXIL (.dxil) | main |
+
+    Path: {basePath}/Content/Shaders/Compiled/{format}/
+end note
+
+@enduml

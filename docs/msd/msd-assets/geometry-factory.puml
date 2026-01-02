@@ -1,0 +1,212 @@
+@startuml
+' =============================================================================
+' Feature: GeometryFactory - Primitive Geometry Generator
+' Description: Static factory methods for creating common 3D primitives
+' Date: 2025-12-28
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Component Focus
+' -----------------------------------------------------------------------------
+package "msd_assets" {
+
+    class GeometryFactory {
+        ' Public static factory methods
+        {static} +createCube(size: double): MeshRecord
+        {static} +createCubeWireframe(size: double): MeshRecord
+        {static} +createPyramid(baseSize: double, height: double): MeshRecord
+
+        ' Private static helpers
+        {static} -getCubeCorners(size: double): array<Vector3d, 8>
+        {static} -verticesToMeshRecord(vertices: vector<Vector3d>): MeshRecord
+    }
+}
+
+package "msd_transfer" {
+    class MeshRecord {
+        +vertex_data: vector<uint8_t>
+        +vertex_count: uint32_t
+        +triangle_count: uint32_t
+        +id: int64_t
+    }
+}
+
+package "Eigen" {
+    class Vector3d {
+        +x(), y(), z(): double
+        +Vector3d(x, y, z)
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+GeometryFactory ..> MeshRecord : creates
+GeometryFactory ..> Vector3d : uses
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of GeometryFactory
+    **Thread Safety:** Stateless, thread-safe
+    - All methods are static
+    - No shared state
+    - Pure functions
+
+    **Pattern:** Static factory methods
+    - No instantiation needed
+    - Procedural geometry generation
+    - Returns ready-to-use MeshRecord
+
+    **Error Handling:**
+    - No input validation (caller responsible)
+    - Returns valid MeshRecord
+    - Throws only on allocation failure
+
+    **Coordinate System:**
+    - All primitives centered at origin
+    - Right-handed coordinate system
+    - Triangulated mesh output
+end note
+
+note as CubeCreation
+    **createCube(size):**
+
+    Creates triangulated cube mesh:
+
+    1. Get 8 corner vertices:
+       - Use getCubeCorners(size)
+       - Extends from -size/2 to +size/2
+
+    2. Define 12 triangles (2 per face):
+       - Front: +Z face (2 triangles)
+       - Back: -Z face (2 triangles)
+       - Left: -X face (2 triangles)
+       - Right: +X face (2 triangles)
+       - Top: +Y face (2 triangles)
+       - Bottom: -Y face (2 triangles)
+
+    3. Order vertices for proper winding:
+       - Counter-clockwise when viewed from outside
+       - Ensures correct normal direction
+
+    4. Call verticesToMeshRecord():
+       - Total: 36 vertices (12 triangles × 3)
+       - Serialize to BLOB
+       - Return MeshRecord
+
+    **Output:**
+    MeshRecord with 36 vertices, 12 triangles
+end note
+
+note as WireframeCreation
+    **createCubeWireframe(size):**
+
+    Creates wireframe (edges only):
+
+    1. Get 8 corner vertices
+    2. Define 12 edges:
+       - Bottom square: 4 edges
+       - Top square: 4 edges
+       - Vertical connectors: 4 edges
+
+    3. Each edge = 2 vertices
+    4. Total: 24 vertices (12 edges × 2)
+
+    **Use case:**
+    - Debug visualization
+    - Bounding box display
+    - Line rendering mode
+
+    **Output:**
+    MeshRecord with 24 vertices (line pairs)
+end note
+
+note as PyramidCreation
+    **createPyramid(baseSize, height):**
+
+    Creates square-based pyramid:
+
+    1. Define 5 vertices:
+       - 4 base corners (at -height/2)
+       - 1 apex (at +height/2)
+
+    2. Define 6 triangles:
+       - Base: 2 triangles (square)
+       - Sides: 4 triangles (one per edge)
+
+    3. Center at origin:
+       - Base at y = -height/2
+       - Apex at y = +height/2
+
+    4. Total: 18 vertices (6 triangles × 3)
+
+    **Output:**
+    MeshRecord with 18 vertices, 6 triangles
+end note
+
+note as HelperMethods
+    **getCubeCorners(size):**
+
+    Returns std::array<Vector3d, 8>:
+    - Half-extent: h = size / 2
+    - Corners:
+      [0] = (-h, -h, -h)  // Bottom-back-left
+      [1] = (+h, -h, -h)  // Bottom-back-right
+      [2] = (+h, -h, +h)  // Bottom-front-right
+      [3] = (-h, -h, +h)  // Bottom-front-left
+      [4] = (-h, +h, -h)  // Top-back-left
+      [5] = (+h, +h, -h)  // Top-back-right
+      [6] = (+h, +h, +h)  // Top-front-right
+      [7] = (-h, +h, +h)  // Top-front-left
+
+    **verticesToMeshRecord(vertices):**
+
+    Converts vector<Vector3d> to MeshRecord:
+    1. Calculate BLOB size: vertices.size() * 24
+       (24 bytes = 3 doubles × 8 bytes)
+    2. Allocate vector<uint8_t>
+    3. memcpy vertex data
+    4. Set vertex_count
+    5. Calculate triangle_count = vertices / 3
+    6. Return MeshRecord
+
+    **Note:** Only stores positions (x,y,z)
+    Colors and normals computed later via
+    computeVertexData() when needed.
+end note
+
+note as UsagePattern
+    **Typical Usage:**
+
+    // Generate primitive
+    auto cubeMesh = GeometryFactory::createCube(2.0);
+
+    // Insert into database
+    auto meshDao = db.getDAO<MeshRecord>();
+    cubeMesh.id = meshDao.insert(cubeMesh);
+
+    // Later: Load as VisualGeometry
+    VisualGeometry visualGeom{cubeMesh};
+
+    **Integration:**
+    - Used by msd-asset-gen for DB population
+    - Used in tests for fixture data
+    - Can be used at runtime for dynamic shapes
+end note
+
+@enduml

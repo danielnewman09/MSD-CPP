@@ -1,0 +1,162 @@
+@startuml
+' =============================================================================
+' Feature: AssetRegistry - Singleton Asset Cache
+' Description: Lazy-loading registry for managing in-memory asset cache
+' Date: 2025-12-28
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Component Focus
+' -----------------------------------------------------------------------------
+package "msd_assets" {
+
+    class AssetRegistry {
+        ' Public interface
+        +AssetRegistry(dbPath: string)
+        +getAsset(objectName: string): optional<reference_wrapper<const Asset>>
+        +loadVisualGeometry(objectName: string): optional<reference_wrapper<const VisualGeometry>>
+        +loadCollisionGeometry(objectName: string): optional<reference_wrapper<const CollisionGeometry>>
+        +getCacheMemoryUsage(): size_t
+
+        ' Private members
+        -database_: unique_ptr<Database>
+        -assetCache_: unordered_map<string, Asset>
+        -cacheMutex_: mutable mutex
+
+        ' Private helper
+        -loadFromDatabase(): void
+    }
+
+    class Asset {
+        {static} +fromObjectRecord(record: ObjectRecord&, db: Database&): Asset
+        +getId(): uint32_t
+        +getName(): string
+        +getVisualGeometry(): optional<reference_wrapper<const VisualGeometry>>
+        +getCollisionGeometry(): optional<reference_wrapper<const CollisionGeometry>>
+    }
+
+    class VisualGeometry {
+        +getVertices(): vector<Vertex>
+    }
+
+    class CollisionGeometry {
+        +getVertices(): vector<Vector3d>
+    }
+}
+
+package "cpp_sqlite" {
+    class Database {
+        +Database(path: string, readWrite: bool, logger: Logger&)
+        +getDAO<T>(): DAO<T>&
+    }
+
+    class "DAO<ObjectRecord>" as DAO {
+        +select(id: int64_t): optional<ObjectRecord>
+        +findByName(name: string): optional<ObjectRecord>
+    }
+}
+
+package "msd_transfer" {
+    class ObjectRecord {
+        +name: string
+        +category: string
+        +meshRecord: ForeignKey<MeshRecord>
+        +collisionMeshRecord: ForeignKey<MeshRecord>
+        +id: int64_t
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' AssetRegistry owns Database and caches Assets
+AssetRegistry *-- Database : owns
+AssetRegistry *-- Asset : caches (value)
+
+' AssetRegistry uses DAO through Database
+AssetRegistry ..> DAO : queries via
+AssetRegistry ..> ObjectRecord : loads
+
+' Asset contains Geometries
+Asset *-- VisualGeometry : optionally contains
+Asset *-- CollisionGeometry : optionally contains
+
+' Database manages DAO
+Database *-- DAO : provides
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of AssetRegistry
+    **Thread Safety:** Thread-safe
+    - All public methods protected by cacheMutex_
+    - Cache access is synchronized
+    - Safe for concurrent reads and writes
+
+    **Pattern:** Singleton-like registry
+    - Single instance per database
+    - Lazy loading on first access
+    - Value semantics for cached assets
+
+    **Memory Management:**
+    - Owns Database via unique_ptr
+    - Assets stored by value in unordered_map
+    - Returns non-owning references via
+      optional<reference_wrapper<const T>>
+
+    **Error Handling:**
+    - Returns std::nullopt for cache miss
+    - Throws on database connection errors
+    - Throws on database schema errors
+end note
+
+note as CacheFlow
+    **Asset Loading Flow:**
+
+    1. Client calls getAsset("cube")
+    2. Lock cacheMutex_
+    3. Check assetCache_ for "cube"
+    4. If found:
+       → return std::cref(cached asset)
+    5. If not found:
+       a. Query ObjectRecord via DAO
+       b. Call Asset::fromObjectRecord()
+       c. Asset loads MeshRecords
+       d. Asset constructs Geometries
+       e. Insert into assetCache_
+       f. return std::cref(new asset)
+    6. Unlock cacheMutex_
+
+    **Key Invariant:**
+    Once cached, assets never change
+    (immutable after insertion)
+end note
+
+note as MemoryUsage
+    **getCacheMemoryUsage():**
+
+    Estimates memory consumption:
+    - Asset metadata (id, name, category)
+    - VisualGeometry vertex data
+    - CollisionGeometry vertex data
+    - Map overhead
+
+    Used for monitoring and capacity
+    planning.
+end note
+
+@enduml

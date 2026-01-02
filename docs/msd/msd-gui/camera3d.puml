@@ -1,0 +1,221 @@
+@startuml
+' =============================================================================
+' Feature: Camera3D - 3D Perspective Camera
+' Description: MVP matrix computation with ReferenceFrame integration
+' Date: 2026-01-01
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Component Focus
+' -----------------------------------------------------------------------------
+package "msd_gui" {
+
+    class Camera3D {
+        ' Construction
+        +Camera3D(position: Coordinate, fovDegrees: float = 60.0f, \n         aspectRatio: float = 16/9, nearPlane: float = 0.1f, \n         farPlane: float = 100.0f)
+
+        ' Reference frame access
+        +getReferenceFrame(): ReferenceFrame&
+        +getReferenceFrame() const: const ReferenceFrame&
+
+        ' Configuration
+        +setAspectRatio(aspectRatio: float): void
+        +setFieldOfView(fovDegrees: float): void
+        +setClippingPlanes(nearPlane: float, farPlane: float): void
+
+        ' Matrix computation
+        +getViewMatrix() const: Matrix4f
+        +getProjectionMatrix() const: Matrix4f
+        +getMVPMatrix(modelMatrix: Matrix4f = Identity) const: Matrix4f
+
+        ' Private members
+        -frame_: ReferenceFrame
+        -fovRadians_: float
+        -aspectRatio_: float
+        -nearPlane_: float
+        -farPlane_: float
+    }
+}
+
+package "msd_sim" {
+    class ReferenceFrame {
+        +ReferenceFrame(origin: Coordinate)
+        +getOrigin(): Coordinate
+        +setOrigin(origin: Coordinate): void
+        +getRotation(): Matrix3d
+        +getEulerAngles(): EulerAngles&
+        +localToGlobalRelative(local: Coordinate): Coordinate
+    }
+
+    class Coordinate {
+        +x(): double
+        +y(): double
+        +z(): double
+        +cast<float>(): Vector3f
+    }
+
+    class EulerAngles {
+        +pitch: Angle
+        +yaw: Angle
+        +roll: Angle
+    }
+}
+
+package "Eigen" {
+    class Matrix4f {
+        +Identity(): Matrix4f
+        +block<3,3>(i,j): Block
+        +data(): float*
+    }
+
+    class Matrix3d {
+        +transpose(): Matrix3d
+        +cast<float>(): Matrix3f
+    }
+
+    class Vector3f
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Camera3D owns ReferenceFrame
+Camera3D *-- ReferenceFrame : owns (value)
+
+' ReferenceFrame uses its components
+ReferenceFrame *-- Coordinate : origin
+ReferenceFrame *-- EulerAngles : orientation
+ReferenceFrame ..> Matrix3d : computes rotation
+
+' Camera3D produces matrices
+Camera3D ..> Matrix4f : produces
+
+' Matrix math dependencies
+Camera3D ..> Vector3f : uses for translation
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of Camera3D
+    **Thread Safety:** Not thread-safe
+    - Mutable ReferenceFrame
+    - Single-threaded use on main render thread
+    - No internal synchronization
+
+    **Coordinate System:** Right-handed
+    - X: right
+    - Y: up
+    - Z: forward (out of screen)
+    - Opposite to viewing direction
+
+    **Memory Management:**
+    - Owns frame_ via value semantics
+    - All computation produces value types
+    - No heap allocations in matrix ops
+
+    **Error Handling:**
+    - No exceptions thrown
+    - Caller responsible for valid parameters
+    - Division by zero possible if aspectRatio = 0
+end note
+
+note as ViewMatrix
+    **View Matrix Computation:**
+
+    The view matrix transforms world space to camera space.
+    It's the inverse of the camera's world transform.
+
+    Camera world transform: T(origin) x R(rotation)
+    View matrix: inverse(T x R) = R^T x T^(-1)
+
+    **Algorithm:**
+    1. Get rotation matrix from ReferenceFrame
+    2. Transpose rotation (inverse for orthonormal)
+    3. Compute: -R^T x origin
+    4. Build 4x4 matrix:
+       | R^T     | -R^T x origin |
+       | 0 0 0   |       1       |
+
+    **Result:**
+    Column-major Matrix4f for GPU upload
+end note
+
+note as ProjectionMatrix
+    **Projection Matrix (Perspective):**
+
+    Maps view frustum to NDC (normalized device coordinates).
+    Standard OpenGL/Vulkan perspective projection.
+
+    **Parameters:**
+    - fovRadians_: vertical field of view
+    - aspectRatio_: width / height
+    - nearPlane_: near clipping distance
+    - farPlane_: far clipping distance
+
+    **Matrix structure:**
+    | f/aspect  0     0              0     |
+    |    0      f     0              0     |
+    |    0      0  (f+n)/(n-f)  2fn/(n-f)  |
+    |    0      0    -1              0     |
+
+    where f = 1 / tan(fov/2)
+
+    **Result:**
+    After projection, w != 1 (perspective division in hardware)
+end note
+
+note as MVPMatrix
+    **MVP Matrix Combination:**
+
+    getMVPMatrix(model) returns:
+    Projection x View x Model
+
+    **Transformation order (right-to-left):**
+    1. Model: object space -> world space
+    2. View: world space -> camera space
+    3. Projection: camera space -> clip space
+
+    **Usage:**
+    mvp = camera.getMVPMatrix();
+    // Upload mvp.data() to GPU uniform buffer
+    // Shader: gl_Position = mvp * vec4(position, 1.0)
+
+    Default model matrix: Identity (no transform)
+end note
+
+note as CoordinateConversion
+    **Position/Orientation Updates:**
+
+    Camera movement via ReferenceFrame:
+
+    // Get mutable reference
+    auto& frame = camera.getReferenceFrame();
+
+    // Update position
+    auto newPos = frame.getOrigin();
+    newPos += frame.localToGlobalRelative(moveDir);
+    frame.setOrigin(newPos);
+
+    // Update rotation (Euler angles)
+    frame.getEulerAngles().yaw += deltaYaw;
+    frame.getEulerAngles().pitch += deltaPitch;
+
+    ReferenceFrame handles local-to-global
+    coordinate transforms automatically.
+end note
+
+@enduml

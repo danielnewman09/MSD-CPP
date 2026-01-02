@@ -1,0 +1,144 @@
+# Feature Ticket: {FEATURE_NAME}
+
+## Status
+- [ ] Draft
+- [ ] Ready for Design
+- [ ] Design Complete — Awaiting Review
+- [ ] Design Approved — Ready for Prototype
+- [ ] Prototype Complete — Awaiting Review
+- [ ] Ready for Implementation
+- [ ] Implementation Complete — Awaiting Review
+- [ ] Approved — Ready to Merge
+- [ ] Merged / Complete
+
+## Metadata
+- **Created**: {DATE}
+- **Author**: {AUTHOR}
+- **Priority**: Low / Medium / High / Critical
+- **Estimated Complexity**: Small / Medium / Large / XL
+- **Target Component(s)**: {e.g., networking, storage, ui}
+
+---
+
+## Summary
+{One paragraph describing what this feature does and why it's needed}
+
+## Motivation
+{Why is this feature important? What problem does it solve? What's the user impact?}
+
+## Requirements
+
+### Functional Requirements
+1. {The system shall...}
+2. {The system shall...}
+
+### Non-Functional Requirements
+- **Performance**: {Any performance constraints}
+- **Memory**: {Any memory constraints}
+- **Thread Safety**: {Thread safety requirements}
+- **Backward Compatibility**: {Must maintain compatibility with...}
+
+## Constraints
+- {Technical constraints}
+- {Business constraints}
+- {Timeline constraints}
+
+## Acceptance Criteria
+- [ ] {Criterion 1 — specific, measurable}
+- [ ] {Criterion 2}
+- [ ] {Criterion 3}
+
+---
+
+## Design Decisions (Human Input)
+
+{Use this section to provide guidance to the Design agent, or to record decisions made during review}
+
+### Preferred Approaches
+- {If you have a preference for how something should be implemented, note it here}
+
+### Things to Avoid
+- {Anti-patterns or approaches that won't work in this codebase}
+
+### Open Questions
+- {Questions you want the Design agent to address}
+
+---
+
+## References
+
+### Related Code
+- `{path/to/relevant/file.hpp}` — {why it's relevant}
+- `{path/to/another/file.cpp}` — {why it's relevant}
+
+### Related Documentation
+- {Links to design docs, specs, or external references}
+
+### Related Tickets
+- {Links to related or dependent tickets}
+
+---
+
+## Workflow Log
+
+{This section is automatically updated as the workflow progresses}
+
+### Design Phase
+- **Started**: 
+- **Completed**: 
+- **Artifacts**: 
+  - `docs/designs/{feature-name}/design.md`
+  - `docs/designs/{feature-name}/{feature-name}.puml`
+- **Notes**: 
+
+### Design Review Phase
+- **Started**: 
+- **Completed**: 
+- **Status**: 
+- **Reviewer Notes**: 
+
+### Prototype Phase
+- **Started**: 
+- **Completed**: 
+- **Prototypes**: 
+  - P1: {name} — {result}
+- **Artifacts**: 
+  - `docs/designs/{feature-name}/prototype-results.md`
+- **Notes**: 
+
+### Implementation Phase
+- **Started**: 
+- **Completed**: 
+- **Files Created**: 
+- **Files Modified**: 
+- **Artifacts**: 
+  - `docs/designs/{feature-name}/implementation-notes.md`
+- **Notes**: 
+
+### Implementation Review Phase
+- **Started**: 
+- **Completed**: 
+- **Status**: 
+- **Reviewer Notes**: 
+
+### Documentation Update Phase
+- **Started**: 
+- **Completed**: 
+- **CLAUDE.md Updates**: 
+- **Diagrams Indexed**: 
+- **Notes**: 
+
+---
+
+## Human Feedback
+
+{Add feedback here at any point. Agents will read this section.}
+
+### Feedback on Design
+{Your comments on the design}
+
+### Feedback on Prototypes
+{Your comments on prototype results}
+
+### Feedback on Implementation
+{Your comments on the implementation}

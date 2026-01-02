@@ -1,0 +1,144 @@
+@startuml
+' =============================================================================
+' Feature: MSD Executable Integration
+' Description: Main executable entry point integrating msd-sim and msd-gui
+' Date: 2025-01-01
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor<<executable>> #E6F3FF
+    BorderColor<<executable>> #4A90E2
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Legend
+' -----------------------------------------------------------------------------
+legend right
+    |= Color |= Component Type |
+    | <#E6F3FF> | Executable entry point |
+    | <#FFFFFF> | Library components |
+endlegend
+
+' -----------------------------------------------------------------------------
+' Components
+' -----------------------------------------------------------------------------
+package "msd-exe" <<executable>> {
+    class "main()" <<executable>> {
+        **Application Entry Point**
+        --
+        + main(): int
+        --
+        **Initialization Steps:**
+        1. Resolve database path
+        2. Create SDLApplication
+        3. Run application loop
+        4. Return exit code
+    }
+}
+
+package "msd_gui" {
+    interface SDLApplication {
+        + SDLApplication(dbPath: string)
+        + runApp(): void
+    }
+}
+
+package "msd_utils" {
+    interface PathUtils {
+        + {static} absolutePath(path: string): filesystem::path
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+"main()" ..> PathUtils : 1. calls\nabsolutePath()
+"main()" ..> SDLApplication : 2. constructs\nwith DB path
+"main()" ..> SDLApplication : 3. calls\nrunApp()
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of "main()"
+    **Thread Safety:** Single-threaded
+    **Exception Safety:** Basic guarantee
+
+    **Current Implementation:**
+    ```cpp
+    int main() {
+      std::string dbPath{"example_assets.db"};
+      auto absolutePath =
+        msd_utils::absolutePath(dbPath);
+
+      msd_gui::SDLApplication application{
+        absolutePath.string()
+      };
+
+      application.runApp();
+      return 0;
+    }
+    ```
+
+    **Responsibilities:**
+    - Resolve asset database path to absolute
+    - Initialize SDLApplication with DB path
+    - Delegate lifecycle to runApp()
+    - Return exit code (0 on success)
+
+    **Error Handling:**
+    - Exceptions propagate from library calls
+    - No explicit try-catch (relies on default)
+    - Non-zero exit on uncaught exception
+end note
+
+note bottom of SDLApplication
+    **From msd-gui library**
+
+    Entry point to GUI and simulation subsystems.
+    See msd-gui/CLAUDE.md for details.
+end note
+
+note bottom of PathUtils
+    **From msd-utils library**
+
+    Utility for path resolution.
+    See msd-utils/CLAUDE.md for details.
+end note
+
+' -----------------------------------------------------------------------------
+' Data Flow
+' -----------------------------------------------------------------------------
+note as DataFlow
+    **Execution Flow:**
+
+    1. **Path Resolution**
+       - Input: "example_assets.db" (relative)
+       - PathUtils::absolutePath() converts to absolute
+       - Output: Full filesystem path
+
+    2. **Application Creation**
+       - SDLApplication constructor receives DB path
+       - Initializes window, GPU, simulation engine
+       - Loads assets from database
+
+    3. **Main Loop**
+       - runApp() runs until quit event
+       - Processes input, updates sim, renders
+
+    4. **Cleanup**
+       - RAII cleanup on stack unwind
+       - Returns 0 on success
+end note
+
+@enduml

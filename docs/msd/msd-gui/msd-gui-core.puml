@@ -1,0 +1,109 @@
+@startuml
+' =============================================================================
+' Feature: msd-gui - Core Architecture Overview
+' Description: High-level component structure and relationships
+' Date: 2026-01-01
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Core Components
+' -----------------------------------------------------------------------------
+package "msd_gui" {
+
+    ' Application Layer
+    class SDLApplication {
+        +SDLApplication(dbPath: string)
+        +runApp(): int
+        +getStatus(): Status
+    }
+
+    enum Status {
+        Starting
+        Running
+        Paused
+        Error
+        Exiting
+    }
+
+    ' GPU Management Layer
+    class GPUManager {
+        +GPUManager(window: SDL_Window&, basePath: string)
+        +render(): void
+        +getCamera(): Camera3D&
+        +addInstance(...): void
+        +removeInstance(index): void
+    }
+
+    struct InstanceData {
+        +position[3]: float
+        +color[3]: float
+    }
+
+    ' Camera System
+    class Camera3D {
+        +Camera3D(position: Coordinate, fov, aspect, near, far)
+        +getViewMatrix(): Matrix4f
+        +getProjectionMatrix(): Matrix4f
+        +getMVPMatrix(model): Matrix4f
+    }
+
+    ' Utilities
+    class SDLException {
+        +SDLException(message: string)
+    }
+}
+
+' External dependencies
+package "msd_sim" {
+    class Engine
+    class ReferenceFrame
+    class Coordinate
+}
+
+package "msd_assets" {
+    class GeometryFactory {
+        {static} +createPyramid(base, height): MeshRecord
+    }
+}
+
+package "SDL3" {
+    class SDL_Window
+    class SDL_GPUDevice
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' SDLApplication owns GPUManager and Engine
+SDLApplication *-- GPUManager : owns (unique_ptr)
+SDLApplication *-- Engine : owns (value)
+SDLApplication o-- SDL_Window : manages
+
+' GPUManager owns Camera3D and GPU resources
+GPUManager *-- Camera3D : owns (value)
+GPUManager *-- InstanceData : manages instances
+GPUManager o-- SDL_GPUDevice : manages
+GPUManager ..> GeometryFactory : uses for\nbase mesh
+
+' Camera3D uses ReferenceFrame
+Camera3D *-- ReferenceFrame : owns (value)
+Camera3D ..> Coordinate : uses
+
+' Status enum
+SDLApplication -- Status
+
+@enduml

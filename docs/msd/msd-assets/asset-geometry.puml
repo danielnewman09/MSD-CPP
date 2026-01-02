@@ -1,0 +1,257 @@
+@startuml
+' =============================================================================
+' Feature: Asset and Geometry System
+' Description: Asset container and template-based geometry storage
+' Date: 2025-12-28
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Component Focus
+' -----------------------------------------------------------------------------
+package "msd_assets" {
+
+    class Asset {
+        ' Static factory
+        {static} +fromObjectRecord(record: ObjectRecord&, db: Database&): Asset
+
+        ' Public accessors
+        +getId(): uint32_t
+        +getName(): string
+        +getCategory(): string
+        +getVisualGeometry(): optional<reference_wrapper<const VisualGeometry>>
+        +getCollisionGeometry(): optional<reference_wrapper<const CollisionGeometry>>
+        +hasVisualGeometry(): bool
+        +hasCollisionGeometry(): bool
+
+        ' Private members
+        -id_: uint32_t
+        -name_: string
+        -category_: string
+        -visualGeometry_: optional<VisualGeometry>
+        -collisionGeometry_: optional<CollisionGeometry>
+
+        ' Private constructor
+        -Asset(id, name, category, visualGeom, collisionGeom)
+    }
+
+    class "BaseGeometry<T>" {
+        ' Construction
+        +BaseGeometry(record: MeshRecord&, objectId: uint32_t)
+
+        ' Accessors
+        +getVertexCount(): size_t
+        +getVertices(): vector<T>
+
+        ' Serialization
+        +serializeVertices(): vector<uint8_t>
+        +populateMeshRecord(): MeshRecord
+
+        ' Private members
+        -objectId_: uint32_t
+        -cachedVertices_: vector<T>
+    }
+
+    class VisualGeometry {
+        <<type alias>>
+        BaseGeometry<Vertex>
+    }
+
+    class CollisionGeometry {
+        <<type alias>>
+        BaseGeometry<Eigen::Vector3d>
+    }
+
+    class Vertex {
+        +position: float[3]
+        +color: float[3]
+        +normal: float[3]
+    }
+
+    class BoundingBox {
+        +min_x, min_y, min_z: float
+        +max_x, max_y, max_z: float
+        +radius: float
+    }
+
+    class "computeVertexData()" as ComputeVertexData {
+        {static} +computeVertexData(vertices: vector<Vector3d>): vector<Vertex>
+    }
+}
+
+package "msd_transfer" {
+    class MeshRecord {
+        +vertex_data: vector<uint8_t>
+        +vertex_count: uint32_t
+        +id: int64_t
+    }
+
+    class ObjectRecord {
+        +name: string
+        +category: string
+        +meshRecord: ForeignKey<MeshRecord>
+        +collisionMeshRecord: ForeignKey<MeshRecord>
+        +id: int64_t
+    }
+}
+
+package "cpp_sqlite" {
+    class Database {
+        +getDAO<T>(): DAO<T>&
+    }
+}
+
+package "Eigen" {
+    class Vector3d {
+        +x(), y(), z(): double
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Asset composition
+Asset *-- VisualGeometry : optionally contains
+Asset *-- CollisionGeometry : optionally contains
+
+' Geometry specializations
+VisualGeometry --|> "BaseGeometry<T>" : specialization\n<Vertex>
+CollisionGeometry --|> "BaseGeometry<T>" : specialization\n<Vector3d>
+
+' Geometry dependencies
+"BaseGeometry<T>" ..> MeshRecord : constructs from\npopulates to
+VisualGeometry ..> Vertex : stores
+CollisionGeometry ..> Vector3d : stores
+
+' Asset creation
+Asset ..> ObjectRecord : created from
+Asset ..> Database : loads geometries
+
+' Helper function
+ComputeVertexData ..> Vertex : creates
+ComputeVertexData ..> Vector3d : reads from
+VisualGeometry ..> ComputeVertexData : uses
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of Asset
+    **Thread Safety:** Immutable
+    - Immutable after construction
+    - Safe to read from multiple threads
+    - No synchronization needed
+
+    **Pattern:** Immutable value object
+    - Created via static factory method
+    - Private constructor enforces validation
+    - Optional geometries via std::optional
+
+    **Memory Management:**
+    - Owns geometries by value
+    - Returns non-owning references
+    - No shared ownership
+
+    **Factory Method:**
+    fromObjectRecord() handles:
+    1. Load ObjectRecord metadata
+    2. Query MeshRecords via foreign keys
+    3. Construct VisualGeometry if present
+    4. Construct CollisionGeometry if present
+    5. Return complete Asset
+end note
+
+note bottom of "BaseGeometry<T>"
+    **Template Specialization:**
+
+    T=Vertex → VisualGeometry:
+    - Stores position + color + normal
+    - Calls computeVertexData()
+    - Used for rendering
+
+    T=Vector3d → CollisionGeometry:
+    - Stores raw coordinates only
+    - No normal computation
+    - Used for physics
+
+    **Compile-time dispatch:**
+    Uses constexpr if to specialize
+    construction behavior based on T.
+
+    **Thread Safety:** Immutable
+    Safe after construction.
+end note
+
+note as ConstructionFlow
+    **BaseGeometry Construction:**
+
+    1. Accept MeshRecord with vertex_data BLOB
+    2. Validate BLOB size (multiple of sizeof(T))
+    3. Deserialize BLOB to vector<T>:
+       - Cast BLOB to T* pointer
+       - Copy range to vector
+
+    If T == Vertex (VisualGeometry):
+       4. Deserialize to Vector3d first
+       5. Call computeVertexData()
+       6. Computes normals per-triangle
+       7. Store as vector<Vertex>
+
+    If T == Vector3d (CollisionGeometry):
+       4. Direct assignment
+       5. Store as vector<Vector3d>
+end note
+
+note as SerializationFlow
+    **serializeVertices():**
+
+    Converts vector<T> → BLOB:
+    1. Allocate blob: size * sizeof(T)
+    2. memcpy from vector.data()
+    3. Return vector<uint8_t>
+
+    **populateMeshRecord():**
+
+    Creates MeshRecord:
+    1. Call serializeVertices()
+    2. Set vertex_data = BLOB
+    3. Set vertex_count = size()
+    4. Return MeshRecord
+
+    Used for database storage.
+end note
+
+note as OptionalGeometry
+    **Why optional<Geometry>?**
+
+    Assets may have:
+    - Visual geometry only (render)
+    - Collision geometry only (physics)
+    - Both geometries (common)
+    - Neither (metadata-only asset)
+
+    Using std::optional avoids:
+    - Null pointer checks
+    - Separate "has" flags
+    - Invalid state representation
+
+    Access pattern:
+    if (auto geom = asset.getVisualGeometry()) {
+        const auto& g = geom->get();
+        // Use g...
+    }
+end note
+
+@enduml
