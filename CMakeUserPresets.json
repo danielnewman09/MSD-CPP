@@ -4,8 +4,8 @@
         "conan": {}
     },
     "include": [
-        "build/Debug/generators/CMakePresets.json",
-        "build/Release/generators/CMakePresets.json"
+        "build/Release/generators/CMakePresets.json",
+        "build/Debug/generators/CMakePresets.json"
     ],
     "configurePresets": [
         {
@@ -160,6 +160,18 @@
                 "msd_utils_test",
                 "msd_sim_test",
                 "msd_assets_test"
+            ]
+        },
+        {
+            "name": "coverage-all",
+            "displayName": "Generate Coverage Reports (All)",
+            "description": "Run all coverage targets and generate HTML reports",
+            "configurePreset": "conan-debug",
+            "targets": [
+                "coverage-msd-utils",
+                "coverage-msd-sim",
+                "coverage-msd-assets",
+                "coverage-msd-gui"
             ]
         }
     ]
