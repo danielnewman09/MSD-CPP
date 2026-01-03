@@ -1,5 +1,6 @@
-// Ticket: 0001_link-gui-sim-object
-// Design: docs/designs/generalize-gui-object-rendering/design.md
+// Ticket: 0002_remove_rotation_from_gpu
+// Design: docs/designs/modularize-gpu-shader-system/design.md
+// Previous ticket: 0001_link-gui-sim-object
 
 #include "msd-gui/src/SDLApp.hpp"
 #include "msd-gui/src/SDLUtils.hpp"
@@ -25,7 +26,7 @@ SDLApplication::SDLApplication(const std::string& dbPath)
     throw SDLException("Failed to create SDL window");
   }
 
-  gpuManager_ = std::make_unique<GPUManager>(*window_, basePath_);
+  gpuManager_ = std::make_unique<AppGPUManager>(*window_, basePath_);
 
   // Get assets from the registry (they should be loaded by the engine from the database)
   auto& registry = engine_.getAssetRegistry();

@@ -1,0 +1,131 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "msd-gui" {
+
+    ' NEW: Shader policy/traits classes
+    class PositionOnlyShaderPolicy <<new>> {
+        +{static} shaderName: string
+        +{static} vertexShaderFile: string
+        +{static} fragmentShaderFile: string
+        +{static} getVertexAttributes(): vector<SDL_GPUVertexAttribute>
+        +{static} getVertexBufferDescription(): SDL_GPUVertexBufferDescription
+        +{static} getVertexInputState(): SDL_GPUVertexInputState
+        +{static} buildInstanceData(Object): InstanceData
+    }
+
+    class FullTransformShaderPolicy <<new>> {
+        +{static} shaderName: string
+        +{static} vertexShaderFile: string
+        +{static} fragmentShaderFile: string
+        +{static} getVertexAttributes(): vector<SDL_GPUVertexAttribute>
+        +{static} getVertexBufferDescription(): SDL_GPUVertexBufferDescription
+        +{static} getVertexInputState(): SDL_GPUVertexInputState
+        +{static} buildInstanceData(Object): InstanceData
+    }
+
+    ' NEW: Instance data structures
+    struct PositionOnlyInstanceData <<new>> {
+        +position: float[3]
+        +color: float[3]
+        +padding: uint32_t[2]
+    }
+
+    struct FullTransformInstanceData <<new>> {
+        +modelMatrix: float[16]
+        +color: float[3]
+        +geometryIndex: uint32_t
+        +padding: uint32_t[4]
+    }
+
+    ' MODIFIED: GPUManager becomes template-based or uses policy
+    class GPUManager <<modified>> {
+        - shaderPolicy_: unique_ptr<ShaderPolicyBase>
+        - vertexAttributes_: vector<SDL_GPUVertexAttribute>
+        - vertexBufferDesc_: SDL_GPUVertexBufferDescription
+        - vertexInputState_: SDL_GPUVertexInputState
+        --
+        +GPUManager(window, basePath, shaderType)
+        +render(): void
+        +getCamera(): Camera3D&
+        +updateObjects(objects): void
+    }
+
+    ' NEW: Base interface for shader policies (if runtime selection needed)
+    interface ShaderPolicyBase <<new>> {
+        +{abstract} getVertexAttributes(): vector<SDL_GPUVertexAttribute>
+        +{abstract} getVertexBufferDescription(): SDL_GPUVertexBufferDescription
+        +{abstract} getVertexInputState(): SDL_GPUVertexInputState
+        +{abstract} buildInstanceData(Object): vector<uint8_t>
+        +{abstract} getVertexShaderFile(): string
+        +{abstract} getFragmentShaderFile(): string
+    }
+
+    ' MODIFIED: SDLApplication selects shader type
+    class SDLApplication <<modified>> {
+        - gpuManager_: unique_ptr<GPUManager>
+        --
+        +SDLApplication(dbPath, shaderType)
+        +runApp(): int
+    }
+
+    ' Unchanged for context
+    class Camera3D {
+        +getViewMatrix(): Matrix4f
+        +getProjectionMatrix(): Matrix4f
+    }
+
+    class Object {
+        +getTransform(): ReferenceFrame
+        +getColor(): array<double, 3>
+        +getGeometryName(): string
+    }
+}
+
+' Relationships
+GPUManager *-- ShaderPolicyBase : uses policy
+PositionOnlyShaderPolicy ..|> ShaderPolicyBase : implements
+FullTransformShaderPolicy ..|> ShaderPolicyBase : implements
+
+PositionOnlyShaderPolicy ..> PositionOnlyInstanceData : creates
+FullTransformShaderPolicy ..> FullTransformInstanceData : creates
+
+GPUManager ..> Object : reads
+GPUManager *-- Camera3D : owns
+
+SDLApplication *-- GPUManager : owns
+SDLApplication ..> Object : creates/manages
+
+note right of PositionOnlyShaderPolicy
+  **Position-Only Shader**
+  - Simple position offset
+  - 32 bytes per instance
+  - TEXCOORD3: position offset
+  - TEXCOORD4: instance color
+end note
+
+note right of FullTransformShaderPolicy
+  **Full Transform Shader**
+  - Complete 4x4 model matrix
+  - 84 bytes per instance
+  - TEXCOORD3-6: matrix rows
+  - TEXCOORD7: instance color
+  - TEXCOORD8: geometry index
+end note
+
+note bottom of GPUManager
+  Two implementation options:
+  **Option A (Compile-time):**
+  template<typename ShaderPolicy>
+  class GPUManager { ... }
+
+  **Option B (Runtime):**
+  class GPUManager {
+    unique_ptr<ShaderPolicyBase> policy_;
+  }
+end note
+
+@enduml

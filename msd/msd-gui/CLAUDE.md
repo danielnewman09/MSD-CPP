@@ -24,6 +24,7 @@ The library consists of four main subsystems:
 | Component | Location | Purpose | Diagram |
 |-----------|----------|---------|---------|
 | SDLApplication | `src/` | Application lifecycle, window management, event handling | [`sdl-application.puml`](../../docs/msd/msd-gui/sdl-application.puml) |
+| ShaderPolicy | `src/` | Template-based shader policy system for GPU pipeline configuration | [`modularize-gpu-shader-system.puml`](../../docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml) |
 | GPUManager | `src/` | GPU device, pipeline, instanced rendering | [`gpu-manager.puml`](../../docs/msd/msd-gui/gpu-manager.puml) |
 | Camera3D | `src/` | 3D camera with MVP matrix computation | [`camera3d.puml`](../../docs/msd/msd-gui/camera3d.puml) |
 | SDLUtils | `src/` | Exception class and shader loading utilities | — |
@@ -147,6 +148,121 @@ gpu.render();
 - SDL3 GPU API — Device, pipeline, buffer management
 - `Camera3D` — View/projection matrices (owned via value semantics)
 - `msd_assets::GeometryFactory` — Primitive geometry generation
+- `ShaderPolicy` — Compile-time shader configuration (template parameter)
+
+---
+
+### ShaderPolicy
+
+**Location**: `src/ShaderPolicy.hpp`, `src/ShaderPolicy.cpp`
+**Diagram**: [`docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml`](../../docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml)
+**Introduced**: [Ticket: 0002_remove_rotation_from_gpu](../../tickets/0002_remove_rotation_from_gpu.md)
+
+#### Purpose
+Provides a compile-time template-based policy system for configuring GPU pipeline shader types and instance data layouts. Enables GPUManager to support multiple shader configurations (position-only vs full transform) without runtime overhead, using C++20 policy-based design for zero-cost abstraction.
+
+#### Key Classes
+
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `PositionOnlyShaderPolicy` | `ShaderPolicy.hpp` | Shader policy for simple position-offset rendering (32-byte instance data) |
+| `FullTransformShaderPolicy` | `ShaderPolicy.hpp` | Shader policy for full 4x4 model matrix rendering (96-byte instance data) |
+| `PositionOnlyInstanceData` | `ShaderPolicy.hpp` | Instance data structure for position-only rendering |
+| `FullTransformInstanceData` | `ShaderPolicy.hpp` | Instance data structure for full transform rendering |
+
+#### Key Interfaces
+```cpp
+// Instance data for Position3DColorTransform shader
+struct PositionOnlyInstanceData {
+    float position[3];       // World position offset (12 bytes)
+    float color[3];          // RGB color (12 bytes)
+    uint32_t padding[2]{0};  // 16-byte alignment (8 bytes)
+    // Total: 32 bytes
+};
+
+// Instance data for PositionRotation3DColorTransform shader
+struct FullTransformInstanceData {
+    float modelMatrix[16];      // 4x4 transform matrix (64 bytes)
+    float color[3];             // RGB color (12 bytes)
+    uint32_t geometryIndex{0};  // Geometry registry index (4 bytes)
+    uint32_t padding[4]{0};     // 16-byte alignment (16 bytes)
+    // Total: 96 bytes
+};
+
+// Shader policy interface (PositionOnlyShaderPolicy shown)
+class PositionOnlyShaderPolicy {
+public:
+    using InstanceDataType = PositionOnlyInstanceData;
+
+    static constexpr const char* kShaderName = "PositionOnly";
+    static constexpr const char* kVertexShaderFile = "Position3DColorTransform.vert";
+    static constexpr const char* kFragmentShaderFile = "SolidColor.frag";
+
+    std::vector<SDL_GPUVertexAttribute> getVertexAttributes() const;
+    std::vector<SDL_GPUVertexBufferDescription> getVertexBufferDescriptions() const;
+    SDL_GPUVertexInputState getVertexInputState() const;
+    std::vector<uint8_t> buildInstanceData(const msd_sim::Object& object) const;
+
+    std::string getVertexShaderFile() const;
+    std::string getFragmentShaderFile() const;
+    size_t getInstanceDataSize() const;
+};
+
+// FullTransformShaderPolicy has identical interface except buildInstanceData signature
+```
+
+#### Usage Example
+```cpp
+// Choose shader policy at compile time via template parameter
+using AppGPUManager = GPUManager<PositionOnlyShaderPolicy>;
+
+// Or use FullTransformShaderPolicy for rotation support
+using AppGPUManager = GPUManager<FullTransformShaderPolicy>;
+
+// GPUManager automatically uses the policy's configuration
+AppGPUManager gpuManager{window, basePath};
+```
+
+#### Policy Selection
+**Current default**: `PositionOnlyShaderPolicy` (set in `SDLApp.hpp`)
+
+To switch shader policies, modify the type alias in `SDLApp.hpp`:
+```cpp
+// In SDLApp.hpp
+using AppGPUManager = GPUManager<FullTransformShaderPolicy>;  // Enable rotation
+```
+
+#### Thread Safety
+- All policy methods are const and stateless (thread-safe)
+- Instance data structures are plain data (no synchronization needed)
+- Policies are typically instantiated as members of GPUManager (single-threaded)
+
+#### Error Handling
+- Returns valid configurations for all methods (no exceptions)
+- Instance data building uses brace initialization (guaranteed valid layout)
+- Foreign key resolution returns `std::optional` for geometry lookups
+
+#### Memory Management
+- **Ownership**: Policies owned by value in GPUManager template instantiation
+- **Instance data**: Plain structs with value semantics, managed in `std::vector<InstanceDataType>`
+- **GPU alignment**: Both instance data types padded to 16-byte boundaries for GPU efficiency
+
+#### Performance Characteristics
+**PositionOnlyShaderPolicy**:
+- Instance data: 32 bytes (62% reduction vs FullTransform)
+- Rendering: Single draw call for all instances
+- GPU bandwidth: 32 KB per frame for 1000 instances
+
+**FullTransformShaderPolicy**:
+- Instance data: 96 bytes (16-byte aligned 4x4 matrix)
+- Rendering: Grouped by geometry index, multiple draw calls
+- GPU bandwidth: 96 KB per frame for 1000 instances
+
+#### Dependencies
+- SDL3 GPU — Vertex attribute and buffer description types
+- `msd_sim::Object` — Source data for instance data building
+- `msd_sim::ReferenceFrame` — Transform data (FullTransformShaderPolicy only)
+- `Eigen::Matrix4f` — 4x4 matrix math (FullTransformShaderPolicy only)
 
 ---
 
@@ -293,6 +409,18 @@ Ownership chain:
 - `GPUManager` owns `Camera3D` (value) and GPU resources (unique_ptr)
 - `Camera3D` owns `ReferenceFrame` (value)
 
+### Policy-Based Design (Template)
+**Used in**: `GPUManager<ShaderPolicy>`
+**Purpose**: Compile-time shader configuration for zero-cost abstraction
+
+See implementation: [`docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml`](../../docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml)
+
+The shader policy system enables:
+- Zero runtime overhead (no virtual function calls)
+- Type-safe instance data layouts via `ShaderPolicy::InstanceDataType`
+- Compile-time shader selection (PositionOnly vs FullTransform)
+- Future extensibility for additional shader types
+
 ---
 
 ## Cross-Cutting Concerns
@@ -431,12 +559,36 @@ Currently focused on integration testing through the main executable (`msd_exe`)
 
 ---
 
+## Recent Architectural Changes
+
+### Shader Policy System — 2026-01-03
+**Ticket**: [0002_remove_rotation_from_gpu](../../tickets/0002_remove_rotation_from_gpu.md)
+**Diagram**: [`docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml`](../../docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml)
+
+Refactored GPUManager to support multiple shader types through a compile-time template-based policy system. This enables switching between position-only rendering (32-byte instance data) and full transform rendering (96-byte instance data with 4x4 matrices) without runtime overhead.
+
+**Key changes**:
+- `msd/msd-gui/src/ShaderPolicy.hpp` — Shader policy interface and implementations
+- `msd/msd-gui/src/ShaderPolicy.cpp` — Policy method implementations
+- `msd/msd-gui/src/SDLGPUManager.hpp` — Template-ized with ShaderPolicy parameter
+- `msd/msd-gui/src/SDLApp.hpp` — Type alias for AppGPUManager with default policy
+- `msd/msd-gui/test/unit/shader_policy_test.cpp` — Unit tests for shader policies
+
+**Design decisions**:
+- Compile-time template approach for zero-cost abstraction
+- 16-byte aligned instance data for GPU efficiency
+- PositionOnlyShaderPolicy as default for simplified debugging
+- Future extensibility for additional shader types (textured, normal-mapped, etc.)
+
+---
+
 ## Diagrams Index
 
 | Diagram | Description | Last Updated |
 |---------|-------------|--------------|
 | [`msd-gui-core.puml`](../../docs/msd/msd-gui/msd-gui-core.puml) | High-level architecture overview | 2026-01-01 |
 | [`sdl-application.puml`](../../docs/msd/msd-gui/sdl-application.puml) | SDLApplication lifecycle and event handling | 2026-01-01 |
+| [`modularize-gpu-shader-system.puml`](../../docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml) | Shader policy system architecture | 2026-01-03 |
 | [`gpu-manager.puml`](../../docs/msd/msd-gui/gpu-manager.puml) | GPUManager rendering pipeline | 2026-01-01 |
 | [`camera3d.puml`](../../docs/msd/msd-gui/camera3d.puml) | Camera3D MVP matrix computation | 2026-01-01 |
 
