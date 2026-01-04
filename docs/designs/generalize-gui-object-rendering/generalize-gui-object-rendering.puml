@@ -1,0 +1,231 @@
+@startuml
+' =============================================================================
+' Feature: Generalize GUI Object Rendering
+' Description: Support arbitrary geometry types with unified Object integration
+' Ticket: 0001_link-gui-sim-object
+' Date: 2026-01-02
+' =============================================================================
+
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+' -----------------------------------------------------------------------------
+' Modified Components
+' -----------------------------------------------------------------------------
+
+package "msd_gui" {
+
+    struct "InstanceData" as InstanceDataOld <<modified>> {
+        ' OLD:
+        ' position[3]: float
+        ' color[3]: float
+    }
+
+    struct InstanceData <<new>> {
+        +modelMatrix[16]: float
+        +color[3]: float
+        +geometryIndex: uint32_t
+        +padding: uint32_t
+    }
+
+    struct GeometryInfo <<new>> {
+        +baseVertex: uint32_t
+        +vertexCount: uint32_t
+    }
+
+    class "GPUManager" as GPUManagerOld <<modified>> {
+        ' OLD:
+        ' -pyramidVertexCount_: size_t
+        ' -instances_: vector<InstanceData>
+        ' +addInstance(posX, posY, posZ, r, g, b): void
+    }
+
+    class GPUManager <<modified>> {
+        ' Modified public interface
+        +addObject(object: Object&): size_t
+        +removeObject(index: size_t): void
+        +updateObjects(): void
+        +clearObjects(): void
+        +getObjectCount(): size_t
+
+        ' New private members
+        -geometryRegistry_: vector<GeometryInfo>
+        -geometryNameToIndex_: unordered_map<string, uint32_t>
+        -objectIndices_: vector<size_t>
+        -totalVertexCount_: size_t
+
+        ' New private helpers
+        -registerGeometry(name: string, vertices: vector<Vertex>): uint32_t
+        -buildInstanceData(object: Object&): InstanceData
+        -createModelMatrix(transform: ReferenceFrame&): Matrix4f
+    }
+
+    class "SDLApplication" as SDLApplicationOld <<modified>> {
+        ' OLD event handling for 'Z' key only
+    }
+
+    class SDLApplication <<modified>> {
+        ' Modified members
+        -mockObjects_: vector<Object>
+
+        ' Modified helpers
+        -handleEvents(): void
+        -spawnRandomObject(geometryType: string): void
+    }
+}
+
+package "msd_sim" {
+    class Object {
+        +getTransform(): ReferenceFrame&
+        +getPosition(): Coordinate
+        +getRotation(): EulerAngles&
+        +getColor(r&, g&, b&): void
+        +getAsset(): optional<reference_wrapper<Asset>>
+        +getVisualGeometry(): VisualGeometry*
+    }
+
+    class ReferenceFrame {
+        +getOrigin(): Coordinate&
+        +getRotation(): Matrix3d&
+    }
+}
+
+package "msd_assets" {
+    class Asset {
+        +getVisualGeometry(): VisualGeometry
+        +getName(): string
+    }
+
+    class VisualGeometry {
+        +toGUIVertices(r, g, b): vector<Vertex>
+        +getVertexCount(): size_t
+    }
+
+    class GeometryFactory {
+        {static} +createPyramid(base, height): Geometry
+        {static} +createCube(size): Geometry
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Modified dependencies
+GPUManager ..> Object : reads transform/color
+GPUManager ..> VisualGeometry : converts to vertices
+GPUManager ..> GeometryInfo : manages registry
+GPUManager *-- InstanceData : manages vector
+
+SDLApplication *-- Object : owns mock vector
+SDLApplication ..> GPUManager : updates objects
+
+Object o-- Asset : references
+Object *-- ReferenceFrame : owns
+Asset *-- VisualGeometry : owns
+
+' Geometry factory usage
+GPUManager ..> GeometryFactory : creates base geometries
+SDLApplication ..> GeometryFactory : creates mock assets
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+
+note right of GPUManager
+    **Major Changes:**
+
+    1. **Single Buffer Architecture**
+       - All geometry types in one vertexBuffer_
+       - GeometryInfo tracks base vertex + count
+       - Indexed drawing per geometry type
+
+    2. **Object Integration**
+       - Reads Object transform (position + rotation)
+       - Builds 4x4 model matrix from ReferenceFrame
+       - Extracts color from Object
+
+    3. **Instance Data Enhanced**
+       - Full model matrix (translation + rotation)
+       - Color per instance
+       - geometryIndex to lookup in registry
+
+    **Thread Safety:** Not thread-safe
+    **Memory:** Single buffer for all vertices
+end note
+
+note right of InstanceData
+    **Memory Layout (per instance):**
+
+    | Offset | Field | Size | Purpose |
+    |--------|-------|------|---------|
+    | 0 | modelMatrix | 64 bytes | Transform |
+    | 64 | color | 12 bytes | RGB color |
+    | 76 | geometryIndex | 4 bytes | Which geometry |
+    | 80 | padding | 4 bytes | Alignment |
+
+    Total: 84 bytes per instance
+    Alignment: 16-byte for matrix
+end note
+
+note right of GeometryInfo
+    **Geometry Registry:**
+
+    Maps geometry name → index:
+    - "pyramid" → GeometryInfo{baseVertex: 0, count: 18}
+    - "cube" → GeometryInfo{baseVertex: 18, count: 36}
+
+    **Vertex Buffer Layout:**
+    [pyramid vertices] [cube vertices] [...]
+     ^baseVertex=0      ^baseVertex=18
+
+    **Single Buffer Benefits:**
+    - Single bind operation per frame
+    - GPU cache coherency
+    - Simplified pipeline state
+
+    **Limitations:**
+    - Static geometry (no runtime adds)
+    - Max buffer size constraint
+    - All geometries use same shader
+end note
+
+note left of SDLApplication
+    **Mock Object Management:**
+
+    SDLApplication creates and owns
+    mock Object instances:
+
+    - 'Z' key → spawn pyramid Object
+    - 'V' key → spawn cube Object
+    - Random position, orientation, color
+
+    Each frame:
+    1. Call gpuManager_->updateObjects()
+    2. GPUManager reads mockObjects_
+    3. Builds instance data from Objects
+    4. Uploads to GPU
+
+    **Future:** Replace with engine.getObjects()
+    when simulation integration is complete.
+end note
+
+note as ShaderChanges
+    **Shader Modifications Required:**
+
+    **Vertex Shader:**
+    - Read modelMatrix from instance buffer
+    - Apply: MVP = projection * view * model * vertex
+    - Read geometryIndex (for future use)
+
+    **Fragment Shader:**
+    - No changes required (already uses instance color)
+
+    **Future Enhancements:**
+    - Per-geometry materials via geometryIndex
+    - Texture support via geometry lookup
+end note
+
+@enduml

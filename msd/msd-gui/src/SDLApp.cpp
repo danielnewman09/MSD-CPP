@@ -1,9 +1,14 @@
+// Ticket: 0001_link-gui-sim-object
+// Design: docs/designs/generalize-gui-object-rendering/design.md
+
 #include "msd-gui/src/SDLApp.hpp"
 #include "msd-gui/src/SDLUtils.hpp"
+#include "msd-assets/src/GeometryFactory.hpp"
 
 #include <cstdlib>
 #include <format>
 #include <iostream>
+#include <random>
 #include <vector>
 
 namespace msd_gui
@@ -22,6 +27,28 @@ SDLApplication::SDLApplication(const std::string& dbPath)
 
   gpuManager_ = std::make_unique<GPUManager>(*window_, basePath_);
 
+  // Get assets from the registry (they should be loaded by the engine from the database)
+  auto& registry = engine_.getAssetRegistry();
+
+  auto pyramidAsset = registry.getAsset("pyramid");
+  if (pyramidAsset)
+  {
+    mockAssets_.push_back(pyramidAsset->get());
+  }
+  else
+  {
+    SDL_Log("WARNING: Pyramid asset not found in registry");
+  }
+
+  auto cubeAsset = registry.getAsset("cube");
+  if (cubeAsset)
+  {
+    mockAssets_.push_back(cubeAsset->get());
+  }
+  else
+  {
+    SDL_Log("WARNING: Cube asset not found in registry");
+  }
 
   status_ = Status::Running;
 }
@@ -34,6 +61,7 @@ int SDLApplication::runApp()
   while (status_ == Status::Running)
   {
     handleEvents();
+    gpuManager_->updateObjects(mockObjects_);
     gpuManager_->render();
   }
 
@@ -103,26 +131,26 @@ void SDLApplication::handleEvents()
             newOrigin -= cameraFrame.localToGlobalRelative(unitY_);
             break;
           case SDLK_Z:
-            // Add a new random pyramid instance
-            gpuManager_->addInstance(
-              static_cast<float>(rand() % 10 - 5),    // Random X: -5 to 5
-              static_cast<float>(rand() % 10 - 5),    // Random Y: -5 to 5
-              static_cast<float>(rand() % 10 - 5),    // Random Z: -5 to 5
-              static_cast<float>(rand()) / RAND_MAX,  // Random R
-              static_cast<float>(rand()) / RAND_MAX,  // Random G
-              static_cast<float>(rand()) / RAND_MAX   // Random B
-            );
+            // Spawn a random pyramid
+            spawnRandomObject("pyramid");
+            break;
+          case SDLK_V:
+            // Spawn a random cube
+            spawnRandomObject("cube");
             break;
           case SDLK_X:
-            // Remove the last instance (if any exist)
-            if (gpuManager_->getInstanceCount() > 0)
+            // Remove the last object (if any exist)
+            if (!mockObjects_.empty())
             {
-              gpuManager_->removeInstance(gpuManager_->getInstanceCount() - 1);
+              mockObjects_.pop_back();
+              SDL_Log("Removed last object. Remaining objects: %zu",
+                      mockObjects_.size());
             }
             break;
           case SDLK_C:
-            // Clear all instances
-            gpuManager_->clearInstances();
+            // Clear all objects
+            mockObjects_.clear();
+            SDL_Log("Cleared all objects");
             break;
           default:
             break;
@@ -138,6 +166,68 @@ void SDLApplication::handleEvents()
     auto logMsg = std::format("Camera at {:.2f}", cameraFrame.getOrigin());
     SDL_Log("%s", logMsg.c_str());
   }
+}
+
+void SDLApplication::spawnRandomObject(const std::string& geometryType)
+{
+  // Use random device for better randomness than rand()
+  static std::random_device rd;
+  static std::mt19937 gen{rd()};
+  static std::uniform_real_distribution<float> posDist{-5.0f, 5.0f};
+  static std::uniform_real_distribution<float> angleDist{-3.14159f, 3.14159f};
+  static std::uniform_real_distribution<float> colorDist{0.0f, 1.0f};
+
+  // Find the asset
+  const msd_assets::Asset* asset = nullptr;
+  for (const auto& a : mockAssets_)
+  {
+    if (a.getName() == geometryType)
+    {
+      asset = &a;
+      break;
+    }
+  }
+
+  if (!asset)
+  {
+    SDL_Log("ERROR: Asset '%s' not found in mockAssets_", geometryType.c_str());
+    return;
+  }
+
+  // Create random transform
+  msd_sim::Coordinate randomPos{
+    posDist(gen), posDist(gen), posDist(gen)};
+
+  msd_sim::EulerAngles randomOrientation{
+    msd_sim::Angle::fromRadians(angleDist(gen)),  // pitch
+    msd_sim::Angle::fromRadians(angleDist(gen)),  // roll
+    msd_sim::Angle::fromRadians(angleDist(gen))   // yaw
+  };
+
+  msd_sim::ReferenceFrame randomFrame{randomPos, randomOrientation};
+
+  // Random color
+  float r = colorDist(gen);
+  float g = colorDist(gen);
+  float b = colorDist(gen);
+
+  // Create graphical object
+  mockObjects_.push_back(
+    msd_sim::Object::createGraphical(*asset, randomFrame, r, g, b));
+
+  SDL_Log("Spawned %s at (%.2f, %.2f, %.2f) with orientation (%.2f, %.2f, "
+          "%.2f) and color (%.2f, %.2f, %.2f). Total objects: %zu",
+          geometryType.c_str(),
+          randomPos.x(),
+          randomPos.y(),
+          randomPos.z(),
+          randomOrientation.pitch.toDeg(),
+          randomOrientation.roll.toDeg(),
+          randomOrientation.yaw.toDeg(),
+          r,
+          g,
+          b,
+          mockObjects_.size());
 }
 
 

@@ -65,4 +65,9 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/Content
 
 # Install headers using the variable
 install(FILES ${HEADER_FILES}
-        DESTINATION include/${MSD_SIM_NAME}) 
+        DESTINATION include/${MSD_SIM_NAME})
+
+# Testing
+if(BUILD_TESTING)
+  add_subdirectory(test)
+endif()

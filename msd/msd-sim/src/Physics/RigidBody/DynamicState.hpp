@@ -49,7 +49,9 @@ public:
    *
    * Initializes all velocities and accelerations to zero.
    */
-  DynamicState();
+  DynamicState()
+  {  // placeholder do nothing
+  }
 
   /**
    * @brief Constructor with specified velocities.
@@ -58,55 +60,82 @@ public:
    * @param angularVelocity Angular velocity vector [rad/s]
    */
   DynamicState(const Coordinate& linearVelocity,
-               const Eigen::Vector3d& angularVelocity);
+               const Eigen::Vector3d& angularVelocity)
+  {  // placeholder do nothing
+  }
 
   /**
    * @brief Get the linear velocity.
    * @return Linear velocity in world frame [m/s]
    */
-  const Coordinate& getLinearVelocity() const;
+  const Coordinate& getLinearVelocity() const
+  {
+    // placeholder do nothing
+    return linearVelocity_;
+  }
 
   /**
    * @brief Get the angular velocity.
    * @return Angular velocity vector [rad/s]
    */
-  const Eigen::Vector3d& getAngularVelocity() const;
+  const Eigen::Vector3d& getAngularVelocity() const
+  {
+    return angularVelocity_;  // placeholder do nothing
+  }
 
   /**
    * @brief Get the linear acceleration.
    * @return Linear acceleration in world frame [m/s²]
    */
-  const Coordinate& getLinearAcceleration() const;
+  const Coordinate& getLinearAcceleration() const
+  {
+    return linearAcceleration_;
+  }
 
   /**
    * @brief Get the angular acceleration.
    * @return Angular acceleration vector [rad/s²]
    */
-  const Eigen::Vector3d& getAngularAcceleration() const;
+  const Eigen::Vector3d& getAngularAcceleration() const
+  {
+    return angularAcceleration_;
+  }
 
   /**
    * @brief Set the linear velocity.
    * @param velocity New linear velocity [m/s]
    */
-  void setLinearVelocity(const Coordinate& velocity);
+  void setLinearVelocity(const Coordinate& velocity)
+  {
+    // placeholder do nothing
+  }
 
   /**
    * @brief Set the angular velocity.
    * @param velocity New angular velocity [rad/s]
    */
-  void setAngularVelocity(const Eigen::Vector3d& velocity);
+  void setAngularVelocity(const Eigen::Vector3d& velocity)
+  {
+    // placeholder do nothing
+  }
 
   /**
    * @brief Set the linear acceleration.
    * @param acceleration New linear acceleration [m/s²]
    */
-  void setLinearAcceleration(const Coordinate& acceleration);
+  void setLinearAcceleration(const Coordinate& acceleration)
+  {
+    // placeholder do nothing
+  }
 
   /**
    * @brief Set the angular acceleration.
    * @param acceleration New angular acceleration [rad/s²]
    */
-  void setAngularAcceleration(const Eigen::Vector3d& acceleration);
+  void setAngularAcceleration(const Eigen::Vector3d& acceleration)
+  {
+    // placeholder do nothing
+  }
 
   /**
    * @brief Get the kinetic energy of linear motion.
@@ -116,7 +145,10 @@ public:
    * @param mass Mass of the body [kg]
    * @return Linear kinetic energy [J]
    */
-  double getLinearKineticEnergy(double mass) const;
+  double getLinearKineticEnergy(double mass) const
+  {
+    return 0.;
+  }
 
   /**
    * @brief Get the kinetic energy of rotational motion.
@@ -126,7 +158,10 @@ public:
    * @param inertiaTensor Inertia tensor in body frame [kg⋅m²]
    * @return Rotational kinetic energy [J]
    */
-  double getRotationalKineticEnergy(const Eigen::Matrix3d& inertiaTensor) const;
+  double getRotationalKineticEnergy(const Eigen::Matrix3d& inertiaTensor) const
+  {
+    return 0.;
+  }
 
   /**
    * @brief Get the total kinetic energy.
@@ -138,19 +173,28 @@ public:
    * @return Total kinetic energy [J]
    */
   double getTotalKineticEnergy(double mass,
-                               const Eigen::Matrix3d& inertiaTensor) const;
+                               const Eigen::Matrix3d& inertiaTensor) const
+  {
+    return 0.;
+  }
 
   /**
    * @brief Get the magnitude of linear velocity.
    * @return Speed [m/s]
    */
-  double getSpeed() const;
+  double getSpeed() const
+  {
+    return 0.;
+  }
 
   /**
    * @brief Get the magnitude of angular velocity.
    * @return Angular speed [rad/s]
    */
-  double getAngularSpeed() const;
+  double getAngularSpeed() const
+  {
+    return 0.;
+  }
 
   /**
    * @brief Check if the body is at rest.
@@ -159,16 +203,24 @@ public:
    * are below the specified thresholds.
    *
    * @param linearThreshold Linear velocity threshold [m/s] (default: 1e-6)
-   * @param angularThreshold Angular velocity threshold [rad/s] (default: 1e-6)
+   * @param angularThreshold Angular velocity threshold [rad/s] (default:
+   * 1e-6)
    * @return true if body is at rest, false otherwise
    */
   bool isAtRest(double linearThreshold = 1e-6,
-                double angularThreshold = 1e-6) const;
+                double angularThreshold = 1e-6) const
+  {
+    // placeholder do nothing
+    return true;
+  }
 
   /**
    * @brief Reset all velocities and accelerations to zero.
    */
-  void reset();
+  void reset()
+  {
+    // placeholder do nothing
+  }
 
   /**
    * @brief Apply a linear impulse to change velocity.
@@ -178,7 +230,10 @@ public:
    * @param impulse Linear impulse vector [N⋅s]
    * @param mass Mass of the body [kg]
    */
-  void applyLinearImpulse(const Coordinate& impulse, double mass);
+  void applyLinearImpulse(const Coordinate& impulse, double mass)
+  {
+    // placeholder do nothing
+  }
 
   /**
    * @brief Apply an angular impulse to change angular velocity.
@@ -189,18 +244,24 @@ public:
    * @param inverseInertia Inverse inertia tensor [1/(kg⋅m²)]
    */
   void applyAngularImpulse(const Eigen::Vector3d& impulse,
-                          const Eigen::Matrix3d& inverseInertia);
+                           const Eigen::Matrix3d& inverseInertia)
+  {
+    // placeholder do nothing
+  }
 
   /**
    * @brief Create a state at rest (zero velocities and accelerations).
    * @return DynamicState with all quantities zero
    */
-  static DynamicState createAtRest();
+  static DynamicState createAtRest()
+  {
+    return DynamicState{};
+  }
 
 private:
-  Coordinate linearVelocity_;         // Linear velocity [m/s]
-  Eigen::Vector3d angularVelocity_;   // Angular velocity [rad/s]
-  Coordinate linearAcceleration_;     // Linear acceleration [m/s²]
+  Coordinate linearVelocity_;            // Linear velocity [m/s]
+  Eigen::Vector3d angularVelocity_;      // Angular velocity [rad/s]
+  Coordinate linearAcceleration_;        // Linear acceleration [m/s²]
   Eigen::Vector3d angularAcceleration_;  // Angular acceleration [rad/s²]
 };
 

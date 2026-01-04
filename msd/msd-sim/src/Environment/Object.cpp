@@ -32,6 +32,12 @@ Object Object::createGraphical(const msd_assets::Asset& asset,
                                float g,
                                float b)
 {
+  // Verify asset has collision geometry
+  if (!asset.hasVisualGeometry())
+  {
+    throw std::invalid_argument(
+      "Cannot create Visual object: asset lacks visual geometry");
+  }
   return Object(Type::Graphical,
                 std::cref(asset),
                 frame,
@@ -152,9 +158,8 @@ const ConvexHull& Object::getCollisionHull() const
 {
   if (!collisionHull_.has_value())
   {
-    throw std::runtime_error(
-      "Object does not have a collision hull (type: " +
-      std::to_string(static_cast<int>(type_)) + ")");
+    throw std::runtime_error("Object does not have a collision hull (type: " +
+                             std::to_string(static_cast<int>(type_)) + ")");
   }
   return collisionHull_.value();
 }
@@ -163,9 +168,8 @@ ConvexHull& Object::getCollisionHull()
 {
   if (!collisionHull_.has_value())
   {
-    throw std::runtime_error(
-      "Object does not have a collision hull (type: " +
-      std::to_string(static_cast<int>(type_)) + ")");
+    throw std::runtime_error("Object does not have a collision hull (type: " +
+                             std::to_string(static_cast<int>(type_)) + ")");
   }
   return collisionHull_.value();
 }
@@ -174,8 +178,9 @@ const PhysicsComponent& Object::getPhysics() const
 {
   if (!physics_.has_value())
   {
-    throw std::runtime_error("Object does not have a physics component (type: " +
-                             std::to_string(static_cast<int>(type_)) + ")");
+    throw std::runtime_error(
+      "Object does not have a physics component (type: " +
+      std::to_string(static_cast<int>(type_)) + ")");
   }
   return physics_.value();
 }
@@ -184,8 +189,9 @@ PhysicsComponent& Object::getPhysics()
 {
   if (!physics_.has_value())
   {
-    throw std::runtime_error("Object does not have a physics component (type: " +
-                             std::to_string(static_cast<int>(type_)) + ")");
+    throw std::runtime_error(
+      "Object does not have a physics component (type: " +
+      std::to_string(static_cast<int>(type_)) + ")");
   }
   return physics_.value();
 }

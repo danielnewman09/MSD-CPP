@@ -1,14 +1,21 @@
+// Ticket: 0001_link-gui-sim-object
+// Design: docs/designs/generalize-gui-object-rendering/design.md
+
 #ifndef SDL_GPU_MANAGER_HPP
 #define SDL_GPU_MANAGER_HPP
 
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
+#include <Eigen/Dense>
 #include <msd-assets/src/Geometry.hpp>
 #include <msd-gui/src/Camera3D.hpp>
 #include <msd-sim/src/Environment/Coordinate.hpp>
+#include <msd-sim/src/Environment/Object.hpp>
 #include <msd-sim/src/Environment/ReferenceFrame.hpp>
 
 namespace msd_gui
@@ -16,11 +23,30 @@ namespace msd_gui
 
 class SDLException;  // Forward declaration
 
-// Per-instance data for instanced rendering
+/**
+ * @brief Geometry registry entry tracking a geometry type's location within
+ * the unified vertex buffer
+ * @ticket 0001_link-gui-sim-object
+ */
+struct GeometryInfo
+{
+  uint32_t baseVertex{0};   // Starting vertex index in unified buffer
+  uint32_t vertexCount{0};  // Number of vertices for this geometry
+};
+
+/**
+ * @brief Per-instance data for instanced rendering
+ * @ticket 0001_link-gui-sim-object
+ *
+ * Stores a full 4x4 model matrix (translation + rotation), color, and geometry
+ * index for each rendered instance. Size: 84 bytes (64 + 12 + 4 + 4)
+ */
 struct InstanceData
 {
-  float position[3];  // World position offset for this instance
-  float color[3];     // Color for this instance
+  float modelMatrix[16];   // 4x4 transform matrix (translation + rotation)
+  float color[3];          // RGB color
+  uint32_t geometryIndex;  // Index into geometryRegistry_
+  uint32_t padding[4] = {0, 0, 0, 0};  // Alignment padding (16-byte boundary)
 };
 
 class GPUManager
@@ -41,25 +67,14 @@ public:
 
   Camera3D& getCamera();
 
-  // Instance management methods
-  void addInstance(float posX,
-                   float posY,
-                   float posZ,
-                   float r,
-                   float g,
-                   float b);
-  void removeInstance(size_t index);
-  void updateInstance(size_t index,
-                      float posX,
-                      float posY,
-                      float posZ,
-                      float r,
-                      float g,
-                      float b);
-  void clearInstances();
-  size_t getInstanceCount() const
+  // Object management methods
+  size_t addObject(const msd_sim::Object& object);
+  void removeObject(size_t index);
+  void updateObjects(const std::vector<msd_sim::Object>& objects);
+  void clearObjects();
+  size_t getObjectCount() const
   {
-    return instances_.size();
+    return objectIndices_.size();
   }
 
 private:
@@ -101,9 +116,12 @@ private:
   UniqueBuffer uniformBuffer_;
 
   std::vector<InstanceData> instances_;  // CPU-side instance data
-  size_t pyramidVertexCount_{0};  // Number of vertices in base pyramid mesh
-  bool instanceBufferNeedsUpdate_{
-    false};  // Flag to track if instance buffer needs upload
+  std::vector<size_t> objectIndices_;    // Indices into external object vector
+
+  // Geometry registry for unified vertex buffer
+  std::vector<GeometryInfo> geometryRegistry_;
+  std::unordered_map<std::string, uint32_t> geometryNameToIndex_;
+  size_t totalVertexCount_{0};
 
   std::unique_ptr<SDL_GPUDevice, SDLDeviceDeleter> device_;
   std::string basePath_;
@@ -111,6 +129,14 @@ private:
   Camera3D camera_;
 
   void uploadInstanceBuffer();
+
+  // Geometry registration system
+  uint32_t registerGeometry(const std::string& name,
+                            const std::vector<msd_assets::Vertex>& vertices);
+
+  // Object → InstanceData conversion
+  InstanceData buildInstanceData(const msd_sim::Object& object);
+  Eigen::Matrix4f createModelMatrix(const msd_sim::ReferenceFrame& transform);
 };
 
 }  // namespace msd_gui
