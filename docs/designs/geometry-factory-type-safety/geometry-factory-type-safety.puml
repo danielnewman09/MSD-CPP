@@ -1,0 +1,217 @@
+@startuml
+' =============================================================================
+' Feature: Geometry Factory Type Safety Fix
+' Description: Simplify factory to leverage existing BaseGeometry infrastructure
+' Ticket: 0003_geometry-factory-type-safety
+' Date: 2026-01-04
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+' -----------------------------------------------------------------------------
+' Component Focus
+' -----------------------------------------------------------------------------
+package "msd_assets" {
+
+    class GeometryFactory <<modified>> {
+        ' Public factory methods (unchanged API)
+        {static} +createCube(size: double): MeshRecord
+        {static} +createPyramid(baseSize: double, height: double): MeshRecord
+        {static} +createCubeWireframe(size: double): MeshRecord
+
+        ' MODIFIED: Now uses VisualGeometry internally
+        {static} -verticesToMeshRecord(vertices: vector<Vector3d>): MeshRecord
+
+        ' Unchanged
+        {static} -getCubeCorners(size: double): array<Vector3d, 8>
+    }
+
+    class "BaseGeometry<T>" {
+        ' Constructors
+        +BaseGeometry(rawVertices: vector<Vector3d>&, objectId: uint32_t)
+        +BaseGeometry(record: MeshRecord&, objectId: uint32_t)
+
+        ' Accessors
+        +getVertexCount(): size_t
+        +getVertices(): vector<T>&
+
+        ' Serialization
+        +serializeVertices(): vector<uint8_t>
+        +populateMeshRecord(): MeshRecord
+
+        ' Private members
+        -objectId_: uint32_t
+        -cachedVertices_: vector<T>
+    }
+
+    class VisualGeometry {
+        <<type alias>>
+        BaseGeometry<Vertex>
+    }
+
+    class CollisionGeometry {
+        <<type alias>>
+        BaseGeometry<Eigen::Vector3d>
+    }
+
+    class Vertex {
+        +position: float[3]
+        +color: float[3]
+        +normal: float[3]
+    }
+
+    ' Free function for normal computation
+    class "<<function>>\ncomputeVertexData" as computeVertexData {
+        (vertices: vector<Vector3d>&): vector<Vertex>
+    }
+}
+
+package "msd_transfer" {
+    class MeshRecord {
+        +vertex_data: vector<uint8_t>
+        +vertex_count: uint32_t
+        +id: int64_t
+    }
+}
+
+package "Eigen" {
+    class Vector3d {
+        +x(), y(), z(): double
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Factory now uses VisualGeometry internally
+GeometryFactory ..> VisualGeometry : uses internally
+GeometryFactory ..> MeshRecord : creates
+GeometryFactory ..> Vector3d : uses
+
+' BaseGeometry relationships
+"BaseGeometry<T>" ..> MeshRecord : constructs from /\npopulates to
+VisualGeometry --|> "BaseGeometry<T>" : specialization\n<Vertex>
+CollisionGeometry --|> "BaseGeometry<T>" : specialization\n<Vector3d>
+
+' VisualGeometry uses computeVertexData
+VisualGeometry ..> computeVertexData : uses in constructor
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of GeometryFactory
+    **Simplified Fix:**
+
+    verticesToMeshRecord() now uses:
+    1. VisualGeometry constructor
+       (calls computeVertexData internally)
+    2. VisualGeometry::populateMeshRecord()
+       (correctly serializes Vertex structs)
+
+    **Before (duplicated logic):**
+    <code>
+    Vertex* data = reinterpret_cast<Vertex*>(...);
+    for (i = 0; i < count; i += 3) {
+      // Compute normals manually
+      // Populate Vertex structs
+    }
+    </code>
+
+    **After (leverages existing code):**
+    <code>
+    VisualGeometry geom{vertices, 0};
+    return geom.populateMeshRecord();
+    </code>
+
+    **Benefits:**
+    - No API changes
+    - Removes code duplication
+    - Single source of truth for
+      normal computation
+end note
+
+note bottom of "BaseGeometry<T>"
+    **Already Fixed:**
+
+    Constructor from MeshRecord correctly
+    casts to T* (not hardcoded Vector3d*):
+
+    <code>
+    const T* vertexBegin =
+      reinterpret_cast<const T*>(
+        record.vertex_data.data());
+    </code>
+
+    **Raw Vertex Constructor:**
+
+    Handles type conversion:
+    - T=Vertex: calls computeVertexData()
+    - T=Vector3d: stores directly
+
+    **populateMeshRecord():**
+
+    Correctly serializes cachedVertices_
+    as type T (Vertex or Vector3d)
+end note
+
+note as UsagePattern
+    **Usage Patterns:**
+
+    **Visual Geometry (for rendering):**
+    <code>
+    auto mesh = GeometryFactory::createCube(1.0);
+    VisualGeometry visual{mesh, objectId};
+    // 36 bytes per vertex (position+color+normal)
+    </code>
+
+    **Collision Geometry (for physics):**
+    <code>
+    vector<Vector3d> verts = getCubeVertices(1.0);
+    CollisionGeometry collision{verts, objectId};
+    // 24 bytes per vertex (position only)
+    auto record = collision.populateMeshRecord();
+    </code>
+
+    **Key Insight:**
+    Factory is for visual geometry.
+    Collision geometry constructs directly
+    from raw vertex coordinates.
+end note
+
+note as BlobFormat
+    **BLOB Format Per Geometry Type:**
+
+    **VisualGeometry (Vertex):**
+    [0..35]:   Vertex 0
+      [0..11]:   position (3 floats)
+      [12..23]:  color (3 floats)
+      [24..35]:  normal (3 floats)
+    [36..71]:  Vertex 1
+    ...
+    Total: vertex_count * 36 bytes
+
+    **CollisionGeometry (Vector3d):**
+    [0..23]:   Vector3d 0
+      [0..7]:    x (double)
+      [8..15]:   y (double)
+      [16..23]:  z (double)
+    [24..47]:  Vector3d 1
+    ...
+    Total: vertex_count * 24 bytes
+end note
+
+@enduml
