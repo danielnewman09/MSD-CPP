@@ -56,7 +56,7 @@ if(ENABLE_COVERAGE)
 
       # Filter to only include project files (exclude system headers, test files, conan cache, and build artifacts)
       COMMAND ${LCOV_PATH} --extract coverage.info '${CMAKE_SOURCE_DIR}/*' --output-file coverage_project.info --ignore-errors inconsistent,unsupported,format
-      COMMAND ${LCOV_PATH} --remove coverage_project.info '*/test/*' '*/build/*' --output-file coverage_filtered.info --ignore-errors inconsistent,unsupported,format
+      COMMAND ${LCOV_PATH} --remove coverage_project.info '*/test/*' '*/build/*' --output-file coverage_filtered.info --ignore-errors inconsistent,unsupported,format,unused
 
       # Generate HTML report
       COMMAND ${GENHTML_PATH} coverage_filtered.info --output-directory ${CMAKE_BINARY_DIR}/coverage/msd-assets --ignore-errors inconsistent,unsupported,format,corrupt,category

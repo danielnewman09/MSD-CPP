@@ -38,6 +38,39 @@ std::vector<Coordinate> createTetrahedronPoints()
           Coordinate(1.0f, 0.0f, 0.0f)};
 }
 
+// Create pyramid vertices (5 unique points: 4 base corners + 1 apex)
+// Matches GeometryFactory::createPyramid layout
+std::vector<Eigen::Vector3d> createPyramidVertices(double baseSize, double height)
+{
+  double half = baseSize / 2.0;
+  double halfHeight = height / 2.0;
+
+  // Return only the 5 unique vertices (not triangulated)
+  return {
+    Eigen::Vector3d{-half, -halfHeight, -half},  // base front-left
+    Eigen::Vector3d{half, -halfHeight, -half},   // base front-right
+    Eigen::Vector3d{half, -halfHeight, half},    // base back-right
+    Eigen::Vector3d{-half, -halfHeight, half},   // base back-left
+    Eigen::Vector3d{0.0, halfHeight, 0.0}        // apex
+  };
+}
+
+// Create cube vertices (8 unique corner points)
+std::vector<Eigen::Vector3d> createCubeVertices(double size)
+{
+  double half = size / 2.0;
+  return {
+    Eigen::Vector3d{-half, -half, -half},
+    Eigen::Vector3d{half, -half, -half},
+    Eigen::Vector3d{half, half, -half},
+    Eigen::Vector3d{-half, half, -half},
+    Eigen::Vector3d{-half, -half, half},
+    Eigen::Vector3d{half, -half, half},
+    Eigen::Vector3d{half, half, half},
+    Eigen::Vector3d{-half, half, half}
+  };
+}
+
 // Create points with some interior points (should be removed by hull)
 std::vector<Coordinate> createPointsWithInterior()
 {
@@ -111,8 +144,11 @@ TEST(ConvexHullTest, FromGeometry)
 
 TEST(ConvexHullTest, FromGeometryPyramid)
 {
-  auto record = msd_assets::GeometryFactory::createPyramid(2.0, 3.0);
-  msd_assets::CollisionGeometry geometry{record};
+  // Ticket: 0003_geometry-factory-type-safety
+  // CollisionGeometry should be constructed from raw vertices, not factory MeshRecord
+  // (factory produces VisualGeometry blobs with Vertex structs)
+  auto vertices = createPyramidVertices(2.0, 3.0);
+  msd_assets::CollisionGeometry geometry{vertices};
   ConvexHull hull{geometry};
 
   EXPECT_TRUE(hull.isValid());
@@ -511,8 +547,10 @@ TEST(ConvexHullTest, HandlesDuplicatePoints)
 
 TEST(ConvexHullTest, WorksWithGeometryFactoryCube)
 {
-  auto record = msd_assets::GeometryFactory::createCube(2.0);
-  msd_assets::CollisionGeometry geometry{record};
+  // Ticket: 0003_geometry-factory-type-safety
+  // CollisionGeometry should be constructed from raw vertices, not factory MeshRecord
+  auto vertices = createCubeVertices(2.0);
+  msd_assets::CollisionGeometry geometry{vertices};
   ConvexHull hull(geometry.getVertices());
 
   EXPECT_TRUE(hull.isValid());
@@ -522,8 +560,10 @@ TEST(ConvexHullTest, WorksWithGeometryFactoryCube)
 
 TEST(ConvexHullTest, WorksWithGeometryFactoryPyramid)
 {
-  auto record = msd_assets::GeometryFactory::createPyramid(2.0, 3.0);
-  msd_assets::CollisionGeometry geometry{record};
+  // Ticket: 0003_geometry-factory-type-safety
+  // CollisionGeometry should be constructed from raw vertices, not factory MeshRecord
+  auto vertices = createPyramidVertices(2.0, 3.0);
+  msd_assets::CollisionGeometry geometry{vertices};
   ConvexHull hull(geometry.getVertices());
 
   EXPECT_TRUE(hull.isValid());

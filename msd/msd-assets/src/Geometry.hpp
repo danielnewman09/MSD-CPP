@@ -53,13 +53,40 @@ class BaseGeometry
 {
 public:
   /**
-   * @brief Constructor with raw vertex data
+   * @brief Constructor from raw coordinate data
    * @param rawVertices Vector of 3D coordinates (Eigen::Vector3d)
    * @param objectId Unique identifier for the geometry
    *
    * For VisualGeometry (T=Vertex): Computes normals and converts to Vertex
    * format. For CollisionGeometry (T=Eigen::Vector3d): Stores raw vertices
    * directly.
+   */
+  explicit BaseGeometry(const std::vector<Eigen::Vector3d>& rawVertices,
+                        uint32_t objectId = 0)
+    : objectId_{objectId}
+  {
+    if constexpr (std::is_same_v<T, Vertex>)
+    {
+      // VisualGeometry: compute normals and convert to Vertex format
+      cachedVertices_ = computeVertexData(rawVertices);
+    }
+    else
+    {
+      // CollisionGeometry: direct assignment of raw coordinates
+      cachedVertices_ = rawVertices;
+    }
+  }
+
+  /**
+   * @brief Constructor from MeshRecord blob
+   * @param record MeshRecord containing serialized vertex data
+   * @param objectId Unique identifier for the geometry
+   *
+   * Deserializes vertex data from the MeshRecord's vertex_data blob.
+   * The blob must contain data in the correct format for type T:
+   * - For VisualGeometry (T=Vertex): blob contains Vertex structs (36 bytes)
+   * - For CollisionGeometry (T=Eigen::Vector3d): blob contains Vector3d (24
+   * bytes)
    */
   explicit BaseGeometry(const msd_transfer::MeshRecord& record,
                         uint32_t objectId = 0)
@@ -70,28 +97,15 @@ public:
         record.vertex_data.size() == 0)
     {
       throw std::runtime_error(
-        "Invalid vertex_data BLOB size: not a multiple of "
-        "Vertex size (36 bytes)");
+        "Invalid vertex_data BLOB size: not a multiple of expected type size");
     }
 
-    // Deserialize cached vertex data using STL range constructor
+    // Deserialize cached vertex data directly as type T
     const size_t vertexCount = record.vertex_data.size() / sizeof(T);
-    const Eigen::Vector3d* vertexBegin =
-      reinterpret_cast<const Eigen::Vector3d*>(record.vertex_data.data());
-    const Eigen::Vector3d* vertexEnd = vertexBegin + vertexCount;
+    const T* vertexBegin = reinterpret_cast<const T*>(record.vertex_data.data());
+    const T* vertexEnd = vertexBegin + vertexCount;
 
-    std::vector<Eigen::Vector3d> vertices(vertexBegin, vertexEnd);
-
-    if constexpr (std::is_same_v<T, Vertex>)
-    {
-      // VisualGeometry: compute normals and convert to Vertex format
-      cachedVertices_ = computeVertexData(vertices);
-    }
-    else
-    {
-      // CollisionGeometry: direct assignment of raw coordinates
-      cachedVertices_ = std::move(vertices);
-    }
+    cachedVertices_ = std::vector<T>(vertexBegin, vertexEnd);
   }
 
   /**

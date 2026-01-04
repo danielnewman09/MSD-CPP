@@ -30,61 +30,16 @@ std::array<Eigen::Vector3d, 8> GeometryFactory::getCubeCorners(double size)
 msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
   const std::vector<Eigen::Vector3d>& vertices)
 {
-  msd_transfer::MeshRecord record;
+  // Ticket: 0003_geometry-factory-type-safety
+  // Create VisualGeometry from raw coordinates
+  // - Computes normals via computeVertexData()
+  // - Stores result in cachedVertices_ as vector<Vertex>
+  VisualGeometry geometry{vertices, 0};
 
-  // Calculate vertex count and triangle count
-  const size_t vertexCount = vertices.size();
-  record.vertex_count = static_cast<uint32_t>(vertexCount);
-
-  // Allocate vertex_data BLOB
-  const size_t blobSize = vertexCount * sizeof(Vertex);
-  record.vertex_data.resize(blobSize);
-
-  // Get pointer to BLOB data for writing
-  Vertex* vertexData = reinterpret_cast<Vertex*>(record.vertex_data.data());
-
-  // Process triangles and compute normals
-  for (size_t i = 0; i + 2 < vertexCount; i += 3)
-  {
-    const auto& v0 = vertices[i];
-    const auto& v1 = vertices[i + 1];
-    const auto& v2 = vertices[i + 2];
-
-    // Calculate two edge vectors
-    auto edge1 = v1 - v0;
-    auto edge2 = v2 - v0;
-
-    // Calculate normal using cross product and normalize
-    auto normal = edge1.cross(edge2).normalized();
-
-    // Convert to float and populate vertices with normal and default white
-    // color
-    vertexData[i] = {{static_cast<float>(v0.x()),
-                      static_cast<float>(v0.y()),
-                      static_cast<float>(v0.z())},
-                     {1.0f, 1.0f, 1.0f},  // Default white color
-                     {static_cast<float>(normal.x()),
-                      static_cast<float>(normal.y()),
-                      static_cast<float>(normal.z())}};
-
-    vertexData[i + 1] = {{static_cast<float>(v1.x()),
-                          static_cast<float>(v1.y()),
-                          static_cast<float>(v1.z())},
-                         {1.0f, 1.0f, 1.0f},  // Default white color
-                         {static_cast<float>(normal.x()),
-                          static_cast<float>(normal.y()),
-                          static_cast<float>(normal.z())}};
-
-    vertexData[i + 2] = {{static_cast<float>(v2.x()),
-                          static_cast<float>(v2.y()),
-                          static_cast<float>(v2.z())},
-                         {1.0f, 1.0f, 1.0f},  // Default white color
-                         {static_cast<float>(normal.x()),
-                          static_cast<float>(normal.y()),
-                          static_cast<float>(normal.z())}};
-  }
-
-  return record;
+  // Serialize using existing populateMeshRecord()
+  // - Correctly serializes vector<Vertex> to BLOB
+  // - Sets vertex_count appropriately
+  return geometry.populateMeshRecord();
 }
 
 msd_transfer::MeshRecord GeometryFactory::createCube(double size)

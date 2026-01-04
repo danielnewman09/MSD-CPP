@@ -1,5 +1,6 @@
-// Ticket: 0001_link-gui-sim-object
-// Design: docs/designs/generalize-gui-object-rendering/design.md
+// Ticket: 0002_remove_rotation_from_gpu
+// Design: docs/designs/modularize-gpu-shader-system/design.md
+// Previous ticket: 0001_link-gui-sim-object
 
 #ifndef SDL_APP_HPP
 #define SDL_APP_HPP
@@ -12,6 +13,7 @@
 
 #include "msd-assets/src/Asset.hpp"
 #include "msd-gui/src/SDLGPUManager.hpp"
+#include "msd-gui/src/ShaderPolicy.hpp"
 #include "msd-sim/src/Engine.hpp"
 #include "msd-sim/src/Environment/Object.hpp"
 
@@ -61,11 +63,15 @@ private:
   std::string basePath_;
 
   std::unique_ptr<SDL_Window, SDLWindowDeleter> window_;
-  std::unique_ptr<GPUManager> gpuManager_;
+
+  // Use PositionOnlyShaderPolicy as default per design decision
+  using AppGPUManager = GPUManager<FullTransformShaderPolicy>;
+  std::unique_ptr<AppGPUManager> gpuManager_;
 
   // Mock object storage for demonstration
   std::vector<msd_sim::Object> mockObjects_;
-  std::vector<msd_assets::Asset> mockAssets_;  // Own assets for Object references
+  std::vector<msd_assets::Asset>
+    mockAssets_;  // Own assets for Object references
 
   const float moveSpeed_{0.1f};
   const msd_sim::Coordinate unitX_{moveSpeed_, 0, 0};

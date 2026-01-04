@@ -10,6 +10,133 @@
 namespace fs = std::filesystem;
 
 // ============================================================================
+// Helper Functions for Generating Raw Vertices
+// ============================================================================
+// Ticket: 0003_geometry-factory-type-safety
+// These helpers generate raw vertex coordinates for CollisionGeometry.
+// VisualGeometry should use GeometryFactory, which produces Vertex blobs.
+
+std::vector<Eigen::Vector3d> generateCubeVertices(double size)
+{
+  float half = static_cast<float>(size) / 2.0f;
+
+  // Define 8 corners
+  std::array<Eigen::Vector3d, 8> corners = {
+    Eigen::Vector3d{-half, -half, -half},  // 0: FTL
+    Eigen::Vector3d{half, -half, -half},   // 1: FTR
+    Eigen::Vector3d{half, half, -half},    // 2: FBR
+    Eigen::Vector3d{-half, half, -half},   // 3: FBL
+    Eigen::Vector3d{-half, -half, half},   // 4: BTL
+    Eigen::Vector3d{half, -half, half},    // 5: BTR
+    Eigen::Vector3d{half, half, half},     // 6: BBR
+    Eigen::Vector3d{-half, half, half}     // 7: BBL
+  };
+
+  std::vector<Eigen::Vector3d> vertices;
+  vertices.reserve(36);
+
+  // Front face (z = -half)
+  vertices.push_back(corners[0]);
+  vertices.push_back(corners[1]);
+  vertices.push_back(corners[2]);
+  vertices.push_back(corners[0]);
+  vertices.push_back(corners[2]);
+  vertices.push_back(corners[3]);
+
+  // Back face (z = +half)
+  vertices.push_back(corners[5]);
+  vertices.push_back(corners[4]);
+  vertices.push_back(corners[7]);
+  vertices.push_back(corners[5]);
+  vertices.push_back(corners[7]);
+  vertices.push_back(corners[6]);
+
+  // Left face (x = -half)
+  vertices.push_back(corners[4]);
+  vertices.push_back(corners[0]);
+  vertices.push_back(corners[3]);
+  vertices.push_back(corners[4]);
+  vertices.push_back(corners[3]);
+  vertices.push_back(corners[7]);
+
+  // Right face (x = +half)
+  vertices.push_back(corners[1]);
+  vertices.push_back(corners[5]);
+  vertices.push_back(corners[6]);
+  vertices.push_back(corners[1]);
+  vertices.push_back(corners[6]);
+  vertices.push_back(corners[2]);
+
+  // Top face (y = -half)
+  vertices.push_back(corners[4]);
+  vertices.push_back(corners[5]);
+  vertices.push_back(corners[1]);
+  vertices.push_back(corners[4]);
+  vertices.push_back(corners[1]);
+  vertices.push_back(corners[0]);
+
+  // Bottom face (y = +half)
+  vertices.push_back(corners[3]);
+  vertices.push_back(corners[2]);
+  vertices.push_back(corners[6]);
+  vertices.push_back(corners[3]);
+  vertices.push_back(corners[6]);
+  vertices.push_back(corners[7]);
+
+  return vertices;
+}
+
+std::vector<Eigen::Vector3d> generatePyramidVertices(double baseSize,
+                                                      double height)
+{
+  float half = static_cast<float>(baseSize) / 2.0f;
+  float halfHeight = static_cast<float>(height) / 2.0f;
+
+  std::vector<Eigen::Vector3d> vertices;
+  vertices.reserve(18);
+
+  // Base corners (y = -height/2)
+  Eigen::Vector3d base_fl{-half, -halfHeight, -half};
+  Eigen::Vector3d base_fr{half, -halfHeight, -half};
+  Eigen::Vector3d base_br{half, -halfHeight, half};
+  Eigen::Vector3d base_bl{-half, -halfHeight, half};
+
+  // Apex
+  Eigen::Vector3d apex{0.0f, halfHeight, 0.0f};
+
+  // Front face
+  vertices.push_back(base_fl);
+  vertices.push_back(base_fr);
+  vertices.push_back(apex);
+
+  // Right face
+  vertices.push_back(base_fr);
+  vertices.push_back(base_br);
+  vertices.push_back(apex);
+
+  // Back face
+  vertices.push_back(base_br);
+  vertices.push_back(base_bl);
+  vertices.push_back(apex);
+
+  // Left face
+  vertices.push_back(base_bl);
+  vertices.push_back(base_fl);
+  vertices.push_back(apex);
+
+  // Base bottom (2 triangles)
+  vertices.push_back(base_fl);
+  vertices.push_back(base_br);
+  vertices.push_back(base_fr);
+
+  vertices.push_back(base_fl);
+  vertices.push_back(base_bl);
+  vertices.push_back(base_br);
+
+  return vertices;
+}
+
+// ============================================================================
 // Test Fixture for Database Operations
 // ============================================================================
 
@@ -174,17 +301,19 @@ TEST_F(GeometryDatabaseTest, VisualGeometry_RoundTrip_Pyramid)
 
 TEST_F(GeometryDatabaseTest, CollisionGeometry_CreateAndStore_Cube)
 {
-  // Create CollisionMeshRecord directly from factory
-  auto collisionRecord = msd_assets::GeometryFactory::createCube(1.5);
+  // Ticket: 0003_geometry-factory-type-safety
+  // Create CollisionGeometry from raw vertices (not factory)
+  auto cubeVertices = generateCubeVertices(1.5);
+  msd_assets::CollisionGeometry collisionCube{cubeVertices, 1};
+  EXPECT_EQ(collisionCube.getVertexCount(), 36);
 
-  // Verify hull data
+  // Serialize to MeshRecord for database storage
+  auto collisionRecord = collisionCube.populateMeshRecord();
+
+  // Verify record data (Vector3d is 24 bytes each)
   EXPECT_EQ(collisionRecord.vertex_count, 36);
   EXPECT_FALSE(collisionRecord.vertex_data.empty());
-
-
-  // Reconstruct CollisionGeometry from record
-  msd_assets::CollisionGeometry collisionCube{collisionRecord, 1};
-  EXPECT_EQ(collisionCube.getVertexCount(), 36);  // Hull vertices
+  EXPECT_EQ(collisionRecord.vertex_data.size(), 36 * sizeof(Eigen::Vector3d));
 
   // Insert collision mesh into database
   auto& collisionDAO = db_->getDAO<msd_transfer::MeshRecord>();
@@ -205,11 +334,13 @@ TEST_F(GeometryDatabaseTest, CollisionGeometry_CreateAndStore_Cube)
 
 TEST_F(GeometryDatabaseTest, CollisionGeometry_RoundTrip_CompleteData)
 {
-  // Create CollisionMeshRecord directly from factory
-  auto record = msd_assets::GeometryFactory::createPyramid(2.0, 3.0);
+  // Ticket: 0003_geometry-factory-type-safety
+  // Create CollisionGeometry from raw vertices (not factory)
+  auto pyramidVertices = generatePyramidVertices(2.0, 3.0);
+  msd_assets::CollisionGeometry pyramid{pyramidVertices, 1};
 
-  // Reconstruct original geometry from record
-  msd_assets::CollisionGeometry pyramid{record, 1};
+  // Serialize to MeshRecord
+  auto record = pyramid.populateMeshRecord();
 
   auto& collisionDAO = db_->getDAO<msd_transfer::MeshRecord>();
 
@@ -365,10 +496,13 @@ TEST_F(GeometryDatabaseTest, InvalidBlobSize_ThrowsException)
 
 TEST_F(GeometryDatabaseTest, CollisionGeometry_InvalidHullBlob_ThrowsException)
 {
-  // Create a valid CollisionMeshRecord then corrupt it
-  auto record = msd_assets::GeometryFactory::createCube(1.0);
+  // Ticket: 0003_geometry-factory-type-safety
+  // Create a valid CollisionGeometry record then corrupt it
+  auto cubeVertices = generateCubeVertices(1.0);
+  msd_assets::CollisionGeometry cube{cubeVertices, 1};
+  auto record = cube.populateMeshRecord();
 
-  // Corrupt the hull data (not a multiple of 24 bytes)
+  // Corrupt the vertex data (not a multiple of 24 bytes for Vector3d)
   record.vertex_data = std::vector<uint8_t>(10);
 
   // Attempt to deserialize should throw

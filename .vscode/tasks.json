@@ -103,9 +103,8 @@
             "command": "cmake",
             "args": [
                 "--build",
-                "${command:cmake.buildDirectory}",
-                "--target",
-                "coverage-msd-sim"
+                "--preset",
+                "coverage-all"
             ],
             "group": "test",
             "presentation": {
@@ -121,7 +120,7 @@
             "type": "shell",
             "command": "open",
             "args": [
-                "${command:cmake.buildDirectory}/coverage/msd-sim/index.html"
+                "${workspaceFolder}/build/Debug/coverage/msd-sim/index.html"
             ],
             "presentation": {
                 "echo": true,
