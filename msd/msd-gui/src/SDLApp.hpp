@@ -65,12 +65,13 @@ private:
   std::unique_ptr<SDL_Window, SDLWindowDeleter> window_;
 
   // Use PositionOnlyShaderPolicy as default per design decision
-  using AppGPUManager = GPUManager<PositionOnlyShaderPolicy>;
+  using AppGPUManager = GPUManager<FullTransformShaderPolicy>;
   std::unique_ptr<AppGPUManager> gpuManager_;
 
   // Mock object storage for demonstration
   std::vector<msd_sim::Object> mockObjects_;
-  std::vector<msd_assets::Asset> mockAssets_;  // Own assets for Object references
+  std::vector<msd_assets::Asset>
+    mockAssets_;  // Own assets for Object references
 
   const float moveSpeed_{0.1f};
   const msd_sim::Coordinate unitX_{moveSpeed_, 0, 0};
