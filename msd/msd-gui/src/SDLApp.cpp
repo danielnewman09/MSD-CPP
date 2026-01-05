@@ -21,17 +21,25 @@ namespace msd_gui
 {
 
 SDLApplication::SDLApplication(const std::string& dbPath)
-  : engine_{dbPath}, status_{Status::Starting}, basePath_{SDL_GetBasePath()}
+  : engine_{dbPath}, status_{Status::Starting}, basePath_{SDL_GetBasePath() ? SDL_GetBasePath() : "/"}
 {
+  SDL_Log("SDLApplication: Starting initialization");
+  SDL_Log("SDLApplication: dbPath = %s", dbPath.c_str());
+  SDL_Log("SDLApplication: basePath = %s", basePath_.c_str());
+
   window_.reset(
     SDL_CreateWindow("MSD Application", 800, 600, SDL_WINDOW_RESIZABLE));
 
   if (!window_.get())
   {
+    SDL_Log("ERROR: Failed to create SDL window: %s", SDL_GetError());
     throw SDLException("Failed to create SDL window");
   }
+  SDL_Log("SDLApplication: Window created successfully");
 
+  SDL_Log("SDLApplication: Creating GPUManager...");
   gpuManager_ = std::make_unique<AppGPUManager>(*window_, basePath_);
+  SDL_Log("SDLApplication: GPUManager created successfully");
 
   // Get assets from the registry (they should be loaded by the engine from the database)
   auto& registry = engine_.getAssetRegistry();

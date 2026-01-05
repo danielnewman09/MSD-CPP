@@ -12,24 +12,29 @@ UniqueShader loadShader(const std::string& shaderFilename,
                         uint32_t storageBufferCount,
                         uint32_t storageTextureCount)
 {
+  SDL_Log("loadShader: Loading shader '%s' with basePath='%s'", shaderFilename.c_str(), basePath.c_str());
+
   // Auto-detect the shader stage from the file name for convenience
   SDL_GPUShaderStage stage;
   if (SDL_strstr(shaderFilename.c_str(), ".vert"))
   {
     stage = SDL_GPU_SHADERSTAGE_VERTEX;
+    SDL_Log("loadShader: Detected vertex shader stage");
   }
   else if (SDL_strstr(shaderFilename.c_str(), ".frag"))
   {
     stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+    SDL_Log("loadShader: Detected fragment shader stage");
   }
   else
   {
-    SDL_Log("Invalid shader stage!");
+    SDL_Log("loadShader: ERROR - Invalid shader stage!");
     return nullptr;
   }
 
   std::string fullPath;
   SDL_GPUShaderFormat backendFormats = SDL_GetGPUShaderFormats(&device);
+  SDL_Log("loadShader: Backend formats = 0x%x", backendFormats);
   SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_INVALID;
   std::string entrypoint;
 
@@ -42,6 +47,8 @@ UniqueShader loadShader(const std::string& shaderFilename,
     basePath + "Content/Shaders/Compiled/SPIRV/" + shaderFilename + ".spv";
   format = SDL_GPU_SHADERFORMAT_SPIRV;
   entrypoint = "main";
+  SDL_Log("loadShader: Emscripten build - using SPIRV format");
+  SDL_Log("loadShader: Full path = '%s'", fullPath.c_str());
 #else
   if (backendFormats & SDL_GPU_SHADERFORMAT_SPIRV)
   {

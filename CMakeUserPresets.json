@@ -6,7 +6,8 @@
     "include": [
         "build/Emscripten/build/Release/generators/CMakePresets.json",
         "build/Release/generators/CMakePresets.json",
-        "build/Debug/generators/CMakePresets.json"
+        "build/Debug/generators/CMakePresets.json",
+        "build/emscripten/build/Release/generators/CMakePresets.json"
     ],
     "configurePresets": [
         {

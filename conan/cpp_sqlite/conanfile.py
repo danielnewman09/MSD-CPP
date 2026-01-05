@@ -19,18 +19,17 @@ class CppSQLiteRecipe(ConanFile):
 
     # Binary configuration
     settings = "os", "compiler", "build_type", "arch"
-    options = {
-        "shared": [True, False],
-        "fPIC": [True, False],
-    }
-    default_options = {
-        "shared": False,
-        "fPIC": True,
-    }
+    options = {"shared": [True, False], "fPIC": [True, False], "build_testing": [True, False]}
+    default_options = {"shared": False, "fPIC": True, "build_testing": False}
 
     def config_options(self):
         if self.settings.os == "Windows":
             del self.options.fPIC
+
+    def source(self):
+        git = Git(self)
+        git.clone(url="https://github.com/danielnewman09/cpp-sqlite.git", target=".")
+        git.checkout("main")
 
     def configure(self):
         if self.options.shared:
@@ -61,10 +60,6 @@ class CppSQLiteRecipe(ConanFile):
             self.options["boost/*"].without_context = True
             self.options["boost/*"].without_iostreams = True
 
-    def source(self):
-        git = Git(self)
-        git.clone(url="https://github.com/danielnewman09/cpp-sqlite.git", target=".")
-        git.checkout("main")
 
     def generate(self):
         deps = CMakeDeps(self)
@@ -96,6 +91,9 @@ class CppSQLiteRecipe(ConanFile):
         tc.cache_variables["Boost_DIR"] = generators_dir
         tc.cache_variables["fmt_DIR"] = generators_dir  # Required by spdlog
 
+        if self.options.build_testing:
+            tc.variables["BUILD_TESTING"] = "ON"
+
         tc.generate()
 
     def build(self):
@@ -106,19 +104,24 @@ class CppSQLiteRecipe(ConanFile):
     def package(self):
         cmake = CMake(self)
         cmake.install()
-        # Copy source files for debugging support
+
+        # Note: cmake.install() handles all header installation via CMakeLists.txt
+        # Headers are installed to: include/cpp_sqlite/src/cpp_sqlite/*.hpp
+        #                           include/cpp_sqlite/src/utils/*.hpp
+
+        # Copy source files for debugging support (allows stepping into library code)
         copy(self, "*.cpp",
              src=os.path.join(self.source_folder, "cpp_sqlite", "src"),
              dst=os.path.join(self.package_folder, "src"),
              keep_path=True)
 
     def requirements(self):
+        # Regular dependency for the library/app
         self.requires('sqlite3/3.47.0-local')
         self.requires("boost/1.86.0")
         self.requires('spdlog/1.14.1')
-        # Skip tests for Emscripten
-        if self.settings.os != "Emscripten":
-            self.test_requires("gtest/1.14.0")
+        # Test-only dependency
+        self.test_requires("gtest/1.14.0")
 
     def build_requirements(self):
         self.tool_requires("cmake/3.22.6")
@@ -129,7 +132,9 @@ class CppSQLiteRecipe(ConanFile):
     def package_info(self):
         self.cpp_info.libs = ["cpp_sqlite"]
         self.cpp_info.includedirs = ["include"]
-        self.cpp_info.set_property("cmake_file_name", "cpp_sqlite")
-        self.cpp_info.set_property("cmake_target_name", "cpp_sqlite::cpp_sqlite")
+
+        # Set C++ standard requirement
         self.cpp_info.cxxflags = ["-std=c++20"]
+
+        # Propagate dependencies
         self.cpp_info.requires = ["sqlite3::sqlite3", "boost::boost", "spdlog::spdlog"]

@@ -112,6 +112,10 @@ install(FILES sqlite3.h sqlite3ext.h DESTINATION include)
 
     def package_info(self):
         self.cpp_info.libs = ["sqlite3"]
+        # Explicitly set includedirs - required because configure() removes compiler settings
+        # which affects how cmake_layout() computes the package layout
+        self.cpp_info.includedirs = ["include"]
+        self.cpp_info.libdirs = ["lib"]
         self.cpp_info.set_property("cmake_file_name", "SQLite3")
         self.cpp_info.set_property("cmake_target_name", "SQLite3::SQLite3")
 

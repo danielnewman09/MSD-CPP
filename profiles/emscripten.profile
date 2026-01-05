@@ -23,5 +23,13 @@ emsdk/4.0.22
 # Use Unix Makefiles - Ninja may not be available in all environments
 tools.cmake.cmaketoolchain:generator=Unix Makefiles
 # Memory configuration for WebAssembly
-tools.build:exelinkflags=["-sALLOW_MEMORY_GROWTH=1", "-sMAXIMUM_MEMORY=536870912", "-sINITIAL_MEMORY=134217728"]
-tools.build:sharedlinkflags=["-sALLOW_MEMORY_GROWTH=1", "-sMAXIMUM_MEMORY=536870912", "-sINITIAL_MEMORY=134217728"]
+tools.build:exelinkflags=["-sALLOW_MEMORY_GROWTH=1", "-sMAXIMUM_MEMORY=536870912", "-sINITIAL_MEMORY=134217728", "-pthread"]
+tools.build:sharedlinkflags=["-sALLOW_MEMORY_GROWTH=1", "-sMAXIMUM_MEMORY=536870912", "-sINITIAL_MEMORY=134217728", "-pthread"]
+# Enable pthread/atomics for shared memory (required by emdawnwebgpu port)
+tools.build:cflags=["-pthread"]
+tools.build:cxxflags=["-pthread"]
+
+[buildenv]
+# Set environment variables for pthread compilation (picked up by emcc/em++)
+CFLAGS=-pthread
+CXXFLAGS=-pthread

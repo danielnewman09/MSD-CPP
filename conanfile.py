@@ -110,6 +110,10 @@ class msd(ConanFile):
         # Build cpp_sqlite with same build_type as project for debugging
         self.requires("cpp_sqlite/0.1.0")
 
+        # Explicitly require sqlite3 to ensure headers are available
+        # (cpp_sqlite depends on it, but transitive dependency doesn't propagate headers)
+        self.requires("sqlite3/3.47.0-local")
+
         self.requires("boost/1.86.0")
 
         # Platform-conditional SDL dependencies

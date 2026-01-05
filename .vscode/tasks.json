@@ -244,9 +244,10 @@
             "command": [
                 "echo '=== Building Emscripten Conan Dependencies ===';",
                 "conan create conan/emsdk --build=${input:conanBuildPolicy};",
-                "conan create conan/sqlite3 --profile:host profiles/emscripten.profile --build=${input:conanBuildPolicy};",
-                "conan create conan/cpp_sqlite --profile:host profiles/emscripten.profile --build=${input:conanBuildPolicy};",
-                "conan create conan/qhull --profile:host profiles/emscripten.profile --build=${input:conanBuildPolicy};",
+                "conan create conan/sqlite3 --profile:host profiles/emscripten.profile --profile:build default --build=${input:conanBuildPolicy};",
+                "conan create conan/cpp_sqlite --profile:host profiles/emscripten.profile --profile:build default --build=${input:conanBuildPolicy};",
+                "conan create conan/qhull --profile:host profiles/emscripten.profile --profile:build default --build=${input:conanBuildPolicy};",
+                // "conan install . --profile:host profiles/emscripten.profile --profile:build default -of build/Emscripten --build=missing;",
                 "echo '=== Emscripten Dependencies Complete ===';"
             ],
             "presentation": {
@@ -266,9 +267,11 @@
                 ".",
                 "--profile:host",
                 "profiles/emscripten.profile",
-                "--build=missing",
+                "--profile:build",
+                "default",
                 "-of",
-                "build/Emscripten"
+                "build/Emscripten",
+                "--build=${input:conanBuildPolicy}"
             ],
             "group": "build",
             "dependsOn": [

@@ -1,7 +1,7 @@
 from conan import ConanFile
 from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
 from conan.tools.scm import Git
-from conan.tools.files import copy
+from conan.tools.files import copy, save
 import os
 
 class QhullRecipe(ConanFile):
@@ -40,6 +40,16 @@ class QhullRecipe(ConanFile):
         # Disable building applications and tests
         tc.variables["BUILD_APPLICATIONS"] = "OFF"
         tc.variables["BUILD_TESTING"] = "OFF"
+
+        # Enable threading/atomics for Emscripten (required for WebGPU/ASYNCIFY)
+        # -pthread enables atomics and bulk-memory features needed for shared memory
+        if self.settings.os == "Emscripten":
+            # Inject pthread flags directly into CMAKE_C_FLAGS_INIT via cache variables
+            # This ensures they are applied before any CMakeLists.txt processing
+            pthread_flags = "-pthread -matomics -mbulk-memory"
+            tc.cache_variables["CMAKE_C_FLAGS_INIT"] = pthread_flags
+            tc.cache_variables["CMAKE_CXX_FLAGS_INIT"] = pthread_flags
+
         tc.generate()
 
     def source(self):
