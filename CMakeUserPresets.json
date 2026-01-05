@@ -4,6 +4,7 @@
         "conan": {}
     },
     "include": [
+        "build/Emscripten/build/Release/generators/CMakePresets.json",
         "build/Release/generators/CMakePresets.json",
         "build/Debug/generators/CMakePresets.json"
     ],
@@ -21,6 +22,15 @@
             "description": "Debug build with code coverage enabled (use: conan install . -o \"&:enable_coverage=True\")",
             "toolchainFile": "generators/conan_toolchain.cmake",
             "binaryDir": "/Users/danielnewman/Documents/GitHub/MSD-CPP/build/Debug-Coverage"
+        },
+        {
+            "name": "emscripten-release",
+            "inherits": "conan-emscripten-release",
+            "displayName": "Emscripten WebGPU Release",
+            "description": "Build for WebAssembly with WebGPU. Run: conan install . --profile:host profiles/emscripten.profile --build=missing -of build/Emscripten",
+            "cacheVariables": {
+                "BUILD_TESTING": "OFF"
+            }
         }
     ],
     "buildPresets": [
@@ -172,6 +182,15 @@
                 "coverage-msd-sim",
                 "coverage-msd-assets",
                 "coverage-msd-gui"
+            ]
+        },
+        {
+            "name": "emscripten-release",
+            "displayName": "Build WebAssembly (Release)",
+            "description": "Build msd-exe for WebAssembly with WebGPU",
+            "configurePreset": "emscripten-release",
+            "targets": [
+                "msd_exe"
             ]
         }
     ]

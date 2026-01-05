@@ -46,6 +46,12 @@ public:
 
   Status getStatus() const;
 
+#ifdef __EMSCRIPTEN__
+  // Emscripten requires a callback-based main loop instead of blocking
+  void runFrame();
+  static void emscriptenMainLoop(void* arg);
+#endif
+
 private:
   struct SDLWindowDeleter
   {

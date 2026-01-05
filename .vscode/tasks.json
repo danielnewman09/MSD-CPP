@@ -30,6 +30,16 @@
                 "True"
             ],
             "default": "False"
+        },
+        {
+            "id": "targetPlatform",
+            "description": "Target Platform",
+            "type": "pickString",
+            "options": [
+                "Native",
+                "Emscripten (WebAssembly)"
+            ],
+            "default": "Native"
         }
     ],
     "tasks": [
@@ -148,6 +158,12 @@
                 "conan create conan/sdl_ttf --build=${input:conanBuildPolicy} -s build_type=Debug;",
                 "conan create conan/qhull --build=${input:conanBuildPolicy} -s build_type=Release;",
                 "conan create conan/qhull --build=${input:conanBuildPolicy} -s build_type=Debug;",
+                "conan create conan/sqlite3 --build=${input:conanBuildPolicy} -s build_type=Release;",
+                "conan create conan/sqlite3 --build=${input:conanBuildPolicy} -s build_type=Debug;",
+                "conan create conan/cpp_sqlite --build=${input:conanBuildPolicy} -s build_type=Release;",
+                "conan create conan/cpp_sqlite --build=${input:conanBuildPolicy} -s build_type=Debug;",
+                "echo '=== Building Emscripten SDK ===';",
+                "conan create conan/emsdk --build=${input:conanBuildPolicy};",
             ],
             "presentation": {
                 "echo": true,
@@ -219,6 +235,95 @@
                 "reveal": "always",
                 "focus": false,
                 "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Create Conan Dependencies (Emscripten)",
+            "type": "shell",
+            "command": [
+                "echo '=== Building Emscripten Conan Dependencies ===';",
+                "conan create conan/emsdk --build=${input:conanBuildPolicy};",
+                "conan create conan/sqlite3 --profile:host profiles/emscripten.profile --build=${input:conanBuildPolicy};",
+                "conan create conan/cpp_sqlite --profile:host profiles/emscripten.profile --build=${input:conanBuildPolicy};",
+                "conan create conan/qhull --profile:host profiles/emscripten.profile --build=${input:conanBuildPolicy};",
+                "echo '=== Emscripten Dependencies Complete ===';"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Conan Install (Emscripten)",
+            "type": "shell",
+            "command": "conan",
+            "args": [
+                "install",
+                ".",
+                "--profile:host",
+                "profiles/emscripten.profile",
+                "--build=missing",
+                "-of",
+                "build/Emscripten"
+            ],
+            "group": "build",
+            "dependsOn": [
+                "Create Conan Dependencies (Emscripten)"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Build Emscripten (WebAssembly)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "cmake --preset emscripten-release && cmake --build --preset emscripten-release"
+            ],
+            "group": "build",
+            "dependsOn": [
+                "Conan Install (Emscripten)"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Serve Emscripten Build",
+            "type": "shell",
+            "command": "python3",
+            "args": [
+                "-m",
+                "http.server",
+                "8080"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/build/Emscripten"
+            },
+            "isBackground": true,
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated"
             },
             "problemMatcher": []
         }

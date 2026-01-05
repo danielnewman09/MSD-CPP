@@ -1,6 +1,8 @@
 #include "msd-utils/src/PathUtils.hpp"
 
-#ifdef _WIN32
+#ifdef __EMSCRIPTEN__
+// Emscripten uses a virtual filesystem - no platform-specific includes needed
+#elif defined(_WIN32)
 #include <windows.h>
 #elif defined(__APPLE__)
 #include <limits.h>
@@ -17,6 +19,23 @@ namespace msd_utils
 
 std::filesystem::path absolutePath(const std::string& relativePath)
 {
+#ifdef __EMSCRIPTEN__
+  // Emscripten uses a virtual filesystem with assets mounted at root
+  // Paths like "example_assets.db" or "/assets/example_assets.db" work directly
+  if (relativePath.empty())
+  {
+    return std::filesystem::path("/");
+  }
+  if (relativePath[0] == '/')
+  {
+    // Already an absolute path in the virtual filesystem
+    return std::filesystem::path(relativePath);
+  }
+  // Treat relative paths as relative to root in the virtual filesystem
+  return std::filesystem::path("/" + relativePath);
+
+#else
+  // Native platform implementations
   std::filesystem::path executablePath;
 
 #ifdef _WIN32
@@ -70,6 +89,8 @@ std::filesystem::path absolutePath(const std::string& relativePath)
   // Note: canonical() requires the path to exist; use absolute() if you want
   // to allow non-existent paths
   return std::filesystem::absolute(fullPath).lexically_normal();
+
+#endif  // __EMSCRIPTEN__
 }
 
 }  // namespace msd_utils

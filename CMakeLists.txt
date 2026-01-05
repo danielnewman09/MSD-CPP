@@ -4,7 +4,12 @@ set(PROJECT_NAME msd)
 
 project(msd VERSION 1.0 LANGUAGES CXX)
 
-# Enable testing at the top level
+# Include Emscripten configuration if building for WebAssembly
+if(EMSCRIPTEN)
+  include(cmake/EmscriptenConfig.cmake)
+endif()
+
+# Enable testing at the top level (disabled for Emscripten in EmscriptenConfig.cmake)
 enable_testing()
 
 # Set compiler options

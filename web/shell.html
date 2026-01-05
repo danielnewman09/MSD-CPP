@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSD Simulation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            flex-direction: column;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .container {
+            text-align: center;
+        }
+
+        h1 {
+            color: #eee;
+            margin-bottom: 20px;
+            font-weight: 300;
+        }
+
+        #canvas {
+            border: 2px solid #4a4a6a;
+            background: #000;
+            display: block;
+        }
+
+        #status {
+            color: #888;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        #status.loading {
+            color: #f0ad4e;
+        }
+
+        #status.running {
+            color: #5cb85c;
+        }
+
+        #status.error {
+            color: #d9534f;
+        }
+
+        #controls {
+            color: #aaa;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            margin-top: 25px;
+            text-align: left;
+            background: #2a2a3e;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        #controls h3 {
+            color: #ccc;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .key {
+            background: #3a3a4e;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        #progress-container {
+            width: 300px;
+            margin-top: 20px;
+        }
+
+        #progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #3a3a4e;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        #progress-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+
+        #progress-text {
+            color: #888;
+            font-size: 12px;
+            margin-top: 8px;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #webgpu-warning {
+            background: #d9534f;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            max-width: 500px;
+        }
+
+        #webgpu-warning a {
+            color: #ffcccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MSD Simulation</h1>
+
+        <div id="webgpu-warning" class="hidden">
+            <strong>WebGPU Not Available</strong>
+            <p>Your browser does not support WebGPU. Please use:</p>
+            <ul>
+                <li>Chrome 113+ or Edge 113+</li>
+                <li>Firefox Nightly with WebGPU enabled</li>
+                <li>Safari Technology Preview 18+</li>
+            </ul>
+            <p><a href="https://caniuse.com/webgpu" target="_blank">Check browser support</a></p>
+        </div>
+
+        <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" width="800" height="600"></canvas>
+
+        <div id="status" class="loading">Initializing WebGPU...</div>
+
+        <div id="progress-container">
+            <div id="progress-bar">
+                <div id="progress-fill"></div>
+            </div>
+            <div id="progress-text">Loading assets...</div>
+        </div>
+
+        <div id="controls" class="hidden">
+            <h3>Controls</h3>
+            <p><span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span> Move camera</p>
+            <p><span class="key">Q</span> <span class="key">E</span> Move up / down</p>
+            <p><span class="key">&uarr;</span> <span class="key">&darr;</span> <span class="key">&larr;</span> <span class="key">&rarr;</span> Look around</p>
+            <p><span class="key">Z</span> Spawn pyramid &nbsp; <span class="key">V</span> Spawn cube</p>
+            <p><span class="key">X</span> Remove last &nbsp; <span class="key">C</span> Clear all</p>
+        </div>
+    </div>
+
+    <script>
+        // Check WebGPU support
+        (async function checkWebGPU() {
+            if (!navigator.gpu) {
+                document.getElementById('webgpu-warning').classList.remove('hidden');
+                document.getElementById('status').textContent = 'WebGPU not supported';
+                document.getElementById('status').className = 'error';
+                document.getElementById('progress-container').classList.add('hidden');
+                return;
+            }
+
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) {
+                    throw new Error('No WebGPU adapter found');
+                }
+                document.getElementById('status').textContent = 'WebGPU available. Loading...';
+            } catch (e) {
+                document.getElementById('webgpu-warning').classList.remove('hidden');
+                document.getElementById('status').textContent = 'WebGPU initialization failed';
+                document.getElementById('status').className = 'error';
+            }
+        })();
+
+        var Module = {
+            canvas: (function() {
+                var canvas = document.getElementById('canvas');
+                canvas.addEventListener('webglcontextlost', function(e) {
+                    alert('WebGL context lost. Please reload the page.');
+                    e.preventDefault();
+                }, false);
+                return canvas;
+            })(),
+
+            onRuntimeInitialized: function() {
+                document.getElementById('status').textContent = 'Running';
+                document.getElementById('status').className = 'running';
+                document.getElementById('progress-container').classList.add('hidden');
+                document.getElementById('controls').classList.remove('hidden');
+
+                // Focus canvas for keyboard input
+                document.getElementById('canvas').focus();
+            },
+
+            setStatus: function(text) {
+                var statusElement = document.getElementById('status');
+                var progressContainer = document.getElementById('progress-container');
+                var progressFill = document.getElementById('progress-fill');
+                var progressText = document.getElementById('progress-text');
+
+                if (!text) {
+                    statusElement.textContent = 'Running';
+                    statusElement.className = 'running';
+                    progressContainer.classList.add('hidden');
+                    return;
+                }
+
+                // Parse download progress
+                var match = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+                if (match) {
+                    var downloaded = parseInt(match[2]);
+                    var total = parseInt(match[4]);
+                    var percent = (downloaded / total * 100).toFixed(0);
+                    progressFill.style.width = percent + '%';
+                    progressText.textContent = match[1].trim() + ' (' + percent + '%)';
+                } else {
+                    progressText.textContent = text;
+                }
+            },
+
+            print: function(text) {
+                console.log('[MSD]', text);
+            },
+
+            printErr: function(text) {
+                console.error('[MSD Error]', text);
+            },
+
+            totalDependencies: 0,
+
+            monitorRunDependencies: function(left) {
+                this.totalDependencies = Math.max(this.totalDependencies, left);
+                var percent = ((this.totalDependencies - left) / this.totalDependencies * 100).toFixed(0);
+                if (left) {
+                    document.getElementById('progress-fill').style.width = percent + '%';
+                    document.getElementById('progress-text').textContent =
+                        'Loading dependencies (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')';
+                }
+            }
+        };
+    </script>
+    {{{ SCRIPT }}}
+</body>
+</html>

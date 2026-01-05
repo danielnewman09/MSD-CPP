@@ -33,6 +33,16 @@ UniqueShader loadShader(const std::string& shaderFilename,
   SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_INVALID;
   std::string entrypoint;
 
+#ifdef __EMSCRIPTEN__
+  // For Emscripten/WebGPU builds, we use SPIRV shaders which get cross-compiled
+  // to WGSL at runtime by the WebGPU backend (via Tint or similar).
+  // When SDL3 adds official WGSL support (SDL_GPU_SHADERFORMAT_WGSL),
+  // we can switch to pre-compiled WGSL shaders for faster load times.
+  fullPath =
+    basePath + "Content/Shaders/Compiled/SPIRV/" + shaderFilename + ".spv";
+  format = SDL_GPU_SHADERFORMAT_SPIRV;
+  entrypoint = "main";
+#else
   if (backendFormats & SDL_GPU_SHADERFORMAT_SPIRV)
   {
     fullPath =
@@ -59,6 +69,7 @@ UniqueShader loadShader(const std::string& shaderFilename,
     SDL_Log("%s", "Unrecognized backend shader format!");
     return nullptr;
   }
+#endif
 
   std::ifstream file(fullPath, std::ios::binary);
   if (!file)

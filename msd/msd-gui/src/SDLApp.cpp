@@ -12,6 +12,11 @@
 #include <random>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#endif
+
 namespace msd_gui
 {
 
@@ -59,15 +64,51 @@ int SDLApplication::runApp()
 {
   SDL_ShowWindow(window_.get());
 
+#ifdef __EMSCRIPTEN__
+  // Emscripten requires a callback-based main loop
+  // The third parameter (0) means use the browser's requestAnimationFrame
+  // The fourth parameter (true) means simulate an infinite loop
+  emscripten_set_main_loop_arg(
+    SDLApplication::emscriptenMainLoop,
+    this,
+    0,     // Use browser's requestAnimationFrame for timing
+    true   // Simulate infinite loop (function won't return)
+  );
+#else
+  // Native: blocking main loop
   while (status_ == Status::Running)
   {
     handleEvents();
     gpuManager_->updateObjects(mockObjects_);
     gpuManager_->render();
   }
+#endif
 
   return EXIT_SUCCESS;
 }
+
+#ifdef __EMSCRIPTEN__
+void SDLApplication::runFrame()
+{
+  handleEvents();
+  gpuManager_->updateObjects(mockObjects_);
+  gpuManager_->render();
+}
+
+void SDLApplication::emscriptenMainLoop(void* arg)
+{
+  auto* app = static_cast<SDLApplication*>(arg);
+
+  if (app->status_ == Status::Running)
+  {
+    app->runFrame();
+  }
+  else
+  {
+    emscripten_cancel_main_loop();
+  }
+}
+#endif
 
 
 SDLApplication::Status SDLApplication::getStatus() const
