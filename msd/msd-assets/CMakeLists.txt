@@ -17,7 +17,9 @@ find_package(Eigen3 REQUIRED NO_MODULE)
 
 # Add subdirectories to collect sources from each module
 add_subdirectory(src)
-add_subdirectory(test)
+if(BUILD_TESTING)
+  add_subdirectory(test)
+endif()
 
 # Link libraries after finding them
 target_link_libraries(${MSD_ASSETS_NAME}

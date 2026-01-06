@@ -1,10 +1,11 @@
-// Ticket: 0002_remove_rotation_from_gpu
-// Design: docs/designs/modularize-gpu-shader-system/design.md
-// Previous ticket: 0001_link-gui-sim-object
+// Ticket: 0004_gui_framerate
+// Design: docs/designs/input-state-management/design.md
+// Previous tickets: 0002_remove_rotation_from_gpu, 0001_link-gui-sim-object
 
 #ifndef SDL_APP_HPP
 #define SDL_APP_HPP
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -12,6 +13,8 @@
 #include <SDL3/SDL.h>
 
 #include "msd-assets/src/Asset.hpp"
+#include "msd-gui/src/CameraController.hpp"
+#include "msd-gui/src/InputHandler.hpp"
 #include "msd-gui/src/SDLGPUManager.hpp"
 #include "msd-gui/src/ShaderPolicy.hpp"
 #include "msd-sim/src/Engine.hpp"
@@ -46,6 +49,12 @@ public:
 
   Status getStatus() const;
 
+#ifdef __EMSCRIPTEN__
+  // Emscripten requires a callback-based main loop instead of blocking
+  void runFrame();
+  static void emscriptenMainLoop(void* arg);
+#endif
+
 private:
   struct SDLWindowDeleter
   {
@@ -56,6 +65,8 @@ private:
   };
 
   void handleEvents();
+  void setupInputBindings();
+  void updatePlayerInput();
   void spawnRandomObject(const std::string& geometryType);
 
   msd_sim::Engine engine_;
@@ -64,20 +75,22 @@ private:
 
   std::unique_ptr<SDL_Window, SDLWindowDeleter> window_;
 
-  // Use PositionOnlyShaderPolicy as default per design decision
+  // Use FullTransformShaderPolicy per previous design decisions
   using AppGPUManager = GPUManager<FullTransformShaderPolicy>;
   std::unique_ptr<AppGPUManager> gpuManager_;
+
+  // Input management
+  std::unique_ptr<InputHandler> inputHandler_;
+  std::unique_ptr<CameraController> cameraController_;
+
+  // Frame timing for delta time
+  std::chrono::milliseconds lastFrameTime_{0};
+  std::chrono::milliseconds frameDeltaTime_{16};  // Default 60 FPS
 
   // Mock object storage for demonstration
   std::vector<msd_sim::Object> mockObjects_;
   std::vector<msd_assets::Asset>
     mockAssets_;  // Own assets for Object references
-
-  const float moveSpeed_{0.1f};
-  const msd_sim::Coordinate unitX_{moveSpeed_, 0, 0};
-  const msd_sim::Coordinate unitY_{0, moveSpeed_, 0};
-  const msd_sim::Coordinate unitZ_{0, 0, moveSpeed_};
-  const msd_sim::Angle rotSpeed_{0.05};
 };
 
 }  // namespace msd_gui

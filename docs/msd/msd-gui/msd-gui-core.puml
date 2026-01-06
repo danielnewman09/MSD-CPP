@@ -1,8 +1,8 @@
-@startuml
+@startuml msd-gui-core
 ' =============================================================================
 ' Feature: msd-gui - Core Architecture Overview
 ' Description: High-level component structure and relationships
-' Date: 2026-01-01
+' Date: 2026-01-05
 ' =============================================================================
 
 ' -----------------------------------------------------------------------------
@@ -60,6 +60,36 @@ package "msd_gui" {
         +getMVPMatrix(model): Matrix4f
     }
 
+    ' Input Management Layer
+    class InputHandler {
+        +addBinding(binding: InputBinding): void
+        +handleSDLEvent(event: SDL_Event): void
+        +update(deltaTime: milliseconds): void
+        +processInput(): void
+        +getInputState(): InputState&
+    }
+
+    class InputState {
+        +updateKey(key: SDL_Keycode, pressed: bool): void
+        +isKeyPressed(key: SDL_Keycode): bool
+        +isKeyJustPressed(key: SDL_Keycode): bool
+        +getKeyHoldDuration(key: SDL_Keycode): milliseconds
+    }
+
+    enum InputMode {
+        Continuous
+        TriggerOnce
+        Interval
+        PressAndHold
+    }
+
+    class CameraController {
+        +CameraController(camera: Camera3D&, moveSpeed, rotSpeed)
+        +updateFromInput(inputState: InputState, deltaTime): void
+        +setMoveSpeed(speed: float): void
+        +setRotationSpeed(speed: Angle): void
+    }
+
     ' Utilities
     class SDLException {
         +SDLException(message: string)
@@ -88,9 +118,11 @@ package "SDL3" {
 ' Relationships
 ' -----------------------------------------------------------------------------
 
-' SDLApplication owns GPUManager and Engine
+' SDLApplication owns GPUManager, Engine, InputHandler, CameraController
 SDLApplication *-- GPUManager : owns (unique_ptr)
 SDLApplication *-- Engine : owns (value)
+SDLApplication *-- InputHandler : owns (unique_ptr)
+SDLApplication *-- CameraController : owns (unique_ptr)
 SDLApplication o-- SDL_Window : manages
 
 ' GPUManager owns Camera3D and GPU resources
@@ -98,6 +130,12 @@ GPUManager *-- Camera3D : owns (value)
 GPUManager *-- InstanceData : manages instances
 GPUManager o-- SDL_GPUDevice : manages
 GPUManager ..> GeometryFactory : uses for\nbase mesh
+
+' Input management relationships
+InputHandler *-- InputState : owns (value)
+InputHandler ..> InputMode : uses
+CameraController --> Camera3D : non-owning reference
+CameraController ..> InputState : reads
 
 ' Camera3D uses ReferenceFrame
 Camera3D *-- ReferenceFrame : owns (value)

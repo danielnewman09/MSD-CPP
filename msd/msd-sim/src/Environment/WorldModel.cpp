@@ -60,10 +60,10 @@ void WorldModel::clearObjects()
 
 // ========== Platform Management (Legacy) ==========
 
-// void WorldModel::addPlatform(Platform&& platform)
-// {
-//   platforms_.push_back(std::move(platform));
-// }
+void WorldModel::addPlatform(Platform&& platform)
+{
+  platforms_.push_back(std::move(platform));
+}
 
 // ========== Simulation Update ==========
 
@@ -71,6 +71,12 @@ void WorldModel::update(std::chrono::milliseconds deltaTime)
 {
   // Convert to seconds for physics calculations
   double dt = deltaTime.count() / 1000.0;
+
+  // Update all platforms (agent logic + visual sync)
+  for (auto& platform : platforms_)
+  {
+    platform.update(time_ + deltaTime);
+  }
 
   // Update physics for all dynamic objects
   updatePhysics(dt);

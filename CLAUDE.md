@@ -334,6 +334,7 @@ Added comprehensive documentation for the msd-transfer header-only library. This
 | [`overview.puml`](docs/architecture/overview.puml) | High-level system architecture | {date} |
 | [`msd-transfer-core.puml`](docs/msd/msd-transfer/msd-transfer-core.puml) | msd-transfer high-level architecture overview | 2026-01-01 |
 | [`records.puml`](docs/msd/msd-transfer/records.puml) | msd-transfer database records detailed design | 2026-01-01 |
+| [`input-state-management.puml`](docs/designs/input-state-management/input-state-management.puml) | Input state tracking and management system | 2026-01-05 |
 
 ---
 
@@ -426,6 +427,73 @@ public:
   ConvexHull(const ConvexHull& other)
     : vertices_(other.vertices_), volume_(other.volume_) {}
   // ... manual implementations for all special members
+};
+```
+
+### All-or-Nothing Rule
+- **If** you implement any special member function, implement ALL of them (Rule of Five)
+- **Prefer** implementing NONE and using `= default` for all (Rule of Zero)
+- **Never** implement only some special member functions - this leads to subtle bugs and inconsistent behavior
+- **Rationale**: If a class needs custom behavior for one operation (e.g., copy), it likely needs custom behavior for related operations (e.g., move, destructor)
+
+```cpp
+// GOOD - All-or-Nothing: Implement all five
+class ResourceOwner {
+public:
+  ResourceOwner() : data_{new int[100]} {}
+  ~ResourceOwner() { delete[] data_; }
+
+  ResourceOwner(const ResourceOwner& other)
+    : data_{new int[100]} {
+    std::copy(other.data_, other.data_ + 100, data_);
+  }
+
+  ResourceOwner(ResourceOwner&& other) noexcept
+    : data_{other.data_} {
+    other.data_ = nullptr;
+  }
+
+  ResourceOwner& operator=(const ResourceOwner& other) {
+    if (this != &other) {
+      std::copy(other.data_, other.data_ + 100, data_);
+    }
+    return *this;
+  }
+
+  ResourceOwner& operator=(ResourceOwner&& other) noexcept {
+    if (this != &other) {
+      delete[] data_;
+      data_ = other.data_;
+      other.data_ = nullptr;
+    }
+    return *this;
+  }
+
+private:
+  int* data_;
+};
+
+// GOOD - All-or-Nothing: Implement none (use RAII wrapper)
+class SafeResourceOwner {
+public:
+  SafeResourceOwner() : data_(100) {}
+  // Compiler generates correct copy/move/destructor automatically
+
+private:
+  std::vector<int> data_;  // RAII wrapper handles resource management
+};
+
+// BAD - Partial implementation leads to bugs
+class BrokenResourceOwner {
+public:
+  BrokenResourceOwner() : data_{new int[100]} {}
+  ~BrokenResourceOwner() { delete[] data_; }
+  // Missing copy constructor - compiler generates shallow copy (double-free!)
+  // Missing move constructor - inefficient copies instead of moves
+  // Missing assignment operators - resource leaks on assignment
+
+private:
+  int* data_;
 };
 ```
 

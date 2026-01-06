@@ -1,0 +1,196 @@
+@startuml input-state-management
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "msd-gui" {
+    ' New input management components
+    class InputState <<new>> {
+        -keyStates_: std::unordered_map<SDL_Keycode, KeyState>
+        -lastUpdateTime_: std::chrono::milliseconds
+        +updateKey(key: SDL_Keycode, pressed: bool): void
+        +isKeyPressed(key: SDL_Keycode): bool
+        +isKeyJustPressed(key: SDL_Keycode): bool
+        +isKeyHeld(key: SDL_Keycode): bool
+        +getKeyHoldDuration(key: SDL_Keycode): std::chrono::milliseconds
+        +reset(): void
+        +update(deltaTime: std::chrono::milliseconds): void
+    }
+
+    class KeyState <<new>> {
+        +pressed: bool
+        +justPressed: bool
+        +pressTime: std::chrono::milliseconds
+        +lastTriggerTime: std::chrono::milliseconds
+    }
+
+    enum InputMode <<new>> {
+        Continuous
+        TriggerOnce
+        Interval
+    }
+
+    class InputBinding <<new>> {
+        +key: SDL_Keycode
+        +mode: InputMode
+        +intervalMs: std::chrono::milliseconds
+        +action: std::function<void()>
+        +shouldTrigger(state: InputState): bool
+        +execute(): void
+    }
+
+    class InputHandler <<new>> {
+        -inputState_: InputState
+        -bindings_: std::vector<InputBinding>
+        +addBinding(binding: InputBinding): void
+        +removeBinding(key: SDL_Keycode): void
+        +processInput(): void
+        +handleSDLEvent(event: SDL_Event): void
+        +getInputState(): InputState&
+        +update(deltaTime: std::chrono::milliseconds): void
+    }
+
+    ' Modified existing components
+    class SDLApplication <<modified>> {
+        -inputHandler_: std::unique_ptr<InputHandler>
+        -cameraController_: std::unique_ptr<CameraController>
+        #handleEvents(): void
+        #setupInputBindings(): void
+    }
+
+    class CameraController <<new>> {
+        -camera_: Camera3D&
+        -moveSpeed_: float
+        -rotSpeed_: Angle
+        -sensitivity_: float
+        +updateFromInput(inputState: InputState, deltaTime: std::chrono::milliseconds): void
+        +setMoveSpeed(speed: float): void
+        +setRotationSpeed(speed: Angle): void
+    }
+
+    class Camera3D {
+        +getReferenceFrame(): ReferenceFrame&
+    }
+}
+
+package "msd-sim" {
+    ' New agent for human input control
+    class InputControlAgent <<new>> {
+        -inputCommands_: InputCommands
+        -maxSpeed_: double
+        -maxAngularSpeed_: Angle
+        +updateState(currentState: InertialState): InertialState
+        +setInputCommands(commands: InputCommands): void
+    }
+
+    struct InputCommands <<new>> {
+        +moveForward: bool
+        +moveBackward: bool
+        +moveLeft: bool
+        +moveRight: bool
+        +moveUp: bool
+        +moveDown: bool
+        +pitchUp: bool
+        +pitchDown: bool
+        +yawLeft: bool
+        +yawRight: bool
+        +rollLeft: bool
+        +rollRight: bool
+        +jump: bool
+    }
+
+    ' Modified existing components
+    class Engine <<modified>> {
+        -playerPlatformId_: std::optional<uint32_t>
+        +setPlayerInputCommands(commands: InputCommands): void
+        +spawnPlayerPlatform(assetName: string, position: Coordinate, orientation: EulerAngles): uint32_t
+    }
+
+    abstract class BaseAgent {
+        +{abstract} updateState(currentState: InertialState): InertialState
+    }
+
+    class Platform <<modified>> {
+        -state_: InertialState
+        -agent_: std::unique_ptr<BaseAgent>
+        -visualObject_: std::optional<std::reference_wrapper<Object>>
+        -id_: uint32_t
+        +update(currTime: std::chrono::milliseconds): void
+        +setAgent(agent: std::unique_ptr<BaseAgent>): void
+        +getAgent(): BaseAgent*
+        +setVisualObject(object: Object&): void
+        +getState(): InertialState&
+        +getId(): uint32_t
+    }
+
+    class Object {
+        +setPosition(position: Coordinate): void
+        +getTransform(): ReferenceFrame&
+    }
+
+    class WorldModel <<modified>> {
+        -platforms_: std::vector<Platform>
+        +getPlatforms(): std::vector<Platform>&
+        +addPlatform(platform: Platform): void
+        +getNextPlatformId(): uint32_t
+    }
+}
+
+' Relationships
+SDLApplication *-- InputHandler
+SDLApplication *-- CameraController
+InputHandler *-- InputState
+InputHandler o-- "0..*" InputBinding
+InputBinding ..> InputMode
+InputState o-- "0..*" KeyState
+CameraController --> Camera3D
+CameraController ..> InputState : uses
+
+' msd-sim relationships
+InputControlAgent ..|> BaseAgent
+InputControlAgent o-- InputCommands
+Platform o-- BaseAgent
+Platform --> Object : visualObject_ (optional)
+Engine --> WorldModel
+Engine ..> InputCommands : propagates
+WorldModel o-- "0..*" Platform
+WorldModel o-- "0..*" Object
+
+' Cross-library integration
+SDLApplication ..> Engine : updates agent input
+SDLApplication ..> InputCommands : creates from InputState
+
+note right of InputState
+  Tracks raw keyboard state.
+  Updated every frame from SDL events.
+  Provides queries for different input modes.
+end note
+
+note right of InputHandler
+  Manages input bindings and processes them
+  based on current InputState.
+  Supports Continuous, TriggerOnce,
+  Interval, and PressAndHold input modes.
+end note
+
+note right of CameraController
+  Encapsulates camera movement logic.
+  Separated from SDLApp to improve
+  testability and reusability.
+end note
+
+note right of InputControlAgent
+  Agent implementation for human-controlled
+  platforms. Translates InputCommands into
+  InertialState updates.
+end note
+
+note bottom of Platform
+  Modified to support optional visual Object.
+  Owns agent and InertialState.
+  Syncs visual Object position on update().
+  Multiple Platforms support AC3 (non-unique state).
+end note
+
+@enduml

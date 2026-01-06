@@ -24,9 +24,11 @@ The library consists of four main subsystems:
 | Component | Location | Purpose | Diagram |
 |-----------|----------|---------|---------|
 | SDLApplication | `src/` | Application lifecycle, window management, event handling | [`sdl-application.puml`](../../docs/msd/msd-gui/sdl-application.puml) |
+| Input Management | `src/` | Keyboard state tracking and input binding system | [`input-state-management.puml`](../../docs/designs/input-state-management/input-state-management.puml) |
 | ShaderPolicy | `src/` | Template-based shader policy system for GPU pipeline configuration | [`modularize-gpu-shader-system.puml`](../../docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml) |
 | GPUManager | `src/` | GPU device, pipeline, instanced rendering | [`gpu-manager.puml`](../../docs/msd/msd-gui/gpu-manager.puml) |
 | Camera3D | `src/` | 3D camera with MVP matrix computation | [`camera3d.puml`](../../docs/msd/msd-gui/camera3d.puml) |
+| CameraController | `src/` | Camera movement control based on input state | [`input-state-management.puml`](../../docs/designs/input-state-management/input-state-management.puml) |
 | SDLUtils | `src/` | Exception class and shader loading utilities | — |
 
 ---
@@ -263,6 +265,204 @@ using AppGPUManager = GPUManager<FullTransformShaderPolicy>;  // Enable rotation
 - `msd_sim::Object` — Source data for instance data building
 - `msd_sim::ReferenceFrame` — Transform data (FullTransformShaderPolicy only)
 - `Eigen::Matrix4f` — 4x4 matrix math (FullTransformShaderPolicy only)
+
+---
+
+### Input Management
+
+**Location**: `src/InputState.hpp`, `src/InputState.cpp`, `src/InputHandler.hpp`, `src/InputHandler.cpp`
+**Diagram**: [`docs/designs/input-state-management/input-state-management.puml`](../../docs/designs/input-state-management/input-state-management.puml)
+**Introduced**: [Ticket: 0004_gui_framerate](../../tickets/0004_gui_framerate.md)
+
+#### Purpose
+Provides a comprehensive input management system that separates input state tracking from input handling logic. Enables flexible control of both camera and simulation objects via keyboard input with support for multiple input modes (Continuous, TriggerOnce, Interval, PressAndHold).
+
+#### Key Classes
+
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `InputState` | `InputState.hpp` | Tracks current state of all keyboard inputs with timestamp information |
+| `InputHandler` | `InputHandler.hpp` | Manages collection of input bindings and processes them based on InputState |
+| `InputBinding` | `InputHandler.hpp` | Binds a key to an action with specified input mode |
+| `InputMode` | `InputHandler.hpp` | Enum defining how bindings should trigger (Continuous, TriggerOnce, Interval, PressAndHold) |
+
+#### Key Interfaces
+```cpp
+// Input state tracking
+struct KeyState {
+  bool pressed{false};
+  bool justPressed{false};
+  std::chrono::milliseconds pressTime{0};
+  std::chrono::milliseconds lastTriggerTime{0};
+};
+
+class InputState {
+public:
+  void updateKey(SDL_Keycode key, bool pressed);
+  bool isKeyPressed(SDL_Keycode key) const;
+  bool isKeyJustPressed(SDL_Keycode key) const;
+  std::chrono::milliseconds getKeyHoldDuration(SDL_Keycode key) const;
+  void update(std::chrono::milliseconds deltaTime);
+};
+
+// Input mode configuration
+enum class InputMode : uint8_t {
+  Continuous,   // Trigger every frame while key is held
+  TriggerOnce,  // Trigger only on initial press
+  Interval,     // Trigger at fixed intervals while held
+  PressAndHold  // Trigger on release with hold duration
+};
+
+// Input binding system
+class InputBinding {
+public:
+  InputBinding(SDL_Keycode key, InputMode mode,
+               std::function<void()> action,
+               std::chrono::milliseconds interval = std::chrono::milliseconds{0});
+
+  bool shouldTrigger(const InputState& state);
+  void execute();
+};
+
+class InputHandler {
+public:
+  void addBinding(InputBinding binding);
+  void handleSDLEvent(const SDL_Event& event);
+  void update(std::chrono::milliseconds deltaTime);
+  void processInput();
+  const InputState& getInputState() const;
+};
+```
+
+#### Usage Example
+```cpp
+InputHandler inputHandler;
+
+// Add continuous camera movement (W key)
+inputHandler.addBinding(InputBinding{
+  SDLK_W,
+  InputMode::Continuous,
+  [this]() { camera.moveForward(); }
+});
+
+// Add single-trigger object spawning (Z key)
+inputHandler.addBinding(InputBinding{
+  SDLK_Z,
+  InputMode::TriggerOnce,
+  [this]() { spawnObject("pyramid"); }
+});
+
+// In event loop
+while (SDL_PollEvent(&event)) {
+  inputHandler.handleSDLEvent(event);
+}
+
+// After event processing
+inputHandler.update(deltaTime);
+inputHandler.processInput();
+```
+
+#### Input Modes
+- **Continuous**: Executes action every frame while key is held (e.g., WASD movement)
+- **TriggerOnce**: Executes action only on initial keypress, ignoring hold (e.g., spawn object)
+- **Interval**: Executes action at fixed intervals while key is held (e.g., auto-fire)
+- **PressAndHold**: Executes action on key release with hold duration (e.g., charge throw)
+
+#### Thread Safety
+- Not thread-safe (single-threaded GUI operation assumed)
+- All input processing on main thread
+- InputState is mutable; InputHandler owns single source of truth
+
+#### Error Handling
+- InputState returns default values for unknown keys (no exceptions)
+- InputBinding action execution failures propagate to caller
+- InputHandler provides no exceptions from public interface
+
+#### Memory Management
+- **InputHandler**: Delete copy, allow move (owns unique InputState)
+- **InputBinding**: Default copyable (std::function is copyable)
+- **InputState**: Default copyable (value semantics for key state map)
+
+#### Performance Characteristics
+- InputState lookup: O(1) via std::unordered_map
+- Binding evaluation: O(n) where n = number of bindings (typically <20)
+- Memory overhead: ~100 bytes per key state, ~50 bytes per binding
+- Frame rate impact: Negligible (<1% CPU for typical usage)
+
+#### Dependencies
+- SDL3 — Event handling and keycode definitions
+- chrono — Timestamp tracking for duration-based queries
+
+---
+
+### CameraController
+
+**Location**: `src/CameraController.hpp`, `src/CameraController.cpp`
+**Diagram**: [`docs/designs/input-state-management/input-state-management.puml`](../../docs/designs/input-state-management/input-state-management.puml)
+**Introduced**: [Ticket: 0004_gui_framerate](../../tickets/0004_gui_framerate.md)
+
+#### Purpose
+Encapsulates camera movement logic based on InputState. Separates camera control logic from SDLApplication (single responsibility principle). Provides frame-rate independent camera movement through delta-time scaling.
+
+#### Key Classes
+
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `CameraController` | `CameraController.hpp` | Camera movement control based on input state |
+
+#### Key Interfaces
+```cpp
+class CameraController {
+public:
+  explicit CameraController(Camera3D& camera,
+                            float moveSpeed = 0.1f,
+                            msd_sim::Angle rotSpeed = msd_sim::Angle::fromRadians(0.05));
+
+  void updateFromInput(const InputState& inputState,
+                       std::chrono::milliseconds deltaTime);
+
+  void setMoveSpeed(float speed);
+  void setRotationSpeed(msd_sim::Angle speed);
+  void setSensitivity(float sensitivity);
+
+  float getMoveSpeed() const;
+  msd_sim::Angle getRotationSpeed() const;
+};
+```
+
+#### Usage Example
+```cpp
+Camera3D camera{msd_sim::Coordinate{0., 0., 5.}};
+CameraController controller{camera, 0.1f, msd_sim::Angle::fromRadians(0.05)};
+
+// In render loop
+controller.updateFromInput(inputHandler.getInputState(), deltaTime);
+```
+
+#### Camera Movement Mapping
+- **W/S**: Move forward/backward in camera's local Z direction
+- **A/D**: Move left/right in camera's local X direction
+- **Q/E**: Move up/down in camera's local Y direction
+- **Arrow Up/Down**: Pitch camera
+- **Arrow Left/Right**: Yaw camera
+
+#### Thread Safety
+- Not thread-safe (mutable camera reference)
+- Designed for single-threaded use on main render thread
+
+#### Error Handling
+- No exceptions; caller responsible for valid parameters
+
+#### Memory Management
+- **Ownership**: Non-owning reference to Camera3D (camera owned by GPUManager)
+- **Value semantics**: Movement/rotation speeds stored by value
+- **Delete copy**: Non-copyable (camera reference not rebindable)
+- **Allow move**: Movable for flexibility
+
+#### Dependencies
+- `Camera3D` — Camera to control (non-owning reference)
+- `InputState` — Input state querying
+- `msd_sim::Angle` — Type-safe rotation speed
 
 ---
 
@@ -561,6 +761,25 @@ Currently focused on integration testing through the main executable (`msd_exe`)
 
 ## Recent Architectural Changes
 
+### Input State Management System — 2026-01-05
+**Ticket**: [0004_gui_framerate](../../tickets/0004_gui_framerate.md)
+**Diagram**: [`docs/designs/input-state-management/input-state-management.puml`](../../docs/designs/input-state-management/input-state-management.puml)
+
+Introduced comprehensive input management system that separates input state tracking from input handling logic. This enables flexible control of both camera and simulation objects via keyboard input with support for multiple input modes (Continuous, TriggerOnce, Interval, PressAndHold).
+
+**Key changes**:
+- `msd/msd-gui/src/InputState.hpp/.cpp` — Keyboard state tracking with timestamp information
+- `msd/msd-gui/src/InputHandler.hpp/.cpp` — Binding management and processing with InputMode support
+- `msd/msd-gui/src/CameraController.hpp/.cpp` — Camera movement encapsulation with delta-time scaling
+- `msd/msd-gui/src/SDLApp.hpp/.cpp` — Integrated new input system, added frame timing
+
+**Design decisions**:
+- Separation of concerns: InputState (tracking) vs InputHandler (processing) vs CameraController (application)
+- TriggerOnce bindings execute immediately in handleSDLEvent (not deferred to processInput)
+- Frame-rate independence through delta time tracking
+- Non-owning camera reference in CameraController (owned by GPUManager)
+- Extensible InputMode enum for future input behaviors
+
 ### Shader Policy System — 2026-01-03
 **Ticket**: [0002_remove_rotation_from_gpu](../../tickets/0002_remove_rotation_from_gpu.md)
 **Diagram**: [`docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml`](../../docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml)
@@ -588,6 +807,7 @@ Refactored GPUManager to support multiple shader types through a compile-time te
 |---------|-------------|--------------|
 | [`msd-gui-core.puml`](../../docs/msd/msd-gui/msd-gui-core.puml) | High-level architecture overview | 2026-01-01 |
 | [`sdl-application.puml`](../../docs/msd/msd-gui/sdl-application.puml) | SDLApplication lifecycle and event handling | 2026-01-01 |
+| [`input-state-management.puml`](../../docs/designs/input-state-management/input-state-management.puml) | Input management system architecture | 2026-01-05 |
 | [`modularize-gpu-shader-system.puml`](../../docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml) | Shader policy system architecture | 2026-01-03 |
 | [`gpu-manager.puml`](../../docs/msd/msd-gui/gpu-manager.puml) | GPUManager rendering pipeline | 2026-01-01 |
 | [`camera3d.puml`](../../docs/msd/msd-gui/camera3d.puml) | Camera3D MVP matrix computation | 2026-01-01 |

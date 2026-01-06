@@ -1,8 +1,8 @@
-@startuml
+@startuml camera3d
 ' =============================================================================
 ' Feature: Camera3D - 3D Perspective Camera
 ' Description: MVP matrix computation with ReferenceFrame integration
-' Date: 2026-01-01
+' Date: 2026-01-05
 ' =============================================================================
 
 ' -----------------------------------------------------------------------------
@@ -47,6 +47,32 @@ package "msd_gui" {
         -aspectRatio_: float
         -nearPlane_: float
         -farPlane_: float
+    }
+
+    ' Camera controller (Ticket: 0004_gui_framerate)
+    class CameraController {
+        ' Construction
+        +CameraController(camera: Camera3D&, moveSpeed: float = 0.1f, \n                   rotSpeed: Angle = fromRadians(0.05))
+
+        ' Update from input state
+        +updateFromInput(inputState: InputState, deltaTime: milliseconds): void
+
+        ' Configuration
+        +setMoveSpeed(speed: float): void
+        +setRotationSpeed(speed: Angle): void
+        +setSensitivity(sensitivity: float): void
+        +getMoveSpeed(): float
+        +getRotationSpeed(): Angle
+
+        ' Private members
+        -camera_: Camera3D&
+        -moveSpeed_: float
+        -rotSpeed_: Angle
+        -sensitivity_: float
+    }
+
+    class InputState {
+        +isKeyPressed(key: SDL_Keycode): bool
     }
 }
 
@@ -95,6 +121,10 @@ package "Eigen" {
 
 ' Camera3D owns ReferenceFrame
 Camera3D *-- ReferenceFrame : owns (value)
+
+' CameraController controls Camera3D (Ticket: 0004_gui_framerate)
+CameraController --> Camera3D : non-owning reference
+CameraController ..> InputState : reads key state
 
 ' ReferenceFrame uses its components
 ReferenceFrame *-- Coordinate : origin
@@ -216,6 +246,31 @@ note as CoordinateConversion
 
     ReferenceFrame handles local-to-global
     coordinate transforms automatically.
+end note
+
+note as CameraControllerNote
+    **CameraController (Ticket: 0004):**
+
+    Encapsulates camera movement logic.
+    Separates control from Camera3D itself.
+
+    **Movement Mapping:**
+    | Key | Action |
+    |-----|--------|
+    | W/S | Forward/backward (local Z) |
+    | A/D | Left/right (local X) |
+    | Q/E | Up/down (local Y) |
+    | ↑/↓ | Pitch |
+    | ←/→ | Yaw |
+
+    **Frame-Rate Independence:**
+    updateFromInput() receives deltaTime
+    for consistent movement speed.
+
+    **Memory Management:**
+    - Non-owning reference to Camera3D
+    - Owned by SDLApplication (unique_ptr)
+    - Delete copy, allow move
 end note
 
 @enduml

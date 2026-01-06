@@ -159,6 +159,9 @@ GPUManager<ShaderPolicy>::GPUManager(SDL_Window& window,
     basePath_{basePath},
     camera_{msd_sim::Coordinate{0., 0., 5.}}
 {
+  SDL_Log("GPUManager: Starting initialization, basePath=%s", basePath_.c_str());
+
+  SDL_Log("GPUManager: Creating GPU device...");
   device_.reset(SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL |
                                       SDL_GPU_SHADERFORMAT_DXIL |
                                       SDL_GPU_SHADERFORMAT_SPIRV,
@@ -167,18 +170,23 @@ GPUManager<ShaderPolicy>::GPUManager(SDL_Window& window,
 
   if (!device_.get())
   {
+    SDL_Log("GPUManager: ERROR - Failed to create SDL GPU device: %s", SDL_GetError());
     throw SDLException("Failed to create SDL GPU device");
   }
+  SDL_Log("GPUManager: GPU device created successfully");
 
+  SDL_Log("GPUManager: Claiming window for GPU device...");
   if (!SDL_ClaimWindowForGPUDevice(device_.get(), &window))
   {
+    SDL_Log("GPUManager: ERROR - Failed to claim window: %s", SDL_GetError());
     throw SDLException("Failed to claim window with GPU Device");
   }
+  SDL_Log("GPUManager: Window claimed successfully");
 
-  std::cout << "Using GPU device driver: "
-            << SDL_GetGPUDeviceDriver(device_.get()) << std::endl;
+  SDL_Log("Using GPU device driver: %s", SDL_GetGPUDeviceDriver(device_.get()));
 
   // Load shaders via shader policy
+  SDL_Log("GPUManager: Loading vertex shader: %s", shaderPolicy_.getVertexShaderFile().c_str());
   auto vertexShader = loadShader(shaderPolicy_.getVertexShaderFile(),
                                  *device_,
                                  basePath_,

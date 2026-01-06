@@ -1,8 +1,8 @@
-@startuml
+@startuml sdl-application
 ' =============================================================================
 ' Feature: SDLApplication - Application Lifecycle Manager
 ' Description: Window management, event handling, and main loop coordination
-' Date: 2026-01-01
+' Date: 2026-01-05
 ' =============================================================================
 
 ' -----------------------------------------------------------------------------
@@ -50,15 +50,16 @@ package "msd_gui" {
         -gpuManager_: unique_ptr<GPUManager>
         -engine_: Engine
 
-        ' Movement constants
-        -moveSpeed_: float = 0.1f
-        -unitX_: Coordinate
-        -unitY_: Coordinate
-        -unitZ_: Coordinate
-        -rotSpeed_: Angle
+        ' Input management (Ticket: 0004_gui_framerate)
+        -inputHandler_: unique_ptr<InputHandler>
+        -cameraController_: unique_ptr<CameraController>
+        -frameDeltaTime_: milliseconds
+        -lastFrameTime_: milliseconds
 
         ' Private helpers
         -handleEvents(): void
+        -setupInputBindings(): void
+        -updatePlayerInput(): void
     }
 
     struct SDLWindowDeleter {
@@ -76,6 +77,34 @@ package "msd_gui" {
 
     class Camera3D {
         +getReferenceFrame(): ReferenceFrame&
+    }
+
+    ' Input Management (Ticket: 0004_gui_framerate)
+    class InputHandler {
+        +addBinding(binding: InputBinding): void
+        +handleSDLEvent(event: SDL_Event): void
+        +update(deltaTime: milliseconds): void
+        +processInput(): void
+        +getInputState(): InputState&
+    }
+
+    class InputState {
+        +updateKey(key: SDL_Keycode, pressed: bool): void
+        +isKeyPressed(key: SDL_Keycode): bool
+        +isKeyJustPressed(key: SDL_Keycode): bool
+    }
+
+    class CameraController {
+        +updateFromInput(inputState: InputState, deltaTime): void
+        +setMoveSpeed(speed: float): void
+        +setRotationSpeed(speed: Angle): void
+    }
+
+    enum InputMode {
+        Continuous
+        TriggerOnce
+        Interval
+        PressAndHold
     }
 }
 
@@ -106,6 +135,8 @@ package "SDL3" {
 SDLApplication *-- GPUManager : owns (unique_ptr)
 SDLApplication *-- Engine : owns (value)
 SDLApplication *-- SDL_Window : manages via\nSDLWindowDeleter
+SDLApplication *-- InputHandler : owns (unique_ptr)
+SDLApplication *-- CameraController : owns (unique_ptr)
 
 ' SDLApplication uses deleter
 SDLApplication ..> SDLWindowDeleter : uses
@@ -113,13 +144,12 @@ SDLApplication ..> SDLWindowDeleter : uses
 ' Status enum
 SDLApplication -- Status
 
-' Event handling
-SDLApplication ..> SDL_Event : processes
-SDLApplication ..> Camera3D : moves via\nGPUManager
-
-' Movement constants
-SDLApplication ..> Coordinate : uses for movement
-SDLApplication ..> Angle : uses for rotation
+' Event handling flow (Ticket: 0004_gui_framerate)
+SDLApplication ..> SDL_Event : processes via\nInputHandler
+InputHandler *-- InputState : owns (value)
+InputHandler ..> InputMode : uses for bindings
+CameraController --> Camera3D : non-owning reference
+CameraController ..> InputState : reads state
 
 ' -----------------------------------------------------------------------------
 ' Notes
@@ -133,11 +163,15 @@ note right of SDLApplication
     **Pattern:** RAII Resource Management
     - Window managed via unique_ptr with custom deleter
     - GPUManager owned via unique_ptr
+    - InputHandler owned via unique_ptr
+    - CameraController owned via unique_ptr
     - Engine owned via value semantics
 
     **Memory Management:**
     - Owns window (unique_ptr + SDLWindowDeleter)
     - Owns gpuManager_ (unique_ptr)
+    - Owns inputHandler_ (unique_ptr)
+    - Owns cameraController_ (unique_ptr)
     - Owns engine_ (value semantics)
     - basePath_ from SDL_GetBasePath()
 
@@ -148,42 +182,67 @@ note right of SDLApplication
 end note
 
 note as EventFlow
-    **Event Handling Flow:**
+    **Event Handling Flow (Ticket: 0004):**
 
-    1. Main loop: while status_ == Running
-    2. Poll SDL events via SDL_PollEvent
-    3. Handle events by type:
-       - SDL_EVENT_QUIT → status_ = Exiting
-       - SDL_EVENT_KEY_DOWN → process keypress
+    1. Poll SDL events via SDL_PollEvent
+    2. Pass each event to inputHandler_->handleSDLEvent()
+       - KEY_DOWN: Update InputState + execute TriggerOnce bindings
+       - KEY_UP: Update InputState
+    3. inputHandler_->processInput() for Continuous/Interval bindings
+    4. inputHandler_->update(deltaTime) clears frame flags
+    5. cameraController_->updateFromInput() moves camera
 
     **Keyboard Controls:**
-    | Key | Action |
-    |-----|--------|
-    | W/S | Forward/backward |
-    | A/D | Left/right |
-    | Q/E | Up/down |
-    | Arrows | Pitch/yaw |
-    | Z | Add instance |
-    | X | Remove instance |
-    | C | Clear instances |
+    | Key | Action | Mode |
+    |-----|--------|------|
+    | W/S | Forward/backward | Continuous |
+    | A/D | Left/right | Continuous |
+    | Q/E | Up/down | Continuous |
+    | Arrows | Pitch/yaw | Continuous |
+    | Z | Spawn pyramid | TriggerOnce |
+    | V | Spawn cube | TriggerOnce |
+    | X | Remove instance | TriggerOnce |
+    | C | Clear instances | TriggerOnce |
 
-    Camera movement uses local coordinate
-    transforms via ReferenceFrame.
+    Camera movement via CameraController
+    using InputState queries.
 end note
 
 note as RenderLoop
     **Main Loop (runApp):**
 
     1. SDL_ShowWindow()
-    2. while (status_ == Running):
-       a. handleEvents()
-       b. gpuManager_->render()
-    3. return EXIT_SUCCESS
+    2. setupInputBindings()
+    3. while (status_ == Running):
+       a. Calculate frameDeltaTime_
+       b. handleEvents()
+       c. gpuManager_->render()
+    4. return EXIT_SUCCESS
 
     **Initialization:**
     1. Create window (800x600, resizable)
     2. Create GPUManager with window ref
-    3. Set status_ = Running
+    3. Create InputHandler
+    4. Create CameraController with camera ref
+    5. Set status_ = Running
+end note
+
+note as InputArchitecture
+    **Input Architecture (Ticket: 0004):**
+
+    Separation of concerns:
+    - InputState: Raw keyboard state tracking
+    - InputHandler: Binding management & processing
+    - CameraController: Camera movement logic
+
+    **TriggerOnce Execution:**
+    Executes immediately in handleSDLEvent()
+    (not deferred to processInput) for
+    responsive single-press actions.
+
+    **Frame-Rate Independence:**
+    Delta time tracking enables consistent
+    movement regardless of frame rate.
 end note
 
 @enduml

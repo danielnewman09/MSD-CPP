@@ -1,6 +1,6 @@
-// Ticket: 0002_remove_rotation_from_gpu
-// Design: docs/designs/modularize-gpu-shader-system/design.md
-// Previous ticket: 0001_link-gui-sim-object
+// Ticket: 0004_gui_framerate
+// Design: docs/designs/input-state-management/design.md
+// Previous tickets: 0002_remove_rotation_from_gpu, 0001_link-gui-sim-object
 
 #include "msd-gui/src/SDLApp.hpp"
 #include "msd-gui/src/SDLUtils.hpp"
@@ -12,21 +12,41 @@
 #include <random>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#endif
+
 namespace msd_gui
 {
 
 SDLApplication::SDLApplication(const std::string& dbPath)
-  : engine_{dbPath}, status_{Status::Starting}, basePath_{SDL_GetBasePath()}
+  : engine_{dbPath}, status_{Status::Starting}, basePath_{SDL_GetBasePath() ? SDL_GetBasePath() : "/"}
 {
+  SDL_Log("SDLApplication: Starting initialization");
+  SDL_Log("SDLApplication: dbPath = %s", dbPath.c_str());
+  SDL_Log("SDLApplication: basePath = %s", basePath_.c_str());
+
   window_.reset(
     SDL_CreateWindow("MSD Application", 800, 600, SDL_WINDOW_RESIZABLE));
 
   if (!window_.get())
   {
+    SDL_Log("ERROR: Failed to create SDL window: %s", SDL_GetError());
     throw SDLException("Failed to create SDL window");
   }
+  SDL_Log("SDLApplication: Window created successfully");
 
+  SDL_Log("SDLApplication: Creating GPUManager...");
   gpuManager_ = std::make_unique<AppGPUManager>(*window_, basePath_);
+  SDL_Log("SDLApplication: GPUManager created successfully");
+
+  // Initialize input system
+  inputHandler_ = std::make_unique<InputHandler>();
+  cameraController_ = std::make_unique<CameraController>(gpuManager_->getCamera());
+
+  // Setup input bindings
+  setupInputBindings();
 
   // Get assets from the registry (they should be loaded by the engine from the database)
   auto& registry = engine_.getAssetRegistry();
@@ -51,6 +71,9 @@ SDLApplication::SDLApplication(const std::string& dbPath)
     SDL_Log("WARNING: Cube asset not found in registry");
   }
 
+  // Initialize frame timing
+  lastFrameTime_ = std::chrono::milliseconds{SDL_GetTicks()};
+
   status_ = Status::Running;
 }
 
@@ -59,15 +82,56 @@ int SDLApplication::runApp()
 {
   SDL_ShowWindow(window_.get());
 
+#ifdef __EMSCRIPTEN__
+  // Emscripten requires a callback-based main loop
+  // The third parameter (0) means use the browser's requestAnimationFrame
+  // The fourth parameter (true) means simulate an infinite loop
+  emscripten_set_main_loop_arg(
+    SDLApplication::emscriptenMainLoop,
+    this,
+    0,     // Use browser's requestAnimationFrame for timing
+    true   // Simulate infinite loop (function won't return)
+  );
+#else
+  // Native: blocking main loop
   while (status_ == Status::Running)
   {
+    // Calculate frame delta time
+    auto currentTime = std::chrono::milliseconds{SDL_GetTicks()};
+    frameDeltaTime_ = currentTime - lastFrameTime_;
+    lastFrameTime_ = currentTime;
+
     handleEvents();
     gpuManager_->updateObjects(mockObjects_);
     gpuManager_->render();
   }
+#endif
 
   return EXIT_SUCCESS;
 }
+
+#ifdef __EMSCRIPTEN__
+void SDLApplication::runFrame()
+{
+  handleEvents();
+  gpuManager_->updateObjects(mockObjects_);
+  gpuManager_->render();
+}
+
+void SDLApplication::emscriptenMainLoop(void* arg)
+{
+  auto* app = static_cast<SDLApplication*>(arg);
+
+  if (app->status_ == Status::Running)
+  {
+    app->runFrame();
+  }
+  else
+  {
+    emscripten_cancel_main_loop();
+  }
+}
+#endif
 
 
 SDLApplication::Status SDLApplication::getStatus() const
@@ -75,98 +139,92 @@ SDLApplication::Status SDLApplication::getStatus() const
   return status_;
 }
 
+void SDLApplication::setupInputBindings()
+{
+  // Z key: Spawn pyramid (TriggerOnce mode)
+  inputHandler_->addBinding(InputBinding{
+    SDLK_Z,
+    InputMode::TriggerOnce,
+    [this]() { spawnRandomObject("pyramid"); }
+  });
+
+  // V key: Spawn cube (TriggerOnce mode)
+  inputHandler_->addBinding(InputBinding{
+    SDLK_V,
+    InputMode::TriggerOnce,
+    [this]() { spawnRandomObject("cube"); }
+  });
+
+  // X key: Remove last object (TriggerOnce mode)
+  inputHandler_->addBinding(InputBinding{
+    SDLK_X,
+    InputMode::TriggerOnce,
+    [this]() {
+      if (!mockObjects_.empty())
+      {
+        mockObjects_.pop_back();
+        SDL_Log("Removed last object. Remaining objects: %zu",
+                mockObjects_.size());
+      }
+    }
+  });
+
+  // C key: Clear all objects (TriggerOnce mode)
+  inputHandler_->addBinding(InputBinding{
+    SDLK_C,
+    InputMode::TriggerOnce,
+    [this]() {
+      mockObjects_.clear();
+      SDL_Log("Cleared all objects");
+    }
+  });
+}
+
 void SDLApplication::handleEvents()
 {
   SDL_Event event;
   while (SDL_PollEvent(&event))
   {
-    auto& camera = gpuManager_->getCamera();
-    auto& cameraFrame = camera.getReferenceFrame();
-    auto newOrigin = cameraFrame.getOrigin();
-    switch (event.type)
+    if (event.type == SDL_EVENT_QUIT)
     {
-      case SDL_EVENT_QUIT:
-        status_ = Status::Exiting;
-        break;
-      case SDL_EVENT_KEY_DOWN:
-        switch (event.key.key)
-        {
-          case SDLK_W:
-            // Move forward in camera's local Z direction
-            newOrigin -= cameraFrame.localToGlobalRelative(unitZ_);
-            break;
-          case SDLK_S:
-            // Move backward in camera's local Z direction
-            newOrigin += cameraFrame.localToGlobalRelative(unitZ_);
-            break;
-          case SDLK_A:
-            // Move left in camera's local X direction (negative X)
-            newOrigin -= cameraFrame.localToGlobalRelative(unitX_);
-            break;
-          case SDLK_D:
-            // Move right in camera's local X direction (positive X)
-            newOrigin += cameraFrame.localToGlobalRelative(unitX_);
-            break;
-          case SDLK_UP:
-            // Pitch up (look up)
-            cameraFrame.getEulerAngles().pitch += rotSpeed_;
-            break;
-          case SDLK_DOWN:
-            // Pitch down (look down)
-            cameraFrame.getEulerAngles().pitch -= rotSpeed_;
-            break;
-          case SDLK_LEFT:
-            // Yaw left (turn left)
-            cameraFrame.getEulerAngles().yaw += rotSpeed_;
-            break;
-          case SDLK_RIGHT:
-            // Yaw right (turn right)
-            cameraFrame.getEulerAngles().yaw -= rotSpeed_;
-            break;
-          case SDLK_Q:
-            // Move up in camera's local Y direction
-            newOrigin += cameraFrame.localToGlobalRelative(unitY_);
-            break;
-          case SDLK_E:
-            // Move down in camera's local Y direction
-            newOrigin -= cameraFrame.localToGlobalRelative(unitY_);
-            break;
-          case SDLK_Z:
-            // Spawn a random pyramid
-            spawnRandomObject("pyramid");
-            break;
-          case SDLK_V:
-            // Spawn a random cube
-            spawnRandomObject("cube");
-            break;
-          case SDLK_X:
-            // Remove the last object (if any exist)
-            if (!mockObjects_.empty())
-            {
-              mockObjects_.pop_back();
-              SDL_Log("Removed last object. Remaining objects: %zu",
-                      mockObjects_.size());
-            }
-            break;
-          case SDLK_C:
-            // Clear all objects
-            mockObjects_.clear();
-            SDL_Log("Cleared all objects");
-            break;
-          default:
-            break;
-        }
-        break;
-      default:
-        break;
+      status_ = Status::Exiting;
     }
-
-    cameraFrame.setOrigin(newOrigin);
-
-    // Log camera position using std::format
-    auto logMsg = std::format("Camera at {:.2f}", cameraFrame.getOrigin());
-    SDL_Log("%s", logMsg.c_str());
+    inputHandler_->handleSDLEvent(event);
   }
+
+  // Process bindings BEFORE update (update clears justPressed flags)
+  inputHandler_->processInput();
+
+  // Update input state (advances time, clears justPressed flags for next frame)
+  inputHandler_->update(frameDeltaTime_);
+
+  // Update camera via controller
+  cameraController_->updateFromInput(inputHandler_->getInputState(), frameDeltaTime_);
+
+  // Update player input (if player platform exists)
+  updatePlayerInput();
+}
+
+void SDLApplication::updatePlayerInput()
+{
+  const auto& inputState = inputHandler_->getInputState();
+
+  // Convert InputState to InputCommands
+  msd_sim::InputCommands commands;
+  commands.moveForward = inputState.isKeyPressed(SDLK_W);
+  commands.moveBackward = inputState.isKeyPressed(SDLK_S);
+  commands.moveLeft = inputState.isKeyPressed(SDLK_A);
+  commands.moveRight = inputState.isKeyPressed(SDLK_D);
+  commands.moveUp = inputState.isKeyPressed(SDLK_Q);
+  commands.moveDown = inputState.isKeyPressed(SDLK_E);
+
+  commands.pitchUp = inputState.isKeyPressed(SDLK_UP);
+  commands.pitchDown = inputState.isKeyPressed(SDLK_DOWN);
+  commands.yawLeft = inputState.isKeyPressed(SDLK_LEFT);
+  commands.yawRight = inputState.isKeyPressed(SDLK_RIGHT);
+
+  // Send to engine
+  engine_.setPlayerInputCommands(commands);
 }
 
 void SDLApplication::spawnRandomObject(const std::string& geometryType)

@@ -162,9 +162,22 @@ public:
   void addPlatform(Platform&& platform);
 
   /**
-   * @brief Get all platforms
+   * @brief Get all platforms (const)
    */
   const std::vector<Platform>& getPlatforms() const { return platforms_; }
+
+  /**
+   * @brief Get all platforms (mutable)
+   *
+   * Allows modification of platforms for input command updates.
+   */
+  std::vector<Platform>& getPlatforms() { return platforms_; }
+
+  /**
+   * @brief Get next platform ID
+   * @return Next available platform ID
+   */
+  uint32_t getNextPlatformId() const { return nextPlatformId_++; }
 
 private:
   // ========== Internal Update Methods ==========
@@ -198,6 +211,7 @@ private:
 
   // Legacy platform support
   std::vector<Platform> platforms_;
+  mutable uint32_t nextPlatformId_{0};  // Mutable for getNextPlatformId() const
 
   // Current simulation time
   std::chrono::milliseconds time_{0};

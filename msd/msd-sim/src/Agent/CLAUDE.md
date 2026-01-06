@@ -26,6 +26,8 @@ Platform
 | Component | Location | Purpose | Diagram |
 |-----------|----------|---------|---------|
 | BaseAgent | `BaseAgent.hpp` | Abstract interface for control logic | [`msd-sim-core.puml`](../../../../../docs/msd/msd-sim/msd-sim-core.puml) |
+| InputControlAgent | `InputControlAgent.hpp` | Human input control implementation | [`input-state-management.puml`](../../../../../docs/designs/input-state-management/input-state-management.puml) |
+| InputCommands | `InputCommands.hpp` | Plain data struct bridging GUI and sim | [`input-state-management.puml`](../../../../../docs/designs/input-state-management/input-state-management.puml) |
 
 ---
 
@@ -82,6 +84,161 @@ platform.setAgent(std::make_unique<LinearMotionAgent>());
 #### Memory Management
 - Virtual destructor ensures proper cleanup of derived classes
 - Owned by Platform via `std::unique_ptr<BaseAgent>`
+
+---
+
+### InputCommands
+
+**Location**: `InputCommands.hpp`
+**Type**: Header-only, plain data struct
+**Diagram**: [`docs/designs/input-state-management/input-state-management.puml`](../../../../../docs/designs/input-state-management/input-state-management.puml)
+**Introduced**: [Ticket: 0004_gui_framerate](../../../../../tickets/0004_gui_framerate.md)
+
+#### Purpose
+Plain data structure representing current input command state for agent control. Acts as the bridge between msd-gui (input source) and msd-sim (consumer), decoupling input representation from simulation logic.
+
+#### Key Interfaces
+```cpp
+struct InputCommands {
+  // Linear movement
+  bool moveForward{false};
+  bool moveBackward{false};
+  bool moveLeft{false};
+  bool moveRight{false};
+  bool moveUp{false};
+  bool moveDown{false};
+
+  // Rotation
+  bool pitchUp{false};
+  bool pitchDown{false};
+  bool yawLeft{false};
+  bool yawRight{false};
+  bool rollLeft{false};
+  bool rollRight{false};
+
+  // Discrete actions
+  bool jump{false};
+
+  void reset();  // Reset all commands to false
+};
+```
+
+#### Usage Example
+```cpp
+#include "msd-sim/src/Agent/InputCommands.hpp"
+
+// In GUI layer
+InputCommands commands;
+commands.moveForward = inputState.isKeyPressed(SDLK_W);
+commands.moveRight = inputState.isKeyPressed(SDLK_D);
+
+// Pass to simulation
+engine.setPlayerInputCommands(commands);
+
+// In agent
+void InputControlAgent::setInputCommands(const InputCommands& commands) {
+  inputCommands_ = commands;
+}
+```
+
+#### Thread Safety
+**Value type** — Safe to copy across threads.
+
+#### Memory Management
+Value semantics with boolean fields only (no dynamic memory).
+
+#### Dependencies
+None (pure data structure).
+
+---
+
+### InputControlAgent
+
+**Location**: `InputControlAgent.hpp`, `InputControlAgent.cpp`
+**Type**: Concrete agent implementation
+**Diagram**: [`docs/designs/input-state-management/input-state-management.puml`](../../../../../docs/designs/input-state-management/input-state-management.puml)
+**Introduced**: [Ticket: 0004_gui_framerate](../../../../../tickets/0004_gui_framerate.md)
+
+#### Purpose
+Agent implementation that translates InputCommands into InertialState updates for human-controlled platforms. Implements the BaseAgent interface to fit cleanly into the simulation architecture.
+
+#### Key Interfaces
+```cpp
+class InputControlAgent : public BaseAgent {
+public:
+  explicit InputControlAgent(double maxSpeed = 10.0,
+                             Angle maxAngularSpeed = Angle::fromRadians(1.0));
+
+  ~InputControlAgent() override = default;
+
+  // BaseAgent interface
+  InertialState updateState(const InertialState& currentState) override;
+
+  // Input interface
+  void setInputCommands(const InputCommands& commands);
+  const InputCommands& getInputCommands() const;
+
+  // Configuration
+  void setMaxSpeed(double speed);
+  void setMaxAngularSpeed(Angle speed);
+  double getMaxSpeed() const;
+  Angle getMaxAngularSpeed() const;
+
+private:
+  InputCommands inputCommands_;
+  double maxSpeed_{10.0};                              // m/s
+  msd_sim::Angle maxAngularSpeed_{Angle::fromRadians(1.0)};  // rad/s
+};
+```
+
+#### Usage Example
+```cpp
+#include "msd-sim/src/Agent/InputControlAgent.hpp"
+
+// Create agent with custom max speeds
+auto agent = std::make_unique<InputControlAgent>(15.0, Angle::fromRadians(2.0));
+
+// Assign to platform
+Platform platform{0};
+platform.setAgent(std::move(agent));
+
+// Update input commands (called from GUI/Engine)
+InputCommands commands;
+commands.moveForward = true;
+commands.yawLeft = true;
+
+auto* agentPtr = platform.getAgent();
+if (auto* inputAgent = dynamic_cast<InputControlAgent*>(agentPtr)) {
+  inputAgent->setInputCommands(commands);
+}
+
+// Simulation update (called from Platform::update)
+InertialState newState = inputAgent->updateState(currentState);
+```
+
+#### Usage Flow
+1. GUI calls `setInputCommands()` with current input state
+2. Engine calls `updateState()` during simulation update
+3. Agent translates boolean commands into velocity/acceleration
+
+#### Thread Safety
+**Not thread-safe** — Assumes single-threaded simulation.
+
+#### Error Handling
+No exceptions from `updateState()`.
+
+#### Memory Management
+- **Ownership**: Owned by Platform via `std::unique_ptr<BaseAgent>`
+- **Value semantics**: InputCommands copied by value
+- **Delete copy**: Non-copyable (unique ownership semantics)
+- **Allow move**: Movable for transfer of ownership
+
+#### Dependencies
+- `BaseAgent` — Abstract interface
+- `InputCommands` — Input data structure
+- `InertialState` — Kinematic state representation
+- `Coordinate` — 3D vector for velocity
+- `Angle` — Type-safe angle for angular speed
 
 ---
 

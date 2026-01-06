@@ -1,4 +1,8 @@
+// Ticket: 0004_gui_framerate
+// Design: docs/designs/input-state-management/design.md
+
 #include "msd-sim/src/Environment/Platform.hpp"
+#include "msd-sim/src/Environment/Object.hpp"
 #include <iostream>
 
 namespace msd_sim
@@ -20,13 +24,22 @@ Platform::~Platform()
 // Update method
 void Platform::update(const std::chrono::milliseconds& currTime)
 {
-  auto elapsedTime = currTime - lastUpdateTime_;
+  // Note: Delta time could be passed to agent for frame-rate independent updates
+  // Currently agent->updateState() doesn't use delta time (future enhancement)
 
-  // Example: update platform's state based on elapsed time
-  // For simplicity, let's just print the elapsed time
-  std::cout << "Platform " << id_
-            << " updated. Elapsed time since last update: "
-            << elapsedTime.count() << " ms\n";
+  // Update state via agent if present
+  if (agent_)
+  {
+    state_ = agent_->updateState(state_);
+  }
+
+  // Sync visual object position and rotation if linked
+  if (visualObject_.has_value())
+  {
+    Object& obj = visualObject_->get();
+    obj.setPosition(state_.position);
+    obj.getTransform().setRotation(state_.angularPosition);
+  }
 
   // Update the last update time to current time
   lastUpdateTime_ = currTime;

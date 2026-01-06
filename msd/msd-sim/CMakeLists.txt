@@ -17,7 +17,9 @@ find_package(qhull REQUIRED CONFIG)
 
 # Add subdirectories to collect sources from each module
 add_subdirectory(src)
-add_subdirectory(test)
+if(BUILD_TESTING)
+  add_subdirectory(test)
+endif()
 
 # Link libraries after finding them
 target_link_libraries(${MSD_SIM_NAME}

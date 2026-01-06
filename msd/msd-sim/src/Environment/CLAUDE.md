@@ -444,36 +444,93 @@ world.update(std::chrono::milliseconds{16});  // ~60 FPS
 
 ---
 
-### Platform (Legacy)
+### Platform
 
 **Location**: `Platform.hpp`, `Platform.cpp`
 **Type**: Library component
+**Diagram**: [`docs/designs/input-state-management/input-state-management.puml`](../../../../../docs/designs/input-state-management/input-state-management.puml)
+**Modified**: [Ticket: 0004_gui_framerate](../../../../../tickets/0004_gui_framerate.md)
 
 #### Purpose
-Legacy entity type representing a single simulated entity with kinematic state and agent control. Being replaced by the unified `Object` type.
+Entity type representing a simulated platform with kinematic state and agent control. Platforms own agents that control their state and can optionally link to Objects in WorldModel for visual representation synchronization. Per AC7 of ticket 0004, agent logic is placed in Platform (not Object). Per AC3, each Platform has its own non-unique internal state.
 
 #### Key Interfaces
 ```cpp
 class Platform {
-  Platform(uint32_t id);
+public:
+  explicit Platform(uint32_t id);
   ~Platform();
 
+  // State update with agent logic and visual sync
   void update(const std::chrono::milliseconds& currTime);
+
+  // Agent management
+  void setAgent(std::unique_ptr<BaseAgent> agent);
+  BaseAgent* getAgent();
+  const BaseAgent* getAgent() const;
+  bool hasAgent() const;
+
+  // Visual object linking
+  void setVisualObject(Object& object);
+  bool hasVisualObject() const;
+  Object& getVisualObject();
+  const Object& getVisualObject() const;
+
+  // State access
+  InertialState& getState();
+  const InertialState& getState() const;
+  uint32_t getId() const;
 
 private:
   InertialState state_;
   std::unique_ptr<BaseAgent> agent_;
+  std::optional<std::reference_wrapper<Object>> visualObject_;
   uint32_t id_;
   std::chrono::milliseconds lastUpdateTime_;
 };
 ```
 
+#### Usage Example
+```cpp
+// Create platform
+Platform platform{0};
+
+// Assign agent for control
+auto agent = std::make_unique<InputControlAgent>();
+platform.setAgent(std::move(agent));
+
+// Link to visual object for rendering
+Object& visualObj = worldModel.getObject(objIndex);
+platform.setVisualObject(visualObj);
+
+// Update (agent updates state, visual object syncs position)
+platform.update(currentTime);
+```
+
+#### Update Behavior
+The `update()` method performs two operations:
+1. If an agent is present, calls `agent->updateState(state_)` to compute new state
+2. If a visual object is linked, synchronizes object position and rotation with platform state
+
+This ensures that:
+- Agent logic controls the platform's kinematic state
+- Visual representation stays synchronized with simulation state
+- Platform owns the source of truth for position/orientation
+
 #### Thread Safety
 **Not thread-safe** — Mutable state.
 
 #### Memory Management
-- Owns agent via `std::unique_ptr<BaseAgent>`
-- RAII cleanup of agent on destruction
+- **Agent ownership**: Owns agent via `std::unique_ptr<BaseAgent>`
+- **Visual object**: Non-owning optional reference (Object owned by WorldModel)
+- **State**: Owned InertialState by value
+- **RAII**: Agent cleaned up automatically on destruction
+
+#### Design Decisions (Ticket 0004)
+- **Platform owns agent** (not Object) per AC7 — separates agent logic from visual representation
+- **Non-unique state** per AC3 — each Platform has its own InputCommands state (not singleton)
+- **Optional visual link** — Platform can update state without requiring visual representation
+- **Synchronization direction** — Platform state drives Object position (not bidirectional)
 
 ---
 
