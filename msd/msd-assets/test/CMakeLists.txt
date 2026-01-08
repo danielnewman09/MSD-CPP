@@ -13,12 +13,8 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
 set_target_properties(${MSD_SIM_TEST_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
 target_link_libraries(${MSD_SIM_TEST_NAME}
-    PUBLIC
-        spdlog::spdlog
     PRIVATE
         msd_assets
-        msd_transfer
-        cpp_sqlite::cpp_sqlite
         GTest::GTest
         GTest::Main)
 

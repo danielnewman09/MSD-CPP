@@ -2,12 +2,10 @@
 add_executable(generate_assets generate_assets.cpp)
 
 # Link against required libraries
+# Note: msd_transfer, cpp_sqlite, spdlog are provided transitively via msd_assets
 target_link_libraries(generate_assets
     PRIVATE
         msd_assets
-        msd_transfer
-        cpp_sqlite
-        spdlog::spdlog
 )
 
 # Set C++20 standard

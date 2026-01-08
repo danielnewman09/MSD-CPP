@@ -11,7 +11,6 @@ set_target_properties(${MSD_SIM_NAME} PROPERTIES
 )
 
 # Find required packages first
-find_package(spdlog REQUIRED)
 find_package(Eigen3 REQUIRED NO_MODULE)
 find_package(qhull REQUIRED CONFIG)
 
@@ -20,12 +19,14 @@ add_subdirectory(src)
 if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
+if(ENABLE_BENCHMARKS)
+  add_subdirectory(bench)
+endif()
 
 # Link libraries after finding them
 target_link_libraries(${MSD_SIM_NAME}
         PUBLIC
           msd_assets
-          spdlog::spdlog
           Eigen3::Eigen
           qhull::qhullstatic_r)
 

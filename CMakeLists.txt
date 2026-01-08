@@ -16,6 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_TESTING "Build the testing tree" ON)
 option(ENABLE_COVERAGE "Enable code coverage" OFF)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy static analysis" OFF)
+option(ENABLE_BENCHMARKS "Build performance benchmarks" OFF)
 
 # Enable warnings as errors for Release builds by default
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
