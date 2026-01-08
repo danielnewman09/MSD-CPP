@@ -1,0 +1,108 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+' New benchmark infrastructure
+package "Benchmark Infrastructure" <<new>> {
+    artifact "msd_sim_bench" as bench_exe <<new>> {
+        Benchmark executable for msd-sim
+        --
+        Location: msd/msd-sim/bench/
+        Type: Executable
+    }
+
+    file "ConvexHullBench.cpp" as hull_bench <<new>> {
+        ConvexHull micro-benchmarks
+        --
+        - Hull construction from point clouds
+        - Point containment queries
+        - Signed distance calculations
+        - Intersection tests (GJK)
+    }
+
+    file "CMakeLists.txt" as bench_cmake <<new>> {
+        Benchmark build configuration
+        --
+        Links: msd_sim, benchmark::benchmark
+        Compile options: Release mode optimizations
+    }
+}
+
+' Modified build system components
+package "Build System" {
+    file "conanfile.py" as conanfile <<modified>> {
+        Add benchmark/1.9.1 dependency
+        --
+        New option: enable_benchmarks
+        Default: False
+        --
+        If enabled, add benchmark to requirements
+    }
+
+    file "CMakeLists.txt (root)" as root_cmake <<modified>> {
+        Add ENABLE_BENCHMARKS option
+        --
+        option(ENABLE_BENCHMARKS "Build benchmarks" OFF)
+        --
+        Pass to Conan via CMakeToolchain
+    }
+
+    file "msd-sim/CMakeLists.txt" as sim_cmake <<modified>> {
+        Add bench subdirectory
+        --
+        if(ENABLE_BENCHMARKS)
+          add_subdirectory(bench)
+        endif()
+    }
+}
+
+' Existing msd-sim library (context)
+package "msd-sim Library" {
+    class ConvexHull {
+        Existing target for benchmarking
+        --
+        +ConvexHull(vector<Coordinate>)
+        +contains(point): bool
+        +signedDistance(point): double
+        +intersects(hull): bool
+    }
+}
+
+' Relationships
+hull_bench ..> ConvexHull : benchmarks
+bench_exe *-- hull_bench : contains
+bench_cmake --> bench_exe : builds
+bench_cmake ..> ConvexHull : links msd_sim
+
+conanfile ..> root_cmake : configures
+root_cmake ..> sim_cmake : passes ENABLE_BENCHMARKS
+sim_cmake --> bench_cmake : includes if enabled
+
+note right of bench_exe
+  Built only when:
+  - ENABLE_BENCHMARKS=ON
+
+  Compilation mode:
+  - Always Release or RelWithDebInfo
+  - Benchmarks require optimizations
+end note
+
+note left of hull_bench
+  Initial benchmark suite:
+
+  BM_ConvexHull_Construction
+  - Cloud sizes: 8, 64, 512, 4096
+
+  BM_ConvexHull_Contains
+  - Test point containment
+
+  BM_ConvexHull_SignedDistance
+  - Distance queries
+
+  BM_ConvexHull_Intersects
+  - GJK collision detection
+end note
+
+@enduml

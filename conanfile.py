@@ -21,12 +21,14 @@ class msd(ConanFile):
     options = {
         "enable_coverage": [True, False],
         "warnings_as_errors": [True, False],
-        "enable_clang_tidy": [True, False]
+        "enable_clang_tidy": [True, False],
+        "enable_benchmarks": [True, False]
     }
     default_options = {
         "enable_coverage": False,
         "warnings_as_errors": False,
-        "enable_clang_tidy": False
+        "enable_clang_tidy": False,
+        "enable_benchmarks": False
     }
 
     def configure(self):
@@ -44,6 +46,7 @@ class msd(ConanFile):
         # Pass options to CMake
         tc.variables["ENABLE_COVERAGE"] = self.options.enable_coverage
         tc.variables["ENABLE_CLANG_TIDY"] = self.options.enable_clang_tidy
+        tc.variables["ENABLE_BENCHMARKS"] = self.options.enable_benchmarks
 
         # Enable warnings as errors for Release builds by default,
         # but allow explicit override via the option
@@ -93,6 +96,10 @@ class msd(ConanFile):
         self.requires("cpp_sqlite/0.1.0")
 
         self.requires("boost/1.86.0")
+
+        # Optional benchmark dependency
+        if self.options.enable_benchmarks:
+            self.requires("benchmark/1.9.1")
 
     def build_requirements(self):
         self.tool_requires("cmake/3.22.6")

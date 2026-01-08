@@ -5,9 +5,6 @@ add_library(${MSD_GUI_NAME})
 
 set_target_properties(${MSD_GUI_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
-# Find required packages
-find_package(spdlog REQUIRED)
-
 # SDL3 handling: For Emscripten, SDL comes from Emscripten ports (USE_SDL=3)
 # For native builds, we use Conan packages
 if(NOT EMSCRIPTEN)
@@ -20,12 +17,10 @@ endif()
 add_subdirectory(src)
 
 # Link libraries - conditionally include SDL packages for native builds
+# Note: spdlog::spdlog is provided transitively via msd_sim (PUBLIC)
 target_link_libraries(${MSD_GUI_NAME}
   PUBLIC
-    msd_sim
-    msd_assets
-  PRIVATE
-    spdlog::spdlog)
+    msd_sim)
 
 if(NOT EMSCRIPTEN)
     # Native builds: link SDL3 shared libraries from Conan

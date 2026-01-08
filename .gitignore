@@ -7,3 +7,4 @@ models/*
 */.DS_Store
 installs/*
 *.db
+benchmark_results/

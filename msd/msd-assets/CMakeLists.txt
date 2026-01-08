@@ -11,8 +11,7 @@ set_target_properties(${MSD_ASSETS_NAME} PROPERTIES
 )
 
 # Find required packages first
-find_package(spdlog REQUIRED)
-find_package(cpp_sqlite REQUIRED)
+# Note: cpp_sqlite and spdlog are found transitively via msd_transfer → cpp_sqlite
 find_package(Eigen3 REQUIRED NO_MODULE)
 
 # Add subdirectories to collect sources from each module
@@ -22,13 +21,11 @@ if(BUILD_TESTING)
 endif()
 
 # Link libraries after finding them
+# Note: cpp_sqlite::cpp_sqlite and spdlog::spdlog are provided transitively via msd_transfer
 target_link_libraries(${MSD_ASSETS_NAME}
         PUBLIC
           msd_transfer
-          cpp_sqlite::cpp_sqlite
-          Eigen3::Eigen
-        PRIVATE
-          spdlog::spdlog)
+          Eigen3::Eigen)
 
 # Add include directories to support "msd-assets/src/..." includes
 target_include_directories(${MSD_ASSETS_NAME}
