@@ -1,5 +1,7 @@
 // Ticket: 0004_gui_framerate
+// Ticket: 0005_camera_controller_sim
 // Design: docs/designs/input-state-management/design.md
+// Design: docs/designs/0005_camera_controller_sim/design.md
 
 #include <exception>
 #include <iostream>
@@ -83,13 +85,18 @@ void Engine::setPlayerInputCommands(const InputCommands& commands)
   {
     if (platform.getId() == *playerPlatformId_)
     {
-      if (auto* agent = platform.getAgent())
+      // Check if platform has visual object linked
+      if (platform.hasVisualObject())
       {
-        // Dynamic cast to InputControlAgent
-        if (auto* inputAgent = dynamic_cast<InputControlAgent*>(agent))
-        {
-          inputAgent->setInputCommands(commands);
-        }
+        // Update visual object's transform via MotionController
+        auto& visualObject = platform.getVisualObject();
+        auto& motionController = platform.getMotionController();
+
+        // Calculate deltaTime since last update (assume 16ms for now - should be passed from update loop)
+        // TODO: Pass deltaTime from the update loop instead of hardcoding
+        std::chrono::milliseconds deltaTime{16};
+
+        motionController.updateTransform(visualObject.getTransform(), commands, deltaTime);
       }
       break;
     }

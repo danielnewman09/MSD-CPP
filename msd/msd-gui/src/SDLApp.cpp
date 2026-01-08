@@ -1,5 +1,7 @@
 // Ticket: 0004_gui_framerate
+// Ticket: 0005_camera_controller_sim
 // Design: docs/designs/input-state-management/design.md
+// Design: docs/designs/0005_camera_controller_sim/design.md
 // Previous tickets: 0002_remove_rotation_from_gpu, 0001_link-gui-sim-object
 
 #include "msd-gui/src/SDLApp.hpp"
@@ -37,13 +39,41 @@ SDLApplication::SDLApplication(const std::string& dbPath)
   }
   SDL_Log("SDLApplication: Window created successfully");
 
-  SDL_Log("SDLApplication: Creating GPUManager...");
-  gpuManager_ = std::make_unique<AppGPUManager>(*window_, basePath_);
+  SDL_Log("SDLApplication: Creating player platform...");
+  // Create player platform with visual object
+  // The camera will reference the visual object's ReferenceFrame
+  playerPlatformId_ = engine_.spawnPlayerPlatform(
+    "cube",
+    msd_sim::Coordinate{0., 0., 5.},
+    msd_sim::EulerAngles{}
+  );
+  SDL_Log("SDLApplication: Player platform created with ID: %u", *playerPlatformId_);
+
+  // Get the player platform's visual object's ReferenceFrame for the camera
+  auto& worldModel = engine_.getWorldModel();
+  msd_sim::ReferenceFrame* cameraFrame = nullptr;
+
+  for (auto& platform : worldModel.getPlatforms())
+  {
+    if (platform.getId() == *playerPlatformId_ && platform.hasVisualObject())
+    {
+      cameraFrame = &platform.getVisualObject().getTransform();
+      break;
+    }
+  }
+
+  if (!cameraFrame)
+  {
+    SDL_Log("ERROR: Failed to get camera reference frame from player platform");
+    throw std::runtime_error("Failed to get camera reference frame");
+  }
+
+  SDL_Log("SDLApplication: Creating GPUManager with camera frame...");
+  gpuManager_ = std::make_unique<AppGPUManager>(*window_, *cameraFrame, basePath_);
   SDL_Log("SDLApplication: GPUManager created successfully");
 
   // Initialize input system
   inputHandler_ = std::make_unique<InputHandler>();
-  cameraController_ = std::make_unique<CameraController>(gpuManager_->getCamera());
 
   // Setup input bindings
   setupInputBindings();
@@ -198,10 +228,7 @@ void SDLApplication::handleEvents()
   // Update input state (advances time, clears justPressed flags for next frame)
   inputHandler_->update(frameDeltaTime_);
 
-  // Update camera via controller
-  cameraController_->updateFromInput(inputHandler_->getInputState(), frameDeltaTime_);
-
-  // Update player input (if player platform exists)
+  // Update player input (forwards input to player platform's MotionController)
   updatePlayerInput();
 }
 
