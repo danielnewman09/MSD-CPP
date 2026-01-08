@@ -1084,7 +1084,7 @@ TEST(FullPipelineTest, ModelAndViewProjection)
   view(2, 3) = -5.0f;  // Translate by -5 in Z
 
   // Simple perspective projection (simplified)
-  float fov = 60.0f * M_PI / 180.0f;
+  float fov = 60.0f * static_cast<float>(M_PI) / 180.0f;
   float aspect = 16.0f / 9.0f;
   float near = 0.1f;
   float far = 100.0f;

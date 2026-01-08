@@ -74,7 +74,13 @@ std::vector<STLTriangle> STLLoader::readBinarySTLTriangles(
 
   // Get file size for validation
   file.seekg(0, std::ios::end);
-  size_t fileSize = file.tellg();
+  std::streamoff fileSizeOffset = file.tellg();
+  if (fileSizeOffset < 0)
+  {
+    std::cerr << "Failed to determine file size for: " << filename << std::endl;
+    return triangles;
+  }
+  size_t fileSize = static_cast<size_t>(fileSizeOffset);
   file.seekg(84);  // Back to position after header and count
 
   // Validate file size
@@ -220,8 +226,15 @@ bool STLLoader::isBinarySTL(const std::string& filename)
     file.read(reinterpret_cast<char*>(&triangleCount), sizeof(uint32_t));
 
     file.seekg(0, std::ios::end);
-    size_t fileSize = file.tellg();
+    std::streamoff fileSizeOffset = file.tellg();
     file.close();
+
+    // If tellg() failed, assume ASCII format
+    if (fileSizeOffset < 0)
+    {
+      return false;
+    }
+    size_t fileSize = static_cast<size_t>(fileSizeOffset);
 
     // If file size matches binary format exactly, it's binary
     if (validateBinarySTLSize(fileSize, triangleCount))

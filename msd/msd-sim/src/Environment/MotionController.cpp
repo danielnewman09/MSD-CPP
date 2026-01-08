@@ -8,8 +8,8 @@
 namespace msd_sim
 {
 
-MotionController::MotionController(Angle rotSpeed, float moveSpeed)
-  : rotSpeed_{rotSpeed}, moveSpeed_{moveSpeed}, sensitivity_{1.0f}
+MotionController::MotionController(Angle rotSpeed, double moveSpeed)
+  : rotSpeed_{rotSpeed}, moveSpeed_{moveSpeed}, sensitivity_{1.0}
 {
 }
 
@@ -19,8 +19,8 @@ void MotionController::updateTransform(ReferenceFrame& frame,
 {
   // Convert deltaTime to seconds for speed calculations
   const double deltaSeconds = deltaTime.count() / 1000.0;
-  const float scaledMoveSpeed = moveSpeed_ * sensitivity_ * static_cast<float>(deltaSeconds);
-  const Angle scaledRotSpeed = rotSpeed_ * static_cast<float>(deltaSeconds);
+  const double scaledMoveSpeed = moveSpeed_ * sensitivity_ * deltaSeconds;
+  const Angle scaledRotSpeed = rotSpeed_ * deltaSeconds;
 
   auto newOrigin = frame.getOrigin();
   auto& eulerAngles = frame.getEulerAngles();

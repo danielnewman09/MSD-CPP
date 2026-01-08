@@ -46,7 +46,9 @@ void WorldModel::removeObject(size_t index)
       " >= " + std::to_string(objects_.size()));
   }
 
-  objects_.erase(objects_.begin() + index);
+  objects_.erase(
+    objects_.begin() +
+    static_cast<std::vector<Object>::difference_type>(index));
   rebuildIndexCaches();
 }
 

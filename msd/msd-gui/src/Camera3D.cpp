@@ -13,7 +13,7 @@ Camera3D::Camera3D(msd_sim::ReferenceFrame& referenceFrame,
                    float nearPlane,
                    float farPlane)
   : frame_{referenceFrame},
-    fovRadians_{static_cast<float>(fovDegrees * M_PI / 180.0)},
+    fovRadians_{static_cast<float>(static_cast<double>(fovDegrees) * M_PI / 180.0)},
     aspectRatio_{aspectRatio},
     nearPlane_{nearPlane},
     farPlane_{farPlane}
@@ -27,7 +27,7 @@ void Camera3D::setAspectRatio(float aspectRatio)
 
 void Camera3D::setFieldOfView(float fovDegrees)
 {
-  fovRadians_ = static_cast<float>(fovDegrees * M_PI / 180.0);
+  fovRadians_ = static_cast<float>(static_cast<double>(fovDegrees) * M_PI / 180.0);
 }
 
 void Camera3D::setClippingPlanes(float nearPlane, float farPlane)

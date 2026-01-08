@@ -18,7 +18,7 @@ namespace fs = std::filesystem;
 
 std::vector<Eigen::Vector3d> generateCubeVertices(double size)
 {
-  float half = static_cast<float>(size) / 2.0f;
+  double half = size / 2.0;
 
   // Define 8 corners
   std::array<Eigen::Vector3d, 8> corners = {
@@ -89,8 +89,8 @@ std::vector<Eigen::Vector3d> generateCubeVertices(double size)
 std::vector<Eigen::Vector3d> generatePyramidVertices(double baseSize,
                                                       double height)
 {
-  float half = static_cast<float>(baseSize) / 2.0f;
-  float halfHeight = static_cast<float>(height) / 2.0f;
+  double half = baseSize / 2.0;
+  double halfHeight = height / 2.0;
 
   std::vector<Eigen::Vector3d> vertices;
   vertices.reserve(18);
@@ -102,7 +102,7 @@ std::vector<Eigen::Vector3d> generatePyramidVertices(double baseSize,
   Eigen::Vector3d base_bl{-half, -halfHeight, half};
 
   // Apex
-  Eigen::Vector3d apex{0.0f, halfHeight, 0.0f};
+  Eigen::Vector3d apex{0.0, halfHeight, 0.0};
 
   // Front face
   vertices.push_back(base_fl);
