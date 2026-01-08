@@ -36,7 +36,7 @@ public:
    * @param moveSpeed Movement speed in units per second (default: 0.1 m/s)
    */
   explicit MotionController(Angle rotSpeed = Angle::fromRadians(0.05),
-                            float moveSpeed = 0.1f);
+                            double moveSpeed = 0.1);
 
   ~MotionController() = default;
 
@@ -76,7 +76,7 @@ public:
    * @brief Set movement speed
    * @param speed Units per second
    */
-  void setMoveSpeed(float speed) { moveSpeed_ = speed; }
+  void setMoveSpeed(double speed) { moveSpeed_ = speed; }
 
   /**
    * @brief Set rotation speed
@@ -88,13 +88,13 @@ public:
    * @brief Set input sensitivity multiplier
    * @param sensitivity Multiplier for input (default: 1.0)
    */
-  void setSensitivity(float sensitivity) { sensitivity_ = sensitivity; }
+  void setSensitivity(double sensitivity) { sensitivity_ = sensitivity; }
 
   /**
    * @brief Get movement speed
    * @return Units per second
    */
-  float getMoveSpeed() const { return moveSpeed_; }
+  double getMoveSpeed() const { return moveSpeed_; }
 
   /**
    * @brief Get rotation speed
@@ -106,12 +106,12 @@ public:
    * @brief Get input sensitivity
    * @return Sensitivity multiplier
    */
-  float getSensitivity() const { return sensitivity_; }
+  double getSensitivity() const { return sensitivity_; }
 
 private:
   Angle rotSpeed_;         // Radians per second
-  float moveSpeed_;        // Units per second
-  float sensitivity_;      // Input multiplier
+  double moveSpeed_;       // Units per second
+  double sensitivity_;     // Input multiplier
 };
 
 }  // namespace msd_sim

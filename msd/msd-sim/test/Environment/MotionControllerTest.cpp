@@ -28,13 +28,13 @@ constexpr double MOTION_TOLERANCE = 1e-7;
 TEST(MotionControllerTest, ConstructorWithParameters)
 {
   Angle rotSpeed = Angle::fromRadians(0.1);
-  float moveSpeed = 5.0f;
+  double moveSpeed = 5.0;
 
   MotionController controller{rotSpeed, moveSpeed};
 
-  EXPECT_DOUBLE_EQ(controller.getMoveSpeed(), 5.0f);
+  EXPECT_DOUBLE_EQ(controller.getMoveSpeed(), 5.0);
   EXPECT_DOUBLE_EQ(controller.getRotationSpeed().getRad(), 0.1);
-  EXPECT_DOUBLE_EQ(controller.getSensitivity(), 1.0f);
+  EXPECT_DOUBLE_EQ(controller.getSensitivity(), 1.0);
 }
 
 // ============================================================================
@@ -43,7 +43,7 @@ TEST(MotionControllerTest, ConstructorWithParameters)
 
 TEST(MotionControllerTest, UpdateTransform_MoveForward_TranslatesInLocalZ)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0f};
+  MotionController controller{Angle::fromRadians(0.0), 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -67,7 +67,7 @@ TEST(MotionControllerTest, UpdateTransform_MoveForward_TranslatesInLocalZ)
 TEST(MotionControllerTest,
      UpdateTransform_MoveBackward_TranslatesInPositiveLocalZ)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0f};
+  MotionController controller{Angle::fromRadians(0.0), 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -88,7 +88,7 @@ TEST(MotionControllerTest,
 
 TEST(MotionControllerTest, UpdateTransform_MoveLeft_TranslatesInNegativeLocalX)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0f};
+  MotionController controller{Angle::fromRadians(0.0), 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -109,7 +109,7 @@ TEST(MotionControllerTest, UpdateTransform_MoveLeft_TranslatesInNegativeLocalX)
 
 TEST(MotionControllerTest, UpdateTransform_MoveRight_TranslatesInPositiveLocalX)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0f};
+  MotionController controller{Angle::fromRadians(0.0), 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -130,7 +130,7 @@ TEST(MotionControllerTest, UpdateTransform_MoveRight_TranslatesInPositiveLocalX)
 
 TEST(MotionControllerTest, UpdateTransform_MoveUp_TranslatesInPositiveLocalY)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0f};
+  MotionController controller{Angle::fromRadians(0.0), 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -151,7 +151,7 @@ TEST(MotionControllerTest, UpdateTransform_MoveUp_TranslatesInPositiveLocalY)
 
 TEST(MotionControllerTest, UpdateTransform_MoveDown_TranslatesInNegativeLocalY)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0f};
+  MotionController controller{Angle::fromRadians(0.0), 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -176,7 +176,7 @@ TEST(MotionControllerTest, UpdateTransform_MoveDown_TranslatesInNegativeLocalY)
 
 TEST(MotionControllerTest, UpdateTransform_PitchUp_IncreasesEulerPitch)
 {
-  MotionController controller{Angle::fromRadians(1.0), 0.0f};
+  MotionController controller{Angle::fromRadians(1.0), 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -198,7 +198,7 @@ TEST(MotionControllerTest, UpdateTransform_PitchUp_IncreasesEulerPitch)
 
 TEST(MotionControllerTest, UpdateTransform_PitchDown_DecreasesEulerPitch)
 {
-  MotionController controller{Angle::fromRadians(1.0), 0.0f};
+  MotionController controller{Angle::fromRadians(1.0), 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -219,7 +219,7 @@ TEST(MotionControllerTest, UpdateTransform_PitchDown_DecreasesEulerPitch)
 
 TEST(MotionControllerTest, UpdateTransform_YawLeft_IncreasesEulerYaw)
 {
-  MotionController controller{Angle::fromRadians(1.0), 0.0f};
+  MotionController controller{Angle::fromRadians(1.0), 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -240,7 +240,7 @@ TEST(MotionControllerTest, UpdateTransform_YawLeft_IncreasesEulerYaw)
 
 TEST(MotionControllerTest, UpdateTransform_YawRight_DecreasesEulerYaw)
 {
-  MotionController controller{Angle::fromRadians(1.0), 0.0f};
+  MotionController controller{Angle::fromRadians(1.0), 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -266,7 +266,7 @@ TEST(MotionControllerTest, UpdateTransform_YawRight_DecreasesEulerYaw)
 TEST(MotionControllerTest,
      UpdateTransform_ScaledByDeltaTime_FrameRateIndependent)
 {
-  MotionController controller{Angle::fromRadians(0.0), 10.0f};
+  MotionController controller{Angle::fromRadians(0.0), 10.0};
   ReferenceFrame frame1;
   frame1.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame1.setRotation(EulerAngles{});
@@ -312,10 +312,10 @@ TEST(MotionControllerTest,
 
 TEST(MotionControllerTest, SetMoveSpeed_UpdatesSpeed_AffectsTranslation)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0f};
-  controller.setMoveSpeed(5.0f);
+  MotionController controller{Angle::fromRadians(0.0), 1.0};
+  controller.setMoveSpeed(5.0);
 
-  EXPECT_DOUBLE_EQ(controller.getMoveSpeed(), 5.0f);
+  EXPECT_DOUBLE_EQ(controller.getMoveSpeed(), 5.0);
 
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
@@ -336,7 +336,7 @@ TEST(MotionControllerTest, SetMoveSpeed_UpdatesSpeed_AffectsTranslation)
 
 TEST(MotionControllerTest, SetRotationSpeed_UpdatesSpeed_AffectsRotation)
 {
-  MotionController controller{Angle::fromRadians(0.5), 0.0f};
+  MotionController controller{Angle::fromRadians(0.5), 0.0};
   controller.setRotationSpeed(Angle::fromRadians(2.0));
 
   EXPECT_DOUBLE_EQ(controller.getRotationSpeed().getRad(), 2.0);
@@ -360,10 +360,10 @@ TEST(MotionControllerTest, SetRotationSpeed_UpdatesSpeed_AffectsRotation)
 
 TEST(MotionControllerTest, SetSensitivity_UpdatesSensitivity_ScalesMovement)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0f};
-  controller.setSensitivity(2.0f);
+  MotionController controller{Angle::fromRadians(0.0), 1.0};
+  controller.setSensitivity(2.0);
 
-  EXPECT_DOUBLE_EQ(controller.getSensitivity(), 2.0f);
+  EXPECT_DOUBLE_EQ(controller.getSensitivity(), 2.0);
 
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
@@ -392,9 +392,9 @@ TEST(MotionControllerTest, Platform_GetMotionController_ReturnsReference)
   MotionController& controller = platform.getMotionController();
 
   // Verify we can modify through reference
-  controller.setMoveSpeed(99.0f);
+  controller.setMoveSpeed(99.0);
 
-  EXPECT_DOUBLE_EQ(platform.getMotionController().getMoveSpeed(), 99.0f);
+  EXPECT_DOUBLE_EQ(platform.getMotionController().getMoveSpeed(), 99.0);
 }
 
 TEST(MotionControllerTest,
@@ -406,7 +406,7 @@ TEST(MotionControllerTest,
   const MotionController& controller = constPlatform.getMotionController();
 
   // Should be able to read default values
-  EXPECT_DOUBLE_EQ(controller.getMoveSpeed(), 0.1f);
+  EXPECT_DOUBLE_EQ(controller.getMoveSpeed(), 0.1);
   EXPECT_DOUBLE_EQ(controller.getRotationSpeed().getRad(), 0.05);
 }
 
@@ -416,7 +416,7 @@ TEST(MotionControllerTest,
 
 TEST(MotionControllerTest, UpdateTransform_CombinedMovement_AppliesAllCommands)
 {
-  MotionController controller{Angle::fromRadians(1.0), 1.0f};
+  MotionController controller{Angle::fromRadians(1.0), 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
   frame.setRotation(EulerAngles{});
@@ -443,7 +443,7 @@ TEST(MotionControllerTest, UpdateTransform_CombinedMovement_AppliesAllCommands)
 
 TEST(MotionControllerTest, UpdateTransform_NoCommands_NoChange)
 {
-  MotionController controller{Angle::fromRadians(1.0), 1.0f};
+  MotionController controller{Angle::fromRadians(1.0), 1.0};
   ReferenceFrame frame;
   Coordinate initialOrigin{5.0, 10.0, 15.0};
   EulerAngles initialAngles{

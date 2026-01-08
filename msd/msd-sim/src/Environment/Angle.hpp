@@ -132,16 +132,12 @@ public:
     return *this;
   }
 
-  // Assignment operator
-  Angle& operator=(const Angle& other)
-  {
-    if (this != &other)
-    {
-      rad_ = other.rad_;
-      normalization_ = other.normalization_;
-    }
-    return *this;
-  }
+  // Rule of Zero: use defaulted special member functions
+  Angle(const Angle&) = default;
+  Angle(Angle&&) noexcept = default;
+  Angle& operator=(const Angle&) = default;
+  Angle& operator=(Angle&&) noexcept = default;
+  ~Angle() = default;
 
   // Comparison operators
   bool operator==(const Angle& other) const

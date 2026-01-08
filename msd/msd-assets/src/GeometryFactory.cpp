@@ -10,7 +10,7 @@ namespace msd_assets
 
 std::array<Eigen::Vector3d, 8> GeometryFactory::getCubeCorners(double size)
 {
-  float half = static_cast<float>(size) / 2.0f;
+  double half = size / 2.0;
 
   // Define 8 corners of the cube
   // Naming: (Front/Back)(Top/Bottom)(Left/Right)
@@ -105,8 +105,8 @@ msd_transfer::MeshRecord GeometryFactory::createCube(double size)
 msd_transfer::MeshRecord GeometryFactory::createPyramid(double baseSize,
                                                         double height)
 {
-  float half = static_cast<float>(baseSize) / 2.0f;
-  float halfHeight = static_cast<float>(height) / 2.0f;
+  double half = baseSize / 2.0;
+  double halfHeight = height / 2.0;
   std::vector<Eigen::Vector3d> vertices;
   vertices.reserve(
     18);  // 4 side faces (triangles) + 2 base triangles = 6 triangles
@@ -118,7 +118,7 @@ msd_transfer::MeshRecord GeometryFactory::createPyramid(double baseSize,
   Eigen::Vector3d base_bl{-half, -halfHeight, half};   // back-left
 
   // Apex (top of pyramid)
-  Eigen::Vector3d apex{0.0f, halfHeight, 0.0f};
+  Eigen::Vector3d apex{0.0, halfHeight, 0.0};
 
   // Front face
   vertices.push_back(base_fl);

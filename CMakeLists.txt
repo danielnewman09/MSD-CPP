@@ -12,16 +12,47 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Build options
+option(BUILD_TESTING "Build the testing tree" ON)
+option(ENABLE_COVERAGE "Enable code coverage" OFF)
+option(ENABLE_CLANG_TIDY "Enable clang-tidy static analysis" OFF)
+
+# Enable warnings as errors for Release builds by default
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+  set(WARNINGS_AS_ERRORS_DEFAULT ON)
+else()
+  set(WARNINGS_AS_ERRORS_DEFAULT OFF)
+endif()
+option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ${WARNINGS_AS_ERRORS_DEFAULT})
+
 # Add useful compiler warnings
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Wconversion        # Warn on implicit type conversions that may lose data
+    -Wshadow            # Warn when a local variable shadows another
+    -Wnon-virtual-dtor  # Warn on classes with virtual functions but non-virtual destructors
+    -Wold-style-cast    # Warn on C-style casts
+    -Wnull-dereference  # Warn if null pointer dereference is detected
+    -Wdouble-promotion  # Warn when float is implicitly promoted to double
+    -Wimplicit-float-conversion  # Warn when double is implicitly converted to float
+  )
 elseif(MSVC)
   add_compile_options(/W4)
 endif()
 
-# Option for building tests
-option(BUILD_TESTING "Build the testing tree" ON)
-option(ENABLE_COVERAGE "Enable code coverage" OFF)
+# Warnings as errors configuration
+if(WARNINGS_AS_ERRORS)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Werror)
+    message(STATUS "Warnings as errors enabled (-Werror)")
+  elseif(MSVC)
+    add_compile_options(/WX)
+    message(STATUS "Warnings as errors enabled (/WX)")
+  endif()
+endif()
 
 # Coverage configuration
 if(ENABLE_COVERAGE)
@@ -32,6 +63,17 @@ if(ENABLE_COVERAGE)
     message(STATUS "Code coverage enabled")
   else()
     message(WARNING "Code coverage is only supported with GCC or Clang")
+  endif()
+endif()
+
+# Clang-tidy configuration
+if(ENABLE_CLANG_TIDY)
+  find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
+  if(CLANG_TIDY_EXE)
+    message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+  else()
+    message(WARNING "clang-tidy requested but not found")
   endif()
 endif()
 

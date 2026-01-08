@@ -19,10 +19,14 @@ class msd(ConanFile):
 
     # Options
     options = {
-        "enable_coverage": [True, False]
+        "enable_coverage": [True, False],
+        "warnings_as_errors": [True, False],
+        "enable_clang_tidy": [True, False]
     }
     default_options = {
-        "enable_coverage": False
+        "enable_coverage": False,
+        "warnings_as_errors": False,
+        "enable_clang_tidy": False
     }
 
     def configure(self):
@@ -37,8 +41,18 @@ class msd(ConanFile):
         deps.generate()
         tc = CMakeToolchain(self)
 
-        # Pass coverage option to CMake
+        # Pass options to CMake
         tc.variables["ENABLE_COVERAGE"] = self.options.enable_coverage
+        tc.variables["ENABLE_CLANG_TIDY"] = self.options.enable_clang_tidy
+
+        # Enable warnings as errors for Release builds by default,
+        # but allow explicit override via the option
+        if self.options.warnings_as_errors:
+            tc.variables["WARNINGS_AS_ERRORS"] = True
+        elif str(self.settings.build_type) == "Release":
+            tc.variables["WARNINGS_AS_ERRORS"] = True
+        else:
+            tc.variables["WARNINGS_AS_ERRORS"] = False
 
         build_type = str(self.settings.build_type).lower()
         tc.variables["CMAKE_RUNTIME_OUTPUT_DIRECTORY"] = \

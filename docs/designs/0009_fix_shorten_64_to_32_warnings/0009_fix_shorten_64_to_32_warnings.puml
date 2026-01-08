@@ -1,0 +1,61 @@
+@startuml
+skinparam class {
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "msd-gui" {
+  class GPUManager<<modified>> {
+    ' MODIFIED METHODS:
+    - registerGeometry(): uint32_t
+    ' Cast size_t to uint32_t with explicit static_cast
+
+    - uploadInstanceBuffer(): void
+    ' Cast size_t buffer sizes to uint32_t
+
+    ' MEMBER VARIABLES (unchanged):
+    - totalVertexCount_: size_t
+    - geometryRegistry_: std::vector<GeometryInfo>
+    - instances_: std::vector<InstanceDataType>
+  }
+
+  note right of GPUManager
+    **Changes**:
+    - Add explicit static_cast<uint32_t>()
+      for all size_t → uint32_t conversions
+    - Document assumption that counts
+      fit in 32-bit range
+
+    **Affected lines**:
+    - Line 268: Buffer size cast
+    - Line 564: Transfer buffer size cast
+    - Line 602: totalVertexCount_ cast
+    - Line 603: vertices.size() cast
+    - Line 605: geometryRegistry_.size() cast
+  end note
+}
+
+package "SDL3 GPU API" {
+  class SDL_GPUBufferCreateInfo {
+    + size: uint32_t
+  }
+
+  class SDL_GPUTransferBufferCreateInfo {
+    + size: uint32_t
+  }
+}
+
+GPUManager --> SDL_GPUBufferCreateInfo : creates with uint32_t size
+GPUManager --> SDL_GPUTransferBufferCreateInfo : creates with uint32_t size
+
+note bottom
+  **Design Summary**:
+  This is a code quality fix (not an architectural change).
+
+  SDL GPU API requires uint32_t for buffer sizes.
+  Explicit casts from size_t to uint32_t remove
+  compiler warnings while documenting intent.
+
+  No new classes, no API changes, no behavioral changes.
+end note
+
+@enduml

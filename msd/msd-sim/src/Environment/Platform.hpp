@@ -149,6 +149,9 @@ public:
   const MotionController& getMotionController() const { return motionController_; }
 
 private:
+  //! Platform ID
+  uint32_t id_;
+
   //! State of the platform
   InertialState state_;
 
@@ -158,16 +161,14 @@ private:
   //! Optional reference to visual object in WorldModel
   std::optional<std::reference_wrapper<Object>> visualObject_;
 
+  //! Last update time
+  std::chrono::milliseconds lastUpdateTime_;
+
   //! Motion controller for transform updates
   MotionController motionController_;
 
   //! Sensor attached to the platform
   // Sensor sensor_;
-
-  //! Platform ID
-  uint32_t id_;
-
-  std::chrono::milliseconds lastUpdateTime_;
 };
 
 }  // namespace msd_sim

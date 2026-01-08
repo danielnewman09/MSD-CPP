@@ -739,8 +739,7 @@ TEST(InstanceDataLayoutTest, MatrixRowsMatchShaderExpectation)
   // Verify the layout matches what the shader expects
   // Shader reads at offsets 0, 16, 32, 48 for the 4 float4 rows
   auto* row0 = reinterpret_cast<float*>(&data.modelMatrix[0]);
-  auto* row1 = reinterpret_cast<float*>(&data.modelMatrix[4]);
-  auto* row2 = reinterpret_cast<float*>(&data.modelMatrix[8]);
+  // row1/row2 at offsets 4/8 are intermediate columns, not verified in this test
   auto* row3 = reinterpret_cast<float*>(&data.modelMatrix[12]);
 
   // These are Eigen columns being read as shader rows
@@ -1085,7 +1084,7 @@ TEST(FullPipelineTest, ModelAndViewProjection)
   view(2, 3) = -5.0f;  // Translate by -5 in Z
 
   // Simple perspective projection (simplified)
-  float fov = 60.0f * M_PI / 180.0f;
+  float fov = 60.0f * static_cast<float>(M_PI) / 180.0f;
   float aspect = 16.0f / 9.0f;
   float near = 0.1f;
   float far = 100.0f;

@@ -158,7 +158,7 @@ void ConvexHull::extractHullData(qhT* qh)
     if (!facet->upperdelaunay && facet->simplicial)
     {
       // Count vertices in this facet
-      vertexT *vertex, **vertexp;
+      vertexT** vertexp;
       int vertexCount = 0;
 
       FOREACHvertex_(facet->vertices)
@@ -173,7 +173,7 @@ void ConvexHull::extractHullData(qhT* qh)
       }
 
       Facet hullFacet;
-      int idx = 0;
+      size_t idx = 0;
 
       FOREACHvertex_(facet->vertices)
       {

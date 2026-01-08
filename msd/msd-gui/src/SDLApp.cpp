@@ -259,8 +259,8 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
   // Use random device for better randomness than rand()
   static std::random_device rd;
   static std::mt19937 gen{rd()};
-  static std::uniform_real_distribution<float> posDist{-5.0f, 5.0f};
-  static std::uniform_real_distribution<float> angleDist{-3.14159f, 3.14159f};
+  static std::uniform_real_distribution<double> posDist{-5.0, 5.0};
+  static std::uniform_real_distribution<double> angleDist{-3.14159, 3.14159};
   static std::uniform_real_distribution<float> colorDist{0.0f, 1.0f};
 
   // Find the asset
@@ -310,9 +310,9 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
           randomOrientation.pitch.toDeg(),
           randomOrientation.roll.toDeg(),
           randomOrientation.yaw.toDeg(),
-          r,
-          g,
-          b,
+          static_cast<double>(r),
+          static_cast<double>(g),
+          static_cast<double>(b),
           mockObjects_.size());
 }
 

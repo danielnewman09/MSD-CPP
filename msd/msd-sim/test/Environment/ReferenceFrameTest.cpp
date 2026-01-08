@@ -413,9 +413,8 @@ TEST(ReferenceFrameTest, ChainedFrameTransformations)
   ReferenceFrame frame1{origin1, euler1};
 
   Coordinate origin2{5.0, 0.0, 0.0};  // Relative to frame1
-  EulerAngles euler2{Angle::fromRadians(0.0),
-                     Angle::fromRadians(0.0),
-                     Angle::fromRadians(M_PI / 4)};
+  // euler2 declared but unused - test focuses on frame1 operations
+  // EulerAngles euler2{...}
 
   // Point in global frame
   Coordinate globalPoint{20.0, 5.0, 0.0};

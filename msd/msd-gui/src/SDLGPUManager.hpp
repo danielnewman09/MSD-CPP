@@ -24,8 +24,8 @@
 #include <msd-assets/src/Geometry.hpp>
 #include <msd-assets/src/GeometryFactory.hpp>
 #include <msd-gui/src/Camera3D.hpp>
-#include <msd-gui/src/ShaderPolicy.hpp>
 #include <msd-gui/src/SDLUtils.hpp>
+#include <msd-gui/src/ShaderPolicy.hpp>
 #include <msd-sim/src/Environment/Coordinate.hpp>
 #include <msd-sim/src/Environment/Object.hpp>
 #include <msd-sim/src/Environment/ReferenceFrame.hpp>
@@ -47,17 +47,22 @@ struct GeometryInfo
 };
 
 /**
- * @brief Templated GPU manager for SDL GPU rendering with configurable shader policies
- * @tparam ShaderPolicy Shader policy type (e.g., PositionOnlyShaderPolicy, FullTransformShaderPolicy)
+ * @brief Templated GPU manager for SDL GPU rendering with configurable shader
+ * policies
+ * @tparam ShaderPolicy Shader policy type (e.g., PositionOnlyShaderPolicy,
+ * FullTransformShaderPolicy)
  * @ticket 0002_remove_rotation_from_gpu
- * @see docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml
+ * @see
+ * docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml
  *
- * Manages GPU device, pipeline, buffers, and rendering for instanced 3D objects.
- * The shader policy determines vertex attributes, instance data layout, and shader files.
+ * Manages GPU device, pipeline, buffers, and rendering for instanced 3D
+ * objects. The shader policy determines vertex attributes, instance data
+ * layout, and shader files.
  *
- * Thread safety: Not thread-safe - all operations must occur on the main thread.
+ * Thread safety: Not thread-safe - all operations must occur on the main
+ * thread.
  */
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 class GPUManager
 {
 public:
@@ -141,7 +146,7 @@ private:
   ShaderPolicy shaderPolicy_;  // Shader policy instance
 
   std::vector<InstanceDataType> instances_;  // CPU-side instance data
-  std::vector<size_t> objectIndices_;        // Indices into external object vector
+  std::vector<size_t> objectIndices_;  // Indices into external object vector
 
   // Geometry registry for unified vertex buffer
   std::vector<GeometryInfo> geometryRegistry_;
@@ -167,15 +172,14 @@ private:
 // Template Implementation
 //=============================================================================
 
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 GPUManager<ShaderPolicy>::GPUManager(SDL_Window& window,
                                      msd_sim::ReferenceFrame& cameraFrame,
                                      const std::string& basePath)
-  : window_{window},
-    basePath_{basePath},
-    camera_{cameraFrame}
+  : window_{window}, basePath_{basePath}, camera_{cameraFrame}
 {
-  SDL_Log("GPUManager: Starting initialization, basePath=%s", basePath_.c_str());
+  SDL_Log("GPUManager: Starting initialization, basePath=%s",
+          basePath_.c_str());
 
   SDL_Log("GPUManager: Creating GPU device...");
   device_.reset(SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL |
@@ -186,7 +190,8 @@ GPUManager<ShaderPolicy>::GPUManager(SDL_Window& window,
 
   if (!device_.get())
   {
-    SDL_Log("GPUManager: ERROR - Failed to create SDL GPU device: %s", SDL_GetError());
+    SDL_Log("GPUManager: ERROR - Failed to create SDL GPU device: %s",
+            SDL_GetError());
     throw SDLException("Failed to create SDL GPU device");
   }
   SDL_Log("GPUManager: GPU device created successfully");
@@ -202,14 +207,10 @@ GPUManager<ShaderPolicy>::GPUManager(SDL_Window& window,
   SDL_Log("Using GPU device driver: %s", SDL_GetGPUDeviceDriver(device_.get()));
 
   // Load shaders via shader policy
-  SDL_Log("GPUManager: Loading vertex shader: %s", shaderPolicy_.getVertexShaderFile().c_str());
-  auto vertexShader = loadShader(shaderPolicy_.getVertexShaderFile(),
-                                 *device_,
-                                 basePath_,
-                                 0,
-                                 1,
-                                 0,
-                                 0);
+  SDL_Log("GPUManager: Loading vertex shader: %s",
+          shaderPolicy_.getVertexShaderFile().c_str());
+  auto vertexShader = loadShader(
+    shaderPolicy_.getVertexShaderFile(), *device_, basePath_, 0, 1, 0, 0);
 
   if (!vertexShader.get())
   {
@@ -220,13 +221,8 @@ GPUManager<ShaderPolicy>::GPUManager(SDL_Window& window,
   SDL_Log("Successfully loaded vertex shader: %s",
           shaderPolicy_.getVertexShaderFile().c_str());
 
-  auto fragmentShader = loadShader(shaderPolicy_.getFragmentShaderFile(),
-                                   *device_,
-                                   basePath_,
-                                   0,
-                                   0,
-                                   0,
-                                   0);
+  auto fragmentShader = loadShader(
+    shaderPolicy_.getFragmentShaderFile(), *device_, basePath_, 0, 0, 0, 0);
 
   if (!fragmentShader.get())
   {
@@ -323,7 +319,8 @@ GPUManager<ShaderPolicy>::GPUManager(SDL_Window& window,
   const size_t maxInstances = 1000;
   SDL_GPUBufferCreateInfo instanceBufferCreateInfo = {
     .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
-    .size = static_cast<uint32_t>(maxInstances * shaderPolicy_.getInstanceDataSize())};
+    .size = static_cast<uint32_t>(maxInstances *
+                                  shaderPolicy_.getInstanceDataSize())};
 
   instanceBuffer_ =
     UniqueBuffer(SDL_CreateGPUBuffer(device_.get(), &instanceBufferCreateInfo),
@@ -355,7 +352,8 @@ GPUManager<ShaderPolicy>::GPUManager(SDL_Window& window,
     .format = SDL_GetGPUSwapchainTextureFormat(device_.get(), &window)};
 
   // Get vertex input state from shader policy
-  SDL_GPUVertexInputState vertexInputState = shaderPolicy_.getVertexInputState();
+  SDL_GPUVertexInputState vertexInputState =
+    shaderPolicy_.getVertexInputState();
 
   SDL_GPUGraphicsPipelineCreateInfo pipelineCreateInfo = {
     .vertex_input_state = vertexInputState,
@@ -405,13 +403,13 @@ GPUManager<ShaderPolicy>::GPUManager(SDL_Window& window,
   }
 }
 
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 Camera3D& GPUManager<ShaderPolicy>::getCamera()
 {
   return camera_;
 }
 
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 void GPUManager<ShaderPolicy>::render()
 {
   {
@@ -478,8 +476,11 @@ void GPUManager<ShaderPolicy>::render()
       SDL_FColor{0.0f, 0.0f, 0.5f, 1.0f};  // Blue background
 
     std::vector<SDL_GPUColorTargetInfo> colorTargets{colorTarget};
-    SDL_GPURenderPass* renderPass{SDL_BeginGPURenderPass(
-      commandBuffer, colorTargets.data(), colorTargets.size(), &depthTarget)};
+    SDL_GPURenderPass* renderPass{
+      SDL_BeginGPURenderPass(commandBuffer,
+                             colorTargets.data(),
+                             static_cast<uint32_t>(colorTargets.size()),
+                             &depthTarget)};
 
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline_.get());
 
@@ -494,17 +495,18 @@ void GPUManager<ShaderPolicy>::render()
     // For FullTransform, instances are sorted by geometryIndex
     if (!instances_.empty())
     {
-      // For PositionOnlyShaderPolicy: no geometryIndex, all instances rendered together
-      // For FullTransformShaderPolicy: instances sorted by geometryIndex
+      // For PositionOnlyShaderPolicy: no geometryIndex, all instances rendered
+      // together For FullTransformShaderPolicy: instances sorted by
+      // geometryIndex
       if constexpr (std::is_same_v<ShaderPolicy, PositionOnlyShaderPolicy>)
       {
         // Simple case: all instances use geometry index 0 (pyramid)
         const auto& geomInfo = geometryRegistry_[0];
         SDL_DrawGPUPrimitives(renderPass,
-                              geomInfo.vertexCount,       // Vertices
-                              instances_.size(),          // Instance count
-                              geomInfo.baseVertex,        // Base vertex
-                              0);                         // First instance
+                              geomInfo.vertexCount,  // Vertices
+                              instances_.size(),     // Instance count
+                              geomInfo.baseVertex,   // Base vertex
+                              0);                    // First instance
       }
       else
       {
@@ -551,7 +553,7 @@ void GPUManager<ShaderPolicy>::render()
   }
 }
 
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 void GPUManager<ShaderPolicy>::uploadInstanceBuffer()
 {
   if (instances_.empty())
@@ -561,7 +563,8 @@ void GPUManager<ShaderPolicy>::uploadInstanceBuffer()
 
   SDL_GPUTransferBufferCreateInfo transferCreateInfo = {
     .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-    .size = static_cast<uint32_t>(instances_.size() * sizeof(InstanceDataType))};
+    .size =
+      static_cast<uint32_t>(instances_.size() * sizeof(InstanceDataType))};
 
   SDL_GPUTransferBuffer* transferBuffer =
     SDL_CreateGPUTransferBuffer(device_.get(), &transferCreateInfo);
@@ -593,7 +596,7 @@ void GPUManager<ShaderPolicy>::uploadInstanceBuffer()
   SDL_ReleaseGPUTransferBuffer(device_.get(), transferBuffer);
 }
 
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 uint32_t GPUManager<ShaderPolicy>::registerGeometry(
   const std::string& name,
   const std::vector<msd_assets::Vertex>& vertices)
@@ -617,7 +620,7 @@ uint32_t GPUManager<ShaderPolicy>::registerGeometry(
   return index;
 }
 
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 typename GPUManager<ShaderPolicy>::InstanceDataType
 GPUManager<ShaderPolicy>::buildInstanceData(const msd_sim::Object& object)
 {
@@ -642,14 +645,15 @@ GPUManager<ShaderPolicy>::buildInstanceData(const msd_sim::Object& object)
     // FullTransform: create model matrix and extract geometry index
     // Use the shader policy's createModelMatrix method
     FullTransformShaderPolicy tempPolicy;
-    auto instanceBytes = tempPolicy.buildInstanceData(object, geometryNameToIndex_);
+    auto instanceBytes =
+      tempPolicy.buildInstanceData(object, geometryNameToIndex_);
     std::memcpy(&data, instanceBytes.data(), sizeof(InstanceDataType));
   }
 
   return data;
 }
 
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 size_t GPUManager<ShaderPolicy>::addObject(const msd_sim::Object& object)
 {
   InstanceDataType instance = buildInstanceData(object);
@@ -669,13 +673,14 @@ size_t GPUManager<ShaderPolicy>::addObject(const msd_sim::Object& object)
   }
   else
   {
-    SDL_Log("Added object %zu. Total objects: %zu", index, objectIndices_.size());
+    SDL_Log(
+      "Added object %zu. Total objects: %zu", index, objectIndices_.size());
   }
 
   return index;
 }
 
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 void GPUManager<ShaderPolicy>::removeObject(size_t index)
 {
   if (index >= objectIndices_.size())
@@ -695,7 +700,7 @@ void GPUManager<ShaderPolicy>::removeObject(size_t index)
     "Removed object %zu. Remaining objects: %zu", index, objectIndices_.size());
 }
 
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 void GPUManager<ShaderPolicy>::updateObjects(
   const std::vector<msd_sim::Object>& objects)
 {
@@ -711,7 +716,8 @@ void GPUManager<ShaderPolicy>::updateObjects(
     }
   }
 
-  // Sort instances by geometry index for efficient rendering (FullTransform only)
+  // Sort instances by geometry index for efficient rendering (FullTransform
+  // only)
   if constexpr (std::is_same_v<ShaderPolicy, FullTransformShaderPolicy>)
   {
     std::sort(instances_.begin(),
@@ -727,7 +733,7 @@ void GPUManager<ShaderPolicy>::updateObjects(
   uploadInstanceBuffer();
 }
 
-template<typename ShaderPolicy>
+template <typename ShaderPolicy>
 void GPUManager<ShaderPolicy>::clearObjects()
 {
   instances_.clear();

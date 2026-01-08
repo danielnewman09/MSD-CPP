@@ -59,8 +59,8 @@ public:
    * @param linearVelocity Linear velocity vector [m/s]
    * @param angularVelocity Angular velocity vector [rad/s]
    */
-  DynamicState(const Coordinate& linearVelocity,
-               const Eigen::Vector3d& angularVelocity)
+  DynamicState([[maybe_unused]] const Coordinate& linearVelocity,
+               [[maybe_unused]] const Eigen::Vector3d& angularVelocity)
   {  // placeholder do nothing
   }
 
@@ -105,7 +105,7 @@ public:
    * @brief Set the linear velocity.
    * @param velocity New linear velocity [m/s]
    */
-  void setLinearVelocity(const Coordinate& velocity)
+  void setLinearVelocity([[maybe_unused]] const Coordinate& velocity)
   {
     // placeholder do nothing
   }
@@ -114,7 +114,7 @@ public:
    * @brief Set the angular velocity.
    * @param velocity New angular velocity [rad/s]
    */
-  void setAngularVelocity(const Eigen::Vector3d& velocity)
+  void setAngularVelocity([[maybe_unused]] const Eigen::Vector3d& velocity)
   {
     // placeholder do nothing
   }
@@ -123,7 +123,7 @@ public:
    * @brief Set the linear acceleration.
    * @param acceleration New linear acceleration [m/s²]
    */
-  void setLinearAcceleration(const Coordinate& acceleration)
+  void setLinearAcceleration([[maybe_unused]] const Coordinate& acceleration)
   {
     // placeholder do nothing
   }
@@ -132,7 +132,8 @@ public:
    * @brief Set the angular acceleration.
    * @param acceleration New angular acceleration [rad/s²]
    */
-  void setAngularAcceleration(const Eigen::Vector3d& acceleration)
+  void setAngularAcceleration(
+      [[maybe_unused]] const Eigen::Vector3d& acceleration)
   {
     // placeholder do nothing
   }
@@ -145,7 +146,7 @@ public:
    * @param mass Mass of the body [kg]
    * @return Linear kinetic energy [J]
    */
-  double getLinearKineticEnergy(double mass) const
+  double getLinearKineticEnergy([[maybe_unused]] double mass) const
   {
     return 0.;
   }
@@ -158,7 +159,8 @@ public:
    * @param inertiaTensor Inertia tensor in body frame [kg⋅m²]
    * @return Rotational kinetic energy [J]
    */
-  double getRotationalKineticEnergy(const Eigen::Matrix3d& inertiaTensor) const
+  double getRotationalKineticEnergy(
+      [[maybe_unused]] const Eigen::Matrix3d& inertiaTensor) const
   {
     return 0.;
   }
@@ -172,8 +174,9 @@ public:
    * @param inertiaTensor Inertia tensor in body frame [kg⋅m²]
    * @return Total kinetic energy [J]
    */
-  double getTotalKineticEnergy(double mass,
-                               const Eigen::Matrix3d& inertiaTensor) const
+  double getTotalKineticEnergy(
+      [[maybe_unused]] double mass,
+      [[maybe_unused]] const Eigen::Matrix3d& inertiaTensor) const
   {
     return 0.;
   }
@@ -207,8 +210,8 @@ public:
    * 1e-6)
    * @return true if body is at rest, false otherwise
    */
-  bool isAtRest(double linearThreshold = 1e-6,
-                double angularThreshold = 1e-6) const
+  bool isAtRest([[maybe_unused]] double linearThreshold = 1e-6,
+                [[maybe_unused]] double angularThreshold = 1e-6) const
   {
     // placeholder do nothing
     return true;
@@ -230,7 +233,8 @@ public:
    * @param impulse Linear impulse vector [N⋅s]
    * @param mass Mass of the body [kg]
    */
-  void applyLinearImpulse(const Coordinate& impulse, double mass)
+  void applyLinearImpulse([[maybe_unused]] const Coordinate& impulse,
+                          [[maybe_unused]] double mass)
   {
     // placeholder do nothing
   }
@@ -243,8 +247,8 @@ public:
    * @param impulse Angular impulse vector [N⋅m⋅s]
    * @param inverseInertia Inverse inertia tensor [1/(kg⋅m²)]
    */
-  void applyAngularImpulse(const Eigen::Vector3d& impulse,
-                           const Eigen::Matrix3d& inverseInertia)
+  void applyAngularImpulse([[maybe_unused]] const Eigen::Vector3d& impulse,
+                           [[maybe_unused]] const Eigen::Matrix3d& inverseInertia)
   {
     // placeholder do nothing
   }
