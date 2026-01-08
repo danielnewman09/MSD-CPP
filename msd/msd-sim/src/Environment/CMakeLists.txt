@@ -4,6 +4,7 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/InertialState.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ReferenceFrame.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Object.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MotionController.cpp
 )
 
 set(
@@ -16,6 +17,7 @@ set(
     ${CMAKE_CURRENT_SOURCE_DIR}/Object.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ReferenceFrame.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/WorldModel.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MotionController.hpp
 # Add more headers here as needed
     PARENT_SCOPE
 )

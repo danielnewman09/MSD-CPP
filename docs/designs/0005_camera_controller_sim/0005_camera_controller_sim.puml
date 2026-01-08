@@ -1,0 +1,149 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "msd-sim" {
+    ' New MotionController class
+    class MotionController <<new>> {
+        -rotSpeed_: Angle
+        -moveSpeed_: float
+        -sensitivity_: float
+        +MotionController(rotSpeed: Angle, moveSpeed: float)
+        +updateTransform(frame: ReferenceFrame&, commands: InputCommands, deltaTime: milliseconds): void
+        +setMoveSpeed(speed: float): void
+        +setRotationSpeed(speed: Angle): void
+        +setSensitivity(sensitivity: float): void
+        +getMoveSpeed(): float
+        +getRotationSpeed(): Angle
+    }
+
+    ' Modified Platform class
+    class Platform <<modified>> {
+        -state_: InertialState
+        -agent_: unique_ptr<BaseAgent>
+        -visualObject_: optional<reference_wrapper<Object>>
+        -id_: uint32_t
+        -lastUpdateTime_: milliseconds
+        +motionController_: MotionController
+        +update(currTime: milliseconds): void
+        +setAgent(agent: unique_ptr<BaseAgent>): void
+        +getMotionController(): MotionController&
+    }
+
+    ' Existing InputCommands (for context)
+    class InputCommands {
+        +moveForward: bool
+        +moveBackward: bool
+        +moveLeft: bool
+        +moveRight: bool
+        +moveUp: bool
+        +moveDown: bool
+        +pitchUp: bool
+        +pitchDown: bool
+        +yawLeft: bool
+        +yawRight: bool
+        +reset(): void
+    }
+
+    ' Existing Object (for context)
+    class Object {
+        -transform_: ReferenceFrame
+        +getTransform(): ReferenceFrame&
+        +setPosition(position: Coordinate): void
+    }
+
+    ' Existing ReferenceFrame (for context)
+    class ReferenceFrame {
+        -origin_: Coordinate
+        -euler_: EulerAngles
+        +getOrigin(): Coordinate&
+        +setOrigin(origin: Coordinate): void
+        +getEulerAngles(): EulerAngles&
+        +setRotation(euler: EulerAngles): void
+        +localToGlobalRelative(localVector: Coordinate): Coordinate
+    }
+}
+
+package "msd-gui" {
+    ' Modified Camera3D
+    class Camera3D <<modified>> {
+        -frame_: reference_wrapper<ReferenceFrame>
+        -fovRadians_: float
+        -aspectRatio_: float
+        -nearPlane_: float
+        -farPlane_: float
+        +Camera3D(referenceFrame: ReferenceFrame&, fov: float, aspect: float)
+        +getReferenceFrame(): ReferenceFrame&
+        +getViewMatrix(): Matrix4f
+        +getProjectionMatrix(): Matrix4f
+    }
+
+    ' CameraController to be removed
+    class CameraController <<removed>> {
+        -camera_: Camera3D&
+        -moveSpeed_: float
+        -rotSpeed_: Angle
+        -sensitivity_: float
+    }
+
+    ' Modified SDLApplication
+    class SDLApplication <<modified>> {
+        -engine_: Engine
+        -gpuManager_: unique_ptr<GPUManager>
+        -inputHandler_: unique_ptr<InputHandler>
+        -cameraController_: unique_ptr<CameraController>
+        +setupInputBindings(): void
+        +updatePlayerInput(): void
+    }
+
+    ' Existing InputHandler (for context)
+    class InputHandler {
+        -inputState_: InputState
+        +getInputState(): InputState&
+        +handleSDLEvent(event: SDL_Event): void
+        +update(deltaTime: milliseconds): void
+    }
+}
+
+' Relationships
+Platform *-- MotionController : owns
+Platform o-- Object : optional visual link
+Object *-- ReferenceFrame : owns transform
+Camera3D o-- ReferenceFrame : references (non-owning)
+MotionController ..> InputCommands : consumes
+MotionController ..> ReferenceFrame : updates
+SDLApplication ..> InputCommands : creates from InputState
+SDLApplication *-- InputHandler : owns
+SDLApplication ..> Platform : accesses via Engine
+
+note right of Camera3D
+  Camera3D now holds a
+  reference to Platform's
+  Object's ReferenceFrame
+  instead of owning its own
+end note
+
+note right of MotionController
+  New class in msd-sim
+  that encapsulates movement
+  and rotation logic.
+  Replaces CameraController
+  from msd-gui.
+end note
+
+note right of Platform
+  Platform owns MotionController
+  and updates its linked
+  Object's ReferenceFrame
+  based on InputCommands.
+end note
+
+note bottom of CameraController
+  This class will be removed.
+  Its functionality moves to
+  msd-sim::MotionController.
+end note
+
+@enduml

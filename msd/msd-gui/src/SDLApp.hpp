@@ -1,5 +1,7 @@
 // Ticket: 0004_gui_framerate
+// Ticket: 0005_camera_controller_sim
 // Design: docs/designs/input-state-management/design.md
+// Design: docs/designs/0005_camera_controller_sim/design.md
 // Previous tickets: 0002_remove_rotation_from_gpu, 0001_link-gui-sim-object
 
 #ifndef SDL_APP_HPP
@@ -7,13 +9,13 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <SDL3/SDL.h>
 
 #include "msd-assets/src/Asset.hpp"
-#include "msd-gui/src/CameraController.hpp"
 #include "msd-gui/src/InputHandler.hpp"
 #include "msd-gui/src/SDLGPUManager.hpp"
 #include "msd-gui/src/ShaderPolicy.hpp"
@@ -81,7 +83,9 @@ private:
 
   // Input management
   std::unique_ptr<InputHandler> inputHandler_;
-  std::unique_ptr<CameraController> cameraController_;
+
+  // Player platform ID for input forwarding
+  std::optional<uint32_t> playerPlatformId_;
 
   // Frame timing for delta time
   std::chrono::milliseconds lastFrameTime_{0};

@@ -1,5 +1,7 @@
 // Ticket: 0002_remove_rotation_from_gpu
+// Ticket: 0005_camera_controller_sim
 // Design: docs/designs/modularize-gpu-shader-system/design.md
+// Design: docs/designs/0005_camera_controller_sim/design.md
 // Previous ticket: 0001_link-gui-sim-object
 
 #ifndef SDL_GPU_MANAGER_HPP
@@ -59,7 +61,20 @@ template<typename ShaderPolicy>
 class GPUManager
 {
 public:
-  explicit GPUManager(SDL_Window& window, const std::string& basePath);
+  /**
+   * @brief Construct a GPUManager with camera reference frame
+   * @param window SDL window reference (non-owning)
+   * @param cameraFrame Reference frame for camera (non-owning)
+   * @param basePath Base path for shader files
+   *
+   * NOTE: The provided ReferenceFrame must outlive this GPUManager instance.
+   * Typically the ReferenceFrame is owned by a Platform's visual Object.
+   *
+   * @ticket 0005_camera_controller_sim
+   */
+  explicit GPUManager(SDL_Window& window,
+                      msd_sim::ReferenceFrame& cameraFrame,
+                      const std::string& basePath);
   ~GPUManager() = default;
 
   // Delete copy constructor and assignment operator
@@ -154,10 +169,11 @@ private:
 
 template<typename ShaderPolicy>
 GPUManager<ShaderPolicy>::GPUManager(SDL_Window& window,
+                                     msd_sim::ReferenceFrame& cameraFrame,
                                      const std::string& basePath)
   : window_{window},
     basePath_{basePath},
-    camera_{msd_sim::Coordinate{0., 0., 5.}}
+    camera_{cameraFrame}
 {
   SDL_Log("GPUManager: Starting initialization, basePath=%s", basePath_.c_str());
 

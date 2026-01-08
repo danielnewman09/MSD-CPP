@@ -1,5 +1,7 @@
 // Ticket: 0004_gui_framerate
+// Ticket: 0005_camera_controller_sim
 // Design: docs/designs/input-state-management/design.md
+// Design: docs/designs/0005_camera_controller_sim/design.md
 
 #include "msd-sim/src/Environment/Platform.hpp"
 #include "msd-sim/src/Environment/Object.hpp"
@@ -10,7 +12,9 @@ namespace msd_sim
 
 // Constructor
 Platform::Platform(uint32_t id)
-  : id_{id}, lastUpdateTime_{std::chrono::milliseconds{0}}
+  : id_{id},
+    lastUpdateTime_{std::chrono::milliseconds{0}},
+    motionController_{}  // Initialize with default parameters
 {
   std::cout << "Platform " << id_ << " created.\n";
 }

@@ -19,24 +19,40 @@ This workflow guides the implementation of **architectural C++ changes**—new c
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                                                             │
-│  ┌──────────┐     ┌────────────────┐     ┌────────────┐                    │
-│  │  DESIGN  │────▶│ DESIGN REVIEW  │────▶│ PROTOTYPE  │                    │
-│  └──────────┘     └────────────────┘     └────────────┘                    │
-│       │                   │                    │                            │
-│       │ Human             │ Human              │ Human                      │
-│       │ Review            │ Review             │ Review                     │
-│       ▼                   ▼                    ▼                            │
-│  [Approve/Edit]     [Approve/Edit]       [Approve/Edit]                    │
+│  ┌──────────┐     ┌────────────────┐                                       │
+│  │  DESIGN  │────▶│ DESIGN REVIEW  │◀─┐                                    │
+│  └──────────┘     └────────────────┘  │                                    │
+│       ▲                   │           │ Autonomous                         │
+│       │                   │           │ Iteration (1x)                     │
+│       │              ┌────┴────┐      │                                    │
+│       │              │ Revision│──────┘                                    │
+│       │              │ Needed? │                                           │
+│       │              └────┬────┘                                           │
+│       │                   │ No (or after 1 iteration)                      │
+│       │                   ▼                                                │
+│       │           ┌────────────┐                                           │
+│       │           │ Human Gate │                                           │
+│       │           └─────┬──────┘                                           │
+│       │                 │                                                  │
+│       └─────────────────┘ (Human requests changes)                         │
+│                         │                                                  │
+│                         ▼ (Human approves)                                 │
+│                 ┌────────────┐                                             │
+│                 │ PROTOTYPE  │                                             │
+│                 └─────┬──────┘                                             │
+│                       │ Human Review                                       │
+│                       ▼                                                    │
+│                 [Approve/Edit]                                             │
 │                                                                             │
-│                      ┌─────────────┐     ┌────────────────────┐            │
-│                      │ IMPLEMENT   │────▶│ IMPLEMENTATION     │            │
-│                      │             │     │ REVIEW             │            │
-│                      └─────────────┘     └────────────────────┘            │
-│                            │                    │                           │
-│                            │ Human              │ Human                     │
-│                            │ Review             │ Review                    │
-│                            ▼                    ▼                           │
-│                       [Approve/Edit]       [Approve/Merge]                 │
+│       ┌─────────────┐     ┌────────────────────┐     ┌──────────────┐      │
+│       │ IMPLEMENT   │────▶│ IMPLEMENTATION     │────▶│ DOCUMENTATION│      │
+│       │             │     │ REVIEW             │     │ SYNC         │      │
+│       └─────────────┘     └────────────────────┘     └──────────────┘      │
+│            │                    │                          │               │
+│            │ Human              │ Human                    │ Human         │
+│            │ Review             │ Review                   │ Review        │
+│            ▼                    ▼                          ▼               │
+│       [Approve/Edit]       [Approve]                  [Approve/Merge]      │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -48,37 +64,43 @@ Each phase produces artifacts that the human operator reviews before the next ph
 ## Phase Definitions
 
 ### Phase 1: Design
-**Agent**: `.claude/agents/cpp-architect.md`  
-**Input**: Feature requirements from user  
-**Output**: 
+**Agent**: `.claude/agents/cpp-architect.md`
+**Input**: Feature requirements from user (or revision feedback from Design Review)
+**Output**:
 - `docs/designs/{feature-name}/design.md`
 - `docs/designs/{feature-name}/{feature-name}.puml`
 
-**Human Gate**: 
-- Review design document and PlantUML
-- Answer Open Questions (design decisions, clarifications)
-- Edit artifacts if needed
-- Signal approval to proceed to Design Review
-
-**Revision Loop**:
-- Human edits design → Re-run Design phase to validate changes
-- OR Human approves → Proceed to Design Review
+**Autonomous Flow**:
+- Initial design created → Automatically proceeds to Design Review
+- If revision requested → Architect updates design based on reviewer feedback
+- Design document includes revision history showing changes made
 
 ---
 
 ### Phase 2: Design Review
-**Agent**: `.claude/agents/design-reviewer.md`  
-**Input**: Design artifacts + human decisions on open questions  
+**Agent**: `.claude/agents/design-reviewer.md`
+**Input**: Design artifacts from Phase 1
 **Output**: Review appended to `docs/designs/{feature-name}/design.md`
 
-**Human Gate**:
-- Review the Design Review assessment
+**Autonomous Iteration** (occurs once before human review):
+1. Reviewer evaluates initial design
+2. If issues found on first pass → Kicks back to Architect with specific feedback
+3. Architect revises design and updates artifacts
+4. Reviewer performs final review of revised design
+5. Final review presented to human
+
+**Human Gate** (after autonomous iteration):
+- Review the complete design history:
+  - Initial design
+  - First review feedback
+  - Architect's revisions (if any)
+  - Final review assessment
 - For APPROVED/APPROVED WITH NOTES: Review prototype guidance
-- For NEEDS REVISION: Review required changes
+- For NEEDS REVISION: Review required changes (beyond autonomous iteration)
 - For BLOCKED: Resolve blocking issues
 
-**Revision Loop**:
-- If NEEDS REVISION: Return to Phase 1 with revision guidance
+**Revision Loop** (human-initiated):
+- If human requests changes: Return to Phase 1 with human feedback
 - If BLOCKED: Human resolves blockers, then re-review
 - If APPROVED: Proceed to Prototype (or Implementation if no prototypes needed)
 
@@ -124,18 +146,38 @@ Each phase produces artifacts that the human operator reviews before the next ph
 ---
 
 ### Phase 5: Implementation Review
-**Agent**: `.claude/agents/implementation-reviewer.md`  
-**Input**: All previous artifacts + implemented code  
+**Agent**: `.claude/agents/implementation-reviewer.md`
+**Input**: All previous artifacts + implemented code
 **Output**: `docs/designs/{feature-name}/implementation-review.md`
 
 **Human Gate**:
 - Review the implementation review
-- Final approval for merge
+- Approve to proceed to Documentation Sync
 
 **Revision Loop**:
 - If CHANGES REQUESTED: Return to Phase 4 with required changes
 - If BLOCKED: May need to return to earlier phases
-- If APPROVED: Feature complete, ready to merge
+- If APPROVED: Proceed to Documentation Sync
+
+---
+
+### Phase 6: Documentation Sync
+**Agent**: `.claude/agents/docs-updater.md`
+**Input**: All design artifacts + implemented code
+**Output**:
+- Updated `docs/msd/{library}/` diagrams and documentation
+- Updated `CLAUDE.md` with new components and diagrams index
+- `docs/designs/{feature-name}/doc-sync-summary.md`
+
+**Human Gate**:
+- Review documentation changes
+- Verify diagrams accurately reflect implementation
+- Verify CLAUDE.md updates are accurate
+- Final approval for merge
+
+**Revision Loop**:
+- If changes needed: Edit and re-run Documentation Sync
+- If approved: Feature workflow complete, ready to merge
 
 ---
 
@@ -144,15 +186,29 @@ Each phase produces artifacts that the human operator reviews before the next ph
 To run each phase, use the Task tool with the appropriate agent:
 
 ```
-Phase 1 - Design:
+Phase 1+2 - Design with Autonomous Review (combined):
+Task: Execute design workflow with autonomous iteration
+Input: Feature "{name}": {description}
+Flow:
+  1. cpp-architect creates initial design
+  2. design-reviewer evaluates and provides feedback
+  3. If revisions needed: cpp-architect updates design (1 iteration max)
+  4. design-reviewer performs final review
+Output: Complete design artifacts in docs/designs/{name}/ including:
+        - design.md with revision history and final review
+        - {name}.puml diagram
+
+Phase 1 - Design (standalone, for human-requested revisions):
 Task: Read .claude/agents/cpp-architect.md and execute design phase
 Input: Feature "{name}": {description}
+       OR Revision feedback: {human feedback}
 Output: Design artifacts in docs/designs/{name}/
 
-Phase 2 - Design Review:
+Phase 2 - Design Review (standalone, for re-review after human changes):
 Task: Read .claude/agents/design-reviewer.md and execute design review
 Input: Design document at docs/designs/{name}/design.md
        Human decisions: {any answers to open questions}
+       Iteration count: {0 for fresh review, 1 if already iterated}
 Output: Review appended to design document
 
 Phase 3 - Prototype:
@@ -173,6 +229,15 @@ Task: Read .claude/agents/implementation-reviewer.md and execute review
 Input: All artifacts in docs/designs/{name}/
        Implemented code
 Output: Implementation review at docs/designs/{name}/implementation-review.md
+
+Phase 6 - Documentation Sync:
+Task: Read .claude/agents/docs-updater.md and execute documentation sync
+Input: All artifacts in docs/designs/{name}/
+       Implemented code
+       Target library: {library} (e.g., msd-sim, msd-assets, msd-gui)
+Output: Updated docs/msd/{library}/ diagrams
+        Updated CLAUDE.md
+        Doc sync summary at docs/designs/{name}/doc-sync-summary.md
 ```
 
 ---
@@ -188,6 +253,7 @@ Each phase MUST read and reference artifacts from previous phases:
 | Prototype | Design document with review | Codebase for types/interfaces |
 | Implementation | Design, Review, Prototype results | Full codebase |
 | Impl Review | ALL previous artifacts | Full codebase |
+| Doc Sync | ALL previous artifacts, implemented code | Existing docs/msd/{library}/ |
 
 ---
 
@@ -244,6 +310,11 @@ When providing feedback to resume a phase:
 - CHANGES REQUESTED → Make changes, re-run review
 - Repeated failures (3x) → Escalate, may need design revision
 
+### Documentation Sync Failures
+- Diagram conflicts with existing library docs → Merge manually or update design
+- CLAUDE.md structure mismatch → Adjust to match existing format
+- Missing library documentation → Create new library section in CLAUDE.md
+
 ---
 
 ## Artifacts Summary
@@ -252,11 +323,20 @@ After successful completion, the following artifacts exist:
 
 ```
 docs/designs/{feature-name}/
-├── design.md                 # Original design + design review
-├── {feature-name}.puml       # Architecture diagram
+├── design.md                 # Design with revision history + reviews
+│                             #   - Initial design
+│                             #   - First review (if revisions requested)
+│                             #   - Revision notes (changes made by architect)
+│                             #   - Final review
+├── {feature-name}.puml       # Architecture diagram (updated through iterations)
 ├── prototype-results.md      # Prototype findings + impl ticket
 ├── implementation-notes.md   # What was implemented
-└── implementation-review.md  # Final review
+├── implementation-review.md  # Final review
+└── doc-sync-summary.md       # Documentation sync summary
+
+docs/msd/{library}/           # Library-level documentation (updated by Doc Sync)
+├── {library}-core.puml       # Updated/created core overview diagram
+└── {component}.puml          # Updated/created component diagrams
 
 prototypes/{feature-name}/    # Prototype code (may delete after)
 ├── p1_{name}/
@@ -278,4 +358,5 @@ prototypes/{feature-name}/    # Prototype code (may delete after)
 | Revise design | Edit artifacts, re-run Design or Design Review |
 | Skip prototypes | If Design Review has no prototypes, go straight to Implementation |
 | Fix implementation issue | Edit code or provide feedback, re-run Implementation |
-| Complete feature | Get APPROVED from Implementation Review |
+| Sync library docs | Run Documentation Sync phase after Implementation Review |
+| Complete feature | Get APPROVED from Documentation Sync |

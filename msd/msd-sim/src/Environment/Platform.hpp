@@ -1,5 +1,7 @@
 // Ticket: 0004_gui_framerate
+// Ticket: 0005_camera_controller_sim
 // Design: docs/designs/input-state-management/design.md
+// Design: docs/designs/0005_camera_controller_sim/design.md
 
 #ifndef PLATFORM_HPP
 #define PLATFORM_HPP
@@ -11,6 +13,7 @@
 #include <optional>
 #include "msd-sim/src/Agent/BaseAgent.hpp"
 #include "msd-sim/src/Environment/InertialState.hpp"
+#include "msd-sim/src/Environment/MotionController.hpp"
 
 namespace msd_sim
 {
@@ -128,6 +131,23 @@ public:
    */
   uint32_t getId() const { return id_; }
 
+  // ========== Motion Control ==========
+
+  /**
+   * @brief Get mutable motion controller reference
+   * @return Reference to motion controller
+   *
+   * Provides access to motion controller for updating transform based on input.
+   * Typically used by Engine to forward player input commands.
+   */
+  MotionController& getMotionController() { return motionController_; }
+
+  /**
+   * @brief Get const motion controller reference
+   * @return Const reference to motion controller
+   */
+  const MotionController& getMotionController() const { return motionController_; }
+
 private:
   //! State of the platform
   InertialState state_;
@@ -137,6 +157,9 @@ private:
 
   //! Optional reference to visual object in WorldModel
   std::optional<std::reference_wrapper<Object>> visualObject_;
+
+  //! Motion controller for transform updates
+  MotionController motionController_;
 
   //! Sensor attached to the platform
   // Sensor sensor_;
