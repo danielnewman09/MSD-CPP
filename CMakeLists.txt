@@ -12,16 +12,38 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Build options
+option(BUILD_TESTING "Build the testing tree" ON)
+option(ENABLE_COVERAGE "Enable code coverage" OFF)
+option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+
 # Add useful compiler warnings
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Wconversion        # Warn on implicit type conversions that may lose data
+    -Wshadow            # Warn when a local variable shadows another
+    -Wnon-virtual-dtor  # Warn on classes with virtual functions but non-virtual destructors
+    -Wold-style-cast    # Warn on C-style casts
+    -Wnull-dereference  # Warn if null pointer dereference is detected
+    -Wdouble-promotion  # Warn when float is implicitly promoted to double
+  )
 elseif(MSVC)
   add_compile_options(/W4)
 endif()
 
-# Option for building tests
-option(BUILD_TESTING "Build the testing tree" ON)
-option(ENABLE_COVERAGE "Enable code coverage" OFF)
+# Warnings as errors configuration
+if(WARNINGS_AS_ERRORS)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Werror)
+    message(STATUS "Warnings as errors enabled (-Werror)")
+  elseif(MSVC)
+    add_compile_options(/WX)
+    message(STATUS "Warnings as errors enabled (/WX)")
+  endif()
+endif()
 
 # Coverage configuration
 if(ENABLE_COVERAGE)

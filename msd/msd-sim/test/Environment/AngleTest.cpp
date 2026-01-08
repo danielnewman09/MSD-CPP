@@ -243,7 +243,8 @@ TEST(AngleTest, AssignmentOperator)
 TEST(AngleTest, SelfAssignment)
 {
   Angle angle = Angle::fromRadians(M_PI / 4);
-  angle = angle;
+  Angle& angleRef = angle;
+  angle = angleRef;  // Self-assignment through reference
   EXPECT_DOUBLE_EQ(angle.getRad(), M_PI / 4);
 }
 

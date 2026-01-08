@@ -739,8 +739,7 @@ TEST(InstanceDataLayoutTest, MatrixRowsMatchShaderExpectation)
   // Verify the layout matches what the shader expects
   // Shader reads at offsets 0, 16, 32, 48 for the 4 float4 rows
   auto* row0 = reinterpret_cast<float*>(&data.modelMatrix[0]);
-  auto* row1 = reinterpret_cast<float*>(&data.modelMatrix[4]);
-  auto* row2 = reinterpret_cast<float*>(&data.modelMatrix[8]);
+  // row1/row2 at offsets 4/8 are intermediate columns, not verified in this test
   auto* row3 = reinterpret_cast<float*>(&data.modelMatrix[12]);
 
   // These are Eigen columns being read as shader rows
