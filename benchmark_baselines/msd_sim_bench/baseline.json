@@ -1,0 +1,147 @@
+{
+  "context": {
+    "date": "2026-01-08T14:55:03-06:00",
+    "host_name": "Daniels-MacBook-Pro.local",
+    "executable": "/Users/danielnewman/Documents/GitHub/MSD-CPP/build/Release/release/msd_sim_bench",
+    "num_cpus": 12,
+    "mhz_per_cpu": 24,
+    "cpu_scaling_enabled": false,
+    "caches": [
+      {
+        "type": "Data",
+        "level": 1,
+        "size": 65536,
+        "num_sharing": 0
+      },
+      {
+        "type": "Instruction",
+        "level": 1,
+        "size": 131072,
+        "num_sharing": 0
+      },
+      {
+        "type": "Unified",
+        "level": 2,
+        "size": 4194304,
+        "num_sharing": 1
+      }
+    ],
+    "load_avg": [3.45898,3.21777,3.54443],
+    "library_version": "v1.9.1",
+    "library_build_type": "release",
+    "json_schema_version": 1
+  },
+  "benchmarks": [
+    {
+      "name": "BM_ConvexHull_Construction/8",
+      "family_index": 0,
+      "per_family_instance_index": 0,
+      "run_name": "BM_ConvexHull_Construction/8",
+      "run_type": "iteration",
+      "repetitions": 1,
+      "repetition_index": 0,
+      "threads": 1,
+      "iterations": 18221,
+      "real_time": 3.8336200858265198e+04,
+      "cpu_time": 3.8019208605455235e+04,
+      "time_unit": "ns"
+    },
+    {
+      "name": "BM_ConvexHull_Construction/64",
+      "family_index": 0,
+      "per_family_instance_index": 1,
+      "run_name": "BM_ConvexHull_Construction/64",
+      "run_type": "iteration",
+      "repetitions": 1,
+      "repetition_index": 0,
+      "threads": 1,
+      "iterations": 6659,
+      "real_time": 9.2362810925146012e+04,
+      "cpu_time": 9.1596936476948496e+04,
+      "time_unit": "ns"
+    },
+    {
+      "name": "BM_ConvexHull_Construction/512",
+      "family_index": 0,
+      "per_family_instance_index": 2,
+      "run_name": "BM_ConvexHull_Construction/512",
+      "run_type": "iteration",
+      "repetitions": 1,
+      "repetition_index": 0,
+      "threads": 1,
+      "iterations": 2584,
+      "real_time": 2.6789994507771410e+05,
+      "cpu_time": 2.6626083591331250e+05,
+      "time_unit": "ns"
+    },
+    {
+      "name": "BM_ConvexHull_Construction_BigO",
+      "family_index": 0,
+      "per_family_instance_index": 0,
+      "run_name": "BM_ConvexHull_Construction",
+      "run_type": "aggregate",
+      "repetitions": 1,
+      "threads": 1,
+      "aggregate_name": "BigO",
+      "aggregate_unit": "time",
+      "cpu_coefficient": 2.4952940034662620e+02,
+      "real_coefficient": 2.5152410443355225e+02,
+      "big_o": "N",
+      "time_unit": "ns"
+    },
+    {
+      "name": "BM_ConvexHull_Construction_RMS",
+      "family_index": 0,
+      "per_family_instance_index": 0,
+      "run_name": "BM_ConvexHull_Construction",
+      "run_type": "aggregate",
+      "repetitions": 1,
+      "threads": 1,
+      "aggregate_name": "RMS",
+      "aggregate_unit": "percentage",
+      "rms": 2.3285210249990046e-01
+    },
+    {
+      "name": "BM_ConvexHull_Contains",
+      "family_index": 1,
+      "per_family_instance_index": 0,
+      "run_name": "BM_ConvexHull_Contains",
+      "run_type": "iteration",
+      "repetitions": 1,
+      "repetition_index": 0,
+      "threads": 1,
+      "iterations": 319858,
+      "real_time": 2.1859881294575580e+03,
+      "cpu_time": 2.1712103495926326e+03,
+      "time_unit": "ns"
+    },
+    {
+      "name": "BM_ConvexHull_SignedDistance",
+      "family_index": 2,
+      "per_family_instance_index": 0,
+      "run_name": "BM_ConvexHull_SignedDistance",
+      "run_type": "iteration",
+      "repetitions": 1,
+      "repetition_index": 0,
+      "threads": 1,
+      "iterations": 316048,
+      "real_time": 2.2709248283205065e+03,
+      "cpu_time": 2.2536102111071764e+03,
+      "time_unit": "ns"
+    },
+    {
+      "name": "BM_ConvexHull_Intersects",
+      "family_index": 3,
+      "per_family_instance_index": 0,
+      "run_name": "BM_ConvexHull_Intersects",
+      "run_type": "iteration",
+      "repetitions": 1,
+      "repetition_index": 0,
+      "threads": 1,
+      "iterations": 45666,
+      "real_time": 1.5837264949248571e+04,
+      "cpu_time": 1.5575986510751971e+04,
+      "time_unit": "ns"
+    }
+  ]
+}
