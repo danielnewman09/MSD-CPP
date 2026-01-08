@@ -16,6 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_TESTING "Build the testing tree" ON)
 option(ENABLE_COVERAGE "Enable code coverage" OFF)
 option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+option(ENABLE_CLANG_TIDY "Enable clang-tidy static analysis" OFF)
 
 # Add useful compiler warnings
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -54,6 +55,17 @@ if(ENABLE_COVERAGE)
     message(STATUS "Code coverage enabled")
   else()
     message(WARNING "Code coverage is only supported with GCC or Clang")
+  endif()
+endif()
+
+# Clang-tidy configuration
+if(ENABLE_CLANG_TIDY)
+  find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
+  if(CLANG_TIDY_EXE)
+    message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+  else()
+    message(WARNING "clang-tidy requested but not found")
   endif()
 endif()
 
