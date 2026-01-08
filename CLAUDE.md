@@ -501,15 +501,125 @@ BENCHMARK(BM_YourComponent_Scaled)
 - Add complexity analysis for parameterized benchmarks
 - Include ticket references in file header and function documentation
 
+### Benchmark Regression Detection
+
+**Ticket**: [0014_benchmark_metrics_tracker](tickets/0014_benchmark_metrics_tracker.md)
+**Design**: [`docs/designs/0014_benchmark_metrics_tracker/design.md`](docs/designs/0014_benchmark_metrics_tracker/design.md)
+
+The project uses `compare_benchmarks.py` to detect performance regressions by comparing results against golden baseline files.
+
+**Basic workflow**:
+```bash
+# Run benchmarks
+./scripts/run_benchmarks.sh
+
+# Compare against baseline
+./scripts/compare_benchmarks.py
+
+# Update baseline (when performance changes are intentional)
+./scripts/compare_benchmarks.py --set-baseline
+```
+
+**Interpreting results**:
+- **GREEN**: Performance within threshold or improved
+- **YELLOW**: New/missing benchmarks (review if expected)
+- **RED**: Regression detected (exceeds threshold)
+
+**Default threshold**: 10% slower than baseline triggers regression
+
+**Advanced options**:
+```bash
+# Use custom threshold (5% instead of default 10%)
+./scripts/compare_benchmarks.py --threshold 5.0
+
+# Strict mode: exit code 1 on regression (for CI)
+./scripts/compare_benchmarks.py --strict
+
+# Compare specific result file
+./scripts/compare_benchmarks.py --current benchmark_results/msd_sim_bench/benchmark_20260108.json
+
+# Disable colors (for CI logs)
+./scripts/compare_benchmarks.py --no-color
+
+# Output JSON report only (no console output)
+./scripts/compare_benchmarks.py --output-json-only
+```
+
+**Comparison reports**:
+- Location: `benchmark_results/{suite}/comparison_{timestamp}.json`
+- Format: JSON with per-benchmark diff, summary statistics
+- Useful for: Design review, pull request analysis
+
+**Baseline files**:
+- Location: `benchmark_baselines/{suite}/baseline.json`
+- Committed to git for team-wide consistency
+- Update when intentional performance changes occur
+
+**When to update baselines**:
+1. After performance optimizations that improve metrics
+2. When algorithmic changes intentionally trade performance for correctness
+3. When refactoring changes performance characteristics
+4. Always commit baseline updates with code changes that affect them
+
+**Example workflow for optimization**:
+```bash
+# Verify current performance
+./scripts/run_benchmarks.sh
+./scripts/compare_benchmarks.py
+
+# Make optimization changes
+# ... edit code ...
+
+# Run benchmarks again
+./scripts/run_benchmarks.sh
+./scripts/compare_benchmarks.py
+
+# If improved, update baseline
+./scripts/compare_benchmarks.py --set-baseline
+
+# Commit code and baseline together
+git add src/optimized_code.cpp
+git add benchmark_baselines/msd_sim_bench/baseline.json
+git commit -m "Optimize ConvexHull construction
+
+Performance improvement:
+- BM_ConvexHull_Construction/512: 266ms -> 180ms (-32%)
+
+Updated benchmark baseline."
+```
+
 ### CI Integration
 
 **Status**: Local execution only (no CI integration yet)
 
-**Future enhancement**: Automated benchmark execution on pull requests with baseline comparison for performance regression detection.
+**Future enhancement**: Automated benchmark execution on pull requests with baseline comparison for performance regression detection using the `--strict` flag.
 
 ---
 
 ## Recent Architectural Changes
+
+### Benchmark Metrics Tracker — 2026-01-08
+**Ticket**: [0014_benchmark_metrics_tracker](tickets/0014_benchmark_metrics_tracker.md)
+**Design**: [`docs/designs/0014_benchmark_metrics_tracker/design.md`](docs/designs/0014_benchmark_metrics_tracker/design.md)
+
+Added Python-based benchmark regression detection tool that compares Google Benchmark results against golden baseline files. The system detects performance regressions with configurable thresholds (default 10%), generates JSON comparison reports, and provides color-coded console output for local development and CI integration.
+
+**Key files added**:
+- `scripts/compare_benchmarks.py` — Main comparison script with CLI interface
+- `benchmark_baselines/msd_sim_bench/baseline.json` — Initial golden baseline for ConvexHull benchmarks
+
+**Features**:
+- Automatic comparison against committed baselines
+- Configurable regression threshold (default 10%)
+- Color-coded console output (GREEN/YELLOW/RED)
+- JSON comparison reports with detailed metrics
+- Strict mode for CI integration (exit code 1 on regression)
+- Baseline management via `--set-baseline` flag
+
+**Workflow integration**:
+- Run after `run_benchmarks.sh` to detect regressions
+- Update baselines when performance changes are intentional
+- Commit baseline updates alongside code changes
 
 ### Google Benchmark Infrastructure — 2026-01-08
 **Ticket**: [0011_add_google_benchmark](tickets/0011_add_google_benchmark.md)
