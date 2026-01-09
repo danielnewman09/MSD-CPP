@@ -145,6 +145,10 @@ See: `./{feature-name}.puml`
 | Test Case | Components Involved | What It Validates |
 |-----------|---------------------|-------------------|
 
+#### Benchmark Tests (if performance-critical)
+| Component | Benchmark Case | What It Measures | Baseline Expectation |
+|-----------|----------------|------------------|----------------------|
+
 ## Open Questions
 
 ### Design Decisions (Human Input Needed)
@@ -184,6 +188,28 @@ When designing interfaces, follow these project conventions:
 - Prefer returning values over output parameters
 - Use return structs for multiple values
 - Use `std::optional<std::reference_wrapper<const T>>` only for truly optional lookups
+
+## Code Quality Gates Awareness
+
+When designing components, consider the project's code quality gates that will be applied during implementation:
+
+### Build Quality Requirements
+- **Warnings as Errors**: All code must compile without warnings (`-Wall -Wextra -Wpedantic -Werror`)
+- **Static Analysis**: clang-tidy checks will be applied; designs should avoid patterns that trigger common warnings
+- Design interfaces that enable const-correctness, avoid implicit conversions, and minimize shadowing risks
+
+### Performance Considerations
+- **Benchmark Regression Detection**: Performance-critical components will be benchmarked
+- If the component is on a hot path (collision detection, rendering loops, data processing):
+  - Note expected performance characteristics in the design
+  - Identify operations that should be benchmarked
+  - Specify performance constraints (e.g., "must handle N operations per frame")
+- Designs should call out where benchmark tests will be needed in the "New Tests Required" section
+
+### Test Infrastructure Requirements
+- Design for testability: injectable dependencies, observable state, mockable interfaces
+- Consider test isolation: avoid global state, prefer dependency injection
+- Note any test fixtures or utilities that will be needed
 
 ## Constraints
 - Do NOT write implementation code (interface sketches in design docs are acceptable)

@@ -29,9 +29,23 @@ This project follows specific coding standards from CLAUDE.md including:
 | Design Approved — Ready for Prototype | Execute Prototyper | `.claude/agents/cpp-prototyper.md` |
 | Prototype Complete — Awaiting Review | Inform human review needed | None |
 | Ready for Implementation | Execute Implementer | `.claude/agents/cpp-implementer.md` |
-| Implementation Complete — Awaiting Review | Execute Implementation Reviewer | `.claude/agents/implementation-reviewer.md` |
-| Approved — Ready to Merge | Execute Doc Updater, then complete | `.claude/agents/doc-updater.md` |
+| Implementation Complete — Awaiting Quality Gate | Execute Quality Gate | `.claude/agents/code-quality-gate.md` |
+| Quality Gate Passed — Awaiting Review | Execute Implementation Reviewer | `.claude/agents/implementation-reviewer.md` |
+| Approved — Ready to Merge | Execute Doc Updater, then complete | `.claude/agents/docs-updater.md` |
 | Merged / Complete | Inform human workflow is complete | None |
+
+### Quality Gate Loop
+
+The Quality Gate phase operates as an automated loop:
+
+1. **On PASSED**: Advance to "Quality Gate Passed — Awaiting Review"
+2. **On FAILED**:
+   - Do NOT advance status
+   - Re-invoke implementer with specific failures from quality gate report
+   - Implementer fixes issues
+   - Re-run quality gate
+   - Track iteration count in Workflow Log
+3. **On 3rd consecutive failure**: Escalate to human, may indicate design issue
 
 ## Commands You Handle
 

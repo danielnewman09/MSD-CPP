@@ -43,16 +43,21 @@ This workflow guides the implementation of **architectural C++ changes**—new c
 │                       │ Human Review                                       │
 │                       ▼                                                    │
 │                 [Approve/Edit]                                             │
-│                                                                             │
+│                         │                                                  │
+│       ┌─────────────┐   │                                                  │
+│       │ IMPLEMENT   │◀──┘                                                  │
+│       └─────┬───────┘                                                      │
+│             │                                                              │
+│             ▼                                                              │
 │       ┌─────────────┐     ┌────────────────────┐     ┌──────────────┐      │
-│       │ IMPLEMENT   │────▶│ IMPLEMENTATION     │────▶│ DOCUMENTATION│      │
-│       │             │     │ REVIEW             │     │ SYNC         │      │
+│       │ QUALITY     │────▶│ IMPLEMENTATION     │────▶│ DOCUMENTATION│      │
+│       │ GATE        │     │ REVIEW             │     │ SYNC         │      │
 │       └─────────────┘     └────────────────────┘     └──────────────┘      │
-│            │                    │                          │               │
-│            │ Human              │ Human                    │ Human         │
-│            │ Review             │ Review                   │ Review        │
-│            ▼                    ▼                          ▼               │
-│       [Approve/Edit]       [Approve]                  [Approve/Merge]      │
+│            │ ▲                  │                          │               │
+│            │ │ Fix & Re-run     │ Human                    │ Human         │
+│            ▼ │                  │ Review                   │ Review        │
+│       [Pass/Fail]───────┘       ▼                          ▼               │
+│                            [Approve]                  [Approve/Merge]      │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -127,21 +132,44 @@ Each phase produces artifacts that the human operator reviews before the next ph
 ---
 
 ### Phase 4: Implementation
-**Agent**: `.claude/agents/cpp-implementer.md`  
-**Input**: Design + prototype results + implementation ticket  
-**Output**: 
+**Agent**: `.claude/agents/cpp-implementer.md`
+**Input**: Design + prototype results + implementation ticket
+**Output**:
 - Implemented code in codebase
 - `docs/designs/{feature-name}/implementation-notes.md`
 
 **Human Gate**:
 - Review implementation notes
 - Spot-check code changes
-- Verify tests pass
 - Approve or request changes
 
 **Revision Loop**:
 - Human identifies issues → Return to Phase 4 with feedback
-- Human approves → Proceed to Implementation Review
+- Human approves → Proceed to Quality Gate
+
+---
+
+### Phase 4.5: Quality Gate
+**Agent**: `.claude/agents/code-quality-gate.md`
+**Input**: Implemented code, design document (for benchmark requirements)
+**Output**: `docs/designs/{feature-name}/quality-gate-report.md`
+
+**Automated Checks**:
+1. **Build Verification**: Compile with warnings-as-errors (`-Werror`)
+2. **Test Verification**: Run all tests, capture pass/fail
+3. **Benchmark Regression**: Compare against baselines (if benchmarks specified in design)
+
+**Automated Loop** (no human intervention):
+- If any check fails → Return to Implementer with specific failures
+- Implementer fixes → Re-run Quality Gate
+- Maximum 3 iterations before escalation to human
+
+**Pass Criteria**:
+- All checks pass → Proceed to Implementation Review
+- Quality gate report shows PASSED status
+
+**Escalation**:
+- If 3 consecutive failures: Human reviews to determine if design revision needed
 
 ---
 
@@ -224,6 +252,18 @@ Input: Design document at docs/designs/{name}/design.md
 Output: Code changes in codebase
         Implementation notes at docs/designs/{name}/implementation-notes.md
 
+Phase 4.5 - Quality Gate:
+Task: Read .claude/agents/code-quality-gate.md and execute quality checks
+Input: Feature name: {name}
+       Design document at docs/designs/{name}/design.md (for benchmark requirements)
+Output: Quality gate report at docs/designs/{name}/quality-gate-report.md
+Flow:
+  1. Run build with warnings-as-errors
+  2. Run all tests
+  3. Run benchmark regression check (if benchmarks in design)
+  4. If FAILED: Return to implementer with failures, re-run after fixes
+  5. If PASSED: Proceed to Implementation Review
+
 Phase 5 - Implementation Review:
 Task: Read .claude/agents/implementation-reviewer.md and execute review
 Input: All artifacts in docs/designs/{name}/
@@ -252,7 +292,8 @@ Each phase MUST read and reference artifacts from previous phases:
 | Design Review | Design document, .puml | Codebase for validation |
 | Prototype | Design document with review | Codebase for types/interfaces |
 | Implementation | Design, Review, Prototype results | Full codebase |
-| Impl Review | ALL previous artifacts | Full codebase |
+| Quality Gate | Design document (benchmark section) | Implemented code |
+| Impl Review | ALL previous artifacts + quality gate report | Full codebase |
 | Doc Sync | ALL previous artifacts, implemented code | Existing docs/msd/{library}/ |
 
 ---
@@ -331,6 +372,7 @@ docs/designs/{feature-name}/
 ├── {feature-name}.puml       # Architecture diagram (updated through iterations)
 ├── prototype-results.md      # Prototype findings + impl ticket
 ├── implementation-notes.md   # What was implemented
+├── quality-gate-report.md    # Automated quality verification results
 ├── implementation-review.md  # Final review
 └── doc-sync-summary.md       # Documentation sync summary
 

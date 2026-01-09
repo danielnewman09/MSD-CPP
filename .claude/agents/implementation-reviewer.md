@@ -21,12 +21,35 @@ Before beginning your review, you must locate and read:
 - Design review section (appended to design document)
 - Prototype results (`docs/designs/{feature-name}/prototype-results.md`)
 - Implementation notes (`docs/designs/{feature-name}/implementation-notes.md`)
+- **Quality gate report (`docs/designs/{feature-name}/quality-gate-report.md`)**
 - The implemented code files
-- Test results
 
 If any required documents are missing, note this in your review and request them from the user.
 
+**IMPORTANT**: The quality gate report is a prerequisite. If the quality gate report shows FAILED status, do NOT proceed with the full review. Instead:
+1. Note that quality gate has not passed
+2. Return status BLOCKED with instruction to re-run quality gate after fixes
+3. Do not spend effort reviewing code that doesn't build or pass tests
+
 ## Review Process
+
+### Phase 0: Quality Gate Verification
+
+Before any other review work, verify the quality gate report:
+
+1. **Locate report**: `docs/designs/{feature-name}/quality-gate-report.md`
+2. **Check overall status**: Must be PASSED to proceed
+3. **Verify gates**:
+   - Build: Must show PASSED (no warnings, no errors)
+   - Tests: Must show PASSED (all tests pass)
+   - Benchmarks: Must show PASSED or N/A (no regressions)
+
+**If quality gate FAILED or missing:**
+- Status: BLOCKED
+- Reason: "Quality gate must pass before implementation review"
+- Do NOT proceed with Phases 1-5
+
+**If quality gate PASSED:** Proceed to Phase 1.
 
 ### Phase 1: Design Conformance
 
