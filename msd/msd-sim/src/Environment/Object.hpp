@@ -15,6 +15,22 @@ namespace msd_sim
 
 /**
  * @brief Unified object type supporting various simulation roles
+ * @deprecated Use AssetEnvironment or AssetInertial with typed WorldModel storage instead
+ * @ticket 0021_worldmodel_asset_refactor
+ *
+ * DEPRECATED: This class is being phased out in favor of specialized asset types.
+ *
+ * Migration path:
+ * - Object::createGraphical() → Not replaced (rendering is msd-gpu responsibility)
+ * - Object::createInertial() → AssetInertial constructor with typed WorldModel storage
+ * - Object::createEnvironmental() → AssetEnvironment constructor with typed WorldModel storage
+ * - Object::createBoundary() → WorldModel::setBoundary() with single ConvexHull
+ *
+ * New approach benefits:
+ * - Compile-time type safety (no runtime type checking)
+ * - No wasted memory on optional components
+ * - Direct vector iteration (no index caches needed)
+ * - Clear separation between static and dynamic assets
  *
  * Object uses a component-based design to support four distinct types:
  *
@@ -56,7 +72,7 @@ namespace msd_sim
  * auto boundary = Object::createBoundary(collisionHull, frame);
  * @endcode
  */
-class Object
+class [[deprecated("Use AssetEnvironment/AssetInertial with typed WorldModel storage instead")]] Object
 {
 public:
   /**

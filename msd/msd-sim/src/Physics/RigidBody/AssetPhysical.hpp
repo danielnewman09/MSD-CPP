@@ -1,7 +1,9 @@
+// Ticket: 0021_worldmodel_asset_refactor
+// Design: docs/designs/worldmodel-asset-refactor/design.md
+
 #ifndef MSD_SIM_PHYSICS_PHYSICAL_ASSET_HPP
 #define MSD_SIM_PHYSICS_PHYSICAL_ASSET_HPP
 
-#include <memory>
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
@@ -11,45 +13,51 @@ namespace msd_sim
 
 /**
  * @brief Base class for geometric elements in the simulation.
+ * @ticket 0021_worldmodel_asset_refactor
  *
  * AssetPhysical is the base class for all geometric objects in the simulation,
  * providing visual geometry, collision detection via convex hull, and a
  * reference frame defining position and orientation in world space.
  *
+ * This class uses value semantics for geometry storage, enabling efficient
+ * storage in typed vectors without pointer indirection.
+ *
  * This class serves as the foundation for:
- * - EnvironmentAsset: Stationary objects with no dynamics
- * - InertialAsset: Dynamic objects with rigid body properties
+ * - AssetEnvironment: Stationary objects with no dynamics
+ * - AssetInertial: Dynamic objects with rigid body properties
  *
  * Key features:
- * - Visual geometry for rendering
- * - Convex hull for collision detection (computed lazily)
+ * - Visual geometry stored by value
+ * - Convex hull for collision detection
  * - Reference frame defining position and orientation in world space
- * - Shared ownership model for efficient memory usage
+ * - Value semantics for WorldModel vector storage
  *
  * Usage pattern:
  * @code
- * // Typically used via derived classes EnvironmentAsset or InertialAsset
- * auto geometry = std::make_shared<msd_assets::Geometry>(...);
- * ReferenceFrame frame(Coordinate(10, 0, 0));
- * auto asset = EnvironmentAsset::create(geometry, frame);
+ * // Create from CollisionGeometry
+ * msd_assets::CollisionGeometry geom{vertices};
+ * ReferenceFrame frame{Coordinate{10, 0, 0}};
+ *
+ * // Use via derived classes
+ * AssetEnvironment envAsset{std::move(geom), frame};
+ * AssetInertial inertialAsset{std::move(geom), 10.0, frame};
  *
  * // Access base class functionality
- * const auto& hull = asset->getCollisionHull();
- * const auto& frame = asset->getReferenceFrame();
+ * const auto& hull = envAsset.getCollisionHull();
+ * const auto& frame = envAsset.getReferenceFrame();
  * @endcode
  */
 class AssetPhysical
 {
 public:
   /**
-   * @brief Protected constructor - use derived class factory methods.
+   * @brief Constructor with collision geometry and reference frame.
    *
-   * @param geometry Shared pointer to visual geometry
-   * @param customHull Optional custom collision hull (if null, computed from
-   * geometry)
+   * @param geometry Collision geometry (moved, value semantics)
+   * @param frame Reference frame defining position and orientation
    */
-  AssetPhysical(std::shared_ptr<msd_assets::CollisionGeometry> geometry,
-                const ReferenceFrame& frame);
+  explicit AssetPhysical(msd_assets::CollisionGeometry&& geometry,
+                         const ReferenceFrame& frame = ReferenceFrame());
 
   /**
    * @brief Virtual destructor for proper cleanup of derived classes.
@@ -57,19 +65,28 @@ public:
   virtual ~AssetPhysical() = default;
 
   /**
-   * @brief Get the visual geometry for rendering.
-   * @return Reference to the visual geometry
+   * @brief Copy constructor (default)
    */
-  const msd_assets::Geometry& getVisualGeometry() const;
+  AssetPhysical(const AssetPhysical&) = default;
+
+  /**
+   * @brief Copy assignment (default)
+   */
+  AssetPhysical& operator=(const AssetPhysical&) = default;
+
+  /**
+   * @brief Move constructor (default)
+   */
+  AssetPhysical(AssetPhysical&&) noexcept = default;
+
+  /**
+   * @brief Move assignment (default)
+   */
+  AssetPhysical& operator=(AssetPhysical&&) noexcept = default;
 
   /**
    * @brief Get the collision hull for collision detection.
-   *
-   * If the hull hasn't been computed yet (deferred computation), this will
-   * compute it on first access.
-   *
    * @return Reference to the collision convex hull
-   * @throws std::runtime_error if hull computation fails
    */
   const ConvexHull& getCollisionHull() const;
 
@@ -89,10 +106,10 @@ public:
   ReferenceFrame& getReferenceFrame();
 
 protected:
-  // Visual representation (shared across multiple instances)
+  // Visual geometry stored by value
   msd_assets::CollisionGeometry visualGeometry_;
 
-  // Collision hull (computed lazily, then cached)
+  // Collision hull (computed from geometry)
   ConvexHull collisionHull_;
 
   // Reference frame defining position and orientation in world space

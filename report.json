@@ -1,0 +1,174 @@
+{
+  "metadata": {
+    "trace_file": "profile_20260108_185430.trace",
+    "template": "Time Profiler",
+    "export_timestamp": "2026-01-10T14:58:48.630605",
+    "executable": "unknown"
+  },
+  "summary": {
+    "total_samples": 6668,
+    "total_time_ms": 6668.0
+  },
+  "top_functions": [
+    {
+      "name": "msd_sim::ConvexHull::extractHullData(qhT*)",
+      "samples": 25,
+      "source_file": "ConvexHull.cpp",
+      "line": 149,
+      "percentage": 0.4,
+      "rank": 1
+    },
+    {
+      "name": "msd_sim::ConvexHull::computeCentroid()",
+      "samples": 18,
+      "source_file": null,
+      "line": 226,
+      "percentage": 0.3,
+      "rank": 2
+    },
+    {
+      "name": "msd_sim::ConvexHull::signedDistance(msd_sim::Coordinate const&) const",
+      "samples": 17,
+      "source_file": null,
+      "line": 108,
+      "percentage": 0.3,
+      "rank": 3
+    },
+    {
+      "name": "msd_sim::GJK::intersects(int)",
+      "samples": 17,
+      "source_file": null,
+      "line": 53,
+      "percentage": 0.3,
+      "rank": 4
+    },
+    {
+      "name": "msd_sim::GJK::support(msd_sim::ConvexHull const&, msd_sim::Coordinate const&) const",
+      "samples": 14,
+      "source_file": "GJK.cpp",
+      "line": 94,
+      "percentage": 0.2,
+      "rank": 5
+    },
+    {
+      "name": "msd_sim::GJK::handleTriangle()",
+      "samples": 13,
+      "source_file": null,
+      "line": 150,
+      "percentage": 0.2,
+      "rank": 6
+    },
+    {
+      "name": "msd_sim::ConvexHull::contains(msd_sim::Coordinate const&, double) const",
+      "samples": 11,
+      "source_file": null,
+      "line": 82,
+      "percentage": 0.2,
+      "rank": 7
+    },
+    {
+      "name": "msd_sim::GJK::handleTetrahedron()",
+      "samples": 10,
+      "source_file": null,
+      "line": 222,
+      "percentage": 0.1,
+      "rank": 8
+    },
+    {
+      "name": "msd_sim::GJK::supportMinkowski(msd_sim::Coordinate const&) const",
+      "samples": 7,
+      "source_file": null,
+      "line": 107,
+      "percentage": 0.1,
+      "rank": 9
+    },
+    {
+      "name": "msd_sim::GJK::handleLine()",
+      "samples": 6,
+      "source_file": null,
+      "line": 131,
+      "percentage": 0.1,
+      "rank": 10
+    },
+    {
+      "name": "msd_sim::Coordinate* std::__1::vector<msd_sim::Coordinate, std::__1::allocator<msd_sim::Coordinate>>::__emplace_back_slow_path<msd_sim::Coordinate const&>(msd_sim::Coordinate const&)",
+      "samples": 6,
+      "source_file": null,
+      "line": 1120,
+      "percentage": 0.1,
+      "rank": 11
+    },
+    {
+      "name": "msd_sim::Coordinate* std::__1::vector<msd_sim::Coordinate, std::__1::allocator<msd_sim::Coordinate>>::__emplace_back_slow_path<double&, double&, double&>(double&, double&, double&)",
+      "samples": 5,
+      "source_file": "vector.h",
+      "line": 1120,
+      "percentage": 0.1,
+      "rank": 12
+    },
+    {
+      "name": "msd_sim::ConvexHull::Facet* std::__1::vector<msd_sim::ConvexHull::Facet, std::__1::allocator<msd_sim::ConvexHull::Facet>>::__emplace_back_slow_path<msd_sim::ConvexHull::Facet const&>(msd_sim::ConvexHull::Facet const&)",
+      "samples": 5,
+      "source_file": null,
+      "line": 1120,
+      "percentage": 0.1,
+      "rank": 13
+    },
+    {
+      "name": "msd_sim::Coordinate::Coordinate(double, double, double)",
+      "samples": 5,
+      "source_file": "Coordinate.hpp",
+      "line": 26,
+      "percentage": 0.1,
+      "rank": 14
+    },
+    {
+      "name": "msd_sim::ConvexHull::Facet::Facet(msd_sim::ConvexHull::Facet&&)",
+      "samples": 5,
+      "source_file": null,
+      "line": 65,
+      "percentage": 0.1,
+      "rank": 15
+    },
+    {
+      "name": "msd_sim::Coordinate& std::__1::vector<msd_sim::Coordinate, std::__1::allocator<msd_sim::Coordinate>>::emplace_back<double&, double&, double&>(double&, double&, double&)",
+      "samples": 4,
+      "source_file": null,
+      "line": 1136,
+      "percentage": 0.1,
+      "rank": 16
+    },
+    {
+      "name": "msd_sim::Coordinate::Coordinate()",
+      "samples": 4,
+      "source_file": null,
+      "line": 22,
+      "percentage": 0.1,
+      "rank": 17
+    },
+    {
+      "name": "msd_sim::Coordinate* std::__1::vector<msd_sim::Coordinate, std::__1::allocator<msd_sim::Coordinate>>::__emplace_back_slow_path<msd_sim::Coordinate>(msd_sim::Coordinate&&)",
+      "samples": 4,
+      "source_file": null,
+      "line": 1118,
+      "percentage": 0.1,
+      "rank": 18
+    },
+    {
+      "name": "msd_sim::ConvexHull::Facet& std::__1::vector<msd_sim::ConvexHull::Facet, std::__1::allocator<msd_sim::ConvexHull::Facet>>::emplace_back<msd_sim::ConvexHull::Facet const&>(msd_sim::ConvexHull::Facet const&)",
+      "samples": 3,
+      "source_file": null,
+      "line": 1136,
+      "percentage": 0.0,
+      "rank": 19
+    },
+    {
+      "name": "msd_sim::gjkIntersects(msd_sim::ConvexHull const&, msd_sim::ConvexHull const&, double, int)",
+      "samples": 3,
+      "source_file": null,
+      "line": 256,
+      "percentage": 0.0,
+      "rank": 20
+    }
+  ]
+}

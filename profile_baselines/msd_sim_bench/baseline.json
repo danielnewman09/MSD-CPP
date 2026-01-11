@@ -1,0 +1,72 @@
+{
+  "metadata": {
+    "runs_averaged": 1,
+    "executable": "unknown",
+    "average_timestamp": "2026-01-11T11:44:58.706229"
+  },
+  "summary": {
+    "avg_total_samples": 6522.0
+  },
+  "top_functions": [
+    {
+      "name": "msd_sim::ConvexHull::extractHullData(qhT*)",
+      "avg_percentage": 0.3,
+      "avg_samples": 22.0,
+      "occurrences": 1
+    },
+    {
+      "name": "msd_sim::ConvexHull::computeCentroid()",
+      "avg_percentage": 0.3,
+      "avg_samples": 20.0,
+      "occurrences": 1
+    },
+    {
+      "name": "msd_sim::GJK::intersects(int)",
+      "avg_percentage": 0.2,
+      "avg_samples": 16.0,
+      "occurrences": 1
+    },
+    {
+      "name": "msd_sim::ConvexHull::signedDistance(msd_sim::Coordinate const&) const",
+      "avg_percentage": 0.2,
+      "avg_samples": 15.0,
+      "occurrences": 1
+    },
+    {
+      "name": "msd_sim::GJK::support(msd_sim::ConvexHull const&, msd_sim::Coordinate const&) const",
+      "avg_percentage": 0.2,
+      "avg_samples": 15.0,
+      "occurrences": 1
+    },
+    {
+      "name": "msd_sim::GJK::handleTriangle()",
+      "avg_percentage": 0.2,
+      "avg_samples": 14.0,
+      "occurrences": 1
+    },
+    {
+      "name": "msd_sim::ConvexHull::contains(msd_sim::Coordinate const&, double) const",
+      "avg_percentage": 0.2,
+      "avg_samples": 13.0,
+      "occurrences": 1
+    },
+    {
+      "name": "msd_sim::GJK::handleTetrahedron()",
+      "avg_percentage": 0.2,
+      "avg_samples": 13.0,
+      "occurrences": 1
+    },
+    {
+      "name": "msd_sim::Coordinate* std::__1::vector<msd_sim::Coordinate, std::__1::allocator<msd_sim::Coordinate>>::__emplace_back_slow_path<msd_sim::Coordinate const&>(msd_sim::Coordinate const&)",
+      "avg_percentage": 0.1,
+      "avg_samples": 7.0,
+      "occurrences": 1
+    },
+    {
+      "name": "msd_sim::ConvexHull::Facet* std::__1::vector<msd_sim::ConvexHull::Facet, std::__1::allocator<msd_sim::ConvexHull::Facet>>::__emplace_back_slow_path<msd_sim::ConvexHull::Facet const&>(msd_sim::ConvexHull::Facet const&)",
+      "avg_percentage": 0.1,
+      "avg_samples": 6.0,
+      "occurrences": 1
+    }
+  ]
+}

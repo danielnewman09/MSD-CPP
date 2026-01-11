@@ -1,0 +1,276 @@
+@startuml
+' =============================================================================
+' Feature: WorldModel Asset Refactor
+' Description: Deprecate unified Object class in favor of specialized asset types
+' Date: 2026-01-11
+' =============================================================================
+
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<deprecated>> #FFCCCC
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam package {
+    BackgroundColor #F5F5F5
+    BorderColor #666666
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+title WorldModel Asset Refactor - Type-Safe Storage Architecture
+
+' -----------------------------------------------------------------------------
+' Modified WorldModel
+' -----------------------------------------------------------------------------
+package "msd_sim" {
+
+    class WorldModel <<modified>> {
+        ' New typed storage
+        -environmentAssets_: vector<AssetEnvironment>
+        -inertialAssets_: vector<AssetInertial>
+        -simulationBoundary_: optional<ConvexHull>
+        ..
+        ' Legacy support (deprecated, to be removed)
+        -platforms_: vector<Platform>
+        -time_: milliseconds
+        ==
+        ' Environment asset management
+        +addEnvironmentAsset(asset: AssetEnvironment&&): size_t
+        +getEnvironmentAsset(index: size_t): AssetEnvironment&
+        +getEnvironmentAssets(): vector<AssetEnvironment>&
+        +removeEnvironmentAsset(index: size_t): void
+        ..
+        ' Inertial asset management
+        +addInertialAsset(asset: AssetInertial&&): size_t
+        +getInertialAsset(index: size_t): AssetInertial&
+        +getInertialAssets(): vector<AssetInertial>&
+        +removeInertialAsset(index: size_t): void
+        ..
+        ' Boundary management
+        +setBoundary(boundary: ConvexHull): void
+        +getBoundary(): optional<ConvexHull>&
+        +hasBoundary(): bool
+        +clearBoundary(): void
+        ..
+        ' Simulation update
+        +update(deltaTime: milliseconds): void
+        +getTime(): milliseconds
+        ..
+        ' Legacy (deprecated)
+        +addPlatform(platform: Platform&&): void
+        +getPlatforms(): vector<Platform>
+    }
+
+    ' -----------------------------------------------------------------------------
+    ' Deprecated Object class
+    ' -----------------------------------------------------------------------------
+    class Object <<deprecated>> {
+        -type_: Type
+        -asset_: optional<reference_wrapper<Asset>>
+        -transform_: ReferenceFrame
+        -physics_: optional<PhysicsComponent>
+        -collisionHull_: optional<ConvexHull>
+        -color_[3]: float
+        ..
+        +{static} createGraphical(...): Object
+        +{static} createInertial(...): Object
+        +{static} createEnvironmental(...): Object
+        +{static} createBoundary(...): Object
+        ..
+        +getType(): Type
+        +hasVisualGeometry(): bool
+        +hasCollision(): bool
+        +hasPhysics(): bool
+    }
+
+    note right of Object
+        **DEPRECATED**
+
+        Object is being replaced by:
+        - AssetEnvironment (static objects)
+        - AssetInertial (dynamic objects)
+        - ConvexHull (boundary)
+
+        Migration:
+        - Object::createEnvironmental -> AssetEnvironment
+        - Object::createInertial -> AssetInertial
+        - Object::createBoundary -> WorldModel::setBoundary
+        - Object::createGraphical -> See design questions
+    end note
+
+}
+
+' -----------------------------------------------------------------------------
+' Physics Module - Existing Classes
+' -----------------------------------------------------------------------------
+package "msd_sim::Physics" {
+
+    class AssetPhysical {
+        #visualGeometry_: CollisionGeometry
+        #collisionHull_: ConvexHull
+        #referenceFrame_: ReferenceFrame
+        ..
+        +getVisualGeometry(): Geometry&
+        +getCollisionHull(): ConvexHull&
+        +getReferenceFrame(): ReferenceFrame&
+    }
+
+    class AssetEnvironment {
+        ' Inherits from AssetPhysical
+        ' No additional members
+        ..
+        +AssetEnvironment(geometry: CollisionGeometry&&, frame: ReferenceFrame)
+        ..
+        [[deprecated]]
+        +{static} create(geometry, frame): shared_ptr
+    }
+
+    class AssetInertial {
+        -mass_: double
+        -inertiaTensor_: Matrix3d
+        -inverseInertiaTensor_: Matrix3d
+        -centerOfMass_: Coordinate
+        -dynamicState_: DynamicState
+        ..
+        +AssetInertial(geometry: CollisionGeometry&&, mass: double, frame: ReferenceFrame)
+        ..
+        +getMass(): double
+        +getInertiaTensor(): Matrix3d
+        +getInverseInertiaTensor(): Matrix3d
+        +getDynamicState(): DynamicState&
+        +getKineticEnergy(): double
+    }
+
+    class ConvexHull {
+        +getVertices(): vector<Coordinate>
+        +getFacets(): vector<Facet>
+        +contains(point: Coordinate): bool
+        +intersects(other: ConvexHull): bool
+    }
+
+    class DynamicState {
+        <<value>>
+        +getLinearVelocity(): Coordinate
+        +getAngularVelocity(): Vector3d
+        +setLinearVelocity(v: Coordinate): void
+        +setAngularVelocity(w: Vector3d): void
+    }
+
+    class ReferenceFrame {
+        +getOrigin(): Coordinate&
+        +setOrigin(origin: Coordinate): void
+        +setRotation(euler: EulerAngles): void
+    }
+}
+
+' -----------------------------------------------------------------------------
+' External Dependencies
+' -----------------------------------------------------------------------------
+package "msd_assets" {
+    class CollisionGeometry {
+        +getVertices(): vector<Vertex>
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Inheritance
+AssetEnvironment --|> AssetPhysical
+AssetInertial --|> AssetPhysical
+
+' AssetPhysical composition
+AssetPhysical *-- ConvexHull : collisionHull_
+AssetPhysical *-- ReferenceFrame : referenceFrame_
+AssetPhysical o-- CollisionGeometry : visualGeometry_
+
+' AssetInertial additional composition
+AssetInertial *-- DynamicState : dynamicState_
+
+' WorldModel composition (new architecture)
+WorldModel *-- "*" AssetEnvironment : environmentAssets_
+WorldModel *-- "*" AssetInertial : inertialAssets_
+WorldModel *-- "0..1" ConvexHull : simulationBoundary_
+
+' Deprecated relationship
+WorldModel ..> Object : deprecated storage
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note as ArchitectureNote
+    **Architecture Benefits:**
+
+    1. **Type Safety**: Compile-time guarantees
+       - Environment assets have no dynamics
+       - Inertial assets always have mass/inertia
+       - Boundary is a single ConvexHull
+
+    2. **Efficient Iteration**: No index caches
+       - Physics loop: iterate inertialAssets_ directly
+       - Collision: iterate moving objects against static
+
+    3. **Value Semantics**: Clean ownership model
+       - Geometry stored by value
+       - Move semantics for asset construction
+       - No shared_ptr complexity
+
+    4. **Single Boundary**: Simpler boundary handling
+       - One ConvexHull defines simulation bounds
+       - No need for multiple boundary objects
+end note
+
+note as MigrationNote
+    **Migration Path:**
+
+    Phase 1: Add new storage
+    - Add typed vectors to WorldModel
+    - Add new add/get methods
+    - Keep Object storage for compatibility
+
+    Phase 2: Update consumers
+    - Update Engine to use new methods
+    - Update physics loop to use typed iteration
+    - Update collision detection
+
+    Phase 3: Remove deprecated
+    - Remove Object class
+    - Remove objects_ vector
+    - Remove index caches
+end note
+
+note as IterationPatterns
+    **New Iteration Patterns:**
+
+    // Physics update - compile-time typed
+    for (auto& asset : world.getInertialAssets()) {
+        asset.getDynamicState().applyForce(...);
+    }
+
+    // Collision detection - moving vs static
+    for (auto& moving : world.getInertialAssets()) {
+        for (const auto& static : world.getEnvironmentAssets()) {
+            if (moving.getCollisionHull().intersects(
+                    static.getCollisionHull())) {
+                // Handle collision...
+            }
+        }
+
+        // Check boundary
+        if (world.hasBoundary()) {
+            const auto& boundary = world.getBoundary().value();
+            if (!boundary.contains(moving.getReferenceFrame().getOrigin())) {
+                // Handle boundary violation...
+            }
+        }
+    }
+end note
+
+@enduml

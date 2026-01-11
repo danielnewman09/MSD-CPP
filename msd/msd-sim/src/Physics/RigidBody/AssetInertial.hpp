@@ -1,24 +1,28 @@
+// Ticket: 0021_worldmodel_asset_refactor
+// Design: docs/designs/worldmodel-asset-refactor/design.md
+
 #ifndef MSD_SIM_PHYSICS_INERTIAL_ASSET_HPP
 #define MSD_SIM_PHYSICS_INERTIAL_ASSET_HPP
 
-#include <memory>
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/DynamicState.hpp"
-
 
 namespace msd_sim
 {
 
 /**
  * @brief Dynamic geometric element with full rigid body physics.
+ * @ticket 0021_worldmodel_asset_refactor
  *
- * AssetInertial extends AssertPhysical by adding rigid body dynamics
+ * AssetInertial extends AssetPhysical by adding rigid body dynamics
  * properties (mass, inertia tensor, center of mass) and dynamic state
  * (velocities and accelerations). These assets can be acted upon by forces,
  * collide with other objects, and move according to the laws of physics.
  *
+ * This class uses value semantics for WorldModel storage.
+ *
  * Key features:
- * - Visual geometry for rendering (inherited)
+ * - Visual geometry stored by value (inherited)
  * - Convex hull for collision detection (inherited)
  * - Reference frame defining position and orientation (inherited)
  * - Rigid body properties (mass, inertia tensor, center of mass)
@@ -35,28 +39,38 @@ namespace msd_sim
  *
  * Usage pattern:
  * @code
- * auto geometry = std::make_shared<msd_assets::Geometry>(...);
- * ReferenceFrame frame(Coordinate(5, 0, 10));  // Initial position
- * auto asset = AssetInertial::create(geometry, 50.0, frame);  // 50 kg mass
+ * // Create from collision geometry
+ * msd_assets::CollisionGeometry geom{vertices};
+ * ReferenceFrame frame{Coordinate{5, 0, 10}};  // Initial position
+ * AssetInertial asset{std::move(geom), 50.0, frame};  // 50 kg mass
  *
- * // Use for rendering
- * renderer.draw(asset->getVisualGeometry(), asset->getReferenceFrame());
+ * // Add to WorldModel
+ * worldModel.addInertialAsset(std::move(asset));
  *
  * // Use for physics
- * const auto& props = asset->getPhysicsProperties();
- * asset->getDynamicState().setLinearVelocity(Coordinate(1, 0, 0));
- * applyForce(force, asset->getReferenceFrame());
+ * asset.getDynamicState().setLinearVelocity(Coordinate{1, 0, 0});
  *
  * // Update position and orientation after physics step
- * asset->getReferenceFrame().setOrigin(newPosition);
+ * asset.getReferenceFrame().setOrigin(newPosition);
  * @endcode
  */
 class AssetInertial : public AssetPhysical
 {
 public:
-  AssetInertial(std::shared_ptr<msd_assets::CollisionGeometry> geometry,
-                double mass,
-                const ReferenceFrame& frame);
+  /**
+   * @brief Constructor for value-based WorldModel storage.
+   *
+   * Creates a dynamic physics asset with the specified mass.
+   * The inertia tensor is automatically computed from the collision geometry.
+   *
+   * @param geometry Collision geometry (moved, value semantics)
+   * @param mass Mass in kilograms [kg] (must be positive)
+   * @param frame Initial reference frame defining position and orientation
+   * @throws std::invalid_argument if mass <= 0 or geometry is empty
+   */
+  explicit AssetInertial(msd_assets::CollisionGeometry&& geometry,
+                         double mass,
+                         const ReferenceFrame& frame = ReferenceFrame());
 
   /**
    * @brief Get the dynamic state (velocities and accelerations).
@@ -101,6 +115,26 @@ public:
    * @return 3x3 inverse inertia tensor [1/(kg⋅m²)]
    */
   const Eigen::Matrix3d& getInverseInertiaTensor() const;
+
+  /**
+   * @brief Copy constructor (default)
+   */
+  AssetInertial(const AssetInertial&) = default;
+
+  /**
+   * @brief Copy assignment (default)
+   */
+  AssetInertial& operator=(const AssetInertial&) = default;
+
+  /**
+   * @brief Move constructor (default)
+   */
+  AssetInertial(AssetInertial&&) noexcept = default;
+
+  /**
+   * @brief Move assignment (default)
+   */
+  AssetInertial& operator=(AssetInertial&&) noexcept = default;
 
 private:
   // Rigid body physics properties

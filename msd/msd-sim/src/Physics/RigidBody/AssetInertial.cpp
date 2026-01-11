@@ -1,18 +1,18 @@
+// Ticket: 0021_worldmodel_asset_refactor
+// Design: docs/designs/worldmodel-asset-refactor/design.md
+
 #include <stdexcept>
 
-#include "msd-assets/src/Geometry.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
-#include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialCalculations.hpp"
 
 namespace msd_sim
 {
 
-AssetInertial::AssetInertial(
-  std::shared_ptr<msd_assets::CollisionGeometry> geometry,
-  double mass,
-  const ReferenceFrame& frame)
-  : AssetPhysical{geometry, frame},
+AssetInertial::AssetInertial(msd_assets::CollisionGeometry&& geometry,
+                             double mass,
+                             const ReferenceFrame& frame)
+  : AssetPhysical{std::move(geometry), frame},
     mass_{mass},
     inertiaTensor_{Eigen::Matrix3d::Zero()},
     inverseInertiaTensor_{Eigen::Matrix3d::Zero()},

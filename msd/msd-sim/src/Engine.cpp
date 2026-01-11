@@ -1,13 +1,17 @@
 // Ticket: 0004_gui_framerate
 // Ticket: 0005_camera_controller_sim
+// Ticket: 0021_worldmodel_asset_refactor
 // Design: docs/designs/input-state-management/design.md
 // Design: docs/designs/0005_camera_controller_sim/design.md
+// Design: docs/designs/worldmodel-asset-refactor/design.md
 
 #include <exception>
 #include <iostream>
 
 #include "msd-sim/src/Engine.hpp"
 #include "msd-sim/src/Agent/InputControlAgent.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 
 namespace msd_sim
 {
@@ -39,6 +43,78 @@ void Engine::spawnInertialObject(const std::string assetName,
 
   worldModel_.spawnObject(
     Object::createInertial(asset->get(), objectFrame, 1.0));
+}
+
+size_t Engine::spawnInertialAsset(const std::string& assetName,
+                                   const Coordinate& position,
+                                   const EulerAngles& orientation,
+                                   double mass)
+{
+  // Lookup asset in registry
+  const auto& assetOpt = assetRegistry_.getAsset(assetName);
+  if (!assetOpt.has_value())
+  {
+    throw std::runtime_error("Asset not found in registry: " + assetName);
+  }
+
+  const auto& asset = assetOpt->get();
+
+  // Get collision geometry
+  auto collisionGeomOpt = asset.getCollisionGeometry();
+  if (!collisionGeomOpt.has_value())
+  {
+    throw std::invalid_argument("Asset has no collision geometry: " + assetName);
+  }
+
+  // Create CollisionGeometry by value and move into AssetInertial
+  msd_assets::CollisionGeometry geom{collisionGeomOpt->get()};
+  ReferenceFrame frame{position, orientation};
+
+  AssetInertial inertialAsset{std::move(geom), mass, frame};
+
+  // Add to WorldModel and return index
+  return worldModel_.addInertialAsset(std::move(inertialAsset));
+}
+
+size_t Engine::spawnEnvironmentAsset(const std::string& assetName,
+                                      const Coordinate& position,
+                                      const EulerAngles& orientation)
+{
+  // Lookup asset in registry
+  const auto& assetOpt = assetRegistry_.getAsset(assetName);
+  if (!assetOpt.has_value())
+  {
+    throw std::runtime_error("Asset not found in registry: " + assetName);
+  }
+
+  const auto& asset = assetOpt->get();
+
+  // Get collision geometry
+  auto collisionGeomOpt = asset.getCollisionGeometry();
+  if (!collisionGeomOpt.has_value())
+  {
+    throw std::invalid_argument("Asset has no collision geometry: " + assetName);
+  }
+
+  // Create CollisionGeometry by value and move into AssetEnvironment
+  msd_assets::CollisionGeometry geom{collisionGeomOpt->get()};
+  ReferenceFrame frame{position, orientation};
+
+  AssetEnvironment envAsset{std::move(geom), frame};
+
+  // Add to WorldModel and return index
+  return worldModel_.addEnvironmentAsset(std::move(envAsset));
+}
+
+void Engine::setSimulationBoundary(const ConvexHull& boundary)
+{
+  worldModel_.setBoundary(boundary);
+}
+
+void Engine::setSimulationBoundary(const std::vector<Coordinate>& boundaryPoints)
+{
+  ConvexHull boundary{boundaryPoints};
+  worldModel_.setBoundary(std::move(boundary));
 }
 
 uint32_t Engine::spawnPlayerPlatform(const std::string& assetName,

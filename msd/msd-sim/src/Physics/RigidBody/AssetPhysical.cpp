@@ -1,25 +1,19 @@
+// Ticket: 0021_worldmodel_asset_refactor
+// Design: docs/designs/worldmodel-asset-refactor/design.md
+
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
-#include <sstream>
 #include <stdexcept>
-#include "msd-assets/src/Geometry.hpp"
 
 namespace msd_sim
 {
 
-AssetPhysical::AssetPhysical(std::shared_ptr<msd_assets::Geometry> geometry,
+AssetPhysical::AssetPhysical(msd_assets::CollisionGeometry&& geometry,
                              const ReferenceFrame& frame)
-  : visualGeometry_(*geometry),
-    referenceFrame_(frame),
-    collisionHull_{
-      std::make_unique<ConvexHull>(ConvexHull::fromGeometry(visualGeometry_))}
+  : visualGeometry_{std::move(geometry)},
+    collisionHull_{visualGeometry_.getVertices()},
+    referenceFrame_{frame}
 {
-  if (!geometry)
-  {
-    throw std::invalid_argument(
-      "Cannot create AssetPhysical with null geometry");
-  }
-
-  if (geometry->getVertexCount() == 0)
+  if (visualGeometry_.getVertexCount() == 0)
   {
     throw std::invalid_argument(
       "Cannot create AssetPhysical with empty geometry");
@@ -28,7 +22,7 @@ AssetPhysical::AssetPhysical(std::shared_ptr<msd_assets::Geometry> geometry,
 
 const ConvexHull& AssetPhysical::getCollisionHull() const
 {
-  return collisionGeometry_.get().;
+  return collisionHull_;
 }
 
 const ReferenceFrame& AssetPhysical::getReferenceFrame() const
@@ -40,6 +34,5 @@ ReferenceFrame& AssetPhysical::getReferenceFrame()
 {
   return referenceFrame_;
 }
-
 
 }  // namespace msd_sim
