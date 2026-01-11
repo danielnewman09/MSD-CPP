@@ -21,6 +21,15 @@
             "description": "Debug build with code coverage enabled (use: conan install . -o \"&:enable_coverage=True\")",
             "toolchainFile": "generators/conan_toolchain.cmake",
             "binaryDir": "/Users/danielnewman/Documents/GitHub/MSD-CPP/build/Debug-Coverage"
+        },
+        {
+            "name": "profiling-release",
+            "inherits": "conan-release",
+            "displayName": "Release with Profiling",
+            "description": "Release build with debug symbols for profiling (use: conan install . -s build_type=Release -o \"&:enable_profiling=True\")",
+            "cacheVariables": {
+                "ENABLE_PROFILING": "ON"
+            }
         }
     ],
     "buildPresets": [

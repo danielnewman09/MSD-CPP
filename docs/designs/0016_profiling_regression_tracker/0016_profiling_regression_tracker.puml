@@ -1,0 +1,96 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam component {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<input>> LightBlue
+    BackgroundColor<<output>> LightSalmon
+}
+
+title Profiling Regression Tracker - Script Architecture
+
+' External inputs
+component "profile_results/\n{executable}/\nprofile_*.json" as ProfileResults <<input>> #LightBlue
+component "profile_baselines/\n{executable}/\nbaseline.json" as Baseline <<input>> #LightBlue
+component "CLI Arguments" as CLI <<input>> #LightBlue
+
+' Script components (new)
+package "compare-profiles.py" <<new>> {
+    component "main()" as Main <<new>>
+    component "load_multiple_profiles()" as LoadMultiple <<new>>
+    component "average_profile_runs()" as Average <<new>>
+    component "match_functions()" as Match <<new>>
+    component "compare_profiles()" as Compare <<new>>
+    component "print_comparison_results()" as Print <<new>>
+    component "set_baseline()" as SetBaseline <<new>>
+}
+
+' Outputs
+component "profile_results/\n{executable}/\ncomparison_*.json" as ComparisonReport <<output>> #LightSalmon
+component "profile_baselines/\n{executable}/\nbaseline.json\n(updated)" as BaselineUpdated <<output>> #LightSalmon
+component "Console Output\n(color-coded)" as Console <<output>> #LightSalmon
+component "Exit Code\n(0 or 1)" as ExitCode <<output>> #LightSalmon
+
+' Main workflow
+CLI --> Main : parse args
+Main --> LoadMultiple : recent N runs
+ProfileResults --> LoadMultiple : read JSON files
+LoadMultiple --> Average : list of profiles
+Average --> Match : averaged profile
+Baseline --> Match : baseline data
+Match --> Compare : matched pairs +\nmissing functions
+Compare --> Print : comparison results
+Compare --> ComparisonReport : write JSON
+Print --> Console : formatted table
+Main --> SetBaseline : --set-baseline
+ProfileResults --> SetBaseline : latest profile
+SetBaseline --> BaselineUpdated : write
+Main --> ExitCode : --strict mode
+
+note right of Average
+  Averages top M runs (default 5)
+  by sample percentage across
+  matching function names
+end note
+
+note right of Match
+  Matches functions by exact name
+  Filters to top N (default 10)
+  Reports new/missing hotspots
+end note
+
+note right of Compare
+  Calculates percentage increase:
+  ((current - baseline) / baseline) * 100
+
+  Regression if increase > threshold
+  (default 50%)
+end note
+
+note bottom of ComparisonReport
+  JSON Schema:
+  {
+    "metadata": {
+      "generated_at": "ISO-8601",
+      "executable": "msd_sim_test",
+      "runs_averaged": 5,
+      "threshold_percent": 50.0
+    },
+    "functions": [{
+      "name": "function::name()",
+      "current_percentage": 10.5,
+      "baseline_percentage": 7.0,
+      "diff_percent": 50.0,
+      "status": "REGRESSION" | "PASS"
+    }],
+    "summary": {
+      "total_compared": 10,
+      "passed": 8,
+      "regressed": 2,
+      "new_hotspots": ["func1"],
+      "disappeared": ["func2"]
+    }
+  }
+end note
+
+@enduml

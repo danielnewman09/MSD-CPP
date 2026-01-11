@@ -5,10 +5,10 @@
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Prototype
-- [ ] Prototype Complete — Awaiting Review
-- [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Review
-- [ ] Approved — Ready to Merge
+- [x] Prototype Complete — Awaiting Review (skipped per design review)
+- [x] Ready for Implementation
+- [x] Implementation Complete — Awaiting Review
+- [x] Approved — Ready to Merge
 - [ ] Merged / Complete
 
 ## Metadata
@@ -66,17 +66,17 @@ This feature provides visibility into function-level performance trends and prev
 - Must work with `--project-only` filtered profiles (only msd_* namespaces)
 
 ## Acceptance Criteria
-- [ ] `scripts/compare-profiles.py` exists and is executable
-- [ ] Running `./scripts/compare-profiles.py` compares latest profile against baseline
-- [ ] Running `./scripts/compare-profiles.py --set-baseline` creates/updates baseline
-- [ ] Running `./scripts/compare-profiles.py --strict` returns exit code 1 on regressions
-- [ ] JSON comparison report generated in `profile_results/comparison_{timestamp}.json`
-- [ ] Console output uses color coding matching `compare_benchmarks.py` (GREEN/YELLOW/RED)
-- [ ] Baseline files stored in `profile_baselines/{executable}/baseline.json`
-- [ ] `profile_baselines/` directory is NOT gitignored (baselines are committed)
-- [ ] Supports comparison of different executables (msd_sim_test, msd_sim_bench, etc.)
-- [ ] Detects new hotspots that weren't in baseline
-- [ ] CLAUDE.md updated with usage documentation
+- [x] `scripts/compare-profiles.py` exists and is executable
+- [x] Running `./scripts/compare-profiles.py` compares latest profile against baseline
+- [x] Running `./scripts/compare-profiles.py --set-baseline` creates/updates baseline
+- [x] Running `./scripts/compare-profiles.py --strict` returns exit code 1 on regressions
+- [x] JSON comparison report generated in `profile_results/comparison_{timestamp}.json`
+- [x] Console output uses color coding matching `compare_benchmarks.py` (GREEN/YELLOW/RED)
+- [x] Baseline files stored in `profile_baselines/{executable}/baseline.json`
+- [x] `profile_baselines/` directory is NOT gitignored (baselines are committed)
+- [x] Supports comparison of different executables (msd_sim_test, msd_sim_bench, etc.)
+- [x] Detects new hotspots that weren't in baseline
+- [x] CLAUDE.md updated with usage documentation
 
 ---
 
@@ -141,24 +141,27 @@ This feature provides visibility into function-level performance trends and prev
 - **Reviewer Notes**: Design approved without revision. Excellent architectural fit with compare_benchmarks.py. Algorithm is feasible and well-specified. JSON schema compatibility verified against actual parse-profile.py output. All criteria passed. No prototyping required. Estimated implementation: 4-6 hours.
 
 ### Prototype Phase
-- **Started**:
-- **Completed**:
-- **Prototypes**:
-- **Artifacts**:
-- **Notes**:
+- **Started**: N/A
+- **Completed**: N/A
+- **Prototypes**: N/A
+- **Artifacts**: N/A
+- **Notes**: Skipped per design review recommendation. Algorithm is straightforward and follows proven compare_benchmarks.py reference implementation.
 
 ### Implementation Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-01-10 16:00
+- **Completed**: 2026-01-10 17:00
 - **Files Created**:
+  - `scripts/compare-profiles.py` — Profiling regression tracker script (executable, ~650 lines)
+  - `profile_baselines/.gitkeep` — Directory marker for baseline storage
 - **Files Modified**:
-- **Notes**:
+  - `CLAUDE.md` — Added profiling regression detection section with usage documentation
+- **Notes**: Implementation follows design document closely. Script mirrors compare_benchmarks.py architecture with adaptations for profiling data: multi-run averaging (default 5 runs), sample percentage comparison, top N function tracking (default 10), relative percentage increase threshold (default 50%). All CLI arguments implemented per design. Color-coded output matches project conventions.
 
 ### Implementation Review Phase
-- **Started**:
-- **Completed**:
-- **Status**:
-- **Reviewer Notes**:
+- **Started**: 2026-01-10 17:15
+- **Completed**: 2026-01-10 17:45
+- **Status**: APPROVED
+- **Reviewer Notes**: Implementation is excellent and fully conforms to design specification. All 8 core functions implemented correctly with proper algorithms (multi-run averaging, relative percentage comparison, function matching). Comprehensive error handling with helpful recovery instructions. CLI arguments match design exactly. CLAUDE.md documentation is thorough and user-friendly. Code quality is high with modern Python 3.9+ syntax, proper type hints, and perfect consistency with compare_benchmarks.py reference implementation. All 11 acceptance criteria met. Zero deviations from design. Zero critical, major, or minor issues found. Feature is production-ready and approved for merge.
 
 ### Documentation Update Phase
 - **Started**:

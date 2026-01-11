@@ -1,0 +1,116 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "Build System" {
+    class conanfile.py <<modified>> {
+        +options: Dict
+        +default_options: Dict
+        --
+        +enable_profiling: bool <<new>>
+        +generate(): void
+    }
+
+    class CMakeLists.txt <<modified>> {
+        +option ENABLE_PROFILING <<new>>
+        --
+        +add_compile_options() for profiling
+    }
+
+    class CMakeUserPresets.json <<modified>> {
+        +configurePresets: List
+        --
+        +"profiling-release" preset <<new>>
+    }
+}
+
+package "Helper Scripts" {
+    class "profile-instruments.sh" <<new>> {
+        +Usage: ./profile-instruments.sh <executable>
+        --
+        +validateXcodeTools(): bool
+        +launchInstruments(executable): void
+        +generateTraceFile(): string
+    }
+}
+
+package "macOS Xcode Instruments" {
+    class xctrace <<existing>> {
+        +record --template "Time Profiler"
+        +record --template "Allocations"
+        --
+        +output .trace files
+    }
+
+    class "Instruments.app" <<existing>> {
+        +GUI interface
+        --
+        +open .trace files
+        +analyze CPU time
+        +analyze memory allocations
+    }
+}
+
+package "MSD Executables" {
+    class msd_sim_bench <<existing>> {
+        +ConvexHull benchmarks
+        --
+        +compiled with -g -O2
+    }
+
+    class msd_sim_test <<existing>> {
+        +unit tests
+        --
+        +compiled with -g -O2
+    }
+
+    class msd_exe <<existing>> {
+        +main application
+        --
+        +compiled with -g -O2
+    }
+}
+
+' Relationships
+conanfile.py --> CMakeLists.txt : passes ENABLE_PROFILING
+CMakeLists.txt --> CMakeUserPresets.json : used by preset
+CMakeUserPresets.json --> msd_sim_bench : builds with profiling flags
+CMakeUserPresets.json --> msd_sim_test : builds with profiling flags
+CMakeUserPresets.json --> msd_exe : builds with profiling flags
+
+"profile-instruments.sh" --> xctrace : invokes via CLI
+"profile-instruments.sh" --> msd_sim_bench : profiles
+"profile-instruments.sh" --> msd_sim_test : profiles
+"profile-instruments.sh" --> msd_exe : profiles
+
+xctrace --> "Instruments.app" : generates .trace files
+"Instruments.app" ..> xctrace : opens trace files
+
+note right of CMakeLists.txt
+  Profiling flags (Apple only):
+  -g (debug symbols)
+  -O2 (Release optimizations)
+  No -DNDEBUG (keep asserts)
+end note
+
+note right of "profile-instruments.sh"
+  Validates:
+  - xctrace exists
+  - executable exists
+  - macOS 12.0+
+
+  Outputs:
+  - profile_<timestamp>.trace
+end note
+
+note right of xctrace
+  CLI-based profiling:
+  - Time Profiler (CPU)
+  - Allocations (Memory)
+  - Requires code signing
+  - No SIP issues
+end note
+
+@enduml

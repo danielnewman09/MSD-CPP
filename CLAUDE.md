@@ -292,6 +292,7 @@ In VSCode with the CMake Tools extension, the component-specific build presets a
 | `BUILD_TESTING` | `ON` | Build the testing tree |
 | `ENABLE_COVERAGE` | `OFF` | Enable code coverage (GCC/Clang only) |
 | `ENABLE_BENCHMARKS` | `OFF` | Build performance benchmarks (requires Conan option) |
+| `ENABLE_PROFILING` | `OFF` | Enable profiling support with debug symbols (macOS only, requires Conan option) |
 
 ---
 
@@ -596,7 +597,484 @@ Updated benchmark baseline."
 
 ---
 
+## Profiling (macOS)
+
+**Ticket**: [0012_add_macos_profiling_support](tickets/0012_add_macos_profiling_support.md)
+**Design**: [`docs/designs/0012_add_macos_profiling_support/design.md`](docs/designs/0012_add_macos_profiling_support/design.md)
+
+The project provides profiling infrastructure for macOS using Xcode Instruments. This enables deep CPU profiling, memory analysis, and call graph visualization on Apple Silicon and Intel Macs. Profiling builds use debug symbols with Release optimizations for realistic performance measurements.
+
+### Prerequisites
+
+**System Requirements**:
+- macOS 12.0+ (Monterey or later)
+- Xcode Command Line Tools installed
+- Apple Clang 13.0+
+
+**Install Xcode Command Line Tools** (if not already installed):
+```bash
+xcode-select --install
+```
+
+### Building with Profiling Support
+
+**Prerequisites**: Install dependencies with profiling enabled:
+```bash
+# Release build recommended for realistic performance
+conan install . --build=missing -s build_type=Release -o "&:enable_profiling=True"
+```
+
+**Configure and Build**:
+```bash
+# Configure with profiling preset
+cmake --preset profiling-release
+
+# Build all targets
+cmake --build --preset conan-release
+
+# Build specific executable
+cmake --build --preset conan-release --target msd_sim_bench
+```
+
+**Compiler Flags Applied**:
+- `-g` — Generate debug symbols for Instruments
+- `-O2` — Release-level optimizations for realistic performance
+- No `-DNDEBUG` — Keeps assertions enabled for issue detection
+
+### Profiling Workflows
+
+#### Option 1: Helper Script (Recommended)
+
+Use the `profile-instruments.sh` script for streamlined profiling:
+
+```bash
+# Profile a benchmark (Time Profiler)
+./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench
+
+# Profile with Allocations template
+./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench "Allocations"
+
+# Open generated trace file
+open profile_20260108_143000.trace
+```
+
+**Available templates**:
+- `Time Profiler` (default) — CPU profiling, hotspot identification
+- `Allocations` — Memory profiling, leak detection
+
+#### Option 2: Direct xctrace Usage
+
+Run `xctrace` manually for more control:
+
+```bash
+# Time Profiler (CPU profiling)
+xctrace record --template "Time Profiler" \
+    --output profile.trace \
+    --launch -- ./build/Release/release/msd_sim_bench
+
+# Allocations (Memory profiling)
+xctrace record --template "Allocations" \
+    --output allocations.trace \
+    --launch -- ./build/Release/release/msd_sim_bench
+
+# Open trace file in Instruments GUI
+open profile.trace
+```
+
+**Common xctrace options**:
+```bash
+# Record for specific duration (30 seconds)
+xctrace record --template "Time Profiler" \
+    --time-limit 30s \
+    --output profile.trace \
+    --launch -- ./build/Release/release/msd_sim_bench
+
+# Attach to running process
+xctrace record --template "Time Profiler" \
+    --output profile.trace \
+    --attach <pid>
+```
+
+#### Option 3: Instruments GUI
+
+Launch Instruments directly for interactive profiling:
+
+```bash
+# Launch Instruments with executable
+open -a Instruments ./build/Release/release/msd_sim_bench
+
+# Then manually:
+# 1. Choose "Time Profiler" or "Allocations" template
+# 2. Click record button
+# 3. Analyze results in GUI
+```
+
+### Parsing Profiling Data
+
+**Ticket**: [0015_profiling_trace_parser](tickets/0015_profiling_trace_parser.md)
+**Design**: [`docs/designs/0015_profiling_trace_parser/design.md`](docs/designs/0015_profiling_trace_parser/design.md)
+
+The `parse-profile.py` script extracts Time Profiler data from `.trace` files into structured JSON format, enabling programmatic analysis of profiling results without requiring manual inspection in the Instruments GUI.
+
+#### Basic Usage
+
+**Parse a trace file**:
+```bash
+# Parse and display top 20 functions
+./scripts/parse-profile.py profile_results/profile_20260108_183915.trace
+
+# Limit to top 10 functions
+./scripts/parse-profile.py profile_results/profile_20260108_183915.trace --top 10
+
+# Save to specific JSON file
+./scripts/parse-profile.py profile_results/profile_20260108_183915.trace -o report.json
+
+# JSON output only (no console summary)
+./scripts/parse-profile.py profile_results/profile_20260108_183915.trace --json-only
+```
+
+#### Integrated Workflow
+
+**Profile with automatic XML export**:
+```bash
+# Profile and export XML in one step
+./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -x
+
+# Then parse the trace
+./scripts/parse-profile.py profile_results/profile_20260108_183915.trace
+```
+
+**Custom output directory**:
+```bash
+# Profile to custom directory
+./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -d my_profiles -x
+
+# Parse from custom directory
+./scripts/parse-profile.py my_profiles/profile_20260108_183915.trace
+```
+
+#### JSON Output Schema
+
+The parser generates JSON reports with the following structure:
+
+```json
+{
+  "metadata": {
+    "trace_file": "profile_20260108_183915.trace",
+    "template": "Time Profiler",
+    "export_timestamp": "2026-01-08T18:20:00Z",
+    "executable": "unknown"
+  },
+  "summary": {
+    "total_samples": 7821,
+    "total_time_ms": 7821.0
+  },
+  "top_functions": [
+    {
+      "rank": 1,
+      "name": "void msd_sim::ConvexHull::computeHull<msd_sim::Coordinate>(...)",
+      "samples": 28,
+      "percentage": 0.4,
+      "source_file": "ConvexHull.hpp",
+      "line": 263
+    }
+  ]
+}
+```
+
+**Field descriptions**:
+- `total_samples` — Number of time samples collected (~1ms per sample)
+- `total_time_ms` — Approximate profiling duration in milliseconds
+- `rank` — Position in top-N list (1-indexed)
+- `name` — Demangled function name (C++ symbols decoded)
+- `samples` — Number of samples where this function was on the stack
+- `percentage` — Percent of total samples (rounded to 1 decimal)
+- `source_file` — Source filename (if available in debug symbols, otherwise null)
+- `line` — Line number (if available, otherwise null)
+
+#### Console Output
+
+When not using `--json-only`, the parser displays a color-coded summary:
+
+```
+Profiling Summary: profile_20260108_183915.trace
+Total Samples: 7,821 (~7,821 ms)
+
+┌─────┬──────────────────────────────────────────────────────┬─────────┬──────────┬──────────────────┐
+│ Rank│ Function                                             │ Samples │ Percent  │ Source           │
+├─────┼──────────────────────────────────────────────────────┼─────────┼──────────┼──────────────────┤
+│   1 │ msd_sim::ConvexHull::computeHull<Coordinate>(...)    │      28 │    0.4%  │ ConvexHull.hpp   │
+│   2 │ msd_sim::ConvexHull::extractHullData(qhT*)           │      25 │    0.3%  │ ConvexHull.cpp   │
+│   3 │ msd_sim::ConvexHull::computeCentroid()               │      25 │    0.3%  │ N/A              │
+└─────┴──────────────────────────────────────────────────────┴─────────┴──────────┴──────────────────┘
+
+Top hotspot: msd_sim::ConvexHull::computeHull<Coordinate>(...) (0.4% of samples)
+
+JSON report: profile_results/profile_20260108_184520.json
+```
+
+#### Output Directory
+
+Profile traces and JSON reports are stored in `profile_results/` by default:
+
+```
+profile_results/
+├── profile_20260108_183915.trace       # Instruments trace file
+├── profile_20260108_183915.xml         # XML export (if --export-xml used)
+└── profile_20260108_184520.json        # JSON report from parser
+```
+
+This mirrors the `benchmark_results/` directory structure for consistency.
+
+#### Script Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --output FILE` | `profile_results/profile_<timestamp>.json` | Output JSON file path |
+| `--top N` | `20` | Limit to top N functions |
+| `--json-only` | `false` | Output JSON only, no console summary |
+| `--no-color` | `false` | Disable colored output |
+| `-h, --help` | — | Show help message |
+
+#### Use Cases
+
+**Quick hotspot identification**:
+```bash
+# Profile and immediately see top functions
+./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -x
+./scripts/parse-profile.py profile_results/profile_*.trace --top 5
+```
+
+**Machine-readable output for CI**:
+```bash
+# Generate JSON report for automated analysis
+./scripts/parse-profile.py profile_results/profile_*.trace --json-only > hotspots.json
+```
+
+**Profiling test executables**:
+```bash
+# Profile unit tests
+./scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
+./scripts/parse-profile.py profile_results/profile_*.trace
+```
+
+#### Limitations
+
+- **Time Profiler only**: Parser currently supports Time Profiler template only (Allocations and other templates not supported in v1)
+- **Flat function list**: Call tree hierarchy not included in JSON output (shows flat list of functions sorted by sample count)
+- **Source locations**: Source file and line number may be null if debug symbols are incomplete
+- **Backtrace references**: Parser processes inline backtraces only; backtrace references in XML are skipped (may undercount samples in some cases)
+
+### Profiling Regression Detection
+
+**Ticket**: [0016_profiling_regression_tracker](tickets/0016_profiling_regression_tracker.md)
+**Design**: [`docs/designs/0016_profiling_regression_tracker/design.md`](docs/designs/0016_profiling_regression_tracker/design.md)
+
+The project uses `compare-profiles.py` to detect profiling regressions by comparing results against golden baseline files. The system tracks when functions consume meaningfully more CPU time (sample percentage) after code changes.
+
+**Basic workflow**:
+```bash
+# Run profiling and parse results
+./scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
+./scripts/parse-profile.py profile_results/*.trace --project-only
+
+# Compare against baseline (averages top 5 runs)
+./scripts/compare-profiles.py
+
+# Update baseline (when performance changes are intentional)
+./scripts/compare-profiles.py --set-baseline
+```
+
+**Interpreting results**:
+- **GREEN**: Performance within threshold or improved
+- **YELLOW**: New/disappeared hotspots (review if expected)
+- **RED**: Regression detected (exceeds threshold)
+
+**Default threshold**: 50% increase in sample percentage triggers regression
+
+**Example regression**:
+```
+Baseline: 10.0% samples (function consumed 10% of CPU time)
+Current:  15.0% samples (function now consumes 15% of CPU time)
+diff_percent = ((15 - 10) / 10) * 100 = 50% increase
+status = REGRESSION (if threshold <= 50%)
+```
+
+**Advanced options**:
+```bash
+# Use custom threshold (75% instead of default 50%)
+./scripts/compare-profiles.py --threshold 75.0
+
+# Average more runs for stability (10 instead of default 5)
+./scripts/compare-profiles.py --runs 10
+
+# Track more functions (20 instead of default 10)
+./scripts/compare-profiles.py --top 20
+
+# Strict mode: exit code 1 on regression (for CI)
+./scripts/compare-profiles.py --strict
+
+# Disable colors (for CI logs)
+./scripts/compare-profiles.py --no-color
+
+# Compare specific executable (auto-detected by default)
+./scripts/compare-profiles.py --executable msd_sim_bench
+```
+
+**Baseline files**:
+- Location: `profile_baselines/{executable}/baseline.json`
+- Committed to git for team-wide consistency
+- Update when intentional performance changes occur
+- Contains averaged data from top 5 runs (configurable)
+
+**Comparison reports**:
+- Location: `profile_results/{executable}/comparison_{timestamp}.json`
+- Format: JSON with per-function diff, summary statistics
+- Useful for: Design review, pull request analysis
+
+**When to update baselines**:
+1. After performance optimizations that change function percentages
+2. When refactoring redistributes CPU usage across functions
+3. When adding new features that become new hotspots
+4. Always commit baseline updates with code changes that affect them
+
+**Example workflow for optimization**:
+```bash
+# Verify current performance
+./scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
+./scripts/parse-profile.py profile_results/*.trace --project-only
+./scripts/compare-profiles.py
+
+# Make optimization changes
+# ... edit code ...
+
+# Run profiling again (collect 5 runs for averaging)
+for i in {1..5}; do
+  ./scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
+  ./scripts/parse-profile.py profile_results/*.trace --project-only
+done
+
+# Compare
+./scripts/compare-profiles.py
+
+# If improved, update baseline
+./scripts/compare-profiles.py --set-baseline
+
+# Commit code and baseline together
+git add src/optimized_code.cpp
+git add profile_baselines/msd_sim_test/baseline.json
+git commit -m "Optimize ConvexHull extraction
+
+Performance improvement:
+- extractHullData(): 10.5% -> 7.2% samples (-31%)
+
+Updated profiling baseline."
+```
+
+**Multi-run averaging**:
+
+The comparison tool averages the most recent M profiling runs (default 5) to handle variance in profiling data:
+
+- Profiles can vary between runs due to system load, GC pauses, etc.
+- Averaging smooths out noise and provides stable baselines
+- Only functions appearing in top N (default 10) of each run are tracked
+- Functions are matched by exact demangled name across runs
+
+**Comparison metrics**:
+
+- **Primary metric**: Sample percentage (not absolute sample count)
+- **Threshold type**: Relative percentage increase (not absolute percentage point difference)
+- **Why percentage**: Normalizes for different profiling durations
+- **Why relative**: A function going from 1% → 2% (+1pp) is a 100% increase (significant), but 50% → 51% (+1pp) is only 2% increase (noise)
+
+### Interpreting Results
+
+**Call Tree Navigation**:
+- Function names appear instead of raw addresses (thanks to `-g` flag)
+- Template instantiations visible (e.g., `ConvexHull::computeHull<Coordinate>`)
+- Source line attribution enables jumping to code
+
+**Time Profiler Metrics**:
+- **Self Time** — Time spent in function excluding callees
+- **Total Time** — Time spent in function including callees
+- **Call Count** — Number of times function was called
+
+**Allocations Metrics**:
+- **Persistent Bytes** — Memory still allocated at end of profiling
+- **Transient Bytes** — Memory allocated and freed during profiling
+- **Allocation Count** — Number of allocations per function
+
+### Profiling Best Practices
+
+**What to profile**:
+- Benchmark executables (`msd_sim_bench`) — Repeatable, isolated performance tests
+- Test executables (`msd_sim_test`) — Real-world code paths with known inputs
+- Main application (`msd_exe`) — Overall performance characteristics
+
+**When to profile**:
+- After benchmarks identify slow operations
+- When investigating performance regressions
+- Before and after optimizations
+- When memory usage grows unexpectedly
+
+**Profiling workflow**:
+1. Run benchmarks to identify slow operations
+2. Profile with Time Profiler to find hotspots
+3. Optimize identified bottlenecks
+4. Re-run benchmarks to verify improvement
+5. Compare baseline to detect regressions
+
+### Troubleshooting
+
+**Problem**: `xctrace: command not found`
+**Solution**: Install Xcode Command Line Tools: `xcode-select --install`
+
+**Problem**: No function names in call tree (only addresses)
+**Solution**: Rebuild with profiling flags: `conan install . -o "&:enable_profiling=True"`
+
+**Problem**: Trace file won't open in Instruments
+**Solution**: Ensure macOS 12.0+ and Xcode Command Line Tools are up to date
+
+**Problem**: Profiling overhead too high
+**Solution**: Use Time Profiler (5% overhead) instead of System Trace (30% overhead)
+
+### Platform Limitations
+
+**macOS-only feature**: Profiling infrastructure uses Xcode Instruments and is only available on macOS. For cross-platform profiling:
+- **Linux**: Use `perf` or Valgrind Callgrind
+- **Windows**: Use Visual Studio Profiler
+
+---
+
 ## Recent Architectural Changes
+
+### Profiling Trace Parser — 2026-01-08
+**Ticket**: [0015_profiling_trace_parser](tickets/0015_profiling_trace_parser.md)
+**Design**: [`docs/designs/0015_profiling_trace_parser/design.md`](docs/designs/0015_profiling_trace_parser/design.md)
+
+Extended the macOS profiling infrastructure (ticket 0012) with XML export capability and a Python parser that extracts Time Profiler data into JSON format. The implementation enables programmatic analysis of profiling results for any executable without requiring manual inspection in the Instruments GUI.
+
+**Key files added**:
+- `scripts/parse-profile.py` — Python script to parse Time Profiler XML and generate JSON reports
+- Enhanced `scripts/profile-instruments.sh` with `--export-xml` / `-x` flag and `--output-dir` / `-d` option
+
+**Features**:
+- Time-sample based XML parsing using xctrace export
+- Automatic C++ symbol demangling (no c++filt needed)
+- Optional source file and line attribution when debug symbols present
+- Color-coded console summary with top N functions by sample count
+- JSON output schema matching benchmark infrastructure patterns
+- Default output to `profile_results/` directory for organization
+
+**Workflow integration**:
+- Profile with `./scripts/profile-instruments.sh <executable> -x` to enable XML export
+- Parse with `./scripts/parse-profile.py <trace_file>` to generate JSON report
+- Use `--top N` to limit output to top N functions (default: 20)
+- Use `--json-only` for machine-readable output (CI integration ready)
+
+**Prototype validation**:
+- P1: Validated xctrace XML schema uses time-sample format with demangled symbols
+- P2: XML export takes ~2s for 8.6s trace (acceptable performance)
 
 ### Benchmark Metrics Tracker — 2026-01-08
 **Ticket**: [0014_benchmark_metrics_tracker](tickets/0014_benchmark_metrics_tracker.md)
@@ -658,6 +1136,7 @@ Added comprehensive documentation for the msd-transfer header-only library. This
 | [`records.puml`](docs/msd/msd-transfer/records.puml) | msd-transfer database records detailed design | 2026-01-01 |
 | [`input-state-management.puml`](docs/designs/input-state-management/input-state-management.puml) | Input state tracking and management system | 2026-01-05 |
 | [`0011_add_google_benchmark.puml`](docs/designs/0011_add_google_benchmark/0011_add_google_benchmark.puml) | Google Benchmark build system integration | 2026-01-08 |
+| [`0015_profiling_trace_parser.puml`](docs/designs/0015_profiling_trace_parser/0015_profiling_trace_parser.puml) | Profiling trace parser architecture and workflow | 2026-01-08 |
 
 ---
 
