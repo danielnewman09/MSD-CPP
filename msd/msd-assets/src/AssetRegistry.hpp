@@ -8,7 +8,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <unordered_map>
+#include <vector>
 #include "msd-assets/src/Asset.hpp"
 
 namespace msd_assets
@@ -39,6 +39,16 @@ public:
   std::optional<std::reference_wrapper<const Asset>> getAsset(uint32_t assetId);
 
   /**
+   * @brief Load asset from database (lazy-loaded and cached)
+   * @param assetId ID of the asset to load
+   * @return Optional reference to cached asset, std::nullopt if asset not
+   * found
+   */
+  std::optional<std::reference_wrapper<const Asset>> getAsset(
+    std::string assetName);
+
+
+  /**
    * @brief Load visual geometry from database (lazy-loaded and cached)
    * @param assetId ID of the asset to load visual mesh for
    * @return Optional reference to cached visual geometry, std::nullopt if
@@ -62,7 +72,7 @@ public:
    */
   size_t getCacheMemoryUsage() const;
 
-  const std::unordered_map<uint32_t, Asset>& getAssetCache() const;
+  const std::vector<Asset>& getAssetCache() const;
 
 private:
   /**
@@ -70,6 +80,7 @@ private:
    * @param dbPath Path to SQLite database file
    */
   void loadFromDatabase();
+
 
   // Delete copy constructor and assignment operator
   AssetRegistry(const AssetRegistry&) = delete;
@@ -81,10 +92,27 @@ private:
   // Cached complete assets loaded from database
   // Key: asset ID, Value: complete Asset with both visual and collision
   // geometry
-  std::unordered_map<uint32_t, Asset> assetCache_;
+  std::vector<Asset> assetCache_;
 
   // Thread safety for multi-threaded access
   mutable std::mutex cacheMutex_;
+
+  /**
+   * @brief Find asset in cache by ID
+   * @param assetId ID of the asset to find
+   * @return Iterator to the asset, or assetCache_.end() if not found
+   */
+  std::vector<Asset>::iterator findAssetById(uint32_t assetId);
+  std::vector<Asset>::const_iterator findAssetById(uint32_t assetId) const;
+
+  /**
+   * @brief Find asset in cache by name
+   * @param assetName Name of the asset to find
+   * @return Iterator to the asset, or assetCache_.end() if not found
+   */
+  std::vector<Asset>::iterator findAssetByName(const std::string& assetName);
+  std::vector<Asset>::const_iterator findAssetByName(
+    const std::string& assetName) const;
 };
 
 }  // namespace msd_assets

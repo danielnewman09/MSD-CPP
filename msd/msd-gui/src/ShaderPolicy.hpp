@@ -213,12 +213,11 @@ public:
    * Extracts full transform (4x4 matrix), color, and geometry index from
    * object.
    */
-  std::vector<uint8_t> buildInstanceData(
-    const msd_sim::AssetInertial& object,
-    float r,
-    float b,
-    float g,
-    const std::unordered_map<std::string, uint32_t>& geometryNameToIndex) const;
+  std::vector<uint8_t> buildInstanceData(const msd_sim::AssetInertial& object,
+                                         float r,
+                                         float b,
+                                         float g,
+                                         uint32_t geometryIndex) const;
 
   /**
    * @brief Get vertex shader filename

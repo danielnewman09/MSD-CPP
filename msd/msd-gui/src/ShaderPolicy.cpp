@@ -243,7 +243,7 @@ std::vector<uint8_t> FullTransformShaderPolicy::buildInstanceData(
   float r,
   float b,
   float g,
-  const std::unordered_map<std::string, uint32_t>& geometryNameToIndex) const
+  uint32_t geometryIndex) const
 {
   FullTransformInstanceData data{};
 
@@ -262,22 +262,9 @@ std::vector<uint8_t> FullTransformShaderPolicy::buildInstanceData(
   data.color[1] = g;
   data.color[2] = b;
 
-  // Look up geometry index by asset ID
-  auto assetId = object.getAssetId();
-  auto it = geometryNameToIndex.find(std::to_string(assetId));
-  if (it != geometryNameToIndex.end())
-  {
-    data.geometryIndex = it->second;
-  }
-  else
-  {
-    SDL_Log("WARNING: Asset ID %u not found in registry, using index 0",
-            assetId);
-    data.geometryIndex = 0;
-  }
+  data.geometryIndex = geometryIndex;
 
   // Padding is already zero-initialized
-
   // Serialize to bytes
   std::vector<uint8_t> bytes(sizeof(FullTransformInstanceData));
   std::memcpy(bytes.data(), &data, sizeof(FullTransformInstanceData));

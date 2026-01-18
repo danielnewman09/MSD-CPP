@@ -85,12 +85,12 @@ void SDLApplication::registerAssets()
 {
   const auto& assetCache = engine_.getAssetRegistry().getAssetCache();
 
-  for (const auto& [name, asset] : assetCache)
+  for (const auto& asset : assetCache)
   {
     if (asset.hasVisualGeometry())
     {
       gpuManager_->registerGeometry(
-        name, asset.getVisualGeometry()->get().getVertices());
+        asset.getId(), asset.getVisualGeometry()->get().getVertices());
     }
   }
 }
@@ -112,6 +112,7 @@ int SDLApplication::runApp()
 
     handleEvents();
     gpuManager_->update(engine_);
+    engine_.update(currentTime);
   }
 
   return EXIT_SUCCESS;
@@ -214,13 +215,7 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
 
   auto object =
     engine_.spawnInertialObject(geometryType, randomPos, randomOrientation);
-  gpuManager_->getInstanceManager().addObject(gpuManager_->getDevice(),
-                                              gpuManager_->getInstanceBuffer(),
-                                              object,
-                                              gpuManager_->getGeometryIdMap(),
-                                              r,
-                                              g,
-                                              b);
+  gpuManager_->addObject(object, r, g, b);
 
   SDL_Log("Spawned %s at (%.2f, %.2f, %.2f) with orientation (%.2f, %.2f, "
           "%.2f) and color (%.2f, %.2f, %.2f). Total objects: %zu",

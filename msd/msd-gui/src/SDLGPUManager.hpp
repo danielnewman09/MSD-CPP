@@ -186,11 +186,8 @@ public:
             shaderPolicy_.getInstanceDataSize());
   }
 
-  void updateGeometryBuffer(const std::vector<msd_assets::Vertex>& vertices)
+  void updateGeometryBuffer()
   {
-    // Append all vertices
-    allVertices_.insert(allVertices_.end(), vertices.begin(), vertices.end());
-
     // Create unified vertex buffer
     SDL_GPUBufferCreateInfo vertexBufferCreateInfo = {
       .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
@@ -278,14 +275,19 @@ public:
 
     totalVertexCount_ += vertices.size();
 
-    SDL_Log("Registered geometry for asset ID %u: index=%u, baseVertex=%u, vertexCount=%u",
+    SDL_Log("Registered geometry for asset ID %u: index=%u, baseVertex=%u, "
+            "vertexCount=%u",
             assetId,
             index,
             info.baseVertex,
             info.vertexCount);
 
+    // Append all vertices
+    allVertices_.insert(allVertices_.end(), vertices.begin(), vertices.end());
+
+
     // Upload vertices to GPU and create/resize buffers
-    updateGeometryBuffer(vertices);
+    updateGeometryBuffer();
 
     return index;
   }
@@ -293,6 +295,26 @@ public:
   std::unordered_map<uint32_t, uint32_t> getGeometryIdMap()
   {
     return assetIdToGeometryIndex_;
+  }
+
+  void addObject(const msd_sim::AssetInertial& object,
+                 float r,
+                 float g,
+                 float b)
+  {
+    uint32_t geometryId;
+    auto it = assetIdToGeometryIndex_.find(object.getAssetId());
+    if (it != assetIdToGeometryIndex_.end())
+    {
+      geometryId = it->second;
+    }
+    else
+    {
+      throw SDLException("Couldn't map object to geometry id");
+    }
+
+    instanceManager_.addObject(
+      getDevice(), getInstanceBuffer(), object, geometryId, r, g, b);
   }
 
   ~GPUManager() = default;
@@ -412,47 +434,48 @@ public:
       {
         // Bind vertex buffer (slot 0) and instance buffer (slot 1)
         SDL_GPUBufferBinding bufferBindings[] = {
-          {.buffer = vertexBuffer_.get(), .offset = 0},   // Slot 0: vertex data
-          {.buffer = instanceBuffer_.get(), .offset = 0}  // Slot 1: instance data
+          {.buffer = vertexBuffer_.get(), .offset = 0},  // Slot 0: vertex data
+          {.buffer = instanceBuffer_.get(), .offset = 0}
+          // Slot 1: instance data
         };
         SDL_BindGPUVertexBuffers(renderPass, 0, bufferBindings, 2);
 
         const auto& instances = instanceManager_.getInstances();
 
-      // Draw instances - for PositionOnly, all instances use the same geometry
-      // For FullTransform, instances are sorted by geometryIndex
-      if (!instances.empty())
-      {
-        // Complex case: group by geometry index
-        uint32_t currentGeomIndex = instances[0].geometryIndex;
-        uint32_t rangeStart = 0;
-
-        for (uint32_t i = 1; i <= instances.size(); ++i)
+        // Draw instances - for PositionOnly, all instances use the same
+        // geometry For FullTransform, instances are sorted by geometryIndex
+        if (!instances.empty())
         {
-          // Check if we've reached the end or found a new geometry type
-          if (i == instances.size() ||
-              instances[i].geometryIndex != currentGeomIndex)
+          // Complex case: group by geometry index
+          uint32_t currentGeomIndex = instances[0].geometryIndex;
+          uint32_t rangeStart = 0;
+
+          for (uint32_t i = 1; i <= instances.size(); ++i)
           {
-            // Draw the current range
-            uint32_t rangeCount = i - rangeStart;
-            const auto& geomInfo = geometryRegistry_[currentGeomIndex];
-
-            SDL_DrawGPUPrimitives(
-              renderPass,
-              geomInfo.vertexCount,  // Vertices for this geometry type
-              rangeCount,            // Number of instances in this range
-              geomInfo.baseVertex,   // Starting vertex in unified buffer
-              rangeStart);           // First instance in this range
-
-            // Start new range if not at end
-            if (i < instances.size())
+            // Check if we've reached the end or found a new geometry type
+            if (i == instances.size() ||
+                instances[i].geometryIndex != currentGeomIndex)
             {
-              currentGeomIndex = instances[i].geometryIndex;
-              rangeStart = i;
+              // Draw the current range
+              uint32_t rangeCount = i - rangeStart;
+              const auto& geomInfo = geometryRegistry_[currentGeomIndex];
+
+              SDL_DrawGPUPrimitives(
+                renderPass,
+                geomInfo.vertexCount,  // Vertices for this geometry type
+                rangeCount,            // Number of instances in this range
+                geomInfo.baseVertex,   // Starting vertex in unified buffer
+                rangeStart);           // First instance in this range
+
+              // Start new range if not at end
+              if (i < instances.size())
+              {
+                currentGeomIndex = instances[i].geometryIndex;
+                rangeStart = i;
+              }
             }
           }
         }
-      }
       }  // end if (vertexBuffer_ && instanceBuffer_)
 
       SDL_EndGPURenderPass(renderPass);
@@ -511,6 +534,21 @@ private:
 
   // Geometry registry for unified vertex buffer
   std::vector<GeometryInfo> geometryRegistry_;
+
+  // Maps the:
+  // assetId - which is the unique identifier for the geometry asset
+  //           as loaded from the database
+  // to the:
+  // GeometryIndex - which is the position in the geometryRegistry_
+  //                 vector for the loaded geometry object in the gui
+  //                 application.
+  //
+  // This might seem a bit weird, but because of the nature of the
+  // graphical object loading and management, we have the lightweight
+  // GeometryInfo object keeping track of the geometry assets in this
+  // manager. Instead of duplicating geometry information or having
+  // complex reference behavior, we copy the asset id when we register
+  // the geometric object with the Manager.
   std::unordered_map<uint32_t, uint32_t> assetIdToGeometryIndex_;
 
 

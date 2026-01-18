@@ -64,12 +64,11 @@ public:
   }
 
 
-  size_t buildInstanceData(
-    const msd_sim::AssetInertial& object,
-    const std::unordered_map<std::string, uint32_t>& geometryNameToIndex,
-    float r,
-    float g,
-    float b)
+  size_t buildInstanceData(const msd_sim::AssetInertial& object,
+                           uint32_t geometryId,
+                           float r,
+                           float g,
+                           float b)
   {
     InstanceDataType data{};
 
@@ -91,7 +90,7 @@ public:
       // Use the shader policy's createModelMatrix method
       FullTransformShaderPolicy tempPolicy;
       auto instanceBytes =
-        tempPolicy.buildInstanceData(object, r, g, b, geometryNameToIndex);
+        tempPolicy.buildInstanceData(object, r, g, b, geometryId);
       std::memcpy(&data, instanceBytes.data(), sizeof(InstanceDataType));
     }
 
@@ -118,12 +117,12 @@ public:
   size_t addObject(SDL_GPUDevice& device,
                    SDL_GPUBuffer& instanceBuffer,
                    const msd_sim::AssetInertial& object,
-                   const std::unordered_map<std::string, uint32_t>& geometryMap,
+                   uint32_t geometryId,
                    float r,
                    float g,
                    float b)
   {
-    auto index = buildInstanceData(object, geometryMap, r, g, b);
+    auto index = buildInstanceData(object, geometryId, r, g, b);
 
     uploadInstanceBuffer(device, instanceBuffer);
 
@@ -230,7 +229,11 @@ public:
 private:
   ShaderPolicy shaderPolicy_;  // Shader policy instance
 
+  // Stores the unique instance data for each object to be rendered
   std::vector<InstanceDataType> instances_;
+
+  // Maps the index identifier from the simulation backend
+  // to the index identifier for the gui
   std::unordered_map<uint32_t, size_t> indexMap_;
 };
 

@@ -88,6 +88,12 @@ void WorldModel::update(std::chrono::milliseconds deltaTime)
 void WorldModel::updatePhysics(double /*dt*/)
 {
   // TODO: implement physics update
+  for (auto& asset : inertialAssets_)
+  {
+    Coordinate dummy_step{0.001, 0, 0};
+    auto& origin = asset.getReferenceFrame().getOrigin();
+    origin += dummy_step;
+  }
 }
 
 void WorldModel::updateCollisions()
