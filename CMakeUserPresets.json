@@ -173,14 +173,11 @@
         },
         {
             "name": "coverage-all",
-            "displayName": "Generate Coverage Reports (All)",
-            "description": "Run all coverage targets and generate HTML reports",
+            "displayName": "Generate Coverage Report",
+            "description": "Run all tests and generate combined HTML coverage report",
             "configurePreset": "conan-debug",
             "targets": [
-                "coverage-msd-utils",
-                "coverage-msd-sim",
-                "coverage-msd-assets",
-                "coverage-msd-gui"
+                "coverage"
             ]
         }
     ]

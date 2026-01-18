@@ -14,18 +14,15 @@ namespace msd_gui
 /**
  * @brief A 3D camera for rendering with perspective projection
  *
- * This class references a ReferenceFrame and provides camera-specific functionality
- * including view matrix and projection matrix computation for 3D rendering.
- * It generates the Model-View-Projection (MVP) matrix needed by shaders.
+ * This class references a ReferenceFrame and provides camera-specific
+ * functionality including view matrix and projection matrix computation for 3D
+ * rendering. It generates the Model-View-Projection (MVP) matrix needed by
+ * shaders.
  *
  * The camera uses a right-handed coordinate system with:
  * - X: right
  * - Y: up
  * - Z: forward (out of screen, opposite viewing direction)
- *
- * BREAKING CHANGE (Ticket 0005_camera_controller_sim):
- * Camera now takes a non-owning reference to ReferenceFrame instead of owning one.
- * This allows simulation logic to control camera position through the referenced frame.
  *
  * @see docs/designs/0005_camera_controller_sim/0005_camera_controller_sim.puml
  * @ticket 0005_camera_controller_sim
@@ -108,11 +105,12 @@ public:
     const Eigen::Matrix4f& modelMatrix = Eigen::Matrix4f::Identity()) const;
 
 private:
-  std::reference_wrapper<msd_sim::ReferenceFrame> frame_;  ///< Non-owning reference to camera's reference frame
-  float fovRadians_;                                       ///< Vertical field of view in radians
-  float aspectRatio_;                                      ///< Width/height ratio
-  float nearPlane_;                                        ///< Near clipping plane distance
-  float farPlane_;                                         ///< Far clipping plane distance
+  std::reference_wrapper<msd_sim::ReferenceFrame>
+    frame_;            ///< Non-owning reference to camera's reference frame
+  float fovRadians_;   ///< Vertical field of view in radians
+  float aspectRatio_;  ///< Width/height ratio
+  float nearPlane_;    ///< Near clipping plane distance
+  float farPlane_;     ///< Far clipping plane distance
 };
 
 }  // namespace msd_gui

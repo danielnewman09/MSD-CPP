@@ -111,8 +111,8 @@ public:
    */
   std::vector<uint8_t> buildInstanceData(const msd_sim::AssetInertial& object,
                                          float r,
-                                         float b,
-                                         float g) const;
+                                         float g,
+                                         float b) const;
 
   /**
    * @brief Get vertex shader filename
@@ -215,8 +215,8 @@ public:
    */
   std::vector<uint8_t> buildInstanceData(const msd_sim::AssetInertial& object,
                                          float r,
-                                         float b,
                                          float g,
+                                         float b,
                                          uint32_t geometryIndex) const;
 
   /**

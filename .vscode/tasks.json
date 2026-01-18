@@ -120,7 +120,7 @@
             "type": "shell",
             "command": "open",
             "args": [
-                "${workspaceFolder}/build/Debug/coverage/msd-sim/index.html"
+                "${workspaceFolder}/build/Debug/coverage/index.html"
             ],
             "presentation": {
                 "echo": true,

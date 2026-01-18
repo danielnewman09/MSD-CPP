@@ -91,8 +91,9 @@ public:
 protected:
   // The identifier for the asset from which this object was built
   uint32_t referenceAssetId_;
-  
+
   uint32_t instanceId_;
+
   // Collision hull (computed lazily, then cached)
   const ConvexHull& collisionHull_;
 

@@ -63,6 +63,49 @@ if(ENABLE_COVERAGE)
     add_compile_options(--coverage -O0 -fno-inline -fno-elide-constructors)
     add_link_options(--coverage)
     message(STATUS "Code coverage enabled")
+
+    # Find required programs for coverage reporting
+    find_program(LCOV_PATH lcov)
+    find_program(GENHTML_PATH genhtml)
+
+    if(LCOV_PATH AND GENHTML_PATH)
+      # Add project-wide coverage target that runs all tests
+      add_custom_target(coverage
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/coverage
+
+        # Zero coverage counters
+        COMMAND ${LCOV_PATH} --directory . --zerocounters
+
+        # Capture baseline (all instrumented files with 0% coverage) BEFORE running tests
+        COMMAND ${LCOV_PATH} --directory . --capture --initial --output-file coverage_baseline.info --ignore-errors inconsistent,unsupported,format,gcov,source,range --filter range
+
+        # Run all tests via ctest (allow test failures to continue coverage generation)
+        COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure || (exit 0)
+
+        # Capture coverage data after tests (ignore inconsistent errors from header-only functions)
+        COMMAND ${LCOV_PATH} --directory . --capture --output-file coverage_test.info --ignore-errors inconsistent,unsupported,format,gcov,source,range --filter range
+
+        # Merge baseline and test coverage (baseline ensures untested files appear with 0%)
+        COMMAND ${LCOV_PATH} --add-tracefile coverage_baseline.info --add-tracefile coverage_test.info --output-file coverage.info --ignore-errors inconsistent,unsupported,format,source,range
+
+        # Filter to only include project files (exclude system headers, test files, conan cache, and build artifacts)
+        COMMAND ${LCOV_PATH} --extract coverage.info '${CMAKE_SOURCE_DIR}/*' --output-file coverage_project.info --ignore-errors inconsistent,unsupported,format
+        COMMAND ${LCOV_PATH} --remove coverage_project.info '*/test/*' '*/build/*' '*/bench/*' --output-file coverage_filtered.info --ignore-errors inconsistent,unsupported,format,unused
+
+        # Generate HTML report (filter missing files and out-of-range lines from stale gcov data)
+        COMMAND ${GENHTML_PATH} coverage_filtered.info --output-directory ${CMAKE_BINARY_DIR}/coverage --ignore-errors inconsistent,unsupported,format,corrupt,category,source,range --filter missing,range
+
+        # Print summary
+        COMMAND ${LCOV_PATH} --summary coverage_filtered.info --ignore-errors inconsistent,unsupported,format
+
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Generating project-wide code coverage report"
+      )
+
+      message(STATUS "Coverage target 'coverage' added. HTML report will be in ${CMAKE_BINARY_DIR}/coverage")
+    else()
+      message(WARNING "lcov and/or genhtml not found. Coverage target will not be available.")
+    endif()
   else()
     message(WARNING "Code coverage is only supported with GCC or Clang")
   endif()

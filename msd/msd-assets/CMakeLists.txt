@@ -1,6 +1,6 @@
 # Define library name
 set(MSD_ASSETS_NAME msd_assets)
-set(MSD_SIM_TEST_NAME msd_assets_test)
+set(MSD_ASSETS_TEST_NAME msd_assets_test)
 
 # Create the library
 add_library(${MSD_ASSETS_NAME})

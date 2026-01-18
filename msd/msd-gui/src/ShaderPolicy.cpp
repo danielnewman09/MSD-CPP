@@ -92,8 +92,8 @@ SDL_GPUVertexInputState PositionOnlyShaderPolicy::getVertexInputState() const
 std::vector<uint8_t> PositionOnlyShaderPolicy::buildInstanceData(
   const msd_sim::AssetInertial& object,
   float r,
-  float b,
-  float g) const
+  float g,
+  float b) const
 {
   PositionOnlyInstanceData data{};
 
@@ -241,8 +241,8 @@ Eigen::Matrix4f FullTransformShaderPolicy::createModelMatrix(
 std::vector<uint8_t> FullTransformShaderPolicy::buildInstanceData(
   const msd_sim::AssetInertial& object,
   float r,
-  float b,
   float g,
+  float b,
   uint32_t geometryIndex) const
 {
   FullTransformInstanceData data{};
