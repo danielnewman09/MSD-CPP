@@ -32,17 +32,10 @@ MSD-CPP/
 ├── tickets/                  # Feature tickets (see Ticketing System below)
 ├── prototypes/               # Prototype code for design validation
 │
-├── scripts/                  # Build and analysis scripts
-│   ├── run_benchmarks.sh     # Run Google Benchmark suites
-│   ├── compare_benchmarks.py # Benchmark regression detection
-│   ├── profile-instruments.sh# macOS profiling with Instruments
-│   ├── parse-profile.py      # Parse profiling traces to JSON
-│   └── compare-profiles.py   # Profiling regression detection
-│
-├── benchmark_baselines/      # Golden baselines for benchmark comparison
-├── benchmark_results/        # Generated benchmark output (gitignored)
-├── profile_baselines/        # Golden baselines for profiling comparison
-├── profile_results/          # Generated profiling output (gitignored)
+├── analysis/                 # Performance analysis infrastructure (see analysis/CLAUDE.md)
+│   ├── scripts/              # Benchmarking and profiling scripts
+│   ├── benchmark_baselines/  # Golden baselines for benchmark comparison
+│   └── profile_baselines/    # Golden baselines for profiling comparison
 │
 ├── build/                    # CMake build output (gitignored)
 ├── conan/                    # Conan package manager configuration
@@ -204,50 +197,27 @@ cmake --build --preset debug-sim-only --target msd_sim_test
 
 ---
 
-## Benchmarking
+## Code Quality
 
-The project uses Google Benchmark for micro-benchmarking. Benchmarks are optional and disabled by default.
+The project provides infrastructure for performance benchmarking and profiling to detect regressions and identify optimization opportunities.
 
-**Full documentation: [`docs/benchmarking.md`](docs/benchmarking.md)**
+**For scripts and detailed usage, see [`analysis/CLAUDE.md`](analysis/CLAUDE.md).**
 
-### Quick Start
+### Benchmarking
 
-```bash
-# Build with benchmarks
-conan install . --build=missing -s build_type=Release -o "&:enable_benchmarks=True"
-cmake --preset conan-release -DENABLE_BENCHMARKS=ON
-cmake --build --preset conan-release --target msd_sim_bench
+Uses Google Benchmark for micro-benchmarking performance-critical code paths. Benchmarks are optional and disabled by default to avoid extending build times.
 
-# Run benchmarks
-./build/Release/release/msd_sim_bench
+- **Purpose**: Measure execution time of critical operations (e.g., ConvexHull construction, collision detection)
+- **Regression Detection**: Compare results against golden baselines to catch performance regressions
+- **Full documentation**: [`docs/benchmarking.md`](docs/benchmarking.md)
 
-# Compare against baseline
-./scripts/compare_benchmarks.py
-```
+### Profiling (macOS)
 
----
+Uses Xcode Instruments for CPU profiling and memory analysis on macOS. Provides deep call graph visualization and hotspot identification.
 
-## Profiling (macOS)
-
-The project provides profiling infrastructure using Xcode Instruments (macOS only).
-
-**Full documentation: [`docs/profiling.md`](docs/profiling.md)**
-
-### Quick Start
-
-```bash
-# Build with profiling
-conan install . --build=missing -s build_type=Release -o "&:enable_profiling=True"
-cmake --preset profiling-release
-cmake --build --preset conan-release
-
-# Profile and parse
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -x
-./scripts/parse-profile.py profile_results/*.trace
-
-# Compare against baseline
-./scripts/compare-profiles.py
-```
+- **Purpose**: Identify performance bottlenecks and memory issues in production code
+- **Regression Detection**: Track function-level CPU usage changes over time
+- **Full documentation**: [`docs/profiling.md`](docs/profiling.md)
 
 ---
 

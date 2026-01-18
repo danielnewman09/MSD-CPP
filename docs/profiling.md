@@ -75,10 +75,10 @@ Use the `profile-instruments.sh` script for streamlined profiling:
 
 ```bash
 # Profile a benchmark (Time Profiler)
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench
 
 # Profile with Allocations template
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench "Allocations"
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench "Allocations"
 
 # Open generated trace file
 open profile_20260108_143000.trace
@@ -145,16 +145,16 @@ The `parse-profile.py` script extracts Time Profiler data from `.trace` files in
 
 ```bash
 # Parse and display top 20 functions
-./scripts/parse-profile.py profile_results/profile_20260108_183915.trace
+./analysis/scripts/parse-profile.py profile_results/profile_20260108_183915.trace
 
 # Limit to top 10 functions
-./scripts/parse-profile.py profile_results/profile_20260108_183915.trace --top 10
+./analysis/scripts/parse-profile.py profile_results/profile_20260108_183915.trace --top 10
 
 # Save to specific JSON file
-./scripts/parse-profile.py profile_results/profile_20260108_183915.trace -o report.json
+./analysis/scripts/parse-profile.py profile_results/profile_20260108_183915.trace -o report.json
 
 # JSON output only (no console summary)
-./scripts/parse-profile.py profile_results/profile_20260108_183915.trace --json-only
+./analysis/scripts/parse-profile.py profile_results/profile_20260108_183915.trace --json-only
 ```
 
 ### Integrated Workflow
@@ -162,19 +162,19 @@ The `parse-profile.py` script extracts Time Profiler data from `.trace` files in
 **Profile with automatic XML export**:
 ```bash
 # Profile and export XML in one step
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -x
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -x
 
 # Then parse the trace
-./scripts/parse-profile.py profile_results/profile_20260108_183915.trace
+./analysis/scripts/parse-profile.py profile_results/profile_20260108_183915.trace
 ```
 
 **Custom output directory**:
 ```bash
 # Profile to custom directory
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -d my_profiles -x
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -d my_profiles -x
 
 # Parse from custom directory
-./scripts/parse-profile.py my_profiles/profile_20260108_183915.trace
+./analysis/scripts/parse-profile.py my_profiles/profile_20260108_183915.trace
 ```
 
 ### JSON Output Schema
@@ -263,21 +263,21 @@ profile_results/
 **Quick hotspot identification**:
 ```bash
 # Profile and immediately see top functions
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -x
-./scripts/parse-profile.py profile_results/profile_*.trace --top 5
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -x
+./analysis/scripts/parse-profile.py profile_results/profile_*.trace --top 5
 ```
 
 **Machine-readable output for CI**:
 ```bash
 # Generate JSON report for automated analysis
-./scripts/parse-profile.py profile_results/profile_*.trace --json-only > hotspots.json
+./analysis/scripts/parse-profile.py profile_results/profile_*.trace --json-only > hotspots.json
 ```
 
 **Profiling test executables**:
 ```bash
 # Profile unit tests
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
-./scripts/parse-profile.py profile_results/profile_*.trace
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
+./analysis/scripts/parse-profile.py profile_results/profile_*.trace
 ```
 
 ### Limitations
@@ -297,14 +297,14 @@ The project uses `compare-profiles.py` to detect profiling regressions by compar
 
 ```bash
 # Run profiling and parse results
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
-./scripts/parse-profile.py profile_results/*.trace --project-only
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
+./analysis/scripts/parse-profile.py profile_results/*.trace --project-only
 
 # Compare against baseline (averages top 5 runs)
-./scripts/compare-profiles.py
+./analysis/scripts/compare-profiles.py
 
 # Update baseline (when performance changes are intentional)
-./scripts/compare-profiles.py --set-baseline
+./analysis/scripts/compare-profiles.py --set-baseline
 ```
 
 ### Interpreting Results
@@ -327,22 +327,22 @@ status = REGRESSION (if threshold <= 50%)
 
 ```bash
 # Use custom threshold (75% instead of default 50%)
-./scripts/compare-profiles.py --threshold 75.0
+./analysis/scripts/compare-profiles.py --threshold 75.0
 
 # Average more runs for stability (10 instead of default 5)
-./scripts/compare-profiles.py --runs 10
+./analysis/scripts/compare-profiles.py --runs 10
 
 # Track more functions (20 instead of default 10)
-./scripts/compare-profiles.py --top 20
+./analysis/scripts/compare-profiles.py --top 20
 
 # Strict mode: exit code 1 on regression (for CI)
-./scripts/compare-profiles.py --strict
+./analysis/scripts/compare-profiles.py --strict
 
 # Disable colors (for CI logs)
-./scripts/compare-profiles.py --no-color
+./analysis/scripts/compare-profiles.py --no-color
 
 # Compare specific executable (auto-detected by default)
-./scripts/compare-profiles.py --executable msd_sim_bench
+./analysis/scripts/compare-profiles.py --executable msd_sim_bench
 ```
 
 ### Baseline Files
@@ -369,24 +369,24 @@ status = REGRESSION (if threshold <= 50%)
 
 ```bash
 # Verify current performance
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
-./scripts/parse-profile.py profile_results/*.trace --project-only
-./scripts/compare-profiles.py
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
+./analysis/scripts/parse-profile.py profile_results/*.trace --project-only
+./analysis/scripts/compare-profiles.py
 
 # Make optimization changes
 # ... edit code ...
 
 # Run profiling again (collect 5 runs for averaging)
 for i in {1..5}; do
-  ./scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
-  ./scripts/parse-profile.py profile_results/*.trace --project-only
+  ./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_test -x
+  ./analysis/scripts/parse-profile.py profile_results/*.trace --project-only
 done
 
 # Compare
-./scripts/compare-profiles.py
+./analysis/scripts/compare-profiles.py
 
 # If improved, update baseline
-./scripts/compare-profiles.py --set-baseline
+./analysis/scripts/compare-profiles.py --set-baseline
 
 # Commit code and baseline together
 git add src/optimized_code.cpp

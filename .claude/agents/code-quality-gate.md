@@ -97,10 +97,10 @@ ctest --preset conan-release --output-on-failure 2>&1
 **If benchmarks are specified, execute:**
 ```bash
 # Run benchmarks
-./scripts/run_benchmarks.sh -b Release -r 3
+./analysis/scripts/run_benchmarks.sh -b Release -r 3
 
 # Compare against baseline
-./scripts/compare_benchmarks.py --strict 2>&1
+./analysis/scripts/compare_benchmarks.py --strict 2>&1
 ```
 
 **Capture:**
@@ -236,8 +236,8 @@ cmake --build --preset conan-release
 ctest --preset conan-release -R {test_name}
 
 # Run benchmarks with custom repetitions
-./scripts/run_benchmarks.sh -b Release -r 5
+./analysis/scripts/run_benchmarks.sh -b Release -r 5
 
 # Benchmark comparison with custom threshold
-./scripts/compare_benchmarks.py --threshold 5.0 --strict
+./analysis/scripts/compare_benchmarks.py --threshold 5.0 --strict
 ```

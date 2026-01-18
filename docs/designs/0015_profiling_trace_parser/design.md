@@ -14,7 +14,7 @@ See: [`./0015_profiling_trace_parser.puml`](./0015_profiling_trace_parser.puml)
 #### parse-profile.py Python Script
 
 - **Purpose**: Extract Time Profiler data from Instruments `.trace` files and output structured JSON
-- **Location**: `scripts/parse-profile.py`
+- **Location**: `analysis/scripts/parse-profile.py`
 - **Key interfaces**:
   ```python
   #!/usr/bin/env python3
@@ -114,7 +114,7 @@ See: [`./0015_profiling_trace_parser.puml`](./0015_profiling_trace_parser.puml)
 
 #### profile-instruments.sh Enhancement
 
-- **Current location**: `scripts/profile-instruments.sh`
+- **Current location**: `analysis/scripts/profile-instruments.sh`
 - **Changes required**:
   1. Add `--export-xml` / `-x` flag to argument parsing
   2. Add `--output-dir` / `-d` flag for custom output directory (default: `profile_results/`)
@@ -210,7 +210,7 @@ See "Open Questions" section for prototype validation of xctrace XML schema pars
 6. Update usage message with new flags
 7. Test with msd_sim_bench:
    ```bash
-   ./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench --export-xml
+   ./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench --export-xml
    ```
 
 **Acceptance**:
@@ -224,7 +224,7 @@ See "Open Questions" section for prototype validation of xctrace XML schema pars
 **Goal**: Create parser that extracts Time Profiler data to JSON
 
 **Tasks**:
-1. Create `scripts/parse-profile.py` with proper shebang and docstring
+1. Create `analysis/scripts/parse-profile.py` with proper shebang and docstring
 2. Implement argument parsing (trace_file, --output, --top, --json-only, --no-color)
 3. Implement `export_trace_to_xml()` function:
    - Call `xctrace export --toc` to discover tables
@@ -238,7 +238,7 @@ See "Open Questions" section for prototype validation of xctrace XML schema pars
    - Extract source file and line info when present
 5. Implement JSON schema generation
 6. Implement `format_console_output()` for human-readable summary
-7. Make script executable: `chmod +x scripts/parse-profile.py`
+7. Make script executable: `chmod +x analysis/scripts/parse-profile.py`
 
 **Acceptance**:
 - Parser accepts `.trace` file and generates JSON
@@ -552,7 +552,7 @@ Follow existing script conventions:
 # GOOD - Clear, actionable error messages
 print(f"{RED}ERROR: Trace file not found: {trace_file}{NC}", file=sys.stderr)
 print("Run profiling first:", file=sys.stderr)
-print("  ./scripts/profile-instruments.sh <executable> --export-xml", file=sys.stderr)
+print("  ./analysis/scripts/profile-instruments.sh <executable> --export-xml", file=sys.stderr)
 
 # BAD - Bare exception without context
 raise FileNotFoundError(trace_file)
@@ -704,7 +704,7 @@ Steps:
    cmake --build --preset conan-release --target msd_sim_bench
 
 2. Profile a short run:
-   ./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench
+   ./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench
    (Let it run for 3-5 seconds, then Ctrl-C)
 
 3. Export to XML:
@@ -767,7 +767,7 @@ Type: Manual timing measurements
 
 Steps:
 1. Create traces of varying lengths:
-   ./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench
+   ./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench
    (Run for 5s, 15s, 30s - Ctrl-C to stop)
 
 2. Time XML export for each:

@@ -35,11 +35,11 @@ benchmark_baselines/           # NEW directory (committed to git)
 
 ```
 1. User runs benchmarks:
-   ./scripts/run_benchmarks.sh
+   ./analysis/scripts/run_benchmarks.sh
    → Generates benchmark_results/{suite}/benchmark_latest.json
 
 2. User compares results:
-   ./scripts/compare_benchmarks.py
+   ./analysis/analysis/scripts/compare_benchmarks.py
    → Reads benchmark_results/{suite}/benchmark_latest.json
    → Reads benchmark_baselines/{suite}/baseline.json
    → Compares metrics
@@ -48,7 +48,7 @@ benchmark_baselines/           # NEW directory (committed to git)
    → Returns exit code (0=pass, 1=regression if --strict)
 
 3. User updates baseline (when performance changes are expected):
-   ./scripts/compare_benchmarks.py --set-baseline
+   ./analysis/analysis/scripts/compare_benchmarks.py --set-baseline
    → Copies benchmark_latest.json to benchmark_baselines/{suite}/baseline.json
 ```
 
@@ -56,7 +56,7 @@ benchmark_baselines/           # NEW directory (committed to git)
 
 ### Module: compare_benchmarks.py
 
-**Location**: `scripts/compare_benchmarks.py`
+**Location**: `analysis/scripts/compare_benchmarks.py`
 
 **Language**: Python 3.9+
 
@@ -192,28 +192,28 @@ def set_baseline(
 
 ```bash
 # Compare latest results against baseline (default behavior)
-./scripts/compare_benchmarks.py
+./analysis/analysis/scripts/compare_benchmarks.py
 
 # Compare specific result file
-./scripts/compare_benchmarks.py --current benchmark_results/msd_sim_bench/benchmark_20260108.json
+./analysis/analysis/scripts/compare_benchmarks.py --current benchmark_results/msd_sim_bench/benchmark_20260108.json
 
 # Compare with custom threshold
-./scripts/compare_benchmarks.py --threshold 5.0
+./analysis/analysis/scripts/compare_benchmarks.py --threshold 5.0
 
 # Set current results as new baseline
-./scripts/compare_benchmarks.py --set-baseline
+./analysis/analysis/scripts/compare_benchmarks.py --set-baseline
 
 # Strict mode: exit code 1 on regression (for CI)
-./scripts/compare_benchmarks.py --strict
+./analysis/analysis/scripts/compare_benchmarks.py --strict
 
 # Specify benchmark suite
-./scripts/compare_benchmarks.py --suite msd_sim_bench
+./analysis/analysis/scripts/compare_benchmarks.py --suite msd_sim_bench
 
 # Output JSON only (no console output)
-./scripts/compare_benchmarks.py --output-json-only
+./analysis/analysis/scripts/compare_benchmarks.py --output-json-only
 
 # Disable colors
-./scripts/compare_benchmarks.py --no-color
+./analysis/analysis/scripts/compare_benchmarks.py --no-color
 ```
 
 ### CLI Arguments
@@ -382,7 +382,7 @@ Comparison report: benchmark_results/msd_sim_bench/comparison_20260108_150000.js
 | Error | Exit Code | User Action |
 |-------|-----------|-------------|
 | No baseline file exists | 1 | Run `--set-baseline` to create initial baseline |
-| Current results file not found | 1 | Run `./scripts/run_benchmarks.sh` first |
+| Current results file not found | 1 | Run `./analysis/scripts/run_benchmarks.sh` first |
 | Invalid JSON in baseline | 1 | Restore baseline from git or regenerate |
 | Invalid JSON in current results | 1 | Re-run benchmarks |
 | Regression detected (--strict mode) | 1 | Investigate performance regression or update baseline |
@@ -394,12 +394,12 @@ Comparison report: benchmark_results/msd_sim_bench/comparison_20260108_150000.js
 # Missing baseline
 ERROR: Baseline file not found: benchmark_baselines/msd_sim_bench/baseline.json
 To create a baseline, run:
-  ./scripts/compare_benchmarks.py --set-baseline
+  ./analysis/analysis/scripts/compare_benchmarks.py --set-baseline
 
 # Missing results
 ERROR: Current results file not found: benchmark_results/msd_sim_bench/benchmark_latest.json
 Run benchmarks first:
-  ./scripts/run_benchmarks.sh
+  ./analysis/scripts/run_benchmarks.sh
 
 # Invalid JSON
 ERROR: Invalid JSON in baseline file: benchmark_baselines/msd_sim_bench/baseline.json
@@ -420,18 +420,18 @@ No modifications required to `run_benchmarks.sh`. The comparison script consumes
 **Workflow**:
 ```bash
 # Developer workflow
-./scripts/run_benchmarks.sh                      # Generate results
-./scripts/compare_benchmarks.py                  # Compare against baseline
+./analysis/scripts/run_benchmarks.sh                      # Generate results
+./analysis/analysis/scripts/compare_benchmarks.py                  # Compare against baseline
 
 # Update baseline when performance changes are expected
-./scripts/run_benchmarks.sh
-./scripts/compare_benchmarks.py --set-baseline
+./analysis/scripts/run_benchmarks.sh
+./analysis/analysis/scripts/compare_benchmarks.py --set-baseline
 git add benchmark_baselines/
 git commit -m "Update benchmark baseline after optimization"
 
 # CI workflow (future enhancement)
-./scripts/run_benchmarks.sh
-./scripts/compare_benchmarks.py --strict         # Fail CI on regression
+./analysis/scripts/run_benchmarks.sh
+./analysis/analysis/scripts/compare_benchmarks.py --strict         # Fail CI on regression
 ```
 
 ### Git Workflow
@@ -442,12 +442,12 @@ git commit -m "Update benchmark baseline after optimization"
 git checkout -b perf-optimization
 
 # Verify improvement
-./scripts/run_benchmarks.sh
-./scripts/compare_benchmarks.py
+./analysis/scripts/run_benchmarks.sh
+./analysis/analysis/scripts/compare_benchmarks.py
 # Output shows improvement
 
 # Update baseline
-./scripts/compare_benchmarks.py --set-baseline
+./analysis/analysis/scripts/compare_benchmarks.py --set-baseline
 
 # Commit both code and updated baseline
 git add src/optimization.cpp
@@ -525,13 +525,13 @@ The project uses `compare_benchmarks.py` to detect performance regressions by co
 **Basic workflow**:
 ```bash
 # Run benchmarks
-./scripts/run_benchmarks.sh
+./analysis/scripts/run_benchmarks.sh
 
 # Compare against baseline
-./scripts/compare_benchmarks.py
+./analysis/analysis/scripts/compare_benchmarks.py
 
 # Update baseline (when performance changes are intentional)
-./scripts/compare_benchmarks.py --set-baseline
+./analysis/analysis/scripts/compare_benchmarks.py --set-baseline
 ```
 
 **Interpreting results**:
@@ -544,7 +544,7 @@ The project uses `compare_benchmarks.py` to detect performance regressions by co
 **CI integration**:
 ```bash
 # Fail CI pipeline on regression
-./scripts/compare_benchmarks.py --strict
+./analysis/analysis/scripts/compare_benchmarks.py --strict
 ```
 
 **Comparison reports**:
@@ -575,7 +575,7 @@ None — Requirements are clear and comprehensive.
 ## Implementation Checklist
 
 ### Files to Create
-- [ ] `scripts/compare_benchmarks.py` — Main script
+- [ ] `analysis/scripts/compare_benchmarks.py` — Main script
 - [ ] `benchmark_baselines/` — Directory for baseline files
 - [ ] `benchmark_baselines/msd_sim_bench/baseline.json` — Initial baseline (copy from latest results)
 

@@ -66,10 +66,10 @@ This feature provides visibility into function-level performance trends and prev
 - Must work with `--project-only` filtered profiles (only msd_* namespaces)
 
 ## Acceptance Criteria
-- [x] `scripts/compare-profiles.py` exists and is executable
-- [x] Running `./scripts/compare-profiles.py` compares latest profile against baseline
-- [x] Running `./scripts/compare-profiles.py --set-baseline` creates/updates baseline
-- [x] Running `./scripts/compare-profiles.py --strict` returns exit code 1 on regressions
+- [x] `analysis/scripts/compare-profiles.py` exists and is executable
+- [x] Running `./analysis/scripts/compare-profiles.py` compares latest profile against baseline
+- [x] Running `./analysis/scripts/compare-profiles.py --set-baseline` creates/updates baseline
+- [x] Running `./analysis/scripts/compare-profiles.py --strict` returns exit code 1 on regressions
 - [x] JSON comparison report generated in `profile_results/comparison_{timestamp}.json`
 - [x] Console output uses color coding matching `compare_benchmarks.py` (GREEN/YELLOW/RED)
 - [x] Baseline files stored in `profile_baselines/{executable}/baseline.json`
@@ -107,8 +107,8 @@ This feature provides visibility into function-level performance trends and prev
 ## References
 
 ### Related Code
-- `scripts/compare_benchmarks.py` — Similar comparison tool for benchmarks (primary reference)
-- `scripts/parse-profile.py` — Produces JSON profiles for comparison
+- `analysis/scripts/compare_benchmarks.py` — Similar comparison tool for benchmarks (primary reference)
+- `analysis/scripts/parse-profile.py` — Produces JSON profiles for comparison
 - `profile_results/*.json` — Profile JSON output format
 
 ### Related Documentation
@@ -151,7 +151,7 @@ This feature provides visibility into function-level performance trends and prev
 - **Started**: 2026-01-10 16:00
 - **Completed**: 2026-01-10 17:00
 - **Files Created**:
-  - `scripts/compare-profiles.py` — Profiling regression tracker script (executable, ~650 lines)
+  - `analysis/scripts/compare-profiles.py` — Profiling regression tracker script (executable, ~650 lines)
   - `profile_baselines/.gitkeep` — Directory marker for baseline storage
 - **Files Modified**:
   - `CLAUDE.md` — Added profiling regression detection section with usage documentation

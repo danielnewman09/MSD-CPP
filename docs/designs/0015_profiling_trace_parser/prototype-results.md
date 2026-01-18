@@ -388,7 +388,7 @@ All prototypes VALIDATED. No blocking issues discovered. Implementation can proc
 
 - [x] `profile-instruments.sh` supports `--export-xml` / `-x` flag
 - [x] XML file generated alongside `.trace` when `--export-xml` is used
-- [x] `scripts/parse-profile.py` exists and is executable
+- [x] `analysis/scripts/parse-profile.py` exists and is executable
 - [x] `parse-profile.py` accepts `.trace` file and outputs JSON to stdout
 - [x] `parse-profile.py --output report.json` writes JSON to specified file
 - [x] `parse-profile.py --top 10` limits output to top 10 functions

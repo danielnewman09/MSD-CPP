@@ -12,7 +12,7 @@ See: `./0016_profiling_regression_tracker.puml`
 ### Script Architecture
 
 #### compare-profiles.py
-**Location**: `scripts/compare-profiles.py`
+**Location**: `analysis/scripts/compare-profiles.py`
 **Purpose**: Standalone Python script for comparing profiling results against baselines
 
 This script follows the architecture of `compare_benchmarks.py` but adapts it for profiling data:
@@ -523,8 +523,8 @@ def average_profile_runs(profiles: list[dict], top_n: int) -> dict:
 print(f"{RED}ERROR: No profile results found in {results_dir}/{executable}{NC}",
       file=sys.stderr)
 print(f"Run profiling first:", file=sys.stderr)
-print(f"  ./scripts/profile-instruments.sh <executable>", file=sys.stderr)
-print(f"  ./scripts/parse-profile.py profile_results/*.trace", file=sys.stderr)
+print(f"  ./analysis/scripts/profile-instruments.sh <executable>", file=sys.stderr)
+print(f"  ./analysis/scripts/parse-profile.py profile_results/*.trace", file=sys.stderr)
 ```
 
 ### Color Coding Conventions
@@ -556,7 +556,7 @@ Since this is a Python script (not C++ code), testing will be manual:
 #### Test Case 1: Basic Comparison
 **Setup**:
 1. Run profiling to generate 5+ profile results
-2. Set baseline: `./scripts/compare-profiles.py --set-baseline`
+2. Set baseline: `./analysis/scripts/compare-profiles.py --set-baseline`
 3. Make code change that increases function CPU usage
 4. Run profiling again
 
@@ -624,9 +624,9 @@ Since this is a Python script (not C++ code), testing will be manual:
 **Planned workflow**:
 ```bash
 # In CI pipeline
-./scripts/profile-instruments.sh ./build/Release/msd_sim_test
-./scripts/parse-profile.py profile_results/*.trace --project-only
-./scripts/compare-profiles.py --strict --no-color
+./analysis/scripts/profile-instruments.sh ./build/Release/msd_sim_test
+./analysis/scripts/parse-profile.py profile_results/*.trace --project-only
+./analysis/scripts/compare-profiles.py --strict --no-color
 
 # Exit code 1 if regression detected
 ```
@@ -683,7 +683,7 @@ The implementation should closely mirror compare_benchmarks.py structure:
 ### File Organization
 
 ```
-scripts/compare-profiles.py
+analysis/scripts/compare-profiles.py
 ├── Imports (json, argparse, pathlib, datetime, sys)
 ├── ANSI color constants
 ├── Helper functions:
@@ -719,14 +719,14 @@ The project uses `compare-profiles.py` to detect profiling regressions by compar
 **Basic workflow**:
 ```bash
 # Run profiling and parse results
-./scripts/profile-instruments.sh ./build/Release/msd_sim_test
-./scripts/parse-profile.py profile_results/*.trace --project-only
+./analysis/scripts/profile-instruments.sh ./build/Release/msd_sim_test
+./analysis/scripts/parse-profile.py profile_results/*.trace --project-only
 
 # Compare against baseline (averages top 5 runs)
-./scripts/compare-profiles.py
+./analysis/scripts/compare-profiles.py
 
 # Update baseline (when performance changes are intentional)
-./scripts/compare-profiles.py --set-baseline
+./analysis/scripts/compare-profiles.py --set-baseline
 ```
 
 **Interpreting results**:
@@ -739,19 +739,19 @@ The project uses `compare-profiles.py` to detect profiling regressions by compar
 **Advanced options**:
 ```bash
 # Use custom threshold (75% instead of default 50%)
-./scripts/compare-profiles.py --threshold 75.0
+./analysis/scripts/compare-profiles.py --threshold 75.0
 
 # Average more runs for stability (10 instead of default 5)
-./scripts/compare-profiles.py --runs 10
+./analysis/scripts/compare-profiles.py --runs 10
 
 # Track more functions (20 instead of default 10)
-./scripts/compare-profiles.py --top 20
+./analysis/scripts/compare-profiles.py --top 20
 
 # Strict mode: exit code 1 on regression (for CI)
-./scripts/compare-profiles.py --strict
+./analysis/scripts/compare-profiles.py --strict
 
 # Disable colors (for CI logs)
-./scripts/compare-profiles.py --no-color
+./analysis/scripts/compare-profiles.py --no-color
 ```
 
 **Baseline files**:
@@ -790,7 +790,7 @@ The project uses `compare-profiles.py` to detect profiling regressions by compar
 | Criterion | Pass/Fail | Notes |
 |-----------|-----------|-------|
 | Naming conventions | ✓ | Python script follows snake_case convention matching compare_benchmarks.py. Function names are descriptive and consistent. |
-| File structure | ✓ | Script location `scripts/compare-profiles.py` matches established pattern. Directory structure for baselines (`profile_baselines/`) mirrors `benchmark_baselines/`. |
+| File structure | ✓ | Script location `analysis/scripts/compare-profiles.py` matches established pattern. Directory structure for baselines (`profile_baselines/`) mirrors `benchmark_baselines/`. |
 | Consistency with existing tools | ✓ | Excellent alignment with compare_benchmarks.py architecture. Design reuses proven patterns (color codes, CLI structure, exit codes, JSON reports). |
 | Dependency direction | ✓ | Script consumes parse-profile.py output as input. No circular dependencies. Clear data flow: profile → parse → compare. |
 

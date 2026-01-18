@@ -236,7 +236,7 @@ Since this is developer tooling without unit tests, validation is performed thro
 |-----------|--------|----------|
 | `profile-instruments.sh` supports `--export-xml` / `-x` flag | ✓ | Argument parsing lines 174-177 |
 | XML file generated alongside `.trace` when `--export-xml` is used | ✓ | Verified: `/Users/danielnewman/Documents/GitHub/MSD-CPP/profile_results/profile_20260108_185430.xml` exists |
-| `scripts/parse-profile.py` exists and is executable | ✓ | File exists with permissions `-rwx--x--x` |
+| `analysis/scripts/parse-profile.py` exists and is executable | ✓ | File exists with permissions `-rwx--x--x` |
 | `parse-profile.py` accepts `.trace` file and outputs JSON to stdout | ✓ | Verified: JSON report written to `profile_20260108_185622.json` |
 | `parse-profile.py --output report.json` writes JSON to specified file | ✓ | Flag implemented lines 357-361 |
 | `parse-profile.py --top 10` limits output to top 10 functions | ✓ | Flag implemented lines 362-367, JSON shows top 10 |
@@ -281,12 +281,12 @@ Top functions from JSON (6,668 total samples):
 Verified workflow:
 ```bash
 # 1. Profile executable with XML export
-./scripts/profile-instruments.sh <executable> --export-xml
+./analysis/scripts/profile-instruments.sh <executable> --export-xml
 
 # 2. XML file created: profile_results/profile_20260108_185430.xml (2.9 MB)
 
 # 3. Parse trace file
-./scripts/parse-profile.py profile_results/profile_20260108_185430.trace
+./analysis/scripts/parse-profile.py profile_results/profile_20260108_185430.trace
 
 # 4. JSON report created: profile_results/profile_20260108_185622.json
 ```

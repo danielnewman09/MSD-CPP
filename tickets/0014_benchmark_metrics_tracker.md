@@ -59,10 +59,10 @@ This feature provides visibility into performance trends and prevents unintentio
 - Must follow existing project conventions (color scheme, directory structure)
 
 ## Acceptance Criteria
-- [ ] `scripts/compare_benchmarks.py` exists and is executable
-- [ ] Running `./scripts/compare_benchmarks.py` compares latest results against baseline
-- [ ] Running `./scripts/compare_benchmarks.py --set-baseline` creates/updates baseline
-- [ ] Running `./scripts/compare_benchmarks.py --strict` returns exit code 1 on regressions
+- [ ] `analysis/scripts/compare_benchmarks.py` exists and is executable
+- [ ] Running `./analysis/scripts/compare_benchmarks.py` compares latest results against baseline
+- [ ] Running `./analysis/scripts/compare_benchmarks.py --set-baseline` creates/updates baseline
+- [ ] Running `./analysis/scripts/compare_benchmarks.py --strict` returns exit code 1 on regressions
 - [ ] JSON comparison report generated in `benchmark_results/{suite}/comparison_{timestamp}.json`
 - [ ] Console output uses color coding matching `run_benchmarks.sh` (GREEN/YELLOW/RED)
 - [ ] Baseline files stored in `benchmark_baselines/{suite}/baseline.json`
@@ -92,7 +92,7 @@ This feature provides visibility into performance trends and prevents unintentio
 ## References
 
 ### Related Code
-- `scripts/run_benchmarks.sh` — Existing benchmark runner, follow conventions
+- `analysis/scripts/run_benchmarks.sh` — Existing benchmark runner, follow conventions
 - `benchmark_results/msd_sim_bench/benchmark_latest.json` — Example result format
 - `msd/msd-sim/bench/ConvexHullBench.cpp` — Current benchmark implementations
 
@@ -133,7 +133,7 @@ This feature provides visibility into performance trends and prevents unintentio
 - **Started**: 2026-01-08
 - **Completed**: 2026-01-08
 - **Files Created**:
-  - `/Users/danielnewman/Documents/GitHub/MSD-CPP/scripts/compare_benchmarks.py` — Python benchmark comparison script with CLI interface
+  - `/Users/danielnewman/Documents/GitHub/MSD-CPP/analysis/scripts/compare_benchmarks.py` — Python benchmark comparison script with CLI interface
   - `/Users/danielnewman/Documents/GitHub/MSD-CPP/benchmark_baselines/msd_sim_bench/baseline.json` — Initial golden baseline from existing ConvexHull benchmarks
 - **Files Modified**:
   - `/Users/danielnewman/Documents/GitHub/MSD-CPP/CLAUDE.md` — Added "Benchmark Regression Detection" section and "Recent Architectural Changes" entry

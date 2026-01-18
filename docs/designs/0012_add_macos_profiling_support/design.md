@@ -14,7 +14,7 @@ See: [`./0012_add_macos_profiling_support.puml`](./0012_add_macos_profiling_supp
 #### profile-instruments.sh Helper Script
 
 - **Purpose**: Automate Xcode Instruments Time Profiler invocation via `xctrace` CLI
-- **Location**: `scripts/profile-instruments.sh`
+- **Location**: `analysis/scripts/profile-instruments.sh`
 - **Key interfaces**:
   ```bash
   #!/bin/bash
@@ -247,10 +247,10 @@ cmake --build --preset conan-release --target msd_sim_bench
 
 ```bash
 # Profile a benchmark
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench
 
 # Profile with Allocations template
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench "Allocations"
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench "Allocations"
 
 # Open generated trace file
 open profile_20260108_143000.trace
@@ -402,7 +402,7 @@ Instruments requires debug symbols to map addresses to function names. The `-g` 
 3. Test preset builds executables with profiling flags
 
 ### Phase 3: Helper Script Development
-1. Create `scripts/profile-instruments.sh` with validation functions
+1. Create `analysis/scripts/profile-instruments.sh` with validation functions
 2. Implement xctrace invocation with template selection
 3. Test script profiles msd_sim_bench successfully
 4. Verify .trace file opens in Instruments GUI with function names

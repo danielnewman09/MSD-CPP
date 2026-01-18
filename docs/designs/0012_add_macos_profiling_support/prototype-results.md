@@ -278,7 +278,7 @@ All prototypes passed validation. No design changes required.
 **Complexity**: Medium
 **Risk**: Low
 
-1. Create `scripts/profile-instruments.sh` skeleton
+1. Create `analysis/scripts/profile-instruments.sh` skeleton
 2. Add validation functions (Xcode tools, macOS version, executable)
 3. Implement xctrace invocation with template selection
 4. Add timestamped output file naming
@@ -319,7 +319,7 @@ No automated tests required. Validation is manual:
 - [ ] `enable_profiling` option added to conanfile.py
 - [ ] `ENABLE_PROFILING` CMake option added with appropriate compiler flags for Apple
 - [ ] `profiling-release` build preset added to CMakeUserPresets.json
-- [ ] `scripts/profile-instruments.sh` helper script created
+- [ ] `analysis/scripts/profile-instruments.sh` helper script created
 - [ ] CLAUDE.md updated with macOS profiling documentation
 - [ ] Profiling workflow tested and produces valid .trace files
 

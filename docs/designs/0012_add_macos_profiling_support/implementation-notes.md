@@ -16,7 +16,7 @@ Successfully implemented macOS profiling infrastructure using Xcode Instruments.
 
 ## Files Created
 
-### scripts/profile-instruments.sh (152 lines)
+### analysis/scripts/profile-instruments.sh (152 lines)
 **Purpose**: Helper script to automate Xcode Instruments profiling via xctrace CLI
 **Key Features**:
 - Validates Xcode Command Line Tools and macOS version
@@ -89,7 +89,7 @@ Successfully implemented macOS profiling infrastructure using Xcode Instruments.
 | Add `ENABLE_PROFILING` CMake option | ✓ | Line 20 in CMakeLists.txt |
 | Apply `-g -O2` flags on macOS | ✓ | Lines 71-83 in CMakeLists.txt |
 | Add `profiling-release` preset | ✓ | Lines 25-33 in CMakeUserPresets.json |
-| Create helper script | ✓ | scripts/profile-instruments.sh (152 lines) |
+| Create helper script | ✓ | analysis/scripts/profile-instruments.sh (152 lines) |
 | Update CLAUDE.md documentation | ✓ | 170 lines added |
 | Support Time Profiler template | ✓ | Default template in script |
 | Support Allocations template | ✓ | Optional template argument |
@@ -124,7 +124,7 @@ Successfully implemented macOS profiling infrastructure using Xcode Instruments.
 
 **Example**:
 ```bash
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -- \
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -- \
     --benchmark_filter="BM_ConvexHull_Construction/8" \
     --benchmark_repetitions=1
 ```
@@ -176,7 +176,7 @@ cmake --build --preset conan-release --target msd_sim_bench
 
 ### Profiling Test
 ```bash
-./scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -- \
+./analysis/scripts/profile-instruments.sh ./build/Release/release/msd_sim_bench -- \
     --benchmark_filter="BM_ConvexHull_Construction/8" \
     --benchmark_repetitions=1
 ```
@@ -242,7 +242,7 @@ From ticket `0012_add_macos_profiling_support.md`:
 - [x] `enable_profiling` option added to conanfile.py
 - [x] `ENABLE_PROFILING` CMake option added with appropriate compiler flags for Apple
 - [x] `profiling-release` build preset added to CMakeUserPresets.json
-- [x] `scripts/profile-instruments.sh` helper script created
+- [x] `analysis/scripts/profile-instruments.sh` helper script created
 - [x] CLAUDE.md updated with macOS profiling documentation
 - [x] Profiling workflow tested and produces valid .trace files
 
@@ -300,7 +300,7 @@ From ticket `0012_add_macos_profiling_support.md`:
 ## Files Summary
 
 **Created**:
-- `scripts/profile-instruments.sh` (152 lines)
+- `analysis/scripts/profile-instruments.sh` (152 lines)
 - `docs/designs/0012_add_macos_profiling_support/implementation-notes.md` (this file)
 
 **Modified**:

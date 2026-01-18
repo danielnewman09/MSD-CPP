@@ -53,7 +53,7 @@ Performance profiling on macOS requires different tooling than Linux (where Valg
 - [X] `enable_profiling` option added to conanfile.py
 - [X] `ENABLE_PROFILING` CMake option added with appropriate compiler flags for Apple
 - [X] `profiling-release` build preset added to CMakeUserPresets.json
-- [X] `scripts/profile-instruments.sh` helper script created
+- [X] `analysis/scripts/profile-instruments.sh` helper script created
 - [X] CLAUDE.md updated with macOS profiling documentation
 - [X] Profiling workflow tested and produces valid .trace files
 
@@ -126,7 +126,7 @@ Performance profiling on macOS requires different tooling than Linux (where Valg
 - **Started**: 2026-01-08
 - **Completed**: 2026-01-08
 - **Files Created**:
-  - `scripts/profile-instruments.sh` (152 lines) — Helper script for xctrace profiling
+  - `analysis/scripts/profile-instruments.sh` (152 lines) — Helper script for xctrace profiling
   - `docs/designs/0012_add_macos_profiling_support/implementation-notes.md` — Implementation documentation
 - **Files Modified**:
   - `conanfile.py` (+7 lines) — Added enable_profiling option and CMake variable passing

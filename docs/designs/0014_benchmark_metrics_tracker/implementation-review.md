@@ -78,7 +78,7 @@ The implementation precisely follows the design specification. All required comp
 | All paths handled | ✓ | | FileNotFoundError, JSONDecodeError, missing suite |
 | No silent failures | ✓ | | All errors print to stderr with actionable messages |
 | Exit codes correct | ✓ | | 0=success, 1=error or --strict regression |
-| Helpful error messages | ✓ | | Includes recovery instructions (e.g., "Run: ./scripts/run_benchmarks.sh") |
+| Helpful error messages | ✓ | | Includes recovery instructions (e.g., "Run: ./analysis/scripts/run_benchmarks.sh") |
 
 #### Data Processing
 | Check | Status | Notes |
@@ -131,7 +131,7 @@ The implementation precisely follows the design specification. All required comp
 |-------------------------|----------|--------|
 | Run without baseline file | Error message implemented (lines 347-351) | ✓ |
 | Run `--set-baseline` | Function implemented (lines 203-231), tested manually | ✓ |
-| Run with identical results | Tested: `python3 scripts/compare_benchmarks.py --no-color` shows 0% difference, all PASS | ✓ |
+| Run with identical results | Tested: `python3 analysis/scripts/compare_benchmarks.py --no-color` shows 0% difference, all PASS | ✓ |
 | Run with regression detection | Threshold logic implemented (line 111), status correctly set | ✓ |
 | Run with `--strict` and regression | Exit code logic (lines 380-384) returns 1 | ✓ |
 | Run without `--strict` and regression | Default behavior (line 386) returns 0 | ✓ |
@@ -144,8 +144,8 @@ The implementation precisely follows the design specification. All required comp
 ### Functional Testing Results
 
 Executed tests:
-1. **Help output**: `python3 scripts/compare_benchmarks.py --help` — Successfully displays all arguments
-2. **Basic comparison**: `python3 scripts/compare_benchmarks.py --no-color` — Successfully compares against baseline, reports 0% difference (identical baseline)
+1. **Help output**: `python3 analysis/scripts/compare_benchmarks.py --help` — Successfully displays all arguments
+2. **Basic comparison**: `python3 analysis/scripts/compare_benchmarks.py --no-color` — Successfully compares against baseline, reports 0% difference (identical baseline)
 3. **Baseline file creation**: Verified `benchmark_baselines/msd_sim_bench/baseline.json` exists and is valid JSON
 4. **Comparison report generation**: Multiple timestamped reports created in `benchmark_results/msd_sim_bench/`
 5. **Suite auto-detection**: Works when only one suite exists
@@ -212,10 +212,10 @@ Reviewing against ticket acceptance criteria:
 
 | Criterion | Status | Evidence |
 |-----------|--------|----------|
-| `scripts/compare_benchmarks.py` exists and is executable | ✓ | File exists with 755 permissions |
-| Running `./scripts/compare_benchmarks.py` compares latest results against baseline | ✓ | Tested: auto-detects suite, loads benchmark_latest.json and baseline.json |
-| Running `./scripts/compare_benchmarks.py --set-baseline` creates/updates baseline | ✓ | Implemented in set_baseline() function (lines 203-231) |
-| Running `./scripts/compare_benchmarks.py --strict` returns exit code 1 on regressions | ✓ | Implemented in main() (lines 380-384) |
+| `analysis/scripts/compare_benchmarks.py` exists and is executable | ✓ | File exists with 755 permissions |
+| Running `./analysis/scripts/compare_benchmarks.py` compares latest results against baseline | ✓ | Tested: auto-detects suite, loads benchmark_latest.json and baseline.json |
+| Running `./analysis/scripts/compare_benchmarks.py --set-baseline` creates/updates baseline | ✓ | Implemented in set_baseline() function (lines 203-231) |
+| Running `./analysis/scripts/compare_benchmarks.py --strict` returns exit code 1 on regressions | ✓ | Implemented in main() (lines 380-384) |
 | JSON comparison report generated in `benchmark_results/{suite}/comparison_{timestamp}.json` | ✓ | Verified multiple timestamped reports exist |
 | Console output uses color coding matching `run_benchmarks.sh` (GREEN/YELLOW/RED) | ✓ | ANSI color codes match (lines 16-21) |
 | Baseline files stored in `benchmark_baselines/{suite}/baseline.json` | ✓ | Directory structure verified |

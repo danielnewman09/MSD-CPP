@@ -18,7 +18,7 @@
 
 **Component Details**:
 
-1. **compare-profiles.py**: Script exists at `scripts/compare-profiles.py` with correct shebang (`#!/usr/bin/env python3`), executable permissions (755), and all required functions per design specification.
+1. **compare-profiles.py**: Script exists at `analysis/scripts/compare-profiles.py` with correct shebang (`#!/usr/bin/env python3`), executable permissions (755), and all required functions per design specification.
 
 2. **profile_baselines/ directory**: Directory created with `.gitkeep` marker file at project root, ensuring baselines are committed to git (not gitignored).
 
@@ -134,7 +134,7 @@ All components exist at correct locations, interfaces match design specification
 | All paths handled | ✓ | | Every exception includes helpful error message with recovery instructions |
 | No silent failures | ✓ | | All errors print to stderr and propagate or return exit code 1 |
 
-**Error Message Quality**: All error messages follow design format with color codes, helpful hints, and recovery instructions (e.g., "Run profiling first: ./scripts/profile-instruments.sh ...").
+**Error Message Quality**: All error messages follow design format with color codes, helpful hints, and recovery instructions (e.g., "Run profiling first: ./analysis/scripts/profile-instruments.sh ...").
 
 ### Algorithm Correctness
 
@@ -218,10 +218,10 @@ Per design document section "Manual Testing Required", the following test cases 
 
 All acceptance criteria from ticket (lines 69-79) are verifiable through manual testing:
 
-- ✓ `scripts/compare-profiles.py` exists and is executable (verified: 755 permissions)
-- ✓ Running `./scripts/compare-profiles.py` compares latest profile against baseline (main workflow implemented)
-- ✓ Running `./scripts/compare-profiles.py --set-baseline` creates/updates baseline (set_baseline() function)
-- ✓ Running `./scripts/compare-profiles.py --strict` returns exit code 1 on regressions (lines 616-620)
+- ✓ `analysis/scripts/compare-profiles.py` exists and is executable (verified: 755 permissions)
+- ✓ Running `./analysis/scripts/compare-profiles.py` compares latest profile against baseline (main workflow implemented)
+- ✓ Running `./analysis/scripts/compare-profiles.py --set-baseline` creates/updates baseline (set_baseline() function)
+- ✓ Running `./analysis/scripts/compare-profiles.py --strict` returns exit code 1 on regressions (lines 616-620)
 - ✓ JSON comparison report generated in `profile_results/comparison_{timestamp}.json` (lines 601-608)
 - ✓ Console output uses color coding matching compare_benchmarks.py (GREEN/YELLOW/RED/BLUE verified)
 - ✓ Baseline files stored in `profile_baselines/{executable}/baseline.json` (lines 551, 436-440)
@@ -339,7 +339,7 @@ The profiling regression tracker implementation is excellent and fully conforms 
 4. **Error Handling Excellence**: Every error condition from design specification handled with:
    - Appropriate exception type (FileNotFoundError, JSONDecodeError, ValueError)
    - Color-coded error messages to stderr
-   - Helpful recovery instructions (e.g., "Run profiling first: ./scripts/profile-instruments.sh...")
+   - Helpful recovery instructions (e.g., "Run profiling first: ./analysis/scripts/profile-instruments.sh...")
    - Correct exit codes
 
 5. **Feature Completeness**: All requirements from ticket satisfied:

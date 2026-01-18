@@ -49,7 +49,7 @@ This feature provides structured JSON output from profiling sessions, enabling:
    - Use `xctrace export --xpath` to extract Time Profiler sample data
    - Save XML file alongside the `.trace` file (same directory, same base name)
 
-2. **Parser Script**: Create `scripts/parse-profile.py` Python script
+2. **Parser Script**: Create `analysis/scripts/parse-profile.py` Python script
    - Accept `.trace` file as input (will internally call xctrace export)
    - Parse Time Profiler XML schema to extract:
      - Total sample count
@@ -106,7 +106,7 @@ This feature provides structured JSON output from profiling sessions, enabling:
 ## Acceptance Criteria
 - [ ] `profile-instruments.sh` supports `--export-xml` / `-x` flag
 - [ ] XML file generated alongside `.trace` when `--export-xml` is used
-- [ ] `scripts/parse-profile.py` exists and is executable
+- [ ] `analysis/scripts/parse-profile.py` exists and is executable
 - [ ] `parse-profile.py` accepts `.trace` file and outputs JSON to stdout
 - [ ] `parse-profile.py --output report.json` writes JSON to specified file
 - [ ] `parse-profile.py --top 10` limits output to top 10 functions
@@ -142,9 +142,9 @@ This feature provides structured JSON output from profiling sessions, enabling:
 ## References
 
 ### Related Code
-- `scripts/profile-instruments.sh` — Existing profiling script to enhance
-- `scripts/compare_benchmarks.py` — Reference for Python script conventions
-- `scripts/run_benchmarks.sh` — Reference for bash script conventions
+- `analysis/scripts/profile-instruments.sh` — Existing profiling script to enhance
+- `analysis/scripts/compare_benchmarks.py` — Reference for Python script conventions
+- `analysis/scripts/run_benchmarks.sh` — Reference for bash script conventions
 
 ### Related Documentation
 - `docs/designs/0012_add_macos_profiling_support/design.md` — Profiling infrastructure design
@@ -219,9 +219,9 @@ This feature provides structured JSON output from profiling sessions, enabling:
 - **Started**: 2026-01-08
 - **Completed**: 2026-01-08
 - **Files Created**:
-  - `scripts/parse-profile.py` — Python script to parse Time Profiler XML and generate JSON reports
+  - `analysis/scripts/parse-profile.py` — Python script to parse Time Profiler XML and generate JSON reports
 - **Files Modified**:
-  - `scripts/profile-instruments.sh` — Added `--export-xml` / `-x` flag, `--output-dir` / `-d` option, and XML export functionality
+  - `analysis/scripts/profile-instruments.sh` — Added `--export-xml` / `-x` flag, `--output-dir` / `-d` option, and XML export functionality
   - `.gitignore` — Added `profile_results/` directory
   - `CLAUDE.md` — Added comprehensive profiling parser documentation and recent architectural changes entry
 - **Notes**:

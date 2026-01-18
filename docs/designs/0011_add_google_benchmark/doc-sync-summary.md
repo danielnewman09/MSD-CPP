@@ -47,7 +47,7 @@ This feature does NOT introduce library-specific diagrams for `docs/msd/msd-sim/
 ### Post-Implementation Additions
 After implementation review approval, the following changes were made and are reflected in CLAUDE.md:
 
-1. **Benchmark Report Script** (`scripts/run_benchmarks.sh`):
+1. **Benchmark Report Script** (`analysis/scripts/run_benchmarks.sh`):
    - Generates JSON benchmark reports with timestamps
    - Organizes results by executable name in `benchmark_results/` directory
    - Creates `benchmark_latest.json` symlinks for convenience

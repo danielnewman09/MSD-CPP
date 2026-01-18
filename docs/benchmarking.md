@@ -83,16 +83,16 @@ Use the `run_benchmarks.sh` script to generate JSON reports for tracking perform
 
 ```bash
 # Generate JSON report (default: benchmark_results/ directory)
-./scripts/run_benchmarks.sh
+./analysis/scripts/run_benchmarks.sh
 
 # Custom output directory with 5 repetitions
-./scripts/run_benchmarks.sh -o reports -r 5
+./analysis/scripts/run_benchmarks.sh -o reports -r 5
 
 # Console output only (no file)
-./scripts/run_benchmarks.sh -f console
+./analysis/scripts/run_benchmarks.sh -f console
 
 # Show all options
-./scripts/run_benchmarks.sh --help
+./analysis/scripts/run_benchmarks.sh --help
 ```
 
 ### Script Options
@@ -232,13 +232,13 @@ The project uses `compare_benchmarks.py` to detect performance regressions by co
 
 ```bash
 # Run benchmarks
-./scripts/run_benchmarks.sh
+./analysis/scripts/run_benchmarks.sh
 
 # Compare against baseline
-./scripts/compare_benchmarks.py
+./analysis/scripts/compare_benchmarks.py
 
 # Update baseline (when performance changes are intentional)
-./scripts/compare_benchmarks.py --set-baseline
+./analysis/scripts/compare_benchmarks.py --set-baseline
 ```
 
 ### Interpreting Results
@@ -253,19 +253,19 @@ The project uses `compare_benchmarks.py` to detect performance regressions by co
 
 ```bash
 # Use custom threshold (5% instead of default 10%)
-./scripts/compare_benchmarks.py --threshold 5.0
+./analysis/scripts/compare_benchmarks.py --threshold 5.0
 
 # Strict mode: exit code 1 on regression (for CI)
-./scripts/compare_benchmarks.py --strict
+./analysis/scripts/compare_benchmarks.py --strict
 
 # Compare specific result file
-./scripts/compare_benchmarks.py --current benchmark_results/msd_sim_bench/benchmark_20260108.json
+./analysis/scripts/compare_benchmarks.py --current benchmark_results/msd_sim_bench/benchmark_20260108.json
 
 # Disable colors (for CI logs)
-./scripts/compare_benchmarks.py --no-color
+./analysis/scripts/compare_benchmarks.py --no-color
 
 # Output JSON report only (no console output)
-./scripts/compare_benchmarks.py --output-json-only
+./analysis/scripts/compare_benchmarks.py --output-json-only
 ```
 
 ### Baseline Files
@@ -291,18 +291,18 @@ The project uses `compare_benchmarks.py` to detect performance regressions by co
 
 ```bash
 # Verify current performance
-./scripts/run_benchmarks.sh
-./scripts/compare_benchmarks.py
+./analysis/scripts/run_benchmarks.sh
+./analysis/scripts/compare_benchmarks.py
 
 # Make optimization changes
 # ... edit code ...
 
 # Run benchmarks again
-./scripts/run_benchmarks.sh
-./scripts/compare_benchmarks.py
+./analysis/scripts/run_benchmarks.sh
+./analysis/scripts/compare_benchmarks.py
 
 # If improved, update baseline
-./scripts/compare_benchmarks.py --set-baseline
+./analysis/scripts/compare_benchmarks.py --set-baseline
 
 # Commit code and baseline together
 git add src/optimized_code.cpp
