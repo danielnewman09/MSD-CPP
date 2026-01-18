@@ -15,9 +15,6 @@
 
 #include <SDL3/SDL.h>
 
-#include <msd-gui/src/GPUInstanceManager.hpp>
-#include "msd-assets/src/Asset.hpp"
-#include "msd-gui/src/GPUInstanceManager.hpp"
 #include "msd-gui/src/InputHandler.hpp"
 #include "msd-gui/src/SDLGPUManager.hpp"
 #include "msd-gui/src/ShaderPolicy.hpp"
@@ -38,7 +35,7 @@ public:
     Exiting
   };
 
-  SDLApplication(const std::string& dbPath);
+  explicit SDLApplication(const std::string& dbPath);
 
   // Delete copy constructor and assignment operator
   SDLApplication(const SDLApplication&) = delete;
@@ -67,14 +64,14 @@ private:
   void spawnRandomObject(const std::string& geometryType);
 
   msd_sim::Engine engine_;
-  using InstanceDataType = FullTransformShaderPolicy;
   Status status_;
   std::string basePath_;
 
   std::unique_ptr<SDL_Window, SDLWindowDeleter> window_;
 
   // Use FullTransformShaderPolicy per previous design decisions
-  std::unique_ptr<GPUManager<InstanceDataType>> gpuManager_;
+  using AppShaderPolicy = FullTransformShaderPolicy;
+  std::unique_ptr<GPUManager<AppShaderPolicy>> gpuManager_;
 
   // Input management
   std::unique_ptr<InputHandler> inputHandler_;

@@ -1,283 +1,243 @@
-# Project Architecture Guide
+# MSD Libraries Architecture Guide
 
-> This document provides architectural context for AI assistants and developers.
-> It references PlantUML diagrams in `docs/designs/` for detailed component relationships.
+> High-level orchestration guide for the MSD (Multi-Spacecraft Dynamics) C++ libraries.
+> For detailed class and interface documentation, see each library's individual CLAUDE.md file.
 
-## Project Overview
+## Overview
 
-This is a high-performance database client library providing connection pooling, query caching, and async operations for C++ applications.
+The MSD system provides a modular framework for spacecraft dynamics simulation and visualization. The libraries are organized in a layered architecture where each layer has a single responsibility and depends only on layers below it.
 
-## Architecture Overview
+## Library Dependency Graph
 
-### High-Level Architecture
+```
+                    ┌─────────────┐
+                    │   msd-exe   │  Main application
+                    └──────┬──────┘
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+              ▼                         ▼
+       ┌─────────────┐          ┌─────────────┐
+       │   msd-gui   │          │  msd-utils  │  Utilities
+       └──────┬──────┘          └─────────────┘
+              │
+              ▼
+       ┌─────────────┐
+       │   msd-sim   │  Physics simulation
+       └──────┬──────┘
+              │
+              ▼
+       ┌─────────────┐
+       │ msd-assets  │  Asset management
+       └──────┬──────┘
+              │
+              ▼
+       ┌─────────────┐
+       │msd-transfer │  Database DTOs
+       └─────────────┘
 
-See: [`docs/architecture/overview.puml`](docs/architecture/overview.puml)
 
-The system consists of three main layers:
-- **Client API** — Public interface for application code
-- **Core Services** — Connection pooling, caching, query execution
-- **Transport** — Network communication and protocol handling
-
-### Core Components
-
-| Component | Location | Purpose | Diagram |
-|-----------|----------|---------|---------|
-| ConnectionPool | `include/database/` | Manages database connections | [`connection-pool.puml`](docs/designs/connection-pool/connection-pool.puml) |
-| QueryCache | `include/cache/` | LRU cache for query results | [`lru-cache.puml`](docs/designs/lru-cache/lru-cache.puml) |
-| AsyncExecutor | `include/async/` | Async query execution | [`async-executor.puml`](docs/designs/async-executor/async-executor.puml) |
-
----
-
-## Component Details
-
-### Connection Pool
-
-**Location**: `include/database/`, `src/database/`  
-**Diagram**: [`docs/designs/connection-pool/connection-pool.puml`](docs/designs/connection-pool/connection-pool.puml)  
-**Introduced**: [Ticket: connection-pool](tickets/connection-pool.md)
-
-#### Purpose
-Manages a pool of reusable database connections to avoid the overhead of establishing new connections for each query.
-
-#### Key Classes
-
-| Class | Header | Responsibility |
-|-------|--------|----------------|
-| `ConnectionPool` | `connection_pool.hpp` | Pool lifecycle and connection distribution |
-| `PooledConnection` | `pooled_connection.hpp` | RAII wrapper for borrowed connections |
-| `ConnectionConfig` | `connection_config.hpp` | Pool configuration parameters |
-
-#### Key Interfaces
-```cpp
-class IConnectionPool {
-public:
-    virtual ~IConnectionPool() = default;
-    virtual PooledConnection acquire() = 0;
-    virtual PooledConnection tryAcquire(std::chrono::milliseconds timeout) = 0;
-    virtual PoolStats stats() const = 0;
-};
+       ┌──────────────┐
+       │msd-asset-gen │  Asset generation tool
+       └──────┬───────┘
+              │
+              ▼
+       ┌─────────────┐
+       │ msd-assets  │
+       └─────────────┘
 ```
 
-#### Usage Example
-```cpp
-auto pool = ConnectionPool::create(config);
-{
-    auto conn = pool->acquire();  // Borrows connection
-    auto result = conn->execute("SELECT * FROM users");
-}  // Connection automatically returned to pool
-```
+## Libraries Summary
 
-#### Thread Safety
-- `acquire()` and `tryAcquire()` are thread-safe
-- `PooledConnection` is not thread-safe (single-thread use)
-- `stats()` provides atomic snapshot
-
-#### Error Handling
-- Throws `ConnectionPoolExhausted` if pool is empty and timeout exceeded
-- Throws `ConnectionError` for underlying connection failures
-
-#### Dependencies
-- `Transport` — For creating raw connections
-- `std::mutex`, `std::condition_variable` — For synchronization
+| Library | Type | Purpose | Documentation |
+|---------|------|---------|---------------|
+| [msd-transfer](msd-transfer/) | Header-only | Database transfer objects (DTOs) for asset persistence | [CLAUDE.md](msd-transfer/CLAUDE.md) |
+| [msd-assets](msd-assets/) | Static library | Asset management, geometry caching, primitive factories | [CLAUDE.md](msd-assets/CLAUDE.md) |
+| [msd-sim](msd-sim/) | Static library | Physics simulation with rigid body dynamics and collision detection | [CLAUDE.md](msd-sim/CLAUDE.md) |
+| [msd-gui](msd-gui/) | Static library | SDL3-based GPU rendering and input handling | [CLAUDE.md](msd-gui/CLAUDE.md) |
+| [msd-utils](msd-utils/) | Static library | General-purpose utilities (path resolution) | [CLAUDE.md](msd-utils/CLAUDE.md) |
+| [msd-exe](msd-exe/) | Executable | Main application entry point | [CLAUDE.md](msd-exe/CLAUDE.md) |
+| [msd-asset-gen](msd-asset-gen/) | Executable | Asset database generation tool | [CLAUDE.md](msd-asset-gen/CLAUDE.md) |
 
 ---
 
-### Query Cache (LRU)
+## Library Descriptions
 
-**Location**: `include/cache/`, `src/cache/`  
-**Diagram**: [`docs/designs/lru-cache/lru-cache.puml`](docs/designs/lru-cache/lru-cache.puml)  
-**Introduced**: [Ticket: lru-cache](tickets/lru-cache.md)
+### msd-transfer
 
-#### Purpose
-Caches query results using an LRU eviction policy to reduce redundant database calls and improve response times.
+**Location**: `msd-transfer/`
+**Type**: Header-only interface library
+**Diagram**: [msd-transfer-core.puml](../docs/msd/msd-transfer/msd-transfer-core.puml)
 
-#### Key Classes
+Defines lightweight structs representing database records for asset persistence. These DTOs are used by `cpp_sqlite` to automatically generate SQL schema. This library acts as the shared contract between database storage and domain logic.
 
-| Class | Header | Responsibility |
-|-------|--------|----------------|
-| `LRUCache<K,V>` | `lru_cache.hpp` | Generic thread-safe LRU cache |
-| `QueryCache` | `query_cache.hpp` | Specialized cache for query results |
-| `CacheStats` | `cache_stats.hpp` | Hit/miss statistics |
-
-#### Key Interfaces
-```cpp
-template<typename K, typename V>
-class LRUCache {
-public:
-    explicit LRUCache(size_t capacity, std::chrono::milliseconds ttl);
-    
-    std::optional<V> get(const K& key);
-    void put(const K& key, V value);
-    void invalidate(const K& key);
-    void clear();
-    
-    CacheStats stats() const;
-};
-```
-
-#### Thread Safety
-- All public methods are thread-safe
-- Uses `std::shared_mutex` for reader-writer locking
-- Statistics use atomic counters
-
-#### Error Handling
-- Returns `std::optional<V>` for cache miss (no exceptions)
-- `put()` silently evicts oldest entry if at capacity
+**External Dependencies**: cpp_sqlite, Boost.Describe
 
 ---
 
-## Design Patterns in Use
+### msd-assets
 
-### RAII Connection Wrapper
-**Used in**: `PooledConnection`  
-**Purpose**: Ensures connections are returned to pool even on exceptions
+**Location**: `msd-assets/`
+**Type**: Static library
+**Diagram**: [msd-assets-core.puml](../docs/msd/msd-assets/msd-assets-core.puml)
 
-See implementation: [`docs/designs/connection-pool/connection-pool.puml`](docs/designs/connection-pool/connection-pool.puml)
+Manages asset loading, caching, and geometry generation. Provides factories for primitive shapes (pyramids, cubes) and handles STL file loading. The AssetRegistry provides cached access to geometry data.
 
-### Template-Based Policy
-**Used in**: `LRUCache<K,V>`  
-**Purpose**: Generic cache usable with different key/value types
-
----
-
-## Cross-Cutting Concerns
-
-### Error Handling Strategy
-- Use exceptions for exceptional conditions (connection failures, pool exhausted)
-- Use `std::optional` or `std::expected` for expected failures (cache miss)
-- All exceptions derive from `DatabaseException` base class
-
-### Logging
-- Use `spdlog` for structured logging
-- Levels: TRACE (query details), DEBUG (connection lifecycle), INFO (pool stats), WARN (retries), ERROR (failures)
-
-### Memory Management
-- `std::unique_ptr` for exclusive ownership
-- `std::shared_ptr` only where shared ownership is required
-- Raw pointers for non-owning references (always document lifetime)
-
-### Thread Safety Conventions
-- Document thread safety in class Doxygen comment
-- Use `std::shared_mutex` for read-heavy, write-light scenarios
-- Prefer `std::atomic` for simple counters/flags
+**Dependencies**: msd-transfer
+**External Dependencies**: cpp_sqlite, Eigen3
 
 ---
 
-## Build & Configuration
+### msd-sim
 
-### Build Requirements
-- C++ Standard: C++17
-- Compiler: GCC 9+, Clang 10+, MSVC 2019+
-- Dependencies: spdlog, Catch2 (tests)
+**Location**: `msd-sim/`
+**Type**: Static library
+**Diagram**: [msd-sim-core.puml](../docs/msd/msd-sim/msd-sim-core.puml)
 
-### Key Build Targets
+Physics simulation engine with rigid body dynamics, collision detection (GJK algorithm), and environmental modeling. Organized into sub-modules:
+- **Environment**: Mathematical primitives, reference frames, world model
+- **Physics**: Rigid body dynamics, convex hull collision shapes
+- **Agent**: Abstract control interface for autonomous entities
+
+**Dependencies**: msd-assets
+**External Dependencies**: Eigen3, Qhull
+
+---
+
+### msd-gui
+
+**Location**: `msd-gui/`
+**Type**: Static library
+**Diagram**: [msd-gui-core.puml](../docs/msd/msd-gui/msd-gui-core.puml)
+
+GPU-accelerated 3D rendering and input handling. Wraps SDL3 with modern C++20 patterns. Key architectural features:
+- **Shader Policy System**: Template-based compile-time shader selection
+- **Input Management**: Separation of concerns (state tracking, handling, application)
+- **GPU Instancing**: Efficient rendering with per-instance data buffers
+
+**Dependencies**: msd-sim, msd-assets
+**External Dependencies**: SDL3, SDL3_image, SDL3_mixer, SDL3_ttf, Eigen3
+
+---
+
+### msd-utils
+
+**Location**: `msd-utils/`
+**Type**: Static library
+
+General-purpose utilities for path resolution and common operations. Minimal dependencies.
+
+**Dependencies**: None (C++20 standard library only)
+
+---
+
+### msd-exe
+
+**Location**: `msd-exe/`
+**Type**: Executable
+**Diagram**: [msd-exe.puml](../docs/msd/msd-exe/msd-exe.puml)
+
+Main application entry point. Minimal integration layer that connects msd-gui with msd-sim.
+
+**Dependencies**: msd-gui, msd-sim, msd-utils
+
+---
+
+### msd-asset-gen
+
+**Location**: `msd-asset-gen/`
+**Type**: Executable
+
+Command-line tool that generates SQLite databases populated with primitive geometry assets.
+
+**Usage**: `./generate_assets output.db`
+
+**Dependencies**: msd-assets, msd-transfer
+
+---
+
+## Architecture Diagrams
+
+### Library-Level Diagrams
+
+| Diagram | Description |
+|---------|-------------|
+| [msd-transfer-core.puml](../docs/msd/msd-transfer/msd-transfer-core.puml) | Database record architecture |
+| [msd-assets-core.puml](../docs/msd/msd-assets/msd-assets-core.puml) | Asset management architecture |
+| [msd-sim-core.puml](../docs/msd/msd-sim/msd-sim-core.puml) | Simulation engine architecture |
+| [msd-gui-core.puml](../docs/msd/msd-gui/msd-gui-core.puml) | GUI and rendering architecture |
+| [msd-exe.puml](../docs/msd/msd-exe/msd-exe.puml) | Application integration |
+
+### Cross-Cutting Design Documents
+
+| Design | Description | Libraries Affected |
+|--------|-------------|-------------------|
+| [modularize-gpu-shader-system](../docs/designs/modularize-gpu-shader-system/) | Template-based shader policy system | msd-gui |
+| [input-state-management](../docs/designs/input-state-management/) | Input handling separation of concerns | msd-gui |
+
+---
+
+## Build System
+
+All MSD libraries are built together using CMake with Conan for dependency management.
+
+**Quick start:**
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-ctest --test-dir build
+# Install dependencies
+conan install . --build=missing -s build_type=Debug
+
+# Build all libraries
+cmake --preset conan-debug
+cmake --build --preset conan-debug
 ```
 
-### Configuration Options
-| Option | Default | Description |
-|--------|---------|-------------|
-| `DB_ENABLE_CACHE` | `ON` | Enable query caching |
-| `DB_CACHE_SIZE` | `10000` | Default cache capacity |
-| `DB_POOL_SIZE` | `10` | Default connection pool size |
+**Library-specific build presets:**
+```bash
+cmake --build --preset debug-transfer-only   # msd-transfer
+cmake --build --preset debug-assets-only     # msd-assets + tests
+cmake --build --preset debug-sim-only        # msd-sim + tests
+cmake --build --preset debug-gui-only        # msd-gui
+cmake --build --preset debug-exe-only        # msd-exe
+cmake --build --preset debug-asset-gen-only  # generate_assets
+```
+
+See [root CLAUDE.md](../CLAUDE.md#build--configuration) for complete build instructions.
 
 ---
 
 ## Testing
 
-### Test Organization
+Each library with testable logic has its own test directory:
+
 ```
-test/
-├── unit/           # Unit tests (isolated, fast)
-│   ├── cache/
-│   └── database/
-├── integration/    # Integration tests (real DB)
-└── benchmark/      # Performance benchmarks
+msd/
+├── msd-assets/test/     # Asset management tests
+├── msd-sim/test/        # Simulation engine tests
+└── msd-utils/test/      # Utility tests
 ```
 
-### Running Tests
 ```bash
-ctest --test-dir build                    # All tests
-ctest --test-dir build -L unit            # Unit tests only
-ctest --test-dir build -L integration     # Integration tests
+# Run all tests
+ctest --preset conan-debug
+
+# Library-specific tests
+cmake --build --preset debug-sim-only --target msd_sim_test
+./build/Debug/debug/msd_sim_test
 ```
-
-### Test Conventions
-- Test files mirror source structure: `src/cache/lru_cache.cpp` → `test/unit/cache/lru_cache_test.cpp`
-- Ticket references in test names: `TEST_CASE("LRUCache: evicts oldest on capacity [lru-cache]")`
-- Use `[unit]` or `[integration]` tags for filtering
-
----
-
-## Recent Architectural Changes
-
-### LRU Query Cache — 2024-01-20
-**Ticket**: [lru-cache](tickets/lru-cache.md)  
-**Diagram**: [`docs/designs/lru-cache/lru-cache.puml`](docs/designs/lru-cache/lru-cache.puml)
-
-Added template-based LRU cache with TTL support to reduce duplicate database queries. Profiling showed 40% of queries were duplicates within a 5-second window.
-
-**Key files added**:
-- `include/cache/lru_cache.hpp` — Generic LRU cache template
-- `include/cache/query_cache.hpp` — Query-specific cache wrapper
-- `src/cache/query_cache.cpp` — Implementation
-- `test/unit/cache/lru_cache_test.cpp` — Unit tests
-
-### Connection Pool — 2024-01-10
-**Ticket**: [connection-pool](tickets/connection-pool.md)  
-**Diagram**: [`docs/designs/connection-pool/connection-pool.puml`](docs/designs/connection-pool/connection-pool.puml)
-
-Introduced connection pooling to reduce connection establishment overhead. Initial implementation supports fixed pool size with configurable timeout.
-
-**Key files added**:
-- `include/database/connection_pool.hpp` — Pool interface and implementation
-- `include/database/pooled_connection.hpp` — RAII connection wrapper
-
----
-
-## Diagrams Index
-
-| Diagram | Description | Last Updated |
-|---------|-------------|--------------|
-| [`overview.puml`](docs/architecture/overview.puml) | High-level system architecture | 2024-01-20 |
-| [`connection-pool.puml`](docs/designs/connection-pool/connection-pool.puml) | Connection pool component | 2024-01-10 |
-| [`lru-cache.puml`](docs/designs/lru-cache/lru-cache.puml) | LRU cache component | 2024-01-20 |
-
----
-
-## Conventions
-
-### Naming Conventions
-- Classes: `PascalCase`
-- Functions/Methods: `camelCase`
-- Member variables: `snake_case_` (trailing underscore)
-- Constants: `kPascalCase`
-- Namespaces: `snake_case`
-
-### Code Organization
-- One class per header (generally)
-- Implementation in `.cpp` unless template/inline
-- Public headers in `include/`, private in `src/`
-
-### Documentation
-- Public APIs: Doxygen-style comments with `@brief`, `@param`, `@return`
-- Ticket references: `@ticket {ticket-name}` in class docs, `// Ticket: {name}` at file top
-- PlantUML diagrams for architectural components
 
 ---
 
 ## Getting Help
 
 ### For AI Assistants
-1. Start with this document for architectural context
-2. Reference the linked PlantUML diagrams for component relationships
-3. Check `tickets/` for feature history and design decisions
-4. Look at `docs/designs/{feature}/design.md` for detailed design rationale
+
+1. **Start here** for library-level architecture and dependencies
+2. **Consult library CLAUDE.md** for class-level details (e.g., [msd-gui/CLAUDE.md](msd-gui/CLAUDE.md))
+3. **Reference diagrams** in `docs/msd/{library}/` for component relationships
+4. **Check root CLAUDE.md** for [coding standards](../CLAUDE.md#coding-standards) and [build instructions](../CLAUDE.md#build--configuration)
 
 ### For Developers
-- Design documents: `docs/designs/`
-- API documentation: `docs/api/` (generated by Doxygen)
-- Tickets with full context: `tickets/`
+
+- **Library documentation**: `msd/{library}/CLAUDE.md`
+- **Design documents**: `docs/designs/`
+- **Feature tickets**: `tickets/`

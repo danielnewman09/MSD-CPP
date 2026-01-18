@@ -64,7 +64,7 @@ SDLApplication::SDLApplication(const std::string& dbPath)
   }
 
   SDL_Log("SDLApplication: Creating GPUManager with camera frame...");
-  gpuManager_ = std::make_unique<GPUManager<InstanceDataType>>(
+  gpuManager_ = std::make_unique<GPUManager<AppShaderPolicy>>(
     *window_, *cameraFrame, basePath_);
   SDL_Log("SDLApplication: GPUManager created successfully");
 

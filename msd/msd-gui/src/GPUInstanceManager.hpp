@@ -43,7 +43,6 @@ public:
     SDL_Log("Cleared all objects");
   }
 
-
   void removeObject(uint32_t instanceId)
   {
     auto it = indexMap_.find(instanceId);
@@ -97,7 +96,6 @@ public:
     auto currentIdx = instances_.size();
     instances_.emplace_back(data);
     indexMap_.emplace(object.getInstanceId(), currentIdx);
-
 
     if constexpr (std::is_same_v<ShaderPolicy, FullTransformShaderPolicy>)
     {
@@ -239,4 +237,4 @@ private:
 
 }  // namespace msd_gui
 
-#endif
+#endif  // GPU_INSTANCE_MANAGER_HPP

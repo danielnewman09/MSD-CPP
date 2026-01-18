@@ -7,13 +7,8 @@
 #ifndef SDL_GPU_MANAGER_HPP
 #define SDL_GPU_MANAGER_HPP
 
-#include <algorithm>
-#include <cmath>
 #include <cstring>
-#include <fstream>
-#include <iostream>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -22,15 +17,12 @@
 #include <SDL3/SDL_gpu.h>
 #include <Eigen/Dense>
 #include <msd-assets/src/Geometry.hpp>
-#include <msd-assets/src/GeometryFactory.hpp>
 #include <msd-gui/src/Camera3D.hpp>
 #include <msd-gui/src/GPUInstanceManager.hpp>
 #include <msd-gui/src/SDLUtils.hpp>
 #include <msd-gui/src/ShaderPolicy.hpp>
-#include <msd-sim/src/Environment/Coordinate.hpp>
 #include <msd-sim/src/Environment/ReferenceFrame.hpp>
-#include "msd-gui/src/ShaderPolicy.hpp"
-#include "msd-sim/src/Engine.hpp"
+#include <msd-sim/src/Engine.hpp>
 
 namespace msd_gui
 {
@@ -284,7 +276,6 @@ public:
 
     // Append all vertices
     allVertices_.insert(allVertices_.end(), vertices.begin(), vertices.end());
-
 
     // Upload vertices to GPU and create/resize buffers
     updateGeometryBuffer();
@@ -551,7 +542,6 @@ private:
   // the geometric object with the Manager.
   std::unordered_map<uint32_t, uint32_t> assetIdToGeometryIndex_;
 
-
   InstanceManager<ShaderPolicy> instanceManager_;
   ShaderPolicy shaderPolicy_;
 
@@ -560,11 +550,6 @@ private:
 
   Camera3D camera_;
 };
-
-//=============================================================================
-// Template Implementation
-//=============================================================================
-
 
 }  // namespace msd_gui
 
