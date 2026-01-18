@@ -48,19 +48,15 @@ public:
    * @param customHull Optional custom collision hull (if null, computed from
    * geometry)
    */
-  AssetPhysical(std::shared_ptr<msd_assets::CollisionGeometry> geometry,
+  AssetPhysical(uint32_t assetId,
+                uint32_t instanceId,
+                ConvexHull& hull,
                 const ReferenceFrame& frame);
 
   /**
    * @brief Virtual destructor for proper cleanup of derived classes.
    */
   virtual ~AssetPhysical() = default;
-
-  /**
-   * @brief Get the visual geometry for rendering.
-   * @return Reference to the visual geometry
-   */
-  const msd_assets::Geometry& getVisualGeometry() const;
 
   /**
    * @brief Get the collision hull for collision detection.
@@ -88,12 +84,17 @@ public:
    */
   ReferenceFrame& getReferenceFrame();
 
-protected:
-  // Visual representation (shared across multiple instances)
-  msd_assets::CollisionGeometry visualGeometry_;
+  uint32_t getAssetId() const;
 
+  uint32_t getInstanceId() const;
+
+protected:
+  // The identifier for the asset from which this object was built
+  uint32_t referenceAssetId_;
+  
+  uint32_t instanceId_;
   // Collision hull (computed lazily, then cached)
-  ConvexHull collisionHull_;
+  const ConvexHull& collisionHull_;
 
   // Reference frame defining position and orientation in world space
   ReferenceFrame referenceFrame_;

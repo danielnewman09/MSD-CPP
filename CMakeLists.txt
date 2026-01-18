@@ -17,6 +17,7 @@ option(BUILD_TESTING "Build the testing tree" ON)
 option(ENABLE_COVERAGE "Enable code coverage" OFF)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy static analysis" OFF)
 option(ENABLE_BENCHMARKS "Build performance benchmarks" OFF)
+option(ENABLE_PROFILING "Enable profiling support (macOS only)" OFF)
 
 # Enable warnings as errors for Release builds by default
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -64,6 +65,20 @@ if(ENABLE_COVERAGE)
     message(STATUS "Code coverage enabled")
   else()
     message(WARNING "Code coverage is only supported with GCC or Clang")
+  endif()
+endif()
+
+# Profiling configuration (macOS only)
+if(ENABLE_PROFILING)
+  if(APPLE)
+    # Add debug symbols with Release optimizations
+    # -g: Generate debug symbols for Instruments
+    # -O2: Release-level optimizations for realistic performance
+    # Keep assertions enabled (no -DNDEBUG)
+    add_compile_options(-g -O2)
+    message(STATUS "Profiling support enabled (debug symbols + optimizations)")
+  else()
+    message(WARNING "Profiling support is only available on macOS (Xcode Instruments)")
   endif()
 endif()
 

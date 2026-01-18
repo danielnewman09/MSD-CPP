@@ -1,34 +1,22 @@
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
-#include <sstream>
-#include <stdexcept>
-#include "msd-assets/src/Geometry.hpp"
 
 namespace msd_sim
 {
 
-AssetPhysical::AssetPhysical(std::shared_ptr<msd_assets::Geometry> geometry,
+AssetPhysical::AssetPhysical(uint32_t assetId,
+                             uint32_t instanceId,
+                             ConvexHull& hull,
                              const ReferenceFrame& frame)
-  : visualGeometry_(*geometry),
-    referenceFrame_(frame),
-    collisionHull_{
-      std::make_unique<ConvexHull>(ConvexHull::fromGeometry(visualGeometry_))}
+  : referenceAssetId_{assetId},
+    instanceId_{instanceId},
+    collisionHull_{hull},
+    referenceFrame_(frame)
 {
-  if (!geometry)
-  {
-    throw std::invalid_argument(
-      "Cannot create AssetPhysical with null geometry");
-  }
-
-  if (geometry->getVertexCount() == 0)
-  {
-    throw std::invalid_argument(
-      "Cannot create AssetPhysical with empty geometry");
-  }
 }
 
 const ConvexHull& AssetPhysical::getCollisionHull() const
 {
-  return collisionGeometry_.get().;
+  return collisionHull_;
 }
 
 const ReferenceFrame& AssetPhysical::getReferenceFrame() const
@@ -39,6 +27,18 @@ const ReferenceFrame& AssetPhysical::getReferenceFrame() const
 ReferenceFrame& AssetPhysical::getReferenceFrame()
 {
   return referenceFrame_;
+}
+
+
+uint32_t AssetPhysical::getAssetId() const
+{
+  return referenceAssetId_;
+}
+
+
+uint32_t AssetPhysical::getInstanceId() const
+{
+  return instanceId_;
 }
 
 

@@ -1,4 +1,5 @@
 #include "msd-assets/src/AssetRegistry.hpp"
+#include <algorithm>
 #include <cpp_sqlite/src/cpp_sqlite/DBDataAccessObject.hpp>
 #include <stdexcept>
 #include "msd-assets/src/Geometry.hpp"
@@ -31,56 +32,67 @@ void AssetRegistry::loadFromDatabase()
     // Create Asset from ObjectRecord using factory method
     Asset asset = Asset::fromObjectRecord(objRecord, *database_);
 
-    // Cache the asset by name
-    assetCache_.emplace(objRecord.name, std::move(asset));
+    // Cache the asset
+    assetCache_.push_back(std::move(asset));
   }
 }
 
-std::optional<std::reference_wrapper<const Asset>>
-AssetRegistry::getAsset(const std::string& objectName)
+std::optional<std::reference_wrapper<const Asset>> AssetRegistry::getAsset(
+  uint32_t assetId)
 {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
-  // Check if asset exists in cache
-  auto assetIt = assetCache_.find(objectName);
+  auto assetIt = findAssetById(assetId);
   if (assetIt != assetCache_.end())
   {
-    return std::cref(assetIt->second);
+    return std::cref(*assetIt);
   }
 
-  return std::nullopt;  // Asset not found
+  return std::nullopt;
 }
 
-std::optional<std::reference_wrapper<const VisualGeometry>>
-AssetRegistry::loadVisualGeometry(const std::string& objectName)
+
+std::optional<std::reference_wrapper<const Asset>> AssetRegistry::getAsset(
+  std::string assetName)
 {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
-  // Find asset in cache
-  auto assetIt = assetCache_.find(objectName);
-  if (assetIt == assetCache_.end())
+  auto assetIt = findAssetByName(assetName);
+  if (assetIt != assetCache_.end())
   {
-    return std::nullopt;  // Asset not found
+    return std::cref(*assetIt);
   }
 
-  // Return visual geometry from the asset
-  return assetIt->second.getVisualGeometry();
+  return std::nullopt;
+}
+
+
+std::optional<std::reference_wrapper<const VisualGeometry>>
+AssetRegistry::loadVisualGeometry(uint32_t assetId)
+{
+  std::lock_guard<std::mutex> lock(cacheMutex_);
+
+  auto assetIt = findAssetById(assetId);
+  if (assetIt == assetCache_.end())
+  {
+    return std::nullopt;
+  }
+
+  return assetIt->getVisualGeometry();
 }
 
 std::optional<std::reference_wrapper<const CollisionGeometry>>
-AssetRegistry::loadCollisionGeometry(const std::string& objectName)
+AssetRegistry::loadCollisionGeometry(uint32_t assetId)
 {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
-  // Find asset in cache
-  auto assetIt = assetCache_.find(objectName);
+  auto assetIt = findAssetById(assetId);
   if (assetIt == assetCache_.end())
   {
-    return std::nullopt;  // Asset not found
+    return std::nullopt;
   }
 
-  // Return collision geometry from the asset
-  return assetIt->second.getCollisionGeometry();
+  return assetIt->getCollisionGeometry();
 }
 
 size_t AssetRegistry::getCacheMemoryUsage() const
@@ -89,12 +101,8 @@ size_t AssetRegistry::getCacheMemoryUsage() const
 
   size_t totalBytes = 0;
 
-  // Calculate memory usage for all cached assets
-  for (const auto& [name, asset] : assetCache_)
+  for (const auto& asset : assetCache_)
   {
-    // Add string overhead for name
-    totalBytes += name.size();
-
     // Add visual geometry if present
     if (asset.hasVisualGeometry())
     {
@@ -118,12 +126,51 @@ size_t AssetRegistry::getCacheMemoryUsage() const
     }
 
     // Add Asset object overhead (id, name, category strings)
-    totalBytes += asset.getName().size() + asset.getCategory().size() +
-                  sizeof(uint32_t);
+    totalBytes +=
+      asset.getName().size() + asset.getCategory().size() + sizeof(uint32_t);
   }
 
   return totalBytes;
 }
 
+const std::vector<Asset>& AssetRegistry::getAssetCache() const
+{
+  return assetCache_;
+}
+
+std::vector<Asset>::iterator AssetRegistry::findAssetById(uint32_t assetId)
+{
+  return std::find_if(
+    assetCache_.begin(),
+    assetCache_.end(),
+    [assetId](const Asset& asset) { return asset.getId() == assetId; });
+}
+
+std::vector<Asset>::const_iterator AssetRegistry::findAssetById(
+  uint32_t assetId) const
+{
+  return std::find_if(
+    assetCache_.cbegin(),
+    assetCache_.cend(),
+    [assetId](const Asset& asset) { return asset.getId() == assetId; });
+}
+
+std::vector<Asset>::iterator AssetRegistry::findAssetByName(
+  const std::string& assetName)
+{
+  return std::find_if(
+    assetCache_.begin(),
+    assetCache_.end(),
+    [&assetName](const Asset& asset) { return asset.getName() == assetName; });
+}
+
+std::vector<Asset>::const_iterator AssetRegistry::findAssetByName(
+  const std::string& assetName) const
+{
+  return std::find_if(
+    assetCache_.cbegin(),
+    assetCache_.cend(),
+    [&assetName](const Asset& asset) { return asset.getName() == assetName; });
+}
 
 }  // namespace msd_assets

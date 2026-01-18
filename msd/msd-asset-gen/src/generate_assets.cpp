@@ -28,7 +28,8 @@ void createCubeAsset(cpp_sqlite::Database& db)
 
   // Insert MeshRecord into database
   auto& meshDAO = db.getDAO<msd_transfer::MeshRecord>();
-  auto meshId = meshDAO.insert(meshRecord);
+  meshDAO.insert(meshRecord);
+  uint32_t meshId = meshRecord.id;
   std::cout << "  Visual mesh inserted with ID: " << meshId << std::endl;
 
   // Create CollisionMeshRecord directly from factory
@@ -36,7 +37,8 @@ void createCubeAsset(cpp_sqlite::Database& db)
 
   // Insert CollisionMeshRecord into database
   auto& collisionDAO = db.getDAO<msd_transfer::MeshRecord>();
-  auto collisionId = collisionDAO.insert(collisionRecord);
+  collisionDAO.insert(collisionRecord);
+  uint32_t collisionId = collisionRecord.id;
   std::cout << "  Collision mesh inserted with ID: " << collisionId
             << std::endl;
 
@@ -68,7 +70,8 @@ void createPyramidAsset(cpp_sqlite::Database& db)
 
   // Insert MeshRecord into database
   auto& meshDAO = db.getDAO<msd_transfer::MeshRecord>();
-  auto meshId = meshDAO.insert(meshRecord);
+  meshDAO.insert(meshRecord);
+  uint32_t meshId = meshRecord.id;
   std::cout << "  Visual mesh inserted with ID: " << meshId << std::endl;
 
   // Create CollisionMeshRecord directly from factory
@@ -76,7 +79,8 @@ void createPyramidAsset(cpp_sqlite::Database& db)
 
   // Insert CollisionMeshRecord into database
   auto& collisionDAO = db.getDAO<msd_transfer::MeshRecord>();
-  auto collisionId = collisionDAO.insert(collisionRecord);
+  collisionDAO.insert(collisionRecord);
+  uint32_t collisionId = collisionRecord.id;
   std::cout << "  Collision mesh inserted with ID: " << collisionId
             << std::endl;
 

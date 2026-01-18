@@ -15,12 +15,10 @@
 
 #include <SDL3/SDL.h>
 
-#include "msd-assets/src/Asset.hpp"
 #include "msd-gui/src/InputHandler.hpp"
 #include "msd-gui/src/SDLGPUManager.hpp"
 #include "msd-gui/src/ShaderPolicy.hpp"
 #include "msd-sim/src/Engine.hpp"
-#include "msd-sim/src/Environment/Object.hpp"
 
 namespace msd_gui
 {
@@ -37,7 +35,7 @@ public:
     Exiting
   };
 
-  SDLApplication(const std::string& dbPath);
+  explicit SDLApplication(const std::string& dbPath);
 
   // Delete copy constructor and assignment operator
   SDLApplication(const SDLApplication&) = delete;
@@ -51,12 +49,6 @@ public:
 
   Status getStatus() const;
 
-#ifdef __EMSCRIPTEN__
-  // Emscripten requires a callback-based main loop instead of blocking
-  void runFrame();
-  static void emscriptenMainLoop(void* arg);
-#endif
-
 private:
   struct SDLWindowDeleter
   {
@@ -65,7 +57,7 @@ private:
       SDL_DestroyWindow(w);
     }
   };
-
+  void registerAssets();
   void handleEvents();
   void setupInputBindings();
   void updatePlayerInput();
@@ -78,8 +70,8 @@ private:
   std::unique_ptr<SDL_Window, SDLWindowDeleter> window_;
 
   // Use FullTransformShaderPolicy per previous design decisions
-  using AppGPUManager = GPUManager<FullTransformShaderPolicy>;
-  std::unique_ptr<AppGPUManager> gpuManager_;
+  using AppShaderPolicy = FullTransformShaderPolicy;
+  std::unique_ptr<GPUManager<AppShaderPolicy>> gpuManager_;
 
   // Input management
   std::unique_ptr<InputHandler> inputHandler_;
@@ -90,11 +82,6 @@ private:
   // Frame timing for delta time
   std::chrono::milliseconds lastFrameTime_{0};
   std::chrono::milliseconds frameDeltaTime_{16};  // Default 60 FPS
-
-  // Mock object storage for demonstration
-  std::vector<msd_sim::Object> mockObjects_;
-  std::vector<msd_assets::Asset>
-    mockAssets_;  // Own assets for Object references
 };
 
 }  // namespace msd_gui

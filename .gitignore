@@ -8,3 +8,4 @@ models/*
 installs/*
 *.db
 benchmark_results/
+profile_results/

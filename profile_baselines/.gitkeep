@@ -1,0 +1,4 @@
+# Profile baselines directory
+# Baseline files are committed to git for team-wide consistency
+# Each executable has its own subdirectory:
+#   profile_baselines/{executable}/baseline.json

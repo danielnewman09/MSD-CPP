@@ -26,7 +26,8 @@ The library consists of four main subsystems:
 | SDLApplication | `src/` | Application lifecycle, window management, event handling | [`sdl-application.puml`](../../docs/msd/msd-gui/sdl-application.puml) |
 | Input Management | `src/` | Keyboard state tracking and input binding system | [`input-state-management.puml`](../../docs/designs/input-state-management/input-state-management.puml) |
 | ShaderPolicy | `src/` | Template-based shader policy system for GPU pipeline configuration | [`modularize-gpu-shader-system.puml`](../../docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml) |
-| GPUManager | `src/` | GPU device, pipeline, instanced rendering | [`gpu-manager.puml`](../../docs/msd/msd-gui/gpu-manager.puml) |
+| GPUManager | `src/` | GPU device, pipeline, geometry registration, rendering orchestration | [`gpu-manager.puml`](../../docs/msd/msd-gui/gpu-manager.puml) |
+| InstanceManager | `src/` | Per-instance data management, simulation-to-GPU synchronization | — |
 | Camera3D | `src/` | 3D camera with MVP matrix computation | [`camera3d.puml`](../../docs/msd/msd-gui/camera3d.puml) |
 | CameraController | `src/` | Camera movement control based on input state | [`input-state-management.puml`](../../docs/designs/input-state-management/input-state-management.puml) |
 | SDLUtils | `src/` | Exception class and shader loading utilities | — |
@@ -41,13 +42,13 @@ The library consists of four main subsystems:
 **Diagram**: [`docs/msd/msd-gui/sdl-application.puml`](../../docs/msd/msd-gui/sdl-application.puml)
 
 #### Purpose
-Manages the application lifecycle including window creation, event handling, and render loop coordination. Owns the GPUManager for rendering and msd_sim::Engine for simulation.
+Manages the application lifecycle including window creation, event handling, and render loop coordination. Owns the GPUManager for rendering and msd_sim::Engine for simulation. Coordinates asset registration and simulation-to-rendering synchronization.
 
 #### Key Classes
 
 | Class | Header | Responsibility |
 |-------|--------|----------------|
-| `SDLApplication` | `SDLApp.hpp` | Application lifecycle, window management, event handling |
+| `SDLApplication` | `SDLApp.hpp` | Application lifecycle, window management, event handling, asset registration |
 
 #### Key Interfaces
 ```cpp
@@ -60,6 +61,12 @@ public:
     SDLApplication(const std::string& dbPath);
     int runApp();
     Status getStatus() const;
+
+private:
+    void registerAssets();        // Register visual geometries with GPUManager
+    void handleEvents();          // SDL event processing
+    void setupInputBindings();    // Configure keyboard bindings
+    void spawnRandomObject(const std::string& geometryType);
 };
 ```
 
@@ -69,6 +76,23 @@ msd_gui::SDLApplication app{"assets.db"};
 int result = app.runApp();  // Blocks until exit
 ```
 
+#### Initialization Flow
+1. Initialize SDL and create window
+2. Create `msd_sim::Engine` with database path
+3. Spawn player platform and obtain camera reference frame
+4. Create `GPUManager` with camera frame reference
+5. Setup input bindings
+6. On `runApp()`: Register all visual assets with GPUManager
+
+#### Main Loop
+```cpp
+while (status_ == Status::Running) {
+    handleEvents();           // Process SDL events, update input state
+    gpuManager_->update(engine_);  // Sync simulation → GPU and render
+    engine_.update(currentTime);   // Step simulation forward
+}
+```
+
 #### Thread Safety
 - Not designed for multi-threaded access
 - Event handling and rendering occur on the main thread
@@ -76,11 +100,13 @@ int result = app.runApp();  // Blocks until exit
 
 #### Error Handling
 - Throws `SDLException` on window creation failure
+- Throws if player platform's reference frame not found
 - Returns `EXIT_SUCCESS` on normal exit
 
 #### Dependencies
-- `GPUManager` — GPU rendering (owned via `std::unique_ptr`)
+- `GPUManager<FullTransformShaderPolicy>` — GPU rendering (owned via `std::unique_ptr`)
 - `msd_sim::Engine` — Simulation engine (owned via value semantics)
+- `InputHandler` — Input binding management (owned via `std::unique_ptr`)
 - SDL3 — Window and event management
 
 ---
@@ -91,50 +117,62 @@ int result = app.runApp();  // Blocks until exit
 **Diagram**: [`docs/msd/msd-gui/gpu-manager.puml`](../../docs/msd/msd-gui/gpu-manager.puml)
 
 #### Purpose
-Handles all GPU-related operations including device initialization, shader loading, pipeline creation, and instanced rendering with depth buffering.
+Handles GPU-related operations including device initialization, shader loading, pipeline creation, geometry registration, and rendering orchestration. Delegates instance data management to `InstanceManager`.
 
 #### Key Classes
 
 | Class | Header | Responsibility |
 |-------|--------|----------------|
-| `GPUManager` | `SDLGPUManager.hpp` | GPU device, pipeline, instanced rendering |
-| `InstanceData` | `SDLGPUManager.hpp` | Per-instance position and color data |
+| `GPUManager<ShaderPolicy>` | `SDLGPUManager.hpp` | GPU device, pipeline, geometry registration, rendering |
+| `GeometryInfo` | `GPUInstanceManager.hpp` | Tracks geometry location within unified vertex buffer |
 
 #### Key Interfaces
 ```cpp
-struct InstanceData {
-    float position[3];  // World position offset
-    float color[3];     // Instance color
+struct GeometryInfo {
+    uint32_t baseVertex{0};   // Starting vertex index in unified buffer
+    uint32_t vertexCount{0};  // Number of vertices for this geometry
 };
 
+template <typename ShaderPolicy>
 class GPUManager {
 public:
-    explicit GPUManager(SDL_Window& window, const std::string& basePath);
+    explicit GPUManager(SDL_Window& window,
+                        msd_sim::ReferenceFrame& cameraFrame,
+                        const std::string& basePath);
 
+    // Geometry registration (called during asset loading)
+    uint32_t registerGeometry(uint32_t assetId,
+                              const std::vector<msd_assets::Vertex>& vertices);
+
+    // Object management (delegates to InstanceManager)
+    void addObject(const msd_sim::AssetInertial& object, float r, float g, float b);
+
+    // Frame update and rendering
+    void update(const msd_sim::Engine& engine);
     void render();
-    Camera3D& getCamera();
 
-    // Instance management
-    void addInstance(float posX, float posY, float posZ,
-                     float r, float g, float b);
-    void removeInstance(size_t index);
-    void updateInstance(size_t index, float posX, float posY, float posZ,
-                        float r, float g, float b);
-    void clearInstances();
-    size_t getInstanceCount() const;
+    // Accessors
+    Camera3D& getCamera();
+    InstanceManager<ShaderPolicy>& getInstanceManager();
+    SDL_GPUDevice& getDevice();
+    SDL_GPUBuffer& getInstanceBuffer();
 };
 ```
 
 #### Usage Example
 ```cpp
-GPUManager gpu{window, basePath};
+// Create GPU manager with camera reference frame
+GPUManager<FullTransformShaderPolicy> gpu{window, cameraFrame, basePath};
 
-// Add pyramid instances
-gpu.addInstance(0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f);  // Red at origin
-gpu.addInstance(2.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);  // Green at x=2
+// Register geometry assets (called once during initialization)
+gpu.registerGeometry(pyramidAssetId, pyramidVertices);
+gpu.registerGeometry(cubeAssetId, cubeVertices);
 
-// Render frame
-gpu.render();
+// Add objects from simulation
+gpu.addObject(inertialObject, 1.0f, 0.0f, 0.0f);  // Red object
+
+// Game loop: update instances from simulation and render
+gpu.update(engine);  // Syncs transforms and renders
 ```
 
 #### Thread Safety
@@ -144,13 +182,100 @@ gpu.render();
 
 #### Error Handling
 - Throws `SDLException` on device/pipeline creation failure
-- Logs errors for invalid instance operations
+- Throws `SDLException` if object's asset ID not found in geometry registry
+- Logs errors for invalid operations
 
 #### Dependencies
 - SDL3 GPU API — Device, pipeline, buffer management
 - `Camera3D` — View/projection matrices (owned via value semantics)
-- `msd_assets::GeometryFactory` — Primitive geometry generation
+- `InstanceManager<ShaderPolicy>` — Instance data management (owned via value semantics)
 - `ShaderPolicy` — Compile-time shader configuration (template parameter)
+- `msd_sim::Engine` — Source of simulation state for frame updates
+
+---
+
+### InstanceManager
+
+**Location**: `src/GPUInstanceManager.hpp`
+**Introduced**: Refactor objects integration (2026-01-18)
+
+#### Purpose
+Manages per-instance GPU data for rendering simulation objects. Handles the mapping between simulation object IDs and GPU instance indices, builds shader-specific instance data, and uploads instance buffers to the GPU.
+
+#### Key Classes
+
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `InstanceManager<ShaderPolicy>` | `GPUInstanceManager.hpp` | Instance data building, mapping, GPU upload |
+
+#### Key Interfaces
+```cpp
+template <typename ShaderPolicy>
+class InstanceManager {
+public:
+    using InstanceDataType = typename ShaderPolicy::InstanceDataType;
+
+    // Object lifecycle
+    void clearObjects();
+    void removeObject(uint32_t instanceId);
+
+    // Add object and upload to GPU
+    size_t addObject(SDL_GPUDevice& device,
+                     SDL_GPUBuffer& instanceBuffer,
+                     const msd_sim::AssetInertial& object,
+                     uint32_t geometryId,
+                     float r, float g, float b);
+
+    // Update all instances from simulation state
+    void update(const msd_sim::Engine& engine);
+
+    // GPU buffer management
+    void uploadInstanceBuffer(SDL_GPUDevice& device,
+                              SDL_GPUBuffer& instanceBuffer);
+
+    // Accessors
+    const std::vector<InstanceDataType>& getInstances() const;
+};
+```
+
+#### Usage Example
+```cpp
+InstanceManager<FullTransformShaderPolicy> instanceManager;
+
+// Add object with GPU upload
+instanceManager.addObject(device, instanceBuffer, object, geometryId, 1.0f, 0.0f, 0.0f);
+
+// Update all instances from simulation
+instanceManager.update(engine);
+instanceManager.uploadInstanceBuffer(device, instanceBuffer);
+
+// Access instances for rendering
+const auto& instances = instanceManager.getInstances();
+```
+
+#### Instance ID Mapping
+The `InstanceManager` maintains a bidirectional mapping:
+- **Simulation ID → GPU Index**: Maps `AssetInertial::getInstanceId()` to vector index
+- Used for efficient lookup during updates and removals
+
+#### Thread Safety
+- Not thread-safe (single-threaded GUI operation assumed)
+- All instance operations on main thread
+
+#### Error Handling
+- Logs errors for invalid instance removals (ID not found)
+- Throws `SDLException` on GPU transfer buffer creation failure
+
+#### Memory Management
+- **Ownership**: Owned by value in `GPUManager`
+- **Instance data**: `std::vector<InstanceDataType>` with value semantics
+- **ID mapping**: `std::unordered_map<uint32_t, size_t>` for O(1) lookup
+
+#### Dependencies
+- `ShaderPolicy` — Determines instance data type and layout
+- `msd_sim::Engine` — Source of simulation state for updates
+- `msd_sim::AssetInertial` — Simulation object with transform data
+- SDL3 GPU API — Transfer buffer operations
 
 ---
 
@@ -203,14 +328,23 @@ public:
     std::vector<SDL_GPUVertexAttribute> getVertexAttributes() const;
     std::vector<SDL_GPUVertexBufferDescription> getVertexBufferDescriptions() const;
     SDL_GPUVertexInputState getVertexInputState() const;
-    std::vector<uint8_t> buildInstanceData(const msd_sim::Object& object) const;
+
+    // Build instance data from AssetInertial (color passed separately)
+    std::vector<uint8_t> buildInstanceData(const msd_sim::AssetInertial& object,
+                                           float r, float g, float b) const;
 
     std::string getVertexShaderFile() const;
     std::string getFragmentShaderFile() const;
     size_t getInstanceDataSize() const;
 };
 
-// FullTransformShaderPolicy has identical interface except buildInstanceData signature
+// FullTransformShaderPolicy adds geometryIndex parameter
+class FullTransformShaderPolicy {
+    // ... same interface plus:
+    std::vector<uint8_t> buildInstanceData(const msd_sim::AssetInertial& object,
+                                           float r, float g, float b,
+                                           uint32_t geometryIndex) const;
+};
 ```
 
 #### Usage Example
@@ -665,9 +799,9 @@ See the [root CLAUDE.md](../../CLAUDE.md#coding-standards) for complete details 
 | Q/E | Move camera up/down |
 | ↑/↓ | Pitch camera up/down |
 | ←/→ | Yaw camera left/right |
-| Z | Add random pyramid instance |
-| X | Remove last instance |
-| C | Clear all instances |
+| Z | Spawn random pyramid at random position |
+| V | Spawn random cube at random position |
+| C | Clear all simulation objects |
 
 ---
 
@@ -760,6 +894,31 @@ Currently focused on integration testing through the main executable (`msd_exe`)
 ---
 
 ## Recent Architectural Changes
+
+### Simulation-GPU Integration Refactor — 2026-01-18
+
+Refactored the GUI layer to integrate directly with `msd_sim::Engine` and `msd_sim::AssetInertial` objects instead of using mock object vectors. Introduced `InstanceManager` to separate instance data management from GPU resource management.
+
+**Key changes**:
+- `msd/msd-gui/src/GPUInstanceManager.hpp` — New `InstanceManager<ShaderPolicy>` template class for instance data management
+- `msd/msd-gui/src/SDLGPUManager.hpp` — Refactored to own `InstanceManager`, dynamic geometry registration via asset IDs
+- `msd/msd-gui/src/SDLApp.hpp/.cpp` — Removed mock object storage, added `registerAssets()` for asset-to-geometry mapping
+- `msd/msd-gui/src/ShaderPolicy.hpp/.cpp` — `buildInstanceData()` now takes `AssetInertial` + explicit color instead of `Object`
+
+**Design decisions**:
+- **InstanceManager separation**: Decouples instance data lifecycle (add/remove/update) from GPU pipeline management
+- **Asset ID mapping**: `GPUManager` maintains `assetIdToGeometryIndex_` map for O(1) geometry lookup from simulation objects
+- **Direct simulation integration**: `GPUManager::update(engine)` pulls transforms directly from `msd_sim::Engine::WorldModel`
+- **Emscripten removal**: Removed browser/WebAssembly support to simplify codebase (native-only)
+- **Color externalization**: Object color now passed as parameters rather than stored on simulation objects
+
+**API changes**:
+- `GPUManager::addObject()` now takes `AssetInertial&` instead of `Object`
+- `GPUManager::updateObjects()` replaced with `GPUManager::update(engine)`
+- `GPUManager::registerGeometry()` now uses `uint32_t assetId` instead of `string name`
+- Removed `GPUManager::removeObject()` and `GPUManager::clearObjects()` (use `InstanceManager` directly)
+
+---
 
 ### Input State Management System — 2026-01-05
 **Ticket**: [0004_gui_framerate](../../tickets/0004_gui_framerate.md)

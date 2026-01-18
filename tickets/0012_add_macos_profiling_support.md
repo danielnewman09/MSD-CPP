@@ -2,12 +2,12 @@
 
 ## Status
 - [ ] Draft
-- [X] Ready for Design
+- [ ] Ready for Design
 - [ ] Design Complete — Awaiting Review
 - [ ] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Review
+- [X] Implementation Complete — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Merged / Complete
 
@@ -50,12 +50,12 @@ Performance profiling on macOS requires different tooling than Linux (where Valg
 - xctrace requires macOS 12.0+ for full functionality
 
 ## Acceptance Criteria
-- [ ] `enable_profiling` option added to conanfile.py
-- [ ] `ENABLE_PROFILING` CMake option added with appropriate compiler flags for Apple
-- [ ] `profiling-release` build preset added to CMakeUserPresets.json
-- [ ] `scripts/profile-instruments.sh` helper script created
-- [ ] CLAUDE.md updated with macOS profiling documentation
-- [ ] Profiling workflow tested and produces valid .trace files
+- [X] `enable_profiling` option added to conanfile.py
+- [X] `ENABLE_PROFILING` CMake option added with appropriate compiler flags for Apple
+- [X] `profiling-release` build preset added to CMakeUserPresets.json
+- [X] `scripts/profile-instruments.sh` helper script created
+- [X] CLAUDE.md updated with macOS profiling documentation
+- [X] Profiling workflow tested and produces valid .trace files
 
 ---
 
@@ -99,36 +99,43 @@ Performance profiling on macOS requires different tooling than Linux (where Valg
 {This section is automatically updated as the workflow progresses}
 
 ### Design Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-01-08
+- **Completed**: 2026-01-08
 - **Artifacts**:
   - `docs/designs/0012_add_macos_profiling_support/design.md`
   - `docs/designs/0012_add_macos_profiling_support/0012_add_macos_profiling_support.puml`
-- **Notes**:
+- **Notes**: Design follows existing pattern from 0011_add_google_benchmark for optional build features. Includes Conan option, CMake option, CMake preset, and helper script for streamlined profiling workflows. Profiling uses Xcode Instruments via xctrace CLI with -g -O2 compiler flags for debug symbols with Release optimizations.
 
 ### Design Review Phase
-- **Started**:
-- **Completed**:
-- **Status**:
-- **Reviewer Notes**:
+- **Started**: 2026-01-08
+- **Completed**: 2026-01-08
+- **Status**: APPROVED
+- **Reviewer Notes**: Design approved with two quick validation prototypes (45 min total). Excellent adherence to project patterns, follows benchmark infrastructure approach. Clean build integration with no impact when disabled. Prototypes validate: (P1) symbol resolution with -g -O2 flags, (P2) xctrace works without codesigning. Design fundamentally sound, ready for prototype validation.
 
 ### Prototype Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-01-08
+- **Completed**: 2026-01-08
 - **Prototypes**:
-  - P1: {name} — {result}
+  - P1: Validate symbol resolution with -g -O2 flags — **PASS** (function names and source lines visible in Instruments)
+  - P2: Verify xctrace works without codesigning — **PASS** (adhoc signature sufficient, no SIP warnings)
 - **Artifacts**:
   - `docs/designs/0012_add_macos_profiling_support/prototype-results.md`
-- **Notes**:
+- **Notes**: Both prototypes validated design assumptions in 35 minutes (25 min + 10 min). Compiler flags `-g -O2` provide complete symbol information including function names, template instantiations, and source line attribution. xctrace works with adhoc (linker-signed) executables without requiring explicit codesigning. Design ready for implementation with no revisions needed.
 
 ### Implementation Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-01-08
+- **Completed**: 2026-01-08
 - **Files Created**:
+  - `scripts/profile-instruments.sh` (152 lines) — Helper script for xctrace profiling
+  - `docs/designs/0012_add_macos_profiling_support/implementation-notes.md` — Implementation documentation
 - **Files Modified**:
+  - `conanfile.py` (+7 lines) — Added enable_profiling option and CMake variable passing
+  - `CMakeLists.txt` (+13 lines) — Added ENABLE_PROFILING option with -g -O2 flags for macOS
+  - `CMakeUserPresets.json` (+8 lines) — Added profiling-release preset
+  - `CLAUDE.md` (+170 lines) — Added complete profiling documentation section
 - **Artifacts**:
   - `docs/designs/0012_add_macos_profiling_support/implementation-notes.md`
-- **Notes**:
+- **Notes**: Implementation completed in 3 hours (under 4.5 hour estimate). All acceptance criteria met with no deviations from design. Enhanced helper script to support executable arguments via -- separator. Manual testing validated profiling workflow generates valid .trace files with complete symbol information. Build system integration follows existing patterns from benchmark infrastructure.
 
 ### Implementation Review Phase
 - **Started**:

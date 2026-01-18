@@ -1,0 +1,70 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+' New Component: Profile Parser Script
+package "scripts/" {
+    component "parse-profile.py" <<new>> {
+        note right
+            Python script (Python 3.9+)
+            Stdlib only: xml.etree, json, argparse
+            Extracts Time Profiler data from .trace
+        end note
+    }
+
+    component "profile-instruments.sh" <<modified>> {
+        note right
+            Adds --export-xml / -x flag
+            Automatically exports trace to XML
+        end note
+    }
+}
+
+' Output Directories
+package "profile_results/" <<new>> {
+    artifact "profile_YYYYMMDD_HHMMSS.trace" as trace_file
+    artifact "profile_YYYYMMDD_HHMMSS.xml" as xml_file
+    artifact "profile_YYYYMMDD_HHMMSS.json" as json_file
+}
+
+' External Tools
+component "xctrace" {
+    note bottom
+        macOS Instruments CLI
+        Part of Xcode toolchain
+    end note
+}
+
+' Executables (context)
+component "msd_sim_bench\nmsd_sim_test\nmsd_exe" {
+    note bottom
+        Any executable can be profiled
+        Built with -g -O2 for symbols
+    end note
+}
+
+' Workflow relationships
+"profile-instruments.sh" --> xctrace : invokes
+xctrace --> trace_file : generates
+"profile-instruments.sh" ..> xml_file : exports (--export-xml)
+"parse-profile.py" --> trace_file : reads
+"parse-profile.py" ..> xctrace : calls "xctrace export"
+"parse-profile.py" --> xml_file : parses
+"parse-profile.py" --> json_file : writes
+xctrace --> "msd_sim_bench\nmsd_sim_test\nmsd_exe" : profiles
+
+' Key parsing flow
+note right of "parse-profile.py"
+    Workflow:
+    1. Accept .trace file as input
+    2. Call xctrace export --toc
+    3. Call xctrace export --xpath
+    4. Parse Time Profiler XML schema
+    5. Extract sample counts per function
+    6. Calculate percentages
+    7. Output JSON report
+end note
+
+@enduml

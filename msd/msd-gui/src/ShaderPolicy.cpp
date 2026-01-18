@@ -53,11 +53,10 @@ PositionOnlyShaderPolicy::getVertexBufferDescriptions() const
 {
   return {
     // Slot 0: Per-vertex data
-    SDL_GPUVertexBufferDescription{
-      .slot = 0,
-      .pitch = sizeof(msd_assets::Vertex),
-      .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-      .instance_step_rate = 0},
+    SDL_GPUVertexBufferDescription{.slot = 0,
+                                   .pitch = sizeof(msd_assets::Vertex),
+                                   .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+                                   .instance_step_rate = 0},
 
     // Slot 1: Per-instance data
     SDL_GPUVertexBufferDescription{
@@ -91,19 +90,19 @@ SDL_GPUVertexInputState PositionOnlyShaderPolicy::getVertexInputState() const
 }
 
 std::vector<uint8_t> PositionOnlyShaderPolicy::buildInstanceData(
-  const msd_sim::Object& object) const
+  const msd_sim::AssetInertial& object,
+  float r,
+  float b,
+  float g) const
 {
   PositionOnlyInstanceData data{};
 
   // Extract position from object transform
-  const auto& origin = object.getTransform().getOrigin();
+  const auto& origin = object.getReferenceFrame().getOrigin();
   data.position[0] = static_cast<float>(origin.x());
   data.position[1] = static_cast<float>(origin.y());
   data.position[2] = static_cast<float>(origin.z());
 
-  // Extract color
-  float r, g, b;
-  object.getColor(r, g, b);
   data.color[0] = r;
   data.color[1] = g;
   data.color[2] = b;
@@ -181,11 +180,10 @@ FullTransformShaderPolicy::getVertexBufferDescriptions() const
 {
   return {
     // Slot 0: Per-vertex data
-    SDL_GPUVertexBufferDescription{
-      .slot = 0,
-      .pitch = sizeof(msd_assets::Vertex),
-      .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-      .instance_step_rate = 0},
+    SDL_GPUVertexBufferDescription{.slot = 0,
+                                   .pitch = sizeof(msd_assets::Vertex),
+                                   .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+                                   .instance_step_rate = 0},
 
     // Slot 1: Per-instance data
     SDL_GPUVertexBufferDescription{
@@ -241,13 +239,16 @@ Eigen::Matrix4f FullTransformShaderPolicy::createModelMatrix(
 }
 
 std::vector<uint8_t> FullTransformShaderPolicy::buildInstanceData(
-  const msd_sim::Object& object,
-  const std::unordered_map<std::string, uint32_t>& geometryNameToIndex) const
+  const msd_sim::AssetInertial& object,
+  float r,
+  float b,
+  float g,
+  uint32_t geometryIndex) const
 {
   FullTransformInstanceData data{};
 
-  // Create model matrix from object's transform
-  Eigen::Matrix4f modelMatrix{createModelMatrix(object.getTransform())};
+  // Create model matrix from object's transform1
+  Eigen::Matrix4f modelMatrix{createModelMatrix(object.getReferenceFrame())};
 
   // Copy model matrix - use Eigen's column-major data directly
   // Metal shader compiles mul(M,v) to v*M, which expects column-major layout
@@ -257,49 +258,13 @@ std::vector<uint8_t> FullTransformShaderPolicy::buildInstanceData(
     data.modelMatrix[i] = modelMatrix.data()[i];
   }
 
-  // Get object color
-  float r, g, b;
-  object.getColor(r, g, b);
   data.color[0] = r;
   data.color[1] = g;
   data.color[2] = b;
 
-  // Get geometry index from asset name
-  if (object.hasVisualGeometry())
-  {
-    auto assetOpt = object.getAsset();
-    if (assetOpt.has_value())
-    {
-      const auto& asset = assetOpt->get();
-      const std::string& geometryName = asset.getName();
-
-      auto it = geometryNameToIndex.find(geometryName);
-      if (it != geometryNameToIndex.end())
-      {
-        data.geometryIndex = it->second;
-      }
-      else
-      {
-        SDL_Log("WARNING: Geometry '%s' not found in registry, using index 0",
-                geometryName.c_str());
-        data.geometryIndex = 0;
-      }
-    }
-    else
-    {
-      SDL_Log(
-        "WARNING: Object has visual geometry but no asset, using index 0");
-      data.geometryIndex = 0;
-    }
-  }
-  else
-  {
-    SDL_Log("WARNING: Object has no visual geometry, using index 0");
-    data.geometryIndex = 0;
-  }
+  data.geometryIndex = geometryIndex;
 
   // Padding is already zero-initialized
-
   // Serialize to bytes
   std::vector<uint8_t> bytes(sizeof(FullTransformInstanceData));
   std::memcpy(bytes.data(), &data, sizeof(FullTransformInstanceData));
