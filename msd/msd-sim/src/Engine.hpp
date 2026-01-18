@@ -21,9 +21,9 @@ public:
 
   void update(std::chrono::milliseconds simTime);
 
-  void spawnInertialObject(const std::string assetName,
-                           const Coordinate& position,
-                           const EulerAngles& orientation);
+  const AssetInertial& spawnInertialObject(const std::string assetName,
+                                           const Coordinate& position,
+                                           const EulerAngles& orientation);
 
   /**
    * @brief Spawn a player-controlled platform with visual object
@@ -33,7 +33,8 @@ public:
    * @return Platform ID
    *
    * Creates a Platform with InputControlAgent and links it to a visual Object
-   * in WorldModel. Sets this platform as the player platform for input commands.
+   * in WorldModel. Sets this platform as the player platform for input
+   * commands.
    */
   uint32_t spawnPlayerPlatform(const std::string& assetName,
                                const Coordinate& position,
@@ -54,11 +55,22 @@ public:
    * @brief Get access to the world model
    * @return Reference to world model
    */
-  WorldModel& getWorldModel() { return worldModel_; }
+  WorldModel& getWorldModel()
+  {
+    return worldModel_;
+  }
+
+  const WorldModel& getWorldModel() const
+  {
+    return worldModel_;
+  }
 
 
 private:
   msd_assets::AssetRegistry assetRegistry_;
+
+  std::unordered_map<uint32_t, ConvexHull> registryHullMap_;
+
   WorldModel worldModel_;
   std::optional<uint32_t> playerPlatformId_;
 };

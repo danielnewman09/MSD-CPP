@@ -3,7 +3,7 @@
 
 #include <memory>
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
-#include "msd-sim/src/Physics/RigidBody/DynamicState.hpp"
+#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 
 namespace msd_sim
@@ -54,15 +54,11 @@ namespace msd_sim
 class AssetInertial : public AssetPhysical
 {
 public:
-  AssetInertial(std::shared_ptr<msd_assets::CollisionGeometry> geometry,
+  AssetInertial(uint32_t assetId,
+                uint32_t instanceId,
+                ConvexHull& hull,
                 double mass,
                 const ReferenceFrame& frame);
-
-  /**
-   * @brief Get the dynamic state (velocities and accelerations).
-   * @return Reference to the dynamic state
-   */
-  const DynamicState& getDynamicState() const;
 
   /**
    * @brief Get the dynamic state (mutable version).
@@ -72,23 +68,15 @@ public:
    *
    * @return Mutable reference to the dynamic state
    */
-  DynamicState& getDynamicState();
+  InertialState& getInertialState();
+
+  const InertialState& getInertialState() const;
 
   /**
    * @brief Get the current mass.
    * @return Mass in kilograms [kg]
    */
   double getMass() const;
-
-  /**
-   * @brief Get the total kinetic energy of this asset.
-   *
-   * Computes total KE = linear KE + rotational KE using mass, inertia,
-   * and current velocities.
-   *
-   * @return Total kinetic energy [J]
-   */
-  double getKineticEnergy() const;
 
   /**
    * @brief Get the inertia tensor about the centroid.
@@ -110,7 +98,7 @@ private:
   Coordinate centerOfMass_;               // Center of mass in local coordinates
 
   // Dynamic state (linear/angular velocity and acceleration)
-  DynamicState dynamicState_;
+  InertialState dynamicState_;
 };
 
 }  // namespace msd_sim

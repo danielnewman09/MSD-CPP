@@ -4,6 +4,7 @@ target_sources(${MSD_GUI_NAME} PRIVATE
   InputState.cpp
   InputHandler.cpp
   SDLApp.cpp
+  SDLGPUManager.cpp
   SDLUtils.cpp
   ShaderPolicy.cpp
 )
@@ -11,6 +12,7 @@ target_sources(${MSD_GUI_NAME} PRIVATE
 set(
     HEADER_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/Camera3D.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/GPUInstanceManager.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/InputState.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/InputHandler.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SDLApp.hpp

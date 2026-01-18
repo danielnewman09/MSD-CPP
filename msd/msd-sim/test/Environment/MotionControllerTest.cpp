@@ -12,9 +12,24 @@
 #include "msd-sim/src/Environment/MotionController.hpp"
 #include "msd-sim/src/Environment/Platform.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
+#include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 #include "msd-sim/src/Utils/utils.hpp"
 
 using namespace msd_sim;
+
+namespace
+{
+// Helper to create a minimal valid ConvexHull for Platform construction
+ConvexHull createTestHull()
+{
+  // Minimal tetrahedron for a valid 3D hull
+  std::vector<Coordinate> points = {Coordinate{0.0, 0.0, 0.0},
+                                    Coordinate{1.0, 0.0, 0.0},
+                                    Coordinate{0.5, 1.0, 0.0},
+                                    Coordinate{0.5, 0.5, 1.0}};
+  return ConvexHull{points};
+}
+}  // namespace
 
 // Motion controller uses float for move speed but double for delta time
 // calculations, which introduces minor floating point errors. Use a relaxed
@@ -388,7 +403,9 @@ TEST(MotionControllerTest, SetSensitivity_UpdatesSensitivity_ScalesMovement)
 
 TEST(MotionControllerTest, Platform_GetMotionController_ReturnsReference)
 {
-  Platform platform{0};
+  ConvexHull hull = createTestHull();
+  ReferenceFrame frame;
+  Platform platform{0, 0,0, hull, 1.0, frame};
   MotionController& controller = platform.getMotionController();
 
   // Verify we can modify through reference
@@ -400,7 +417,9 @@ TEST(MotionControllerTest, Platform_GetMotionController_ReturnsReference)
 TEST(MotionControllerTest,
      Platform_GetMotionController_ConstVersion_ReturnsConstReference)
 {
-  Platform platform{0};
+  ConvexHull hull = createTestHull();
+  ReferenceFrame frame;
+  Platform platform{0, 0,0, hull, 1.0, frame};
   const Platform& constPlatform = platform;
 
   const MotionController& controller = constPlatform.getMotionController();

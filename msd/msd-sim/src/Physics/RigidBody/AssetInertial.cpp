@@ -8,11 +8,12 @@
 namespace msd_sim
 {
 
-AssetInertial::AssetInertial(
-  std::shared_ptr<msd_assets::CollisionGeometry> geometry,
-  double mass,
-  const ReferenceFrame& frame)
-  : AssetPhysical{geometry, frame},
+AssetInertial::AssetInertial(uint32_t assetId,
+                             uint32_t instanceId,
+                             ConvexHull& hull,
+                             double mass,
+                             const ReferenceFrame& frame)
+  : AssetPhysical{assetId, instanceId, hull, frame},
     mass_{mass},
     inertiaTensor_{Eigen::Matrix3d::Zero()},
     inverseInertiaTensor_{Eigen::Matrix3d::Zero()},
@@ -33,30 +34,27 @@ AssetInertial::AssetInertial(
   inverseInertiaTensor_ = inertiaTensor_.inverse();
 }
 
-const DynamicState& AssetInertial::getDynamicState() const
-{
-  return dynamicState_;
-}
-
-DynamicState& AssetInertial::getDynamicState()
-{
-  return dynamicState_;
-}
-
 double AssetInertial::getMass() const
 {
   return mass_;
-}
-
-double AssetInertial::getKineticEnergy() const
-{
-  return dynamicState_.getTotalKineticEnergy(mass_, inertiaTensor_);
 }
 
 const Eigen::Matrix3d& AssetInertial::getInertiaTensor() const
 {
   return inertiaTensor_;
 }
+
+
+const InertialState& AssetInertial::getInertialState() const
+{
+  return dynamicState_;
+}
+
+InertialState& AssetInertial::getInertialState()
+{
+  return dynamicState_;
+}
+
 
 const Eigen::Matrix3d& AssetInertial::getInverseInertiaTensor() const
 {

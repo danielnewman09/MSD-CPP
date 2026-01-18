@@ -31,18 +31,18 @@ void AssetRegistry::loadFromDatabase()
     // Create Asset from ObjectRecord using factory method
     Asset asset = Asset::fromObjectRecord(objRecord, *database_);
 
-    // Cache the asset by name
-    assetCache_.emplace(objRecord.name, std::move(asset));
+    // Cache the asset by ID
+    assetCache_.emplace(objRecord.id, std::move(asset));
   }
 }
 
-std::optional<std::reference_wrapper<const Asset>>
-AssetRegistry::getAsset(const std::string& objectName)
+std::optional<std::reference_wrapper<const Asset>> AssetRegistry::getAsset(
+  uint32_t assetId)
 {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
   // Check if asset exists in cache
-  auto assetIt = assetCache_.find(objectName);
+  auto assetIt = assetCache_.find(assetId);
   if (assetIt != assetCache_.end())
   {
     return std::cref(assetIt->second);
@@ -52,12 +52,12 @@ AssetRegistry::getAsset(const std::string& objectName)
 }
 
 std::optional<std::reference_wrapper<const VisualGeometry>>
-AssetRegistry::loadVisualGeometry(const std::string& objectName)
+AssetRegistry::loadVisualGeometry(uint32_t assetId)
 {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
   // Find asset in cache
-  auto assetIt = assetCache_.find(objectName);
+  auto assetIt = assetCache_.find(assetId);
   if (assetIt == assetCache_.end())
   {
     return std::nullopt;  // Asset not found
@@ -68,12 +68,12 @@ AssetRegistry::loadVisualGeometry(const std::string& objectName)
 }
 
 std::optional<std::reference_wrapper<const CollisionGeometry>>
-AssetRegistry::loadCollisionGeometry(const std::string& objectName)
+AssetRegistry::loadCollisionGeometry(uint32_t assetId)
 {
   std::lock_guard<std::mutex> lock(cacheMutex_);
 
   // Find asset in cache
-  auto assetIt = assetCache_.find(objectName);
+  auto assetIt = assetCache_.find(assetId);
   if (assetIt == assetCache_.end())
   {
     return std::nullopt;  // Asset not found
@@ -90,10 +90,10 @@ size_t AssetRegistry::getCacheMemoryUsage() const
   size_t totalBytes = 0;
 
   // Calculate memory usage for all cached assets
-  for (const auto& [name, asset] : assetCache_)
+  for (const auto& [id, asset] : assetCache_)
   {
-    // Add string overhead for name
-    totalBytes += name.size();
+    // Add uint32_t overhead for id
+    totalBytes += sizeof(id);
 
     // Add visual geometry if present
     if (asset.hasVisualGeometry())
@@ -118,11 +118,16 @@ size_t AssetRegistry::getCacheMemoryUsage() const
     }
 
     // Add Asset object overhead (id, name, category strings)
-    totalBytes += asset.getName().size() + asset.getCategory().size() +
-                  sizeof(uint32_t);
+    totalBytes +=
+      asset.getName().size() + asset.getCategory().size() + sizeof(uint32_t);
   }
 
   return totalBytes;
+}
+
+const std::unordered_map<uint32_t, Asset>& AssetRegistry::getAssetCache() const
+{
+  return assetCache_;
 }
 
 

@@ -5,8 +5,8 @@
 // Previous tickets: 0002_remove_rotation_from_gpu, 0001_link-gui-sim-object
 
 #include "msd-gui/src/SDLApp.hpp"
-#include "msd-gui/src/SDLUtils.hpp"
 #include "msd-assets/src/GeometryFactory.hpp"
+#include "msd-gui/src/SDLUtils.hpp"
 
 #include <cstdlib>
 #include <format>
@@ -14,16 +14,13 @@
 #include <random>
 #include <vector>
 
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#include <emscripten/html5.h>
-#endif
-
 namespace msd_gui
 {
 
 SDLApplication::SDLApplication(const std::string& dbPath)
-  : engine_{dbPath}, status_{Status::Starting}, basePath_{SDL_GetBasePath() ? SDL_GetBasePath() : "/"}
+  : engine_{dbPath},
+    status_{Status::Starting},
+    basePath_{SDL_GetBasePath() ? SDL_GetBasePath() : "/"}
 {
   SDL_Log("SDLApplication: Starting initialization");
   SDL_Log("SDLApplication: dbPath = %s", dbPath.c_str());
@@ -43,11 +40,9 @@ SDLApplication::SDLApplication(const std::string& dbPath)
   // Create player platform with visual object
   // The camera will reference the visual object's ReferenceFrame
   playerPlatformId_ = engine_.spawnPlayerPlatform(
-    "cube",
-    msd_sim::Coordinate{0., 0., 5.},
-    msd_sim::EulerAngles{}
-  );
-  SDL_Log("SDLApplication: Player platform created with ID: %u", *playerPlatformId_);
+    "cube", msd_sim::Coordinate{0., 0., 5.}, msd_sim::EulerAngles{});
+  SDL_Log("SDLApplication: Player platform created with ID: %u",
+          *playerPlatformId_);
 
   // Get the player platform's visual object's ReferenceFrame for the camera
   auto& worldModel = engine_.getWorldModel();
@@ -55,9 +50,9 @@ SDLApplication::SDLApplication(const std::string& dbPath)
 
   for (auto& platform : worldModel.getPlatforms())
   {
-    if (platform.getId() == *playerPlatformId_ && platform.hasVisualObject())
+    if (platform.getId() == *playerPlatformId_)
     {
-      cameraFrame = &platform.getVisualObject().getTransform();
+      cameraFrame = &platform.getInertialAsset().getReferenceFrame();
       break;
     }
   }
@@ -69,8 +64,10 @@ SDLApplication::SDLApplication(const std::string& dbPath)
   }
 
   SDL_Log("SDLApplication: Creating GPUManager with camera frame...");
-  gpuManager_ = std::make_unique<AppGPUManager>(*window_, *cameraFrame, basePath_);
+  gpuManager_ = std::make_unique<GPUManager<InstanceDataType>>(
+    *window_, *cameraFrame, basePath_);
   SDL_Log("SDLApplication: GPUManager created successfully");
+
 
   // Initialize input system
   inputHandler_ = std::make_unique<InputHandler>();
@@ -78,51 +75,33 @@ SDLApplication::SDLApplication(const std::string& dbPath)
   // Setup input bindings
   setupInputBindings();
 
-  // Get assets from the registry (they should be loaded by the engine from the database)
-  auto& registry = engine_.getAssetRegistry();
-
-  auto pyramidAsset = registry.getAsset("pyramid");
-  if (pyramidAsset)
-  {
-    mockAssets_.push_back(pyramidAsset->get());
-  }
-  else
-  {
-    SDL_Log("WARNING: Pyramid asset not found in registry");
-  }
-
-  auto cubeAsset = registry.getAsset("cube");
-  if (cubeAsset)
-  {
-    mockAssets_.push_back(cubeAsset->get());
-  }
-  else
-  {
-    SDL_Log("WARNING: Cube asset not found in registry");
-  }
-
   // Initialize frame timing
   lastFrameTime_ = std::chrono::milliseconds{SDL_GetTicks()};
 
   status_ = Status::Running;
 }
 
+void SDLApplication::registerAssets()
+{
+  const auto& assetCache = engine_.getAssetRegistry().getAssetCache();
+
+  for (const auto& [name, asset] : assetCache)
+  {
+    if (asset.hasVisualGeometry())
+    {
+      gpuManager_->registerGeometry(
+        name, asset.getVisualGeometry()->get().getVertices());
+    }
+  }
+}
 
 int SDLApplication::runApp()
 {
   SDL_ShowWindow(window_.get());
 
-#ifdef __EMSCRIPTEN__
-  // Emscripten requires a callback-based main loop
-  // The third parameter (0) means use the browser's requestAnimationFrame
-  // The fourth parameter (true) means simulate an infinite loop
-  emscripten_set_main_loop_arg(
-    SDLApplication::emscriptenMainLoop,
-    this,
-    0,     // Use browser's requestAnimationFrame for timing
-    true   // Simulate infinite loop (function won't return)
-  );
-#else
+  // Register assets with GPU manager before rendering
+  registerAssets();
+
   // Native: blocking main loop
   while (status_ == Status::Running)
   {
@@ -132,37 +111,11 @@ int SDLApplication::runApp()
     lastFrameTime_ = currentTime;
 
     handleEvents();
-    gpuManager_->updateObjects(mockObjects_);
-    gpuManager_->render();
+    gpuManager_->update(engine_);
   }
-#endif
 
   return EXIT_SUCCESS;
 }
-
-#ifdef __EMSCRIPTEN__
-void SDLApplication::runFrame()
-{
-  handleEvents();
-  gpuManager_->updateObjects(mockObjects_);
-  gpuManager_->render();
-}
-
-void SDLApplication::emscriptenMainLoop(void* arg)
-{
-  auto* app = static_cast<SDLApplication*>(arg);
-
-  if (app->status_ == Status::Running)
-  {
-    app->runFrame();
-  }
-  else
-  {
-    emscripten_cancel_main_loop();
-  }
-}
-#endif
-
 
 SDLApplication::Status SDLApplication::getStatus() const
 {
@@ -172,42 +125,24 @@ SDLApplication::Status SDLApplication::getStatus() const
 void SDLApplication::setupInputBindings()
 {
   // Z key: Spawn pyramid (TriggerOnce mode)
-  inputHandler_->addBinding(InputBinding{
-    SDLK_Z,
-    InputMode::TriggerOnce,
-    [this]() { spawnRandomObject("pyramid"); }
-  });
+  inputHandler_->addBinding(InputBinding{SDLK_Z,
+                                         InputMode::TriggerOnce,
+                                         [this]()
+                                         { spawnRandomObject("pyramid"); }});
 
   // V key: Spawn cube (TriggerOnce mode)
   inputHandler_->addBinding(InputBinding{
-    SDLK_V,
-    InputMode::TriggerOnce,
-    [this]() { spawnRandomObject("cube"); }
-  });
-
-  // X key: Remove last object (TriggerOnce mode)
-  inputHandler_->addBinding(InputBinding{
-    SDLK_X,
-    InputMode::TriggerOnce,
-    [this]() {
-      if (!mockObjects_.empty())
-      {
-        mockObjects_.pop_back();
-        SDL_Log("Removed last object. Remaining objects: %zu",
-                mockObjects_.size());
-      }
-    }
-  });
+    SDLK_V, InputMode::TriggerOnce, [this]() { spawnRandomObject("cube"); }});
 
   // C key: Clear all objects (TriggerOnce mode)
-  inputHandler_->addBinding(InputBinding{
-    SDLK_C,
-    InputMode::TriggerOnce,
-    [this]() {
-      mockObjects_.clear();
-      SDL_Log("Cleared all objects");
-    }
-  });
+  inputHandler_->addBinding(
+    InputBinding{SDLK_C,
+                 InputMode::TriggerOnce,
+                 [this]()
+                 {
+                   engine_.getWorldModel().clearObjects();
+                   SDL_Log("Cleared all objects");
+                 }});
 }
 
 void SDLApplication::handleEvents()
@@ -263,26 +198,8 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
   static std::uniform_real_distribution<double> angleDist{-3.14159, 3.14159};
   static std::uniform_real_distribution<float> colorDist{0.0f, 1.0f};
 
-  // Find the asset
-  const msd_assets::Asset* asset = nullptr;
-  for (const auto& a : mockAssets_)
-  {
-    if (a.getName() == geometryType)
-    {
-      asset = &a;
-      break;
-    }
-  }
-
-  if (!asset)
-  {
-    SDL_Log("ERROR: Asset '%s' not found in mockAssets_", geometryType.c_str());
-    return;
-  }
-
   // Create random transform
-  msd_sim::Coordinate randomPos{
-    posDist(gen), posDist(gen), posDist(gen)};
+  msd_sim::Coordinate randomPos{posDist(gen), posDist(gen), posDist(gen)};
 
   msd_sim::EulerAngles randomOrientation{
     msd_sim::Angle::fromRadians(angleDist(gen)),  // pitch
@@ -290,16 +207,20 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
     msd_sim::Angle::fromRadians(angleDist(gen))   // yaw
   };
 
-  msd_sim::ReferenceFrame randomFrame{randomPos, randomOrientation};
-
   // Random color
   float r = colorDist(gen);
   float g = colorDist(gen);
   float b = colorDist(gen);
 
-  // Create graphical object
-  mockObjects_.push_back(
-    msd_sim::Object::createGraphical(*asset, randomFrame, r, g, b));
+  auto object =
+    engine_.spawnInertialObject(geometryType, randomPos, randomOrientation);
+  gpuManager_->getInstanceManager().addObject(gpuManager_->getDevice(),
+                                              gpuManager_->getInstanceBuffer(),
+                                              object,
+                                              gpuManager_->getGeometryIdMap(),
+                                              r,
+                                              g,
+                                              b);
 
   SDL_Log("Spawned %s at (%.2f, %.2f, %.2f) with orientation (%.2f, %.2f, "
           "%.2f) and color (%.2f, %.2f, %.2f). Total objects: %zu",
@@ -313,7 +234,7 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
           static_cast<double>(r),
           static_cast<double>(g),
           static_cast<double>(b),
-          mockObjects_.size());
+          engine_.getWorldModel().getInertialAssets().size());
 }
 
 

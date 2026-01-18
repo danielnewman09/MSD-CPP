@@ -5,59 +5,49 @@
 namespace msd_sim
 {
 
+
 // ========== Object Management ==========
 
-size_t WorldModel::spawnObject(Object&& object)
+const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
+                                             ConvexHull& hull,
+                                             const ReferenceFrame& origin)
 {
-  size_t index = objects_.size();
-  objects_.push_back(std::move(object));
-  rebuildIndexCaches();
-  return index;
+  auto instanceId = getInertialAssetId();
+  inertialAssets_.emplace_back(assetId, instanceId, hull, 1.0, origin);
+  return inertialAssets_.back();
 }
 
-const Object& WorldModel::getObject(size_t index) const
+const AssetInertial& WorldModel::getObject(uint32_t instanceId) const
 {
-  if (index >= objects_.size())
+  auto it = std::find_if(inertialAssets_.begin(),
+                         inertialAssets_.end(),
+                         [instanceId](const AssetInertial& asset)
+                         { return asset.getInstanceId() == instanceId; });
+  if (it == inertialAssets_.end())
   {
-    throw std::out_of_range(
-      "Object index out of range: " + std::to_string(index) +
-      " >= " + std::to_string(objects_.size()));
+    throw std::out_of_range("Object with instanceId not found: " +
+                            std::to_string(instanceId));
   }
-  return objects_[index];
+  return *it;
 }
 
-Object& WorldModel::getObject(size_t index)
+AssetInertial& WorldModel::getObject(uint32_t instanceId)
 {
-  if (index >= objects_.size())
+  auto it = std::find_if(inertialAssets_.begin(),
+                         inertialAssets_.end(),
+                         [instanceId](const AssetInertial& asset)
+                         { return asset.getInstanceId() == instanceId; });
+  if (it == inertialAssets_.end())
   {
-    throw std::out_of_range(
-      "Object index out of range: " + std::to_string(index) +
-      " >= " + std::to_string(objects_.size()));
+    throw std::out_of_range("Object with instanceId not found: " +
+                            std::to_string(instanceId));
   }
-  return objects_[index];
-}
-
-void WorldModel::removeObject(size_t index)
-{
-  if (index >= objects_.size())
-  {
-    throw std::out_of_range(
-      "Object index out of range: " + std::to_string(index) +
-      " >= " + std::to_string(objects_.size()));
-  }
-
-  objects_.erase(
-    objects_.begin() +
-    static_cast<std::vector<Object>::difference_type>(index));
-  rebuildIndexCaches();
+  return *it;
 }
 
 void WorldModel::clearObjects()
 {
-  objects_.clear();
-  physicsObjectIndices_.clear();
-  collisionObjectIndices_.clear();
-  renderObjectIndices_.clear();
+  inertialAssets_.clear();
 }
 
 // ========== Platform Management (Legacy) ==========
@@ -95,117 +85,20 @@ void WorldModel::update(std::chrono::milliseconds deltaTime)
 
 // ========== Private Methods ==========
 
-void WorldModel::updatePhysics(double dt)
+void WorldModel::updatePhysics(double /*dt*/)
 {
-  // Iterate only over objects with physics components
-  for (size_t idx : physicsObjectIndices_)
-  {
-    Object& obj = objects_[idx];
-    PhysicsComponent& physics = obj.getPhysics();
-    ReferenceFrame& transform = obj.getTransform();
-
-    // Get current state
-    DynamicState& state = physics.getDynamicState();
-
-    // Simple Euler integration (can be replaced with better integrator)
-    // Update velocity: v = v + a * dt
-    Coordinate newLinearVel =
-      state.getLinearVelocity() + state.getLinearAcceleration() * dt;
-    state.setLinearVelocity(newLinearVel);
-
-    Eigen::Vector3d newAngularVel =
-      state.getAngularVelocity() + state.getAngularAcceleration() * dt;
-    state.setAngularVelocity(newAngularVel);
-
-    // Update position: p = p + v * dt
-    Coordinate newPosition = transform.getOrigin() + newLinearVel * dt;
-    transform.setOrigin(newPosition);
-
-    // Update orientation using angular velocity
-    // For small dt, quaternion update: q = q + 0.5 * dt * ω * q
-    // This is a simplified rotation update - could use proper quaternion
-    // integration For now, we'll skip orientation integration and leave it for
-    // a more sophisticated integrator
-
-    // Clear forces for next frame (they'll be reapplied by force generators)
-    physics.clearForces();
-  }
+  // TODO: implement physics update
 }
 
 void WorldModel::updateCollisions()
 {
-  // Simple broad-phase: check all pairs of collision objects
-  // TODO: Implement spatial partitioning (octree, BVH, etc.) for better
-  // performance
-
-  const size_t numCollisionObjects = collisionObjectIndices_.size();
-
-  for (size_t i = 0; i < numCollisionObjects; ++i)
-  {
-    for (size_t j = i + 1; j < numCollisionObjects; ++j)
-    {
-      size_t idxA = collisionObjectIndices_[i];
-      size_t idxB = collisionObjectIndices_[j];
-
-      Object& objA = objects_[idxA];
-      Object& objB = objects_[idxB];
-
-      // Get collision hulls and transforms
-      const ConvexHull& hullA = objA.getCollisionHull();
-      const ConvexHull& hullB = objB.getCollisionHull();
-      // const ReferenceFrame& transformA = objA.getTransform();
-      // const ReferenceFrame& transformB = objB.getTransform();
-
-      // Broad-phase: Check bounding boxes first
-      // TODO: Implement proper AABB transformation and intersection test
-      // For now, we'll skip to narrow-phase
-
-      // Narrow-phase: GJK collision detection
-      bool collision = hullA.intersects(hullB);
-
-      if (collision)
-      {
-        // TODO: Implement collision response
-        // For now, just log the collision
-        std::cout << "Collision detected between object " << idxA
-                  << " and object " << idxB << std::endl;
-
-        // Future work:
-        // 1. Compute contact manifold (contact points, normal, penetration
-        // depth)
-        // 2. Apply impulse-based collision resolution
-        // 3. Update velocities of both objects (if they have physics
-        // components)
-      }
-    }
-  }
 }
 
-void WorldModel::rebuildIndexCaches()
+
+uint32_t WorldModel::getInertialAssetId()
 {
-  physicsObjectIndices_.clear();
-  collisionObjectIndices_.clear();
-  renderObjectIndices_.clear();
-
-  for (size_t i = 0; i < objects_.size(); ++i)
-  {
-    const Object& obj = objects_[i];
-
-    if (obj.hasPhysics())
-    {
-      physicsObjectIndices_.push_back(i);
-    }
-
-    if (obj.hasCollision())
-    {
-      collisionObjectIndices_.push_back(i);
-    }
-
-    if (obj.hasVisualGeometry())
-    {
-      renderObjectIndices_.push_back(i);
-    }
-  }
+  return ++inertialAssetIdCounter_;
 }
+
 
 }  // namespace msd_sim

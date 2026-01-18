@@ -3,8 +3,10 @@
 
 #include <chrono>
 #include <vector>
-#include "msd-sim/src/Environment/Object.hpp"
 #include "msd-sim/src/Environment/Platform.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
+
 
 namespace msd_sim
 {
@@ -56,29 +58,21 @@ public:
    * @param object Object to add (uses move semantics)
    * @return Index of added object
    */
-  size_t spawnObject(Object&& object);
-
-  /**
-   * @brief Get object by index (const)
-   * @throws std::out_of_range if index is invalid
-   */
-  const Object& getObject(size_t index) const;
-
-  /**
-   * @brief Get object by index (mutable)
-   * @throws std::out_of_range if index is invalid
-   */
-  Object& getObject(size_t index);
+  const AssetInertial& spawnObject(uint32_t assetId,
+                                   ConvexHull& hull,
+                                   const ReferenceFrame& origin);
 
   /**
    * @brief Get all objects (const)
    */
-  const std::vector<Object>& getObjects() const { return objects_; }
+  const std::vector<AssetInertial>& getInertialAssets() const
+  {
+    return inertialAssets_;
+  }
 
-  /**
-   * @brief Get all objects (mutable)
-   */
-  std::vector<Object>& getObjects() { return objects_; }
+  const AssetInertial& getObject(uint32_t instanceId) const;
+
+  AssetInertial& getObject(uint32_t instanceId);
 
   /**
    * @brief Remove object by index
@@ -89,12 +83,15 @@ public:
    * @param index Index of object to remove
    * @throws std::out_of_range if index is invalid
    */
-  void removeObject(size_t index);
+  void removeObject(uint32_t instanceId);
 
   /**
    * @brief Get object count
    */
-  size_t getObjectCount() const { return objects_.size(); }
+  size_t getObjectCount() const
+  {
+    return inertialAssets_.size();
+  }
 
   /**
    * @brief Clear all objects from the world
@@ -108,29 +105,9 @@ public:
    *
    * Use this for physics integration loops.
    */
-  const std::vector<size_t>& getPhysicsObjectIndices() const
+  const std::vector<AssetEnvironment>& getEnvironmentalObjects() const
   {
-    return physicsObjectIndices_;
-  }
-
-  /**
-   * @brief Get indices of all objects with collision hulls
-   *
-   * Use this for collision detection loops.
-   */
-  const std::vector<size_t>& getCollisionObjectIndices() const
-  {
-    return collisionObjectIndices_;
-  }
-
-  /**
-   * @brief Get indices of all objects with visual geometry
-   *
-   * Use this for rendering loops.
-   */
-  const std::vector<size_t>& getRenderObjectIndices() const
-  {
-    return renderObjectIndices_;
+    return environmentalAssets_;
   }
 
   // ========== Simulation Update ==========
@@ -151,7 +128,10 @@ public:
   /**
    * @brief Get current simulation time
    */
-  std::chrono::milliseconds getTime() const { return time_; }
+  std::chrono::milliseconds getTime() const
+  {
+    return time_;
+  }
 
   // ========== Platform Management (Legacy) ==========
 
@@ -164,20 +144,35 @@ public:
   /**
    * @brief Get all platforms (const)
    */
-  const std::vector<Platform>& getPlatforms() const { return platforms_; }
+  const std::vector<Platform>& getPlatforms() const
+  {
+    return platforms_;
+  }
 
   /**
    * @brief Get all platforms (mutable)
    *
    * Allows modification of platforms for input command updates.
    */
-  std::vector<Platform>& getPlatforms() { return platforms_; }
+  std::vector<Platform>& getPlatforms()
+  {
+    return platforms_;
+  }
 
   /**
    * @brief Get next platform ID
    * @return Next available platform ID
    */
-  uint32_t getNextPlatformId() const { return nextPlatformId_++; }
+  uint32_t getNextPlatformId() const
+  {
+    return nextPlatformId_++;
+  }
+
+  /**
+   * Retrieve the next inertial asset id and increment the counter
+   */
+  uint32_t getInertialAssetId();
+
 
 private:
   // ========== Internal Update Methods ==========
@@ -193,21 +188,19 @@ private:
    */
   void updateCollisions();
 
-  /**
-   * @brief Rebuild index caches for efficient iteration
-   *
-   * Call this after adding or removing objects.
-   */
-  void rebuildIndexCaches();
 
   // ========== Data ==========
 
-  std::vector<Object> objects_;
 
-  // Cached indices for efficient iteration
-  std::vector<size_t> physicsObjectIndices_;   // Objects with PhysicsComponent
-  std::vector<size_t> collisionObjectIndices_; // Objects with ConvexHull
-  std::vector<size_t> renderObjectIndices_;    // Objects with visual geometry
+  // Physical assets are those that are "dumb" objects which are
+  // affected by physics, but do not have any intelligence
+  // e.g. a ball that bounces around
+  std::vector<AssetInertial> inertialAssets_;
+
+  // Environmental assets are those that are immovable, but
+  // still affect other assets that interact with them.
+  // e.g. a floor that a bounces off of
+  std::vector<AssetEnvironment> environmentalAssets_;
 
   // Legacy platform support
   std::vector<Platform> platforms_;
@@ -215,6 +208,8 @@ private:
 
   // Current simulation time
   std::chrono::milliseconds time_{0};
+
+  uint32_t inertialAssetIdCounter_{0};
 };
 
 }  // namespace msd_sim

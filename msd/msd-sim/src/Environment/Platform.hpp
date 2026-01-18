@@ -12,8 +12,8 @@
 #include <memory>
 #include <optional>
 #include "msd-sim/src/Agent/BaseAgent.hpp"
-#include "msd-sim/src/Environment/InertialState.hpp"
 #include "msd-sim/src/Environment/MotionController.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 
 namespace msd_sim
 {
@@ -35,16 +35,12 @@ class Object;
 class Platform
 {
 public:
-  explicit Platform(uint32_t id);
-  ~Platform();
-
-  // Delete copy (unique_ptr member)
-  Platform(const Platform&) = delete;
-  Platform& operator=(const Platform&) = delete;
-
-  // Enable move
-  Platform(Platform&&) noexcept = default;
-  Platform& operator=(Platform&&) noexcept = default;
+  explicit Platform(uint32_t platformId,
+                    uint32_t assetInstanceId,
+                    uint32_t assetId,
+                    ConvexHull& hull,
+                    double mass,
+                    const ReferenceFrame& frame);
 
   /*!
    * \brief Update the platform state via agent and sync visual object
@@ -61,55 +57,55 @@ public:
    * @brief Set the agent controlling this platform
    * @param agent Unique pointer to agent (transfers ownership)
    */
-  void setAgent(std::unique_ptr<BaseAgent> agent) { agent_ = std::move(agent); }
+  void setAgent(std::unique_ptr<BaseAgent> agent)
+  {
+    agent_ = std::move(agent);
+  }
 
   /**
    * @brief Get mutable agent pointer
    * @return Pointer to agent (nullptr if no agent)
    */
-  BaseAgent* getAgent() { return agent_.get(); }
+  BaseAgent* getAgent()
+  {
+    return agent_.get();
+  }
 
   /**
    * @brief Get const agent pointer
    * @return Pointer to agent (nullptr if no agent)
    */
-  const BaseAgent* getAgent() const { return agent_.get(); }
+  const BaseAgent* getAgent() const
+  {
+    return agent_.get();
+  }
 
   /**
    * @brief Check if platform has an agent
    * @return True if agent is present
    */
-  bool hasAgent() const { return agent_ != nullptr; }
+  bool hasAgent() const
+  {
+    return agent_ != nullptr;
+  }
 
   // ========== Visual Object Linking ==========
-
-  /**
-   * @brief Link platform to a visual object in WorldModel
-   * @param object Object reference (non-owning)
-   *
-   * When linked, platform synchronizes object position/rotation during update().
-   */
-  void setVisualObject(Object& object) { visualObject_ = object; }
-
-  /**
-   * @brief Check if platform has a linked visual object
-   * @return True if visual object is linked
-   */
-  bool hasVisualObject() const { return visualObject_.has_value(); }
-
-  /**
-   * @brief Get mutable visual object reference
-   * @return Reference to linked object
-   * @throws std::bad_optional_access if no visual object linked
-   */
-  Object& getVisualObject() { return visualObject_->get(); }
 
   /**
    * @brief Get const visual object reference
    * @return Const reference to linked object
    * @throws std::bad_optional_access if no visual object linked
    */
-  const Object& getVisualObject() const { return visualObject_->get(); }
+  const AssetInertial& getInertialAsset() const
+  {
+    return inertialAsset_;
+  }
+
+  AssetInertial& getInertialAsset()
+  {
+    return inertialAsset_;
+  }
+
 
   // ========== State Access ==========
 
@@ -117,19 +113,28 @@ public:
    * @brief Get const state reference
    * @return Const reference to inertial state
    */
-  const InertialState& getState() const { return state_; }
+  const InertialState& getState() const
+  {
+    return inertialAsset_.getInertialState();
+  }
 
   /**
    * @brief Get mutable state reference
    * @return Mutable reference to inertial state
    */
-  InertialState& getState() { return state_; }
+  InertialState& getState()
+  {
+    return inertialAsset_.getInertialState();
+  }
 
   /**
    * @brief Get platform ID
    * @return Unique platform identifier
    */
-  uint32_t getId() const { return id_; }
+  uint32_t getId() const
+  {
+    return id_;
+  }
 
   // ========== Motion Control ==========
 
@@ -140,35 +145,35 @@ public:
    * Provides access to motion controller for updating transform based on input.
    * Typically used by Engine to forward player input commands.
    */
-  MotionController& getMotionController() { return motionController_; }
+  MotionController& getMotionController()
+  {
+    return motionController_;
+  }
 
   /**
    * @brief Get const motion controller reference
    * @return Const reference to motion controller
    */
-  const MotionController& getMotionController() const { return motionController_; }
+  const MotionController& getMotionController() const
+  {
+    return motionController_;
+  }
 
 private:
   //! Platform ID
   uint32_t id_;
 
-  //! State of the platform
-  InertialState state_;
-
   //! Agent controlling the platform
   std::unique_ptr<BaseAgent> agent_;
 
   //! Optional reference to visual object in WorldModel
-  std::optional<std::reference_wrapper<Object>> visualObject_;
+  AssetInertial inertialAsset_;
 
   //! Last update time
   std::chrono::milliseconds lastUpdateTime_;
 
   //! Motion controller for transform updates
   MotionController motionController_;
-
-  //! Sensor attached to the platform
-  // Sensor sensor_;
 };
 
 }  // namespace msd_sim
