@@ -204,18 +204,6 @@ public:
    */
   bool isValid() const;
 
-  /**
-   * @brief Test if this hull intersects with another using GJK algorithm.
-   *
-   * Uses the Gilbert-Johnson-Keerthi (GJK) algorithm to efficiently detect
-   * intersection between two convex hulls. This is typically faster than
-   * brute-force vertex containment tests and works in all cases.
-   *
-   * @param other The other convex hull to test against
-   * @param epsilon Numerical tolerance for termination (default: 1e-6)
-   * @return true if the hulls intersect, false otherwise
-   */
-  bool intersects(const ConvexHull& other, double epsilon = 1e-6) const;
 
 private:
   std::vector<Coordinate> vertices_;  // Hull boundary vertices
@@ -296,14 +284,24 @@ private:
       volume_ = qh->totvol;
       surfaceArea_ = qh->totarea;
 
-      // Extract bounding box from Qhull
-      boundingBoxMin_ =
-        Coordinate{qh->lower_bound[0], qh->lower_bound[1], qh->lower_bound[2]};
-      boundingBoxMax_ =
-        Coordinate{qh->upper_bound[0], qh->upper_bound[1], qh->upper_bound[2]};
-
-      // Extract hull data
+      // Extract hull data (vertices and facets)
       extractHullData(qh);
+
+      // Compute bounding box from extracted vertices
+      if (!vertices_.empty())
+      {
+        boundingBoxMin_ = vertices_[0];
+        boundingBoxMax_ = vertices_[0];
+        for (const auto& v : vertices_)
+        {
+          boundingBoxMin_ = Coordinate{std::min(boundingBoxMin_.x(), v.x()),
+                                       std::min(boundingBoxMin_.y(), v.y()),
+                                       std::min(boundingBoxMin_.z(), v.z())};
+          boundingBoxMax_ = Coordinate{std::max(boundingBoxMax_.x(), v.x()),
+                                       std::max(boundingBoxMax_.y(), v.y()),
+                                       std::max(boundingBoxMax_.z(), v.z())};
+        }
+      }
 
       // Clean up Qhull
       int curlong, totlong;

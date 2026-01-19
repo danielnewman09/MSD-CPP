@@ -124,11 +124,6 @@ bool ConvexHull::isValid() const
   return !vertices_.empty() && !facets_.empty();
 }
 
-bool ConvexHull::intersects(const ConvexHull& other, double epsilon) const
-{
-  return gjkIntersects(*this, other, epsilon);
-}
-
 // computeHull is now a template defined in the header file
 
 void ConvexHull::extractHullData(qhT* qh)

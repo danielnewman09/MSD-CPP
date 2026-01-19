@@ -1,3 +1,6 @@
+// Ticket: 0022_gjk_asset_physical_transform
+// Design: docs/designs/0022_gjk_asset_physical_transform/design.md
+
 #include "msd-sim/src/Physics/GJK.hpp"
 #include <algorithm>
 #include <limits>
@@ -8,9 +11,11 @@ namespace msd_sim
 
 // GJK class implementation
 
-GJK::GJK(const ConvexHull& hullA, const ConvexHull& hullB, double epsilon)
-  : hullA_{hullA},
-    hullB_{hullB},
+GJK::GJK(const AssetPhysical& assetA,
+         const AssetPhysical& assetB,
+         double epsilon)
+  : assetA_{assetA},
+    assetB_{assetB},
     epsilon_{epsilon},
     simplex_{},
     direction_{0.0, 0.0, 0.0}
@@ -19,19 +24,53 @@ GJK::GJK(const ConvexHull& hullA, const ConvexHull& hullB, double epsilon)
 
 bool GJK::intersects(int maxIterations)
 {
-  // Quick bounding box check first (cheap early-out)
-  auto bboxA = hullA_.getBoundingBox();
-  auto bboxB = hullB_.getBoundingBox();
+  // Get collision hulls from assets
+  const ConvexHull& hullA = assetA_.getCollisionHull();
+  const ConvexHull& hullB = assetB_.getCollisionHull();
 
-  if (bboxA.max.x() < bboxB.min.x() || bboxA.min.x() > bboxB.max.x() ||
-      bboxA.max.y() < bboxB.min.y() || bboxA.min.y() > bboxB.max.y() ||
-      bboxA.max.z() < bboxB.min.z() || bboxA.min.z() > bboxB.max.z())
+  // Get reference frames for transformation
+  const ReferenceFrame& frameA = assetA_.getReferenceFrame();
+  const ReferenceFrame& frameB = assetB_.getReferenceFrame();
+
+  // Quick bounding box check first (cheap early-out)
+  // Transform bounding boxes to world space before comparison
+  auto bboxA_local = hullA.getBoundingBox();
+  auto bboxB_local = hullB.getBoundingBox();
+
+  // Transform bounding box corners to world space
+  Coordinate bboxA_min_world = frameA.localToGlobalAbsolute(bboxA_local.min);
+  Coordinate bboxA_max_world = frameA.localToGlobalAbsolute(bboxA_local.max);
+  Coordinate bboxB_min_world = frameB.localToGlobalAbsolute(bboxB_local.min);
+  Coordinate bboxB_max_world = frameB.localToGlobalAbsolute(bboxB_local.max);
+
+  // Recompute axis-aligned bounding box in world space
+  // (rotation may change which corners are min/max)
+  auto recomputeAABB = [](const Coordinate& c1, const Coordinate& c2)
+  {
+    return std::make_pair(Coordinate{std::min(c1.x(), c2.x()),
+                                     std::min(c1.y(), c2.y()),
+                                     std::min(c1.z(), c2.z())},
+                          Coordinate{std::max(c1.x(), c2.x()),
+                                     std::max(c1.y(), c2.y()),
+                                     std::max(c1.z(), c2.z())});
+  };
+
+  auto [bboxA_min, bboxA_max] = recomputeAABB(bboxA_min_world, bboxA_max_world);
+  auto [bboxB_min, bboxB_max] = recomputeAABB(bboxB_min_world, bboxB_max_world);
+
+  if (bboxA_max.x() < bboxB_min.x() || bboxA_min.x() > bboxB_max.x() ||
+      bboxA_max.y() < bboxB_min.y() || bboxA_min.y() > bboxB_max.y() ||
+      bboxA_max.z() < bboxB_min.z() || bboxA_min.z() > bboxB_max.z())
   {
     return false;  // Bounding boxes don't overlap
   }
 
-  // Initialize: pick initial search direction (from A toward B)
-  direction_ = hullB_.getCentroid() - hullA_.getCentroid();
+  // Initialize: pick initial search direction (from A toward B in world space)
+  Coordinate centroidA_world =
+    frameA.localToGlobalAbsolute(hullA.getCentroid());
+  Coordinate centroidB_world =
+    frameB.localToGlobalAbsolute(hullB.getCentroid());
+  direction_ = centroidB_world - centroidA_world;
 
   // Handle edge case where centroids are identical
   if (direction_.norm() < epsilon_)
@@ -104,7 +143,30 @@ Coordinate GJK::support(const ConvexHull& hull, const Coordinate& dir) const
 
 Coordinate GJK::supportMinkowski(const Coordinate& dir) const
 {
-  return support(hullA_, dir) - support(hullB_, -dir);
+  // Get collision hulls and reference frames from assets
+  const ConvexHull& hullA = assetA_.getCollisionHull();
+  const ConvexHull& hullB = assetB_.getCollisionHull();
+  const ReferenceFrame& frameA = assetA_.getReferenceFrame();
+  const ReferenceFrame& frameB = assetB_.getReferenceFrame();
+
+  // Transform search direction from world space to local space for asset A
+  // (rotation only - direction vectors don't translate)
+  Coordinate dirA_local = frameA.globalToLocalRelative(dir);
+
+  // Get support vertex in local space for asset A
+  Coordinate supportA_local = support(hullA, dirA_local);
+
+  // Transform support vertex from local space to world space
+  // (rotation + translation - positions transform fully)
+  Coordinate supportA_world = frameA.localToGlobalAbsolute(supportA_local);
+
+  // Same process for asset B with negated direction
+  Coordinate dirB_local = frameB.globalToLocalRelative(-dir);
+  Coordinate supportB_local = support(hullB, dirB_local);
+  Coordinate supportB_world = frameB.localToGlobalAbsolute(supportB_local);
+
+  // Return Minkowski difference in world space
+  return supportA_world - supportB_world;
 }
 
 bool GJK::updateSimplex()
@@ -247,12 +309,12 @@ bool GJK::sameDirection(const Coordinate& direction, const Coordinate& ao)
 
 // Convenience function implementation
 
-bool gjkIntersects(const ConvexHull& hullA,
-                   const ConvexHull& hullB,
+bool gjkIntersects(const AssetPhysical& assetA,
+                   const AssetPhysical& assetB,
                    double epsilon,
                    int maxIterations)
 {
-  GJK gjk{hullA, hullB, epsilon};
+  GJK gjk{assetA, assetB, epsilon};
   return gjk.intersects(maxIterations);
 }
 

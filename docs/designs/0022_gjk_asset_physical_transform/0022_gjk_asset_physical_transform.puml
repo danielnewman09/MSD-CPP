@@ -1,0 +1,120 @@
+@startuml 0022_gjk_asset_physical_transform
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+' Modified GJK class to support AssetPhysical transformations
+class GJK <<modified>> {
+    ' New members (replacing old ConvexHull references)
+    -assetA_: const AssetPhysical&
+    -assetB_: const AssetPhysical&
+    -epsilon_: double
+    -simplex_: std::vector<Coordinate>
+    -direction_: Coordinate
+
+    ' Existing constructors (REMOVE)
+    +GJK(hullA: const ConvexHull&, hullB: const ConvexHull&, epsilon: double = 1e-6)
+
+    ' New constructor for transformed collision detection
+    +GJK(assetA: const AssetPhysical&, assetB: const AssetPhysical&, epsilon: double = 1e-6)
+    
+    ' Existing methods (unchanged)
+    +intersects(maxIterations: int = 64): bool
+
+    ' Modified private methods
+    -support(hull: const ConvexHull&, dir: const Coordinate&): Coordinate
+    -support(hull: const ConvexHull&, frame: const ReferenceFrame*, dir: const Coordinate&): Coordinate
+    -supportMinkowski(dir: const Coordinate&): Coordinate
+    -updateSimplex(): bool
+    -handleLine(): bool
+    -handleTriangle(): bool
+    -handleTetrahedron(): bool
+    +sameDirection(direction: const Coordinate&, ao: const Coordinate&): bool
+}
+
+' Modified ConvexHull to expose vertex data
+class ConvexHull <<modified>> {
+    -vertices_: std::vector<Coordinate>
+    -facets_: std::vector<Facet>
+    -volume_: double
+    -surfaceArea_: double
+    -boundingBoxMin_: Coordinate
+    -boundingBoxMax_: Coordinate
+    -centroid_: Coordinate
+
+    ' Existing interface
+    +ConvexHull()
+    +ConvexHull(points: const std::vector<VectorType>&)
+    +ConvexHull(geometry: const msd_assets::CollisionGeometry&)
+    +getVertices(): const std::vector<Coordinate>&
+    +getFacets(): const std::vector<Facet>&
+    +getVolume(): double
+    +getSurfaceArea(): double
+    +getCentroid(): Coordinate
+    +getBoundingBox(): BoundingBox
+    +contains(point: const Coordinate&, epsilon: double = 1e-6): bool
+    +signedDistance(point: const Coordinate&): double
+
+    ' Remove old intersection function
+    +intersects(other: const ConvexHull&, epsilon: double = 1e-6): bool
+}
+
+' AssetPhysical class (existing, shown for context)
+class AssetPhysical {
+    -referenceAssetId_: uint32_t
+    -instanceId_: uint32_t
+    -collisionHull_: const ConvexHull&
+    -referenceFrame_: ReferenceFrame
+
+    +AssetPhysical(assetId: uint32_t, instanceId: uint32_t, hull: ConvexHull&, frame: const ReferenceFrame&)
+    +getCollisionHull(): const ConvexHull&
+    +getReferenceFrame(): const ReferenceFrame&
+    +getReferenceFrame(): ReferenceFrame&
+}
+
+' ReferenceFrame class (existing, shown for context)
+class ReferenceFrame {
+    -origin_: Coordinate
+    -euler_: EulerAngles
+    -rotation_: Eigen::Matrix3d
+    -updated_: bool
+
+    +ReferenceFrame()
+    +ReferenceFrame(origin: const Coordinate&)
+    +ReferenceFrame(origin: const Coordinate&, euler: const EulerAngles&)
+    +localToGlobal(localCoord: const Coordinate&): Coordinate
+    +globalToLocal(globalCoord: const Coordinate&): Coordinate
+    +localToGlobalRelative(localVector: const Coordinate&): Coordinate
+    +globalToLocalRelative(globalVector: const Coordinate&): Coordinate
+}
+
+' New convenience functions
+class "Free Functions" <<new>> {
+    +gjkIntersects(assetA: const AssetPhysical&, assetB: const AssetPhysical&, epsilon: double = 1e-6, maxIterations: int = 64): bool
+}
+
+' Relationships
+GJK --> ConvexHull : uses for collision geometry
+GJK --> AssetPhysical : uses for transformed collision
+GJK --> ReferenceFrame : uses for transformation
+AssetPhysical --> ConvexHull : contains (non-owning reference)
+AssetPhysical --> ReferenceFrame : contains (owned)
+
+note right of GJK
+  Key transformation strategy:
+  1. Store AssetPhysical references directly
+  2. Access ReferenceFrame via AssetPhysical
+  3. Transform search direction from world to local space
+  4. Get support vertex in local space
+  5. Transform support vertex from local to world space
+  6. Continue GJK algorithm in world space
+end note
+
+note right of "Free Functions"
+  Convenience function provides
+  simple one-shot collision testing
+  for AssetPhysical objects
+end note
+
+@enduml

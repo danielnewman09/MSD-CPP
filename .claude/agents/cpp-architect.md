@@ -80,7 +80,15 @@ ExistingClass --> NewComponent : creates
 @enduml
 ```
 
-### 3. Create Design Document
+### 3. Sanity Check Constraints
+Before finalizing, review the "Design Complexity Sanity Checks" section below. If backward compatibility or other constraints are leading to:
+- 3+ function overloads for type combinations
+- Optional wrapper types for legacy paths
+- More modified components than new components
+
+**STOP** and ask the human whether the constraint is firm or if a simpler breaking change is acceptable.
+
+### 4. Create Design Document
 Create at `docs/designs/{feature-name}/design.md` with this structure:
 
 ```markdown
@@ -188,6 +196,77 @@ When designing interfaces, follow these project conventions:
 - Prefer returning values over output parameters
 - Use return structs for multiple values
 - Use `std::optional<std::reference_wrapper<const T>>` only for truly optional lookups
+
+## Design Complexity Sanity Checks
+
+Before finalizing a design, evaluate whether constraints (especially backward compatibility) are leading to unnecessary complexity. The following patterns are **red flags** that should trigger a pause and human consultation:
+
+### Red Flag 1: Combinatorial Overloads
+**Pattern**: Creating N² function overloads to handle N input types.
+
+Example of problematic design:
+```cpp
+// 4 overloads for 2 types = complexity explosion
+GJK(const ConvexHull&, const ConvexHull&);
+GJK(const AssetPhysical&, const AssetPhysical&);
+GJK(const ConvexHull&, const AssetPhysical&);
+GJK(const AssetPhysical&, const ConvexHull&);
+```
+
+**When to flag**: If you're creating 3+ similar function signatures to accommodate different type combinations, STOP and ask the human:
+> "Maintaining backward compatibility requires N overloads. Would a breaking change with migration guidance be simpler?"
+
+### Red Flag 2: Optional Wrappers for Legacy Paths
+**Pattern**: Using `std::optional<T>` or nullable types to accommodate "sometimes transformed, sometimes not" scenarios.
+
+Example of problematic design:
+```cpp
+// Optional wrapper to handle "maybe has transform" case
+std::optional<std::reference_wrapper<const ReferenceFrame>> frameA_;
+std::optional<std::reference_wrapper<const ReferenceFrame>> frameB_;
+```
+
+**When to flag**: If you're adding optional members or parameters specifically to preserve an old code path alongside a new one, STOP and ask:
+> "This design uses optional wrappers to support both old and new interfaces. Should the old interface simply be removed?"
+
+### Red Flag 3: Modified Components Outnumber New Components
+**Pattern**: The "Modified Components" section is larger than the "New Components" section, suggesting the design is primarily about preserving old behavior rather than adding new capability.
+
+**When to flag**: If backward compatibility modifications dominate the design, question whether the constraint is appropriate.
+
+### Red Flag 4: Conditional Logic Explosion
+**Pattern**: Design requires numerous `if (hasTransform)` or `if (legacyMode)` branches throughout the codebase.
+
+**When to flag**: If the implementation will need >2 conditional branches to handle old vs. new paths, prefer a clean break.
+
+### How to Handle Red Flags
+
+When you detect a red flag:
+
+1. **Document the trade-off** in the "Open Questions" section:
+   ```markdown
+   ### Design Decisions (Human Input Needed)
+
+   1. **Backward Compatibility vs. Simplicity Trade-off**
+      - Option A: Maintain backward compatibility — Requires 4 overloads, optional wrapper types, increased test surface
+      - Option B: Breaking change — Single clean interface, migration guide for existing code
+      - Recommendation: Option B unless there are external consumers we cannot update
+   ```
+
+2. **Explicitly ask the human** before proceeding with the complex design:
+   > "The backward compatibility constraint leads to [specific complexity]. Is this constraint firm, or would you prefer a simpler breaking change?"
+
+3. **Never assume** backward compatibility is more important than simplicity. The human may not have considered the complexity cost when setting the constraint.
+
+### Exception: Genuine External Constraints
+The only time to accept complexity without question is when there are genuine external constraints:
+- Public API consumed by external users who cannot be updated
+- Binary compatibility requirements
+- Regulatory or contractual obligations
+
+If none of these apply, always question constraints that lead to red flag patterns.
+
+---
 
 ## Code Quality Gates Awareness
 

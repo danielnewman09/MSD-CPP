@@ -5,6 +5,9 @@
 #include <random>
 #include <vector>
 #include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/Environment/ReferenceFrame.hpp"
+#include "msd-sim/src/Physics/GJK.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 
 using namespace msd_sim;
@@ -13,25 +16,33 @@ using namespace msd_sim;
 // Helper Functions
 // ============================================================================
 
-namespace {
+namespace
+{
 
 // Create a simple cube as a point cloud
-std::vector<Coordinate> createCubePoints(double size) {
+std::vector<Coordinate> createCubePoints(double size)
+{
   double half = size / 2.0;
-  return {Coordinate(-half, -half, -half), Coordinate(half, -half, -half),
-          Coordinate(half, half, -half),   Coordinate(-half, half, -half),
-          Coordinate(-half, -half, half),  Coordinate(half, -half, half),
-          Coordinate(half, half, half),    Coordinate(-half, half, half)};
+  return {Coordinate(-half, -half, -half),
+          Coordinate(half, -half, -half),
+          Coordinate(half, half, -half),
+          Coordinate(-half, half, -half),
+          Coordinate(-half, -half, half),
+          Coordinate(half, -half, half),
+          Coordinate(half, half, half),
+          Coordinate(-half, half, half)};
 }
 
 // Generate random point cloud with fixed seed for reproducibility
-std::vector<Coordinate> generateRandomPointCloud(size_t count) {
+std::vector<Coordinate> generateRandomPointCloud(size_t count)
+{
   static std::mt19937 rng{42};  // Fixed seed for deterministic benchmarks
   std::uniform_real_distribution<double> dist{-10.0, 10.0};
 
   std::vector<Coordinate> points;
   points.reserve(count);
-  for (size_t i = 0; i < count; ++i) {
+  for (size_t i = 0; i < count; ++i)
+  {
     points.emplace_back(dist(rng), dist(rng), dist(rng));
   }
   return points;
@@ -52,20 +63,22 @@ std::vector<Coordinate> generateRandomPointCloud(size_t count) {
  *
  * @ticket 0011_add_google_benchmark
  */
-static void BM_ConvexHull_Construction(benchmark::State& state) {
+static void BM_ConvexHull_Construction(benchmark::State& state)
+{
   auto points = generateRandomPointCloud(static_cast<size_t>(state.range(0)));
-  for (auto _ : state) {
+  for (auto _ : state)
+  {
     ConvexHull hull{points};
     benchmark::DoNotOptimize(hull);
   }
   state.SetComplexityN(state.range(0));
 }
 BENCHMARK(BM_ConvexHull_Construction)
-    ->Args({8})     // Cube (minimum convex hull)
-    ->Args({64})    // Small collision mesh
-    ->Args({512})   // Medium complexity mesh
-    ->Args({4096})  // High-detail collision geometry
-    ->Complexity();
+  ->Args({8})     // Cube (minimum convex hull)
+  ->Args({64})    // Small collision mesh
+  ->Args({512})   // Medium complexity mesh
+  ->Args({4096})  // High-detail collision geometry
+  ->Complexity();
 
 /**
  * @brief Benchmark point containment queries
@@ -76,10 +89,12 @@ BENCHMARK(BM_ConvexHull_Construction)
  *
  * @ticket 0011_add_google_benchmark
  */
-static void BM_ConvexHull_Contains(benchmark::State& state) {
+static void BM_ConvexHull_Contains(benchmark::State& state)
+{
   auto hull = ConvexHull{createCubePoints(2.0)};
   Coordinate testPoint{0.5, 0.5, 0.5};  // Interior point
-  for (auto _ : state) {
+  for (auto _ : state)
+  {
     bool result = hull.contains(testPoint);
     benchmark::DoNotOptimize(result);
   }
@@ -95,10 +110,12 @@ BENCHMARK(BM_ConvexHull_Contains);
  *
  * @ticket 0011_add_google_benchmark
  */
-static void BM_ConvexHull_SignedDistance(benchmark::State& state) {
+static void BM_ConvexHull_SignedDistance(benchmark::State& state)
+{
   auto hull = ConvexHull{createCubePoints(2.0)};
   Coordinate testPoint{3.0, 0.0, 0.0};  // Exterior point
-  for (auto _ : state) {
+  for (auto _ : state)
+  {
     double distance = hull.signedDistance(testPoint);
     benchmark::DoNotOptimize(distance);
   }
@@ -109,16 +126,22 @@ BENCHMARK(BM_ConvexHull_SignedDistance);
  * @brief Benchmark GJK intersection tests
  *
  * GJK-based intersection testing is the core of collision detection. This
- * benchmark measures the performance of the intersects() method with two
- * overlapping convex hulls.
+ * benchmark measures the performance of gjkIntersects() with two overlapping
+ * AssetPhysical objects using identity transforms.
  *
  * @ticket 0011_add_google_benchmark
+ * @ticket 0022_gjk_asset_physical_transform
  */
-static void BM_ConvexHull_Intersects(benchmark::State& state) {
+static void BM_ConvexHull_Intersects(benchmark::State& state)
+{
   auto hullA = ConvexHull{createCubePoints(2.0)};
   auto hullB = ConvexHull{createCubePoints(1.0)};  // Overlapping cube
-  for (auto _ : state) {
-    bool result = hullA.intersects(hullB);
+  ReferenceFrame identityFrame{};
+  AssetPhysical assetA{0, 0, hullA, identityFrame};
+  AssetPhysical assetB{0, 1, hullB, identityFrame};
+  for (auto _ : state)
+  {
+    bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
 }

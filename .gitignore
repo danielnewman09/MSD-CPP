@@ -1,5 +1,5 @@
-build/*
-CMakeFiles/*
+**/build/**
+**/CMakeFiles/**
 CMakeCache.txt
 CMakeUserPresets.json
 src/msd-db/src/Database.cpp
@@ -9,3 +9,5 @@ installs/*
 *.db
 benchmark_results/
 profile_results/
+**/.cache/**
+**/.cmake/**

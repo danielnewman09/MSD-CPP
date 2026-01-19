@@ -1,0 +1,116 @@
+@startuml gjk-asset-physical
+' GJK collision detection with AssetPhysical transformation support
+' Feature: 0022_gjk_asset_physical_transform
+
+' GJK class with AssetPhysical support
+class GJK {
+    -assetA_: const AssetPhysical&
+    -assetB_: const AssetPhysical&
+    -epsilon_: double
+    -simplex_: std::vector<Coordinate>
+    -direction_: Coordinate
+
+    +GJK(assetA: const AssetPhysical&, assetB: const AssetPhysical&, epsilon: double = 1e-6)
+    +intersects(maxIterations: int = 64): bool
+
+    -support(hull: const ConvexHull&, dir: const Coordinate&): Coordinate
+    -supportMinkowski(dir: const Coordinate&): Coordinate
+    -updateSimplex(): bool
+    -handleLine(): bool
+    -handleTriangle(): bool
+    -handleTetrahedron(): bool
+    +sameDirection(direction: const Coordinate&, ao: const Coordinate&): bool
+}
+
+' ConvexHull geometry (collision hull only, no intersects method)
+class ConvexHull {
+    -vertices_: std::vector<Coordinate>
+    -facets_: std::vector<Facet>
+    -volume_: double
+    -surfaceArea_: double
+    -boundingBoxMin_: Coordinate
+    -boundingBoxMax_: Coordinate
+    -centroid_: Coordinate
+
+    +ConvexHull()
+    +ConvexHull(points: const std::vector<VectorType>&)
+    +ConvexHull(geometry: const msd_assets::CollisionGeometry&)
+    +getVertices(): const std::vector<Coordinate>&
+    +getFacets(): const std::vector<Facet>&
+    +getVolume(): double
+    +getSurfaceArea(): double
+    +getCentroid(): Coordinate
+    +getBoundingBox(): BoundingBox
+    +contains(point: const Coordinate&, epsilon: double = 1e-6): bool
+    +signedDistance(point: const Coordinate&): double
+}
+
+' AssetPhysical combines collision hull with world-space transform
+class AssetPhysical {
+    -referenceAssetId_: uint32_t
+    -instanceId_: uint32_t
+    -collisionHull_: const ConvexHull&
+    -referenceFrame_: ReferenceFrame
+
+    +AssetPhysical(assetId: uint32_t, instanceId: uint32_t, hull: ConvexHull&, frame: const ReferenceFrame&)
+    +getCollisionHull(): const ConvexHull&
+    +getReferenceFrame(): const ReferenceFrame&
+    +getReferenceFrame(): ReferenceFrame&
+}
+
+' ReferenceFrame provides coordinate transformations
+class ReferenceFrame {
+    -origin_: Coordinate
+    -euler_: EulerAngles
+    -rotation_: Eigen::Matrix3d
+    -updated_: bool
+
+    +ReferenceFrame()
+    +ReferenceFrame(origin: const Coordinate&)
+    +ReferenceFrame(origin: const Coordinate&, euler: const EulerAngles&)
+    +localToGlobal(localCoord: const Coordinate&): Coordinate
+    +globalToLocal(globalCoord: const Coordinate&): Coordinate
+    +localToGlobalRelative(localVector: const Coordinate&): Coordinate
+    +globalToLocalRelative(globalVector: const Coordinate&): Coordinate
+}
+
+' Convenience function for one-shot collision testing
+class "msd_sim namespace" as FreeFunctions {
+    +gjkIntersects(assetA: const AssetPhysical&, assetB: const AssetPhysical&, epsilon: double = 1e-6, maxIterations: int = 64): bool
+}
+
+' Relationships
+GJK --> ConvexHull : accesses geometry via AssetPhysical
+GJK --> AssetPhysical : stores references
+GJK --> ReferenceFrame : uses for transformation
+AssetPhysical --> ConvexHull : contains (non-owning reference)
+AssetPhysical --> ReferenceFrame : contains (owned)
+
+note right of GJK
+  **Transformation Pipeline**
+  1. Store AssetPhysical references
+  2. Access ConvexHull and ReferenceFrame via AssetPhysical
+  3. Transform search direction from world to local space
+     (globalToLocalRelative - rotation only)
+  4. Get support vertex in local space
+  5. Transform support vertex to world space
+     (localToGlobal - rotation + translation)
+  6. Construct simplex in world space
+
+  **Memory**: No heap allocations during collision detection
+  **Performance**: < 2% overhead vs identity transform
+end note
+
+note right of FreeFunctions
+  Convenience function for simple
+  one-shot collision testing between
+  AssetPhysical objects with transforms
+end note
+
+note right of AssetPhysical
+  Combines collision geometry with
+  world-space transformation for
+  physics simulation
+end note
+
+@enduml

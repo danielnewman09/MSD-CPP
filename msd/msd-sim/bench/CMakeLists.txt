@@ -7,6 +7,7 @@ find_package(benchmark REQUIRED)
 # Create benchmark executable
 add_executable(msd_sim_bench
   ConvexHullBench.cpp
+  GJKBench.cpp
 )
 
 # Link dependencies

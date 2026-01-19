@@ -80,7 +80,8 @@ Force-based rigid body dynamics and collision detection. Provides convex hull ge
 - `PhysicsComponent` — Rigid body physics properties
 - `DynamicState` — Velocities and accelerations
 - `InertialCalculations` — Inertia tensor computation
-- `GJK` — Gilbert-Johnson-Keerthi collision detection
+- `GJK` — Gilbert-Johnson-Keerthi collision detection with AssetPhysical transform support
+- `AssetPhysical` — Combines collision hull with world-space ReferenceFrame transformation
 
 ### Utils Module
 
@@ -253,7 +254,34 @@ ctest --preset debug
 | [`convex-hull.puml`](../../docs/msd/msd-sim/Physics/convex-hull.puml) | ConvexHull geometry | `docs/msd/msd-sim/Physics/` |
 | [`physics-component.puml`](../../docs/msd/msd-sim/Physics/physics-component.puml) | PhysicsComponent rigid body | `docs/msd/msd-sim/Physics/` |
 | [`dynamic-state.puml`](../../docs/msd/msd-sim/Physics/dynamic-state.puml) | DynamicState kinematics | `docs/msd/msd-sim/Physics/` |
-| [`gjk.puml`](../../docs/msd/msd-sim/Physics/gjk.puml) | GJK collision detection | `docs/msd/msd-sim/Physics/` |
+| [`gjk-asset-physical.puml`](../../docs/msd/msd-sim/Physics/gjk-asset-physical.puml) | GJK collision detection with AssetPhysical transforms | `docs/msd/msd-sim/Physics/` |
+
+---
+
+## Recent Architectural Changes
+
+### GJK AssetPhysical Transform Support — 2026-01-18
+**Ticket**: [0022_gjk_asset_physical_transform](../../tickets/0022_gjk_asset_physical_transform.md)
+**Diagram**: [`gjk-asset-physical.puml`](../../docs/msd/msd-sim/Physics/gjk-asset-physical.puml)
+**Type**: Breaking Change
+
+Refactored GJK collision detection to work exclusively with `AssetPhysical` objects that include `ReferenceFrame` transformations. This enables collision detection between objects with arbitrary positions and orientations in world space by applying transformations on-the-fly during support function computation.
+
+**Breaking changes**:
+- Removed `GJK(const ConvexHull&, const ConvexHull&)` constructor
+- Removed `gjkIntersects(const ConvexHull&, const ConvexHull&)` convenience function
+- Removed `ConvexHull::intersects()` method
+- Added `GJK(const AssetPhysical&, const AssetPhysical&)` constructor
+- Added `gjkIntersects(const AssetPhysical&, const AssetPhysical&)` convenience function
+
+**Performance**: < 2% overhead compared to identity transform baseline (validated by prototypes).
+
+**Migration**: Wrap `ConvexHull` objects in `AssetPhysical` with identity `ReferenceFrame` for untransformed collision detection.
+
+**Key files**:
+- `src/Physics/GJK/GJK.hpp`, `GJK.cpp` — AssetPhysical-based GJK implementation
+- `src/Physics/RigidBody/ConvexHull.hpp`, `ConvexHull.cpp` — Removed intersects() method
+- `src/Physics/RigidBody/AssetPhysical.hpp` — Documentation updates
 
 ---
 

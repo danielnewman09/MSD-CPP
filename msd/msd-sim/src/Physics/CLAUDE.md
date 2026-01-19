@@ -54,7 +54,6 @@ Represents a 3D convex hull for collision detection and mass property calculatio
 - Access to hull vertices and triangular facets
 - Point containment testing and signed distance
 - Axis-aligned bounding box for broad-phase collision
-- GJK-based intersection testing
 
 #### Key Interfaces
 ```cpp
@@ -88,7 +87,6 @@ class ConvexHull {
   // Collision queries
   bool contains(const Coordinate& point, double epsilon = 1e-6) const;
   double signedDistance(const Coordinate& point) const;
-  bool intersects(const ConvexHull& other, double epsilon = 1e-6) const;
 };
 ```
 
@@ -111,11 +109,8 @@ if (hull.contains(testPoint)) {
   std::cout << "Point is inside hull" << std::endl;
 }
 
-// Collision detection
-ConvexHull other{otherPoints};
-if (hull.intersects(other)) {
-  std::cout << "Hulls collide!" << std::endl;
-}
+// For collision detection, use GJK with AssetPhysical
+// (See GJK section for collision detection examples)
 ```
 
 #### Thread Safety
@@ -330,30 +325,31 @@ Eigen::Vector3d alpha = I_inv * torque;
 ### GJK (Gilbert-Johnson-Keerthi)
 
 **Location**: `GJK.hpp`, `GJK.cpp`
-**Diagram**: [`gjk.puml`](../../../../../docs/msd/msd-sim/Physics/gjk.puml)
+**Diagram**: [`gjk-asset-physical.puml`](../../../../../docs/msd/msd-sim/Physics/gjk-asset-physical.puml)
 **Type**: Library component
+**Introduced**: [Ticket: 0022_gjk_asset_physical_transform](../../../../../tickets/0022_gjk_asset_physical_transform.md) (Breaking change)
 
 #### Purpose
-Efficient collision detection algorithm for convex shapes. Iteratively constructs a simplex in Minkowski difference space to determine if two convex hulls intersect.
+Efficient collision detection algorithm for convex shapes with world-space transformations. Iteratively constructs a simplex in Minkowski difference space to determine if two `AssetPhysical` objects intersect, applying `ReferenceFrame` transformations on-the-fly.
 
 #### Key Insight
-Two convex shapes A and B intersect if and only if their Minkowski difference (A ⊖ B) contains the origin.
+Two convex shapes A and B intersect if and only if their Minkowski difference (A ⊖ B) contains the origin. This implementation applies transformations during support function computation to avoid creating temporary transformed hulls.
 
 #### Key Interfaces
 ```cpp
 class GJK {
   /**
-   * Construct solver for two hulls.
-   * @param hullA First convex hull
-   * @param hullB Second convex hull
+   * Construct solver for two AssetPhysical objects.
+   * @param assetA First asset with collision hull and transform
+   * @param assetB Second asset with collision hull and transform
    * @param epsilon Numerical tolerance (default: 1e-6)
    */
-  GJK(const ConvexHull& hullA, const ConvexHull& hullB, double epsilon = 1e-6);
+  GJK(const AssetPhysical& assetA, const AssetPhysical& assetB, double epsilon = 1e-6);
 
   /**
    * Test intersection.
    * @param maxIterations Maximum iterations (default: 64)
-   * @return true if hulls intersect
+   * @return true if assets' collision hulls intersect in world space
    */
   bool intersects(int maxIterations = 64);
 };
@@ -361,30 +357,64 @@ class GJK {
 /**
  * Convenience function for one-shot intersection testing.
  */
-bool gjkIntersects(const ConvexHull& hullA,
-                   const ConvexHull& hullB,
+bool gjkIntersects(const AssetPhysical& assetA,
+                   const AssetPhysical& assetB,
                    double epsilon = 1e-6,
                    int maxIterations = 64);
 ```
 
 #### Usage Example
 ```cpp
+// Create collision hulls
 ConvexHull hullA{pointsA};
 ConvexHull hullB{pointsB};
 
-// One-shot test
-if (gjkIntersects(hullA, hullB)) {
-  std::cout << "Collision detected!" << std::endl;
+// Create reference frames with world-space transforms
+ReferenceFrame frameA{Coordinate{10.0, 0.0, 0.0}};  // Translated
+ReferenceFrame frameB{Coordinate{0.0, 5.0, 0.0}, EulerAngles{0.0, 0.0, M_PI/4}};  // Translated + rotated
+
+// Wrap in AssetPhysical objects
+AssetPhysical assetA{0, 0, hullA, frameA};
+AssetPhysical assetB{0, 1, hullB, frameB};
+
+// One-shot test with transformations
+if (gjkIntersects(assetA, assetB)) {
+  std::cout << "Collision detected in world space!" << std::endl;
 }
 
-// Or via ConvexHull method
-if (hullA.intersects(hullB)) {
+// Or create GJK instance for multiple queries
+GJK gjk{assetA, assetB};
+if (gjk.intersects()) {
   // Handle collision...
 }
 ```
 
+#### Transformation Pipeline
+The GJK algorithm applies transformations on-the-fly during support function computation:
+
+1. Transform search direction from world space to local space (`globalToLocalRelative` - rotation only)
+2. Find support vertex in local hull space
+3. Transform support vertex from local space to world space (`localToGlobal` - rotation + translation)
+4. Construct simplex in world space
+
+This approach avoids creating temporary transformed hulls, preserving memory efficiency.
+
+#### Performance Characteristics
+- **Memory**: No heap allocations during collision detection (16 bytes for two `AssetPhysical&` references)
+- **Transformation overhead**: < 2% compared to identity transform baseline (validated by prototypes)
+- **Complexity**: O(iterations), typically converges in < 20 iterations
+
 #### Thread Safety
-**Thread-safe for read-only hulls** — GJK maintains its own state and only reads from hulls.
+**Thread-safe for read-only assets** — GJK maintains its own state and only reads from `AssetPhysical`, `ConvexHull`, and `ReferenceFrame`.
+
+#### Breaking Changes (Ticket 0022)
+- **Removed**: `GJK(const ConvexHull&, const ConvexHull&)` constructor
+- **Removed**: `gjkIntersects(const ConvexHull&, const ConvexHull&)` function
+- **Removed**: `ConvexHull::intersects()` method
+- **Added**: `GJK(const AssetPhysical&, const AssetPhysical&)` constructor
+- **Added**: `gjkIntersects(const AssetPhysical&, const AssetPhysical&)` function
+
+**Migration**: Wrap `ConvexHull` objects in `AssetPhysical` with identity `ReferenceFrame` for untransformed collision detection.
 
 ---
 
@@ -522,6 +552,6 @@ See the [root CLAUDE.md](../../../../CLAUDE.md#coding-standards) for complete de
 ### For Developers
 - **Collision geometry**: Start with ConvexHull
 - **Dynamic objects**: Use PhysicsComponent with DynamicState
-- **Collision detection**: Use GJK or ConvexHull::intersects()
+- **Collision detection**: Use GJK with AssetPhysical objects
 - **Inertia calculation**: Use InertialCalculations namespace
 - **Integration patterns**: See README.md in this directory

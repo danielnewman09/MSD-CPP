@@ -1,7 +1,11 @@
+// Ticket: 0022_gjk_asset_physical_transform
+// Design: docs/designs/0022_gjk_asset_physical_transform/design.md
+
 #ifndef MSD_SIM_PHYSICS_GJK_HPP
 #define MSD_SIM_PHYSICS_GJK_HPP
 
 #include <vector>
+#include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 
 namespace msd_sim
@@ -20,31 +24,36 @@ namespace msd_sim
  * Minkowski difference (A ⊖ B) contains the origin.
  *
  * This class maintains the algorithm state (simplex and search direction)
- * as it iterates toward a solution.
+ * as it iterates toward a solution. It works with AssetPhysical objects
+ * to support collision detection between objects with arbitrary world-space
+ * transformations.
+ *
+ * @see docs/designs/0022_gjk_asset_physical_transform/0022_gjk_asset_physical_transform.puml
+ * @ticket 0022_gjk_asset_physical_transform
  */
 class GJK
 {
 public:
   /**
-   * @brief Construct a GJK solver for two convex hulls.
+   * @brief Construct a GJK solver for two physical assets with transformations.
    *
-   * @param hullA First convex hull
-   * @param hullB Second convex hull
+   * @param assetA First physical asset (includes collision hull and reference frame)
+   * @param assetB Second physical asset (includes collision hull and reference frame)
    * @param epsilon Numerical tolerance for convergence (default: 1e-6)
    */
-  GJK(const ConvexHull& hullA, const ConvexHull& hullB, double epsilon = 1e-6);
+  GJK(const AssetPhysical& assetA, const AssetPhysical& assetB, double epsilon = 1e-6);
 
   /**
-   * @brief Test if the two hulls intersect.
+   * @brief Test if the two assets intersect in world space.
    *
    * @param maxIterations Maximum iterations before giving up (default: 64)
-   * @return true if the hulls intersect, false otherwise
+   * @return true if the assets intersect, false otherwise
    */
   bool intersects(int maxIterations = 64);
 
 private:
-  const ConvexHull& hullA_;
-  const ConvexHull& hullB_;
+  const AssetPhysical& assetA_;
+  const AssetPhysical& assetB_;
   double epsilon_;
 
   std::vector<Coordinate> simplex_;
@@ -52,11 +61,23 @@ private:
 
   /**
    * @brief Support function: find vertex furthest in given direction.
+   *
+   * This method searches for the vertex with maximum dot product in the
+   * given direction within the hull's local coordinate system.
    */
   Coordinate support(const ConvexHull& hull, const Coordinate& dir) const;
 
   /**
-   * @brief Minkowski difference support function.
+   * @brief Minkowski difference support function with world-space transformations.
+   *
+   * Applies ReferenceFrame transformations on-the-fly:
+   * 1. Transform search direction from world space to local space (rotation only)
+   * 2. Find support vertex in local hull geometry
+   * 3. Transform support vertex from local space to world space (rotation + translation)
+   * 4. Compute Minkowski difference in world space
+   *
+   * @param dir Search direction in world space
+   * @return Support point in world space (supportA - supportB)
    */
   Coordinate supportMinkowski(const Coordinate& dir) const;
 
@@ -88,16 +109,16 @@ private:
 };
 
 /**
- * @brief Convenience function to test intersection using GJK.
+ * @brief Convenience function to test intersection using GJK with AssetPhysical objects.
  *
- * @param hullA First convex hull
- * @param hullB Second convex hull
+ * @param assetA First physical asset
+ * @param assetB Second physical asset
  * @param epsilon Numerical tolerance for convergence (default: 1e-6)
  * @param maxIterations Maximum iterations before giving up (default: 64)
- * @return true if the hulls intersect, false otherwise
+ * @return true if the assets intersect in world space, false otherwise
  */
-bool gjkIntersects(const ConvexHull& hullA,
-                   const ConvexHull& hullB,
+bool gjkIntersects(const AssetPhysical& assetA,
+                   const AssetPhysical& assetB,
                    double epsilon = 1e-6,
                    int maxIterations = 64);
 

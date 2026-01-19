@@ -92,6 +92,7 @@ protected:
   // The identifier for the asset from which this object was built
   uint32_t referenceAssetId_;
 
+  // The unique identifier for this specific phydsical asset.
   uint32_t instanceId_;
 
   // Collision hull (computed lazily, then cached)
