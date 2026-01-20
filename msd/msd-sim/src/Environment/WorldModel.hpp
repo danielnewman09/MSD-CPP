@@ -133,6 +133,14 @@ public:
     return time_;
   }
 
+  // ========== NEW: Gravity Configuration (ticket 0023a) ==========
+
+  /**
+   * @brief Get the world gravity vector.
+   * @return Gravity acceleration vector [m/s²]
+   */
+  const Coordinate& getGravity() const;
+
   // ========== Platform Management (Legacy) ==========
 
   /**
@@ -210,6 +218,9 @@ private:
   std::chrono::milliseconds time_{0};
 
   uint32_t inertialAssetIdCounter_{0};
+
+  // NEW: Gravity (constant after construction, ticket 0023a)
+  Coordinate gravity_{0.0, 0.0, -9.81};
 };
 
 }  // namespace msd_sim

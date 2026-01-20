@@ -1,0 +1,147 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+' Modified InertialState: Angular fields now use Coordinate
+struct InertialState <<modified>> {
+    +position: Coordinate
+    +velocity: Coordinate
+    +acceleration: Coordinate
+
+    +orientation: EulerAngles
+    +angularVelocity: Coordinate
+    +angularAcceleration: Coordinate
+}
+
+' Modified AssetInertial: Force accumulation API
+class AssetInertial <<modified>> {
+    -mass_: double
+    -inertiaTensor_: Eigen::Matrix3d
+    -inverseInertiaTensor_: Eigen::Matrix3d
+    -centerOfMass_: Coordinate
+    -dynamicState_: InertialState
+
+    ' NEW: Force accumulation members
+    -accumulatedForce_: Coordinate
+    -accumulatedTorque_: Coordinate
+
+    ' Existing interface
+    +getMass(): double
+    +getInertiaTensor(): Eigen::Matrix3d
+    +getInverseInertiaTensor(): Eigen::Matrix3d
+    +getInertialState(): InertialState&
+
+    ' NEW: Force application API (placeholders)
+    +applyForce(force: Coordinate): void
+    +applyForceAtPoint(force: Coordinate, worldPoint: Coordinate): void
+    +applyTorque(torque: Coordinate): void
+    +clearForces(): void
+    +getAccumulatedForce(): Coordinate
+    +getAccumulatedTorque(): Coordinate
+}
+
+' Modified WorldModel: Gravity configuration
+class WorldModel <<modified>> {
+    -inertialAssets_: vector<AssetInertial>
+    -environmentalAssets_: vector<AssetEnvironment>
+    -time_: chrono::milliseconds
+
+    ' NEW: Gravity configuration (constant)
+    -gravity_: Coordinate
+
+    +spawnObject(...): AssetInertial&
+    +getInertialAssets(): vector<AssetInertial>&
+    +update(deltaTime: chrono::milliseconds): void
+
+    ' NEW: Gravity API
+    +getGravity(): Coordinate
+
+    -updatePhysics(dt: double): void
+    -updateCollisions(): void
+}
+
+' Unchanged classes shown for context
+class AssetPhysical {
+    #referenceAssetId_: uint32_t
+    #instanceId_: uint32_t
+    #collisionHull_: ConvexHull&
+    #referenceFrame_: ReferenceFrame
+
+    +getCollisionHull(): ConvexHull&
+    +getReferenceFrame(): ReferenceFrame&
+}
+
+struct EulerAngles {
+    +pitch: Angle
+    +roll: Angle
+    +yaw: Angle
+
+    toCoordinate(): Coordinate
+
+    static fromCoordinate(const Coordinate& coord) : EulerAngles
+}
+
+struct Coordinate {
+    +x(): double
+    +y(): double
+    +z(): double
+}
+
+' Relationships
+AssetInertial --|> AssetPhysical : extends
+AssetInertial *-- InertialState : contains
+InertialState *-- Coordinate : linear state
+InertialState *-- EulerAngles : orientation
+WorldModel o-- AssetInertial : manages
+AssetInertial -- Coordinate : accumulatedForce_
+AssetInertial -- "Coordinate" : accumulatedTorque_
+
+
+note right of EulerAngles
+    Add helper functions to translate between 
+    coordiante and eulerAngles. 
+
+    This will help ensure core logic is kept correct 
+    for unit testing purposes
+end note
+
+note right of InertialState
+  **MODIFIED**
+  - angularPosition → orientation
+  - angularVelocity: EulerAngles → Coordinate
+  - angularAcceleration: EulerAngles → Coordinate
+
+  Breaking change: Existing code must migrate
+  to Coordinate for angular velocity/acceleration
+end note
+
+note right of AssetInertial
+  **MODIFIED**
+  New force accumulation members:
+  - accumulatedForce_ (Coordinate, init to zero)
+  - accumulatedTorque_ (Coordinate, init to zero)
+
+  New placeholder methods:
+  - applyForce(): Accumulates force
+  - applyForceAtPoint(): Accumulates force + TODO torque
+  - applyTorque(): Accumulates torque
+  - clearForces(): Resets accumulators
+  - Accessors for accumulated values
+
+  All methods are placeholders (no physics logic)
+end note
+
+note right of WorldModel
+  **MODIFIED**
+  New gravity configuration:
+  - gravity_ (constant, not modified after construction
+  - getGravity(): Returns gravity vector
+
+  updatePhysics():
+  - Updated with TODO comment for integration
+  - Calls clearForces() only (scaffolding)
+end note
+
+@enduml

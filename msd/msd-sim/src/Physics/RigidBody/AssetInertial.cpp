@@ -61,4 +61,48 @@ const Eigen::Matrix3d& AssetInertial::getInverseInertiaTensor() const
   return inverseInertiaTensor_;
 }
 
+// ========== Force Application API (ticket 0023a) ==========
+
+void AssetInertial::applyForce(const Coordinate& force)
+{
+  accumulatedForce_ += force;
+  // Ticket: 0023a_force_application_scaffolding
+}
+
+void AssetInertial::applyForceAtPoint(const Coordinate& force,
+                                       const Coordinate& worldPoint)
+{
+  accumulatedForce_ += force;
+
+  // TODO (ticket 0023): Compute torque from r × F
+  // Coordinate r = worldPoint - getReferenceFrame().getOrigin();
+  // Coordinate torqueVec = r.cross(force);
+  // accumulatedTorque_ += torqueVec;
+
+  // Ticket: 0023a_force_application_scaffolding
+}
+
+void AssetInertial::applyTorque(const Coordinate& torque)
+{
+  accumulatedTorque_ += torque;
+  // Ticket: 0023a_force_application_scaffolding
+}
+
+void AssetInertial::clearForces()
+{
+  accumulatedForce_ = Coordinate{0.0, 0.0, 0.0};
+  accumulatedTorque_ = Coordinate{0.0, 0.0, 0.0};
+  // Ticket: 0023a_force_application_scaffolding
+}
+
+const Coordinate& AssetInertial::getAccumulatedForce() const
+{
+  return accumulatedForce_;
+}
+
+const Coordinate& AssetInertial::getAccumulatedTorque() const
+{
+  return accumulatedTorque_;
+}
+
 }  // namespace msd_sim

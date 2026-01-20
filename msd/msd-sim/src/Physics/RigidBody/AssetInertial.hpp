@@ -90,6 +90,57 @@ public:
    */
   const Eigen::Matrix3d& getInverseInertiaTensor() const;
 
+  // ========== NEW: Force Application API (ticket 0023a) ==========
+
+  /**
+   * @brief Apply a force at the center of mass.
+   *
+   * Placeholder implementation for ticket 0023a - only accumulates force.
+   * Actual integration will be implemented in ticket 0023.
+   *
+   * @param force Force vector in world coordinates [N]
+   */
+  void applyForce(const Coordinate& force);
+
+  /**
+   * @brief Apply a force at a specific world-space point.
+   *
+   * Placeholder implementation for ticket 0023a - accumulates force only.
+   * Torque computation (r × F) deferred to ticket 0023.
+   *
+   * @param force Force vector in world coordinates [N]
+   * @param worldPoint Application point in world coordinates [m]
+   */
+  void applyForceAtPoint(const Coordinate& force, const Coordinate& worldPoint);
+
+  /**
+   * @brief Apply a torque about the center of mass.
+   *
+   * Placeholder implementation for ticket 0023a - only accumulates torque.
+   *
+   * @param torque Torque vector in world coordinates [N·m]
+   */
+  void applyTorque(const Coordinate& torque);
+
+  /**
+   * @brief Clear all accumulated forces and torques.
+   *
+   * Call this at the end of each physics step after integration.
+   */
+  void clearForces();
+
+  /**
+   * @brief Get the accumulated force for this frame.
+   * @return Accumulated force vector [N]
+   */
+  const Coordinate& getAccumulatedForce() const;
+
+  /**
+   * @brief Get the accumulated torque for this frame.
+   * @return Accumulated torque vector [N·m]
+   */
+  const Coordinate& getAccumulatedTorque() const;
+
 private:
   // Rigid body physics properties
   double mass_;                    // Mass in kg
@@ -99,6 +150,10 @@ private:
 
   // Dynamic state (linear/angular velocity and acceleration)
   InertialState dynamicState_;
+
+  // NEW: Force accumulation (ticket 0023a)
+  Coordinate accumulatedForce_{0.0, 0.0, 0.0};
+  Coordinate accumulatedTorque_{0.0, 0.0, 0.0};
 };
 
 }  // namespace msd_sim

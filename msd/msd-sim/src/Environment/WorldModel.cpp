@@ -85,14 +85,29 @@ void WorldModel::update(std::chrono::milliseconds deltaTime)
 
 // ========== Private Methods ==========
 
-void WorldModel::updatePhysics(double /*dt*/)
+void WorldModel::updatePhysics(double dt)
 {
-  // TODO: implement physics update
   for (auto& asset : inertialAssets_)
   {
-    Coordinate dummy_step{0.001, 0, 0};
-    auto& origin = asset.getReferenceFrame().getOrigin();
-    origin += dummy_step;
+    // TODO (ticket 0023): Implement semi-implicit Euler integration
+    //
+    // Linear integration:
+    //   1. Compute linear acceleration: a = F_net/m + gravity_
+    //   2. Update velocity: v += a * dt
+    //   3. Update position: x += v * dt
+    //
+    // Angular integration:
+    //   4. Compute angular acceleration: α = I^-1 * τ_net
+    //   5. Update angular velocity: ω += α * dt
+    //   6. Update orientation from ω and dt
+    //
+    // Synchronization:
+    //   7. Sync ReferenceFrame with InertialState
+    //   8. Clear forces for next frame
+
+    asset.clearForces();  // Only action for now (scaffolding)
+
+    // Ticket: 0023a_force_application_scaffolding
   }
 }
 
@@ -106,5 +121,11 @@ uint32_t WorldModel::getInertialAssetId()
   return ++inertialAssetIdCounter_;
 }
 
+// ========== Gravity Configuration (ticket 0023a) ==========
+
+const Coordinate& WorldModel::getGravity() const
+{
+  return gravity_;
+}
 
 }  // namespace msd_sim

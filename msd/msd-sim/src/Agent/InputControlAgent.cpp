@@ -46,31 +46,32 @@ InertialState InputControlAgent::updateState(const InertialState& currentState)
   newState.velocity = velocity;
 
   // Calculate angular velocity based on input commands
-  EulerAngles angularVelocity;
+  // Note: angularVelocity is now Coordinate (vector form) per ticket 0023a
+  Coordinate angularVelocity{0, 0, 0};
 
   if (inputCommands_.pitchUp)
   {
-    angularVelocity.pitch = maxAngularSpeed_;
+    angularVelocity.x() = maxAngularSpeed_.getRad();  // pitch around X-axis
   }
   if (inputCommands_.pitchDown)
   {
-    angularVelocity.pitch = -maxAngularSpeed_;
-  }
-  if (inputCommands_.yawLeft)
-  {
-    angularVelocity.yaw = maxAngularSpeed_;
-  }
-  if (inputCommands_.yawRight)
-  {
-    angularVelocity.yaw = -maxAngularSpeed_;
+    angularVelocity.x() = -maxAngularSpeed_.getRad();
   }
   if (inputCommands_.rollLeft)
   {
-    angularVelocity.roll = maxAngularSpeed_;
+    angularVelocity.y() = maxAngularSpeed_.getRad();  // roll around Y-axis
   }
   if (inputCommands_.rollRight)
   {
-    angularVelocity.roll = -maxAngularSpeed_;
+    angularVelocity.y() = -maxAngularSpeed_.getRad();
+  }
+  if (inputCommands_.yawLeft)
+  {
+    angularVelocity.z() = maxAngularSpeed_.getRad();  // yaw around Z-axis
+  }
+  if (inputCommands_.yawRight)
+  {
+    angularVelocity.z() = -maxAngularSpeed_.getRad();
   }
 
   newState.angularVelocity = angularVelocity;
