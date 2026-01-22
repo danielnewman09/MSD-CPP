@@ -31,8 +31,23 @@ This project follows specific coding standards from CLAUDE.md including:
 | Ready for Implementation | Execute Implementer | `.claude/agents/cpp-implementer.md` |
 | Implementation Complete — Awaiting Quality Gate | Execute Quality Gate | `.claude/agents/code-quality-gate.md` |
 | Quality Gate Passed — Awaiting Review | Execute Implementation Reviewer | `.claude/agents/implementation-reviewer.md` |
-| Approved — Ready to Merge | Execute Doc Updater, then complete | `.claude/agents/docs-updater.md` |
+| Approved — Ready to Merge | Execute Doc Updater, then check tutorial flag | `.claude/agents/docs-updater.md` |
+| Documentation Complete — Awaiting Tutorial | Execute Tutorial Generator (if flagged) | `.claude/agents/cpp-tutorial-generator.md` |
+| Tutorial Complete — Ready to Merge | Complete workflow | None |
 | Merged / Complete | Inform human workflow is complete | None |
+
+### Tutorial Generation (Conditional Phase)
+
+The Tutorial Generation phase is **optional** and only executes when the ticket metadata contains:
+```
+Generate Tutorial: Yes
+```
+
+**Workflow branching after Documentation Update:**
+1. If `Generate Tutorial: Yes` → Advance to "Documentation Complete — Awaiting Tutorial"
+2. If `Generate Tutorial: No` or not specified → Skip to "Merged / Complete"
+
+When processing tickets, check the Metadata section for the tutorial flag before advancing from the documentation phase.
 
 ### Quality Gate Loop
 
@@ -46,6 +61,21 @@ The Quality Gate phase operates as an automated loop:
    - Re-run quality gate
    - Track iteration count in Workflow Log
 3. **On 3rd consecutive failure**: Escalate to human, may indicate design issue
+
+### Tutorial Generation Handling
+
+When processing the "Approved — Ready to Merge" status:
+
+1. Execute the docs-updater agent first
+2. After documentation completes, check ticket Metadata for `Generate Tutorial: Yes`
+3. **If tutorial requested**:
+   - Update status to "Documentation Complete — Awaiting Tutorial"
+   - Report that tutorial generation is next step
+   - On next invocation, execute cpp-tutorial-generator agent
+4. **If tutorial NOT requested**:
+   - Skip tutorial phase entirely
+   - Advance directly to "Merged / Complete"
+   - Report workflow complete
 
 ## Commands You Handle
 
@@ -150,12 +180,16 @@ project/
 ├── tickets/                    # Feature tickets
 │   └── {feature-name}.md
 ├── docs/
-│   └── designs/               # Design artifacts
-│       └── {feature-name}/
+│   ├── designs/               # Design artifacts
+│   │   └── {feature-name}/
+│   └── tutorials/             # Tutorial documentation (if generated)
+│       ├── TUTORIAL_STATE.md  # Continuation state for tutorial agent
+│       └── {feature-name}/    # Feature-specific tutorials
 ├── prototypes/                # Prototype code
 │   └── {feature-name}/
 └── .claude/
     ├── agents/                # Agent definitions
+    ├── skills/                # User-invocable skills
     └── templates/             # Ticket templates
 ```
 

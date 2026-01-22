@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TOPIC_TITLE}} - Tutorial</title>
+
+  <!-- Reveal.js from CDN -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/theme/night.css">
+
+  <!-- Syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/highlight/monokai.css">
+
+  <!-- KaTeX for math rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+
+  <style>
+    /* Custom styles for technical presentations */
+    .reveal h1,
+    .reveal h2,
+    .reveal h3 {
+      text-transform: none;
+    }
+
+    .reveal pre {
+      width: 100%;
+      font-size: 0.55em;
+    }
+
+    .reveal pre code {
+      max-height: 500px;
+      padding: 20px;
+    }
+
+    /* Math styling */
+    .reveal .katex {
+      font-size: 1.1em;
+    }
+
+    /* Two-column layout */
+    .columns {
+      display: flex;
+      gap: 2em;
+    }
+
+    .columns>* {
+      flex: 1;
+    }
+
+    /* Highlight boxes */
+    .highlight-box {
+      background: rgba(255, 255, 255, 0.1);
+      border-left: 4px solid #42affa;
+      padding: 1em;
+      margin: 1em 0;
+    }
+
+    /* Algorithm step styling */
+    .algorithm-step {
+      text-align: left;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 0.5em 1em;
+      margin: 0.3em 0;
+      border-radius: 5px;
+    }
+
+    /* Complexity notation */
+    .complexity {
+      font-family: 'Courier New', monospace;
+      color: #42affa;
+    }
+
+    /* Production vs Tutorial comparison */
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8em;
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+      border: 1px solid #444;
+      padding: 0.5em;
+      text-align: left;
+    }
+
+    .comparison-table th {
+      background: rgba(66, 175, 250, 0.3);
+    }
+
+    /* Speaker notes styling (visible in speaker view) */
+    .reveal .speaker-notes {
+      font-size: 1em;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- ============================================ -->
+      <!-- TITLE SLIDE -->
+      <!-- ============================================ -->
+      <section>
+        <h1>{{TOPIC_TITLE}}</h1>
+        <h3>Tutorial & Implementation Guide</h3>
+        <p>
+          <small>
+            Part of the {{PROJECT_NAME}} Documentation<br>
+            <code>docs/tutorials/{{TOPIC_SLUG}}/</code>
+          </small>
+        </p>
+        <aside class="notes">
+          Welcome to this tutorial on {{TOPIC_TITLE}}.
+          Learning objectives:
+          - Understand the mathematical foundation
+          - Implement a basic version from scratch
+          - Know how this relates to the production code
+        </aside>
+      </section>
+
+      <!-- ============================================ -->
+      <!-- LEARNING OBJECTIVES -->
+      <!-- ============================================ -->
+      <section>
+        <h2>Learning Objectives</h2>
+        <ul>
+          <li class="fragment">Understand the mathematical foundation of {{CONCEPT}}</li>
+          <li class="fragment">Implement a basic version from scratch</li>
+          <li class="fragment">Analyze time and space complexity</li>
+          <li class="fragment">Connect to production code in <code>{{PRODUCTION_PATH}}</code></li>
+        </ul>
+      </section>
+
+      <!-- ============================================ -->
+      <!-- PROBLEM MOTIVATION -->
+      <!-- ============================================ -->
+      <section>
+        <section>
+          <h2>Why {{TOPIC_TITLE}}?</h2>
+          <div class="highlight-box">
+            <p>{{PROBLEM_STATEMENT}}</p>
+          </div>
+          <aside class="notes">
+            Explain the real-world motivation here.
+            Why does this problem matter?
+            What applications use this?
+          </aside>
+        </section>
+
+        <section>
+          <h3>Applications</h3>
+          <ul>
+            <li class="fragment">{{APPLICATION_1}}</li>
+            <li class="fragment">{{APPLICATION_2}}</li>
+            <li class="fragment">{{APPLICATION_3}}</li>
+          </ul>
+        </section>
+      </section>
+
+      <!-- ============================================ -->
+      <!-- MATHEMATICAL BACKGROUND -->
+      <!-- ============================================ -->
+      <section>
+        <section>
+          <h2>Mathematical Foundation</h2>
+          <p>The core formula:</p>
+          <div class="katex-display">
+            {{MAIN_FORMULA_KATEX}}
+          </div>
+          <aside class="notes">
+            Walk through each term in the formula.
+            Explain what each symbol represents.
+          </aside>
+        </section>
+
+        <section>
+          <h3>Step-by-Step Derivation</h3>
+          <div class="algorithm-step fragment">
+            <strong>Step 1:</strong> {{DERIVATION_STEP_1}}
+          </div>
+          <div class="algorithm-step fragment">
+            <strong>Step 2:</strong> {{DERIVATION_STEP_2}}
+          </div>
+          <div class="algorithm-step fragment">
+            <strong>Step 3:</strong> {{DERIVATION_STEP_3}}
+          </div>
+        </section>
+
+        <section>
+          <h3>Key Properties</h3>
+          <ul>
+            <li class="fragment">{{PROPERTY_1}}</li>
+            <li class="fragment">{{PROPERTY_2}}</li>
+            <li class="fragment">{{PROPERTY_3}}</li>
+          </ul>
+        </section>
+      </section>
+
+      <!-- ============================================ -->
+      <!-- ALGORITHM WALKTHROUGH -->
+      <!-- ============================================ -->
+      <section>
+        <section>
+          <h2>Algorithm Overview</h2>
+          <pre><code class="language-plaintext" data-trim>
+{{PSEUDOCODE}}
+                    </code></pre>
+        </section>
+
+        <section>
+          <h3>Visual Walkthrough</h3>
+          <!-- Replace with actual diagram or animation -->
+          <div style="background: #333; padding: 2em; border-radius: 10px;">
+            <p><em>[Algorithm visualization goes here]</em></p>
+            <p>Consider using:</p>
+            <ul style="font-size: 0.8em;">
+              <li>SVG diagrams</li>
+              <li>Step-by-step animations</li>
+              <li>Interactive demos</li>
+            </ul>
+          </div>
+        </section>
+      </section>
+
+      <!-- ============================================ -->
+      <!-- CODE IMPLEMENTATION -->
+      <!-- ============================================ -->
+      <section>
+        <section>
+          <h2>Implementation</h2>
+          <p><code>example.cpp</code></p>
+          <pre><code class="language-cpp" data-trim data-line-numbers="1-5|7-15|17-25">
+{{CODE_SNIPPET_1}}
+                    </code></pre>
+          <aside class="notes">
+            Line-by-line explanation:
+            - Lines 1-5: Setup and declarations
+            - Lines 7-15: Main algorithm loop
+            - Lines 17-25: Result processing
+          </aside>
+        </section>
+
+        <section>
+          <h3>Key Function</h3>
+          <pre><code class="language-cpp" data-trim data-line-numbers>
+{{CODE_SNIPPET_2}}
+                    </code></pre>
+        </section>
+
+        <section>
+          <h3>Usage Example</h3>
+          <pre><code class="language-cpp" data-trim>
+int main() {
+    // Create input data
+    {{USAGE_EXAMPLE}}
+    
+    // Run algorithm
+    auto result = {{FUNCTION_CALL}};
+    
+    // Display results
+    std::cout << "Result: " << result << std::endl;
+}
+                    </code></pre>
+        </section>
+      </section>
+
+      <!-- ============================================ -->
+      <!-- COMPLEXITY ANALYSIS -->
+      <!-- ============================================ -->
+      <section>
+        <h2>Complexity Analysis</h2>
+        <div class="columns">
+          <div>
+            <h4>Time</h4>
+            <p class="complexity">O({{TIME_COMPLEXITY}})</p>
+            <p style="font-size: 0.7em;">{{TIME_EXPLANATION}}</p>
+          </div>
+          <div>
+            <h4>Space</h4>
+            <p class="complexity">O({{SPACE_COMPLEXITY}})</p>
+            <p style="font-size: 0.7em;">{{SPACE_EXPLANATION}}</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================ -->
+      <!-- PRODUCTION COMPARISON -->
+      <!-- ============================================ -->
+      <section>
+        <section>
+          <h2>Tutorial vs Production</h2>
+          <table class="comparison-table">
+            <thead>
+              <tr>
+                <th>Aspect</th>
+                <th>Tutorial</th>
+                <th>Production</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="fragment">
+                <td>Complexity</td>
+                <td>{{TUTORIAL_COMPLEXITY}}</td>
+                <td>{{PRODUCTION_COMPLEXITY}}</td>
+              </tr>
+              <tr class="fragment">
+                <td>Optimization</td>
+                <td>None (clarity)</td>
+                <td>{{PRODUCTION_OPTIMIZATIONS}}</td>
+              </tr>
+              <tr class="fragment">
+                <td>Dependencies</td>
+                <td>Standard library only</td>
+                <td>{{PRODUCTION_DEPENDENCIES}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h3>Production Code Location</h3>
+          <pre><code class="language-plaintext" data-trim>
+{{PRODUCTION_PATH}}
+                    </code></pre>
+          <p>Key optimizations in production:</p>
+          <ul>
+            <li class="fragment">{{OPTIMIZATION_1}}</li>
+            <li class="fragment">{{OPTIMIZATION_2}}</li>
+            <li class="fragment">{{OPTIMIZATION_3}}</li>
+          </ul>
+        </section>
+      </section>
+
+      <!-- ============================================ -->
+      <!-- FURTHER READING -->
+      <!-- ============================================ -->
+      <section>
+        <h2>Further Reading</h2>
+        <ul>
+          <li><a href="{{REFERENCE_URL_1}}">{{REFERENCE_TITLE_1}}</a></li>
+          <li><a href="{{REFERENCE_URL_2}}">{{REFERENCE_TITLE_2}}</a></li>
+          <li><a href="{{REFERENCE_URL_3}}">{{REFERENCE_TITLE_3}}</a></li>
+        </ul>
+        <div class="highlight-box" style="margin-top: 1em;">
+          <p>📁 Full tutorial: <code>docs/tutorials/{{TOPIC_SLUG}}/README.md</code></p>
+          <p>💻 Run the code:
+            <code>cd docs/tutorials/{{TOPIC_SLUG}} && mkdir build && cd build && cmake .. && make && ./example</code>
+          </p>
+        </div>
+      </section>
+
+      <!-- ============================================ -->
+      <!-- QUESTIONS -->
+      <!-- ============================================ -->
+      <section>
+        <h2>Questions?</h2>
+        <p style="font-size: 0.8em; margin-top: 2em;">
+          Tutorial source: <code>docs/tutorials/{{TOPIC_SLUG}}/</code>
+        </p>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Reveal.js -->
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/highlight/highlight.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/notes/notes.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/math/math.js"></script>
+
+  <!-- KaTeX -->
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+  <script>
+    // Initialize Reveal.js
+    Reveal.initialize({
+      hash: true,
+      slideNumber: 'c/t',
+      showNotes: false,
+
+      // Transition style
+      transition: 'slide',
+
+      // Math configuration using KaTeX
+      math: {
+        mathjax: null,
+        katex: 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js',
+        katexCSS: 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css',
+      },
+
+      plugins: [
+        RevealHighlight,
+        RevealNotes,
+        RevealMath.KaTeX
+      ]
+    });
+
+    // Render any KaTeX in custom containers
+    document.addEventListener('DOMContentLoaded', function () {
+      renderMathInElement(document.body, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false }
+        ]
+      });
+    });
+  </script>
+</body>
+
+</html>

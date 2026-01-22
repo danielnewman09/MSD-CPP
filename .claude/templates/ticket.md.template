@@ -7,8 +7,11 @@
 - [ ] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Review
+- [ ] Implementation Complete — Awaiting Quality Gate
+- [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
+- [ ] Documentation Complete — Awaiting Tutorial (if Generate Tutorial: Yes)
+- [ ] Tutorial Complete — Ready to Merge (if Generate Tutorial: Yes)
 - [ ] Merged / Complete
 
 ## Metadata
@@ -17,6 +20,7 @@
 - **Priority**: Low / Medium / High / Critical
 - **Estimated Complexity**: Small / Medium / Large / XL
 - **Target Component(s)**: {e.g., networking, storage, ui}
+- **Generate Tutorial**: No (set to Yes for features with educational value)
 
 ---
 
@@ -122,11 +126,22 @@
 - **Reviewer Notes**: 
 
 ### Documentation Update Phase
-- **Started**: 
-- **Completed**: 
-- **CLAUDE.md Updates**: 
-- **Diagrams Indexed**: 
-- **Notes**: 
+- **Started**:
+- **Completed**:
+- **CLAUDE.md Updates**:
+- **Diagrams Indexed**:
+- **Notes**:
+
+### Tutorial Documentation Phase (if Generate Tutorial: Yes)
+- **Started**:
+- **Completed**:
+- **Tutorial Location**: `docs/tutorials/{feature-name}/`
+- **Artifacts**:
+  - `docs/tutorials/{feature-name}/README.md`
+  - `docs/tutorials/{feature-name}/example.cpp`
+  - `docs/tutorials/{feature-name}/presentation.html`
+- **Concepts Covered**:
+- **Notes**:
 
 ---
 
@@ -142,3 +157,6 @@
 
 ### Feedback on Implementation
 {Your comments on the implementation}
+
+### Feedback on Tutorial (if Generate Tutorial: Yes)
+{Your comments on the tutorial content, concepts to cover, or presentation style}
