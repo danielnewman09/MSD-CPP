@@ -85,30 +85,56 @@ void WorldModel::update(std::chrono::milliseconds deltaTime)
 
 // ========== Private Methods ==========
 
-void WorldModel::updatePhysics([[maybe_unused]] double dt)
+void WorldModel::updatePhysics(double dt)
 {
   for (auto& asset : inertialAssets_)
   {
-    // TODO (ticket 0023): Implement semi-implicit Euler integration
-    //
-    // Linear integration:
-    //   1. Compute linear acceleration: a = F_net/m + gravity_
-    //   2. Update velocity: v += a * dt
-    //   3. Update position: x += v * dt
-    //
-    // Angular integration:
-    //   4. Compute angular acceleration: α = I^-1 * τ_net
-    //   5. Update angular velocity: ω += α * dt
-    //   6. Update orientation from ω and dt
-    //
-    // Synchronization:
-    //   7. Sync ReferenceFrame with InertialState
-    //   8. Clear forces for next frame
+    // ===== Apply Gravity =====
+    // F_gravity = m * g (where g is acceleration vector)
+    Coordinate gravityForce = gravity_ * asset.getMass();
+    asset.applyForce(gravityForce);
 
-    asset.clearForces();  // Only action for now (scaffolding)
+    // ===== Linear Integration (Semi-Implicit Euler) =====
+    // Get accumulated forces
+    const Coordinate& netForce = asset.getAccumulatedForce();
 
-    // Ticket: 0023a_force_application_scaffolding
+    // Compute linear acceleration: a = F_net / m
+    Coordinate linearAccel = netForce / asset.getMass();
+
+    // Update velocity: v_new = v_old + a * dt
+    InertialState& state = asset.getInertialState();
+    state.velocity += linearAccel * dt;
+    state.acceleration = linearAccel;
+
+    // Update position using NEW velocity: x_new = x_old + v_new * dt
+    state.position += state.velocity * dt;
+
+    // ===== Angular Integration (Semi-Implicit Euler) =====
+    // Get accumulated torque
+    const Coordinate& netTorque = asset.getAccumulatedTorque();
+
+    // Compute angular acceleration: α = I⁻¹ * τ
+    Eigen::Vector3d angularAccel = asset.getInverseInertiaTensor() * netTorque;
+
+    // Update angular velocity: ω_new = ω_old + α * dt
+    AngularRate& omega = state.angularVelocity;
+    omega += angularAccel * dt;
+    state.angularAcceleration = AngularRate{angularAccel};
+
+    // Update orientation: θ_new = θ_old + ω_new * dt
+    state.orientation += omega * dt;
+
+    // ===== Synchronize ReferenceFrame =====
+    // ReferenceFrame must match InertialState for collision detection
+    // and rendering to work correctly
+    ReferenceFrame& frame = asset.getReferenceFrame();
+    frame.setOrigin(state.position);
+    frame.setRotation(state.orientation);
+
+    // ===== Clear Forces for Next Frame =====
+    asset.clearForces();
   }
+  // Ticket: 0023_force_application_system
 }
 
 void WorldModel::updateCollisions()

@@ -74,7 +74,7 @@ Core mathematical primitives and simulation entity management. Provides type-saf
 **Documentation**: [`Physics/CLAUDE.md`](src/Physics/CLAUDE.md)
 **Diagrams**: [`docs/msd/msd-sim/Physics/`](../../docs/msd/msd-sim/Physics/)
 
-Force-based rigid body dynamics and collision detection. Provides convex hull geometry, GJK collision detection, inertia tensor calculation, and dynamic state management.
+Force-based rigid body dynamics and collision detection. Provides convex hull geometry, GJK collision detection, inertia tensor calculation, dynamic state management, and force application with semi-implicit Euler integration.
 
 **Key Components**:
 - `ConvexHull` — Convex hull geometry via Qhull
@@ -83,6 +83,8 @@ Force-based rigid body dynamics and collision detection. Provides convex hull ge
 - `InertialCalculations` — Inertia tensor computation
 - `GJK` — Gilbert-Johnson-Keerthi collision detection with AssetPhysical transform support
 - `AssetPhysical` — Combines collision hull with world-space ReferenceFrame transformation
+- `AssetInertial` — Dynamic physics object with force accumulation and integration
+- `WorldModel` — Physics integration with gravity and semi-implicit Euler
 
 ### Utils Module
 
@@ -257,10 +259,49 @@ ctest --preset debug
 | [`physics-component.puml`](../../docs/msd/msd-sim/Physics/physics-component.puml) | PhysicsComponent rigid body | `docs/msd/msd-sim/Physics/` |
 | [`dynamic-state.puml`](../../docs/msd/msd-sim/Physics/dynamic-state.puml) | DynamicState kinematics | `docs/msd/msd-sim/Physics/` |
 | [`gjk-asset-physical.puml`](../../docs/msd/msd-sim/Physics/gjk-asset-physical.puml) | GJK collision detection with AssetPhysical transforms | `docs/msd/msd-sim/Physics/` |
+| [`force-application.puml`](../../docs/msd/msd-sim/Physics/force-application.puml) | Force application system with semi-implicit Euler integration | `docs/msd/msd-sim/Physics/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Force Application System for Rigid Body Physics — 2026-01-21
+**Ticket**: [0023_force_application_system](../../tickets/0023_force_application_system.md)
+**Diagram**: [`force-application.puml`](../../docs/msd/msd-sim/Physics/force-application.puml)
+**Type**: Feature Enhancement
+
+Implemented a complete force application system for rigid body physics, enabling realistic dynamics simulation with gravity, forces at arbitrary points generating torque, and semi-implicit Euler integration. This completes the scaffolding from ticket 0023a and uses the angular types introduced in ticket 0024.
+
+**Key features**:
+- **Force accumulation**: `AssetInertial` accumulates forces and torques per frame via `applyForce()`, `applyForceAtPoint()`, and `applyTorque()` methods
+- **Torque computation**: Forces applied at offset points generate torque using the cross product `τ = r × F`
+- **Semi-implicit Euler integration**: `WorldModel::updatePhysics()` integrates motion using velocity-first integration for better numerical stability
+- **Gravity**: Applied as direct acceleration `F = m * g` for efficiency
+- **ReferenceFrame synchronization**: Position and orientation synchronized after physics updates to ensure consistency with collision detection and rendering
+- **World-space convention**: All forces, torques, and application points use world-space coordinates
+
+**Physics integration order**:
+1. Apply gravity to all inertial objects
+2. Compute linear acceleration: `a = F_net / m`
+3. Update velocity: `v += a * dt` (semi-implicit)
+4. Update position: `x += v * dt`
+5. Compute angular acceleration: `α = I⁻¹ * τ_net`
+6. Update angular velocity: `ω += α * dt` (semi-implicit)
+7. Update orientation: `θ += ω * dt`
+8. Synchronize ReferenceFrame with InertialState
+9. Clear accumulated forces for next frame
+
+**Performance**: O(n) complexity per physics update where n = number of inertial objects. Recommended timestep: 16.67ms (60 FPS).
+
+**Known limitation**: Angular physics integration cannot be fully validated due to pre-existing bug in inertia tensor calculation producing NaN values for certain geometries. Linear physics (gravity, projectile motion) fully validated and operational.
+
+**Key files**:
+- `src/Physics/RigidBody/AssetInertial.hpp`, `AssetInertial.cpp` — Force application and torque computation
+- `src/Environment/WorldModel.hpp`, `WorldModel.cpp` — Physics integration with semi-implicit Euler
+- `src/Environment/ReferenceFrame.hpp`, `ReferenceFrame.cpp` — Added const overload for getAngularCoordinate()
+- `src/Physics/RigidBody/InertialState.hpp` — Kinematic state representation
+
+---
 
 ### AngularCoordinate and AngularRate — 2026-01-21
 **Ticket**: [0024_angular_coordinate](../../tickets/0024_angular_coordinate.md)

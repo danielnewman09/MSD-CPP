@@ -6,7 +6,6 @@
 
 #include "msd-sim/src/Agent/BaseAgent.hpp"
 #include "msd-sim/src/Agent/InputCommands.hpp"
-#include "msd-sim/src/Environment/Angle.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
@@ -36,7 +35,7 @@ public:
    * @param maxAngularSpeed Maximum angular speed in rad/s (default: 1.0)
    */
   explicit InputControlAgent(double maxSpeed = 10.0,
-                             Angle maxAngularSpeed = Angle::fromRadians(1.0));
+                             double maxAngularSpeed = 1.0);
 
   /**
    * @brief Update state based on current input commands
@@ -82,7 +81,7 @@ public:
    * @brief Set maximum angular speed
    * @param speed Maximum angular speed in rad/s
    */
-  void setMaxAngularSpeed(Angle speed)
+  void setMaxAngularSpeed(double speed)
   {
     maxAngularSpeed_ = speed;
   }
@@ -100,15 +99,15 @@ public:
    * @brief Get maximum angular speed
    * @return Maximum angular speed in rad/s
    */
-  Angle getMaxAngularSpeed() const
+  double getMaxAngularSpeed() const
   {
     return maxAngularSpeed_;
   }
 
 private:
   InputCommands inputCommands_;
-  double maxSpeed_{10.0};                                    // m/s
-  msd_sim::Angle maxAngularSpeed_{Angle::fromRadians(1.0)};  // rad/s
+  double maxSpeed_{10.0};         // m/s
+  double maxAngularSpeed_{1.0};   // rad/s
 };
 
 }  // namespace msd_sim

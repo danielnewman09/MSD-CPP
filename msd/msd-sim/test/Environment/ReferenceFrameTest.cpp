@@ -3,7 +3,6 @@
 
 #include <gtest/gtest.h>
 #include <cmath>
-#include "msd-sim/src/Environment/Angle.hpp"
 #include "msd-sim/src/Environment/AngularCoordinate.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"

@@ -2,11 +2,12 @@
 // Design: docs/designs/input-state-management/design.md
 
 #include "msd-sim/src/Agent/InputControlAgent.hpp"
+#include "msd-sim/src/Environment/AngularRate.hpp"
 
 namespace msd_sim
 {
 
-InputControlAgent::InputControlAgent(double maxSpeed, Angle maxAngularSpeed)
+InputControlAgent::InputControlAgent(double maxSpeed, double maxAngularSpeed)
   : maxSpeed_{maxSpeed}, maxAngularSpeed_{maxAngularSpeed}
 {
 }
@@ -46,32 +47,32 @@ InertialState InputControlAgent::updateState(const InertialState& currentState)
   newState.velocity = velocity;
 
   // Calculate angular velocity based on input commands
-  // Note: angularVelocity is now Coordinate (vector form) per ticket 0023a
-  Coordinate angularVelocity{0, 0, 0};
+  // Note: angularVelocity is now AngularRate (vector form) per ticket 0024
+  AngularRate angularVelocity{0, 0, 0};
 
   if (inputCommands_.pitchUp)
   {
-    angularVelocity.x() = maxAngularSpeed_.getRad();  // pitch around X-axis
+    angularVelocity.pitch() = maxAngularSpeed_;  // pitch around Y-axis (aerospace convention)
   }
   if (inputCommands_.pitchDown)
   {
-    angularVelocity.x() = -maxAngularSpeed_.getRad();
+    angularVelocity.pitch() = -maxAngularSpeed_;
   }
   if (inputCommands_.rollLeft)
   {
-    angularVelocity.y() = maxAngularSpeed_.getRad();  // roll around Y-axis
+    angularVelocity.roll() = maxAngularSpeed_;  // roll around X-axis
   }
   if (inputCommands_.rollRight)
   {
-    angularVelocity.y() = -maxAngularSpeed_.getRad();
+    angularVelocity.roll() = -maxAngularSpeed_;
   }
   if (inputCommands_.yawLeft)
   {
-    angularVelocity.z() = maxAngularSpeed_.getRad();  // yaw around Z-axis
+    angularVelocity.yaw() = maxAngularSpeed_;  // yaw around Z-axis
   }
   if (inputCommands_.yawRight)
   {
-    angularVelocity.z() = -maxAngularSpeed_.getRad();
+    angularVelocity.yaw() = -maxAngularSpeed_;
   }
 
   newState.angularVelocity = angularVelocity;

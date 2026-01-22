@@ -112,6 +112,11 @@ AngularCoordinate& ReferenceFrame::getAngularCoordinate()
   return angular_;
 }
 
+const AngularCoordinate& ReferenceFrame::getAngularCoordinate() const
+{
+  return angular_;
+}
+
 void ReferenceFrame::updateRotationMatrix() const
 {
   // Create rotation matrix using ZYX Euler angle convention

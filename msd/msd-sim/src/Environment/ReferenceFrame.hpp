@@ -176,6 +176,12 @@ public:
   AngularCoordinate& getAngularCoordinate();
 
   /**
+   * @brief Get the orientation as AngularCoordinate (const version)
+   * @return Const reference to AngularCoordinate representing current rotation
+   */
+  const AngularCoordinate& getAngularCoordinate() const;
+
+  /**
    * @brief Get the rotation matrix
    * @return Const reference to the 3x3 rotation matrix
    */

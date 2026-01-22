@@ -1,0 +1,124 @@
+@startuml
+
+' Force Application System for Rigid Body Physics
+' Adapted from ticket 0023_force_application_system design
+' This diagram shows the production force application system
+
+class AssetInertial {
+    - accumulatedForce_: Coordinate
+    - accumulatedTorque_: Coordinate
+    - mass_: double
+    - inertiaTensor_: Eigen::Matrix3d
+    - inverseInertiaTensor_: Eigen::Matrix3d
+    - dynamicState_: InertialState
+    --
+    + applyForce(force: Coordinate): void
+    + applyForceAtPoint(force: Coordinate, worldPoint: Coordinate): void
+    + applyTorque(torque: Coordinate): void
+    + clearForces(): void
+    + getAccumulatedForce(): const Coordinate&
+    + getAccumulatedTorque(): const Coordinate&
+    + getMass(): double
+    + getInertiaTensor(): const Eigen::Matrix3d&
+    + getInverseInertiaTensor(): const Eigen::Matrix3d&
+    + getInertialState(): InertialState&
+}
+
+class WorldModel {
+    - inertialAssets_: vector<AssetInertial>
+    - gravity_: Coordinate
+    --
+    + getGravity(): const Coordinate&
+    + updatePhysics(dt: double): void
+    + update(deltaTime: milliseconds): void
+}
+
+class ReferenceFrame {
+    - origin_: Coordinate
+    - angular_: AngularCoordinate
+    - rotationMatrix_: Eigen::Matrix3d
+    --
+    + setOrigin(origin: Coordinate): void
+    + setRotation(angular: AngularCoordinate): void
+    + getOrigin(): Coordinate&
+    + getAngularCoordinate(): AngularCoordinate
+}
+
+class InertialState {
+    + position: Coordinate
+    + velocity: Coordinate
+    + acceleration: Coordinate
+    + orientation: AngularCoordinate
+    + angularVelocity: AngularRate
+    + angularAcceleration: AngularRate
+}
+
+class AngularRate {
+    + AngularRate(pitch, roll, yaw: double)
+    + pitch(): double
+    + roll(): double
+    + yaw(): double
+}
+
+class AngularCoordinate {
+    + AngularCoordinate(pitch, roll, yaw: double)
+    + pitch(): double
+    + roll(): double
+    + yaw(): double
+    + normalized(): AngularCoordinate
+}
+
+' Relationships
+AssetInertial *-- InertialState : contains
+AssetInertial --> ReferenceFrame : inherits from AssetPhysical
+WorldModel o-- AssetInertial : manages
+InertialState *-- AngularCoordinate : orientation
+InertialState *-- AngularRate : angular velocity/accel
+ReferenceFrame *-- AngularCoordinate : rotation
+
+' Integration flow annotations
+note right of WorldModel::updatePhysics
+  **Semi-Implicit Euler Integration**
+  For each AssetInertial:
+  1. Apply gravity: applyForce(m * g)
+  2. Compute linear accel: a = F_net/m
+  3. Update velocity: v += a * dt
+  4. Update position: x += v * dt
+  5. Compute angular accel: α = I⁻¹ * τ_net
+  6. Update angular velocity: ω += α * dt
+  7. Update orientation: θ += ω * dt
+  8. Sync ReferenceFrame with InertialState
+  9. Clear accumulated forces
+end note
+
+note left of AssetInertial::applyForceAtPoint
+  **Torque from Force at Point**
+  r = worldPoint - frame.getOrigin()
+  τ = r × F
+  accumulatedForce_ += force
+  accumulatedTorque_ += τ
+end note
+
+note bottom of AssetInertial
+  **Force Accumulation**
+  Forces and torques accumulate per frame.
+  Integration uses accumulated values.
+  Cleared automatically after physics step.
+
+  **World-Space Convention**
+  All forces, torques, and application points
+  are in world-space coordinates.
+end note
+
+note top of WorldModel
+  **Physics Integration**
+  Semi-implicit Euler provides better stability
+  than explicit Euler for oscillatory systems.
+  Recommended timestep: 16.67ms (60 FPS)
+
+  **Gravity**
+  Applied as direct acceleration (m * g)
+  for efficiency and physical equivalence.
+end note
+
+@enduml

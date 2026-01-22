@@ -105,8 +105,9 @@ public:
   /**
    * @brief Apply a force at a specific world-space point.
    *
-   * Placeholder implementation for ticket 0023a - accumulates force only.
-   * Torque computation (r × F) deferred to ticket 0023.
+   * Generates torque via τ = r × F, where r is the vector from the center
+   * of mass to the application point. Forces at the center of mass generate
+   * zero torque.
    *
    * @param force Force vector in world coordinates [N]
    * @param worldPoint Application point in world coordinates [m]

@@ -32,6 +32,11 @@ AssetInertial::AssetInertial(uint32_t assetId,
 
   // Compute inverse inertia tensor for physics calculations
   inverseInertiaTensor_ = inertiaTensor_.inverse();
+
+  // Initialize InertialState position and orientation from ReferenceFrame
+  dynamicState_.position = frame.getOrigin();
+  dynamicState_.orientation = frame.getAngularCoordinate();
+  // Ticket: 0023_force_application_system
 }
 
 double AssetInertial::getMass() const
@@ -70,16 +75,20 @@ void AssetInertial::applyForce(const Coordinate& force)
 }
 
 void AssetInertial::applyForceAtPoint(const Coordinate& force,
-                                       [[maybe_unused]] const Coordinate& worldPoint)
+                                       const Coordinate& worldPoint)
 {
+  // Accumulate linear force
   accumulatedForce_ += force;
 
-  // TODO (ticket 0023): Compute torque from r × F
-  // Coordinate r = worldPoint - getReferenceFrame().getOrigin();
-  // Coordinate torqueVec = r.cross(force);
-  // accumulatedTorque_ += torqueVec;
+  // Compute torque: τ = r × F
+  // r is the vector from center of mass to application point
+  Coordinate r = worldPoint - getReferenceFrame().getOrigin();
+  Coordinate torque = r.cross(force);
 
-  // Ticket: 0023a_force_application_scaffolding
+  // Accumulate torque
+  accumulatedTorque_ += torque;
+
+  // Ticket: 0023_force_application_system
 }
 
 void AssetInertial::applyTorque(const Coordinate& torque)

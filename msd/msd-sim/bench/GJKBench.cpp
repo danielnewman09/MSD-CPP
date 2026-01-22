@@ -4,7 +4,6 @@
 #include <benchmark/benchmark.h>
 #include <random>
 #include <vector>
-#include "msd-sim/src/Environment/Angle.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
 #include "msd-sim/src/Environment/AngularCoordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
@@ -99,9 +98,9 @@ static void BM_GJK_TransformedCollision(benchmark::State& state) {
 
   // Non-trivial transformation: translation + rotation
   AngularCoordinate rotation{
-    Angle::fromDegrees(15.0).getRad(),  // pitch
-    Angle::fromDegrees(30.0).getRad(),  // roll
-    Angle::fromDegrees(45.0).getRad()   // yaw
+    15.0 * M_PI / 180.0,  // pitch (radians)
+    30.0 * M_PI / 180.0,  // roll (radians)
+    45.0 * M_PI / 180.0   // yaw (radians)
   };
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
@@ -178,9 +177,9 @@ static void BM_GJK_RotationOnly(benchmark::State& state) {
   auto hullB = generateRandomHull(vertexCount);
 
   AngularCoordinate rotation{
-    Angle::fromDegrees(30.0).getRad(),  // pitch
-    Angle::fromDegrees(45.0).getRad(),  // roll
-    Angle::fromDegrees(60.0).getRad()   // yaw
+    30.0 * M_PI / 180.0,  // pitch (radians)
+    45.0 * M_PI / 180.0,  // roll (radians)
+    60.0 * M_PI / 180.0   // yaw (radians)
   };
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};

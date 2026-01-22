@@ -7,7 +7,6 @@
 #include <chrono>
 
 #include "msd-sim/src/Agent/InputCommands.hpp"
-#include "msd-sim/src/Environment/Angle.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 
 namespace msd_sim
