@@ -21,36 +21,30 @@ class ConvexHull;
 namespace InertialCalculations
 {
 /**
- * @brief Compute the moment of inertia tensor about the origin.
- *
- * Computes the inertia tensor for a uniform-density solid with the given
- * mass, with the tensor computed about the coordinate system origin.
- *
- * @param hull The convex hull geometry
- * @param mass Mass in kilograms [kg]
- * @return 3x3 inertia tensor about origin [kg⋅m²]
- * @throws std::invalid_argument if mass <= 0
- * @throws std::runtime_error if hull is degenerate (volume <= 0)
- */
-Eigen::Matrix3d computeInertiaTensorAboutOrigin(const ConvexHull& hull,
-                                                double mass);
-
-/**
  * @brief Compute the moment of inertia tensor about the centroid.
  *
  * Computes the inertia tensor about the hull's center of mass assuming
- * uniform density. This is the most useful form for rigid body dynamics.
+ * uniform density. This is the standard form for rigid body dynamics.
  *
- * Uses the parallel axis theorem to transform from the origin-based tensor.
+ * Uses Brian Mirtich's algorithm from "Fast and Accurate Computation of
+ * Polyhedral Mass Properties" (1996). The algorithm applies the divergence
+ * theorem to convert volume integrals to surface integrals through three
+ * layers: projection integrals → face integrals → volume integrals.
+ *
+ * This produces results within machine precision of analytical solutions
+ * (< 1e-10 error).
+ *
+ * Ticket: 0026_mirtich_inertia_tensor
+ * Design: docs/designs/0026_mirtich_inertia_tensor/design.md
  *
  * @param hull The convex hull geometry
- * @param mass Mass in kilograms [kg]
+ * @param density Density in kilograms [kg/m^3]
  * @return 3x3 inertia tensor about centroid [kg⋅m²]
- * @throws std::invalid_argument if mass <= 0
- * @throws std::runtime_error if hull is degenerate (volume <= 0)
+ * @throws std::invalid_argument if density <= 0
+ * @throws std::runtime_error if hull is invalid or degenerate
  */
 Eigen::Matrix3d computeInertiaTensorAboutCentroid(const ConvexHull& hull,
-                                                  double mass);
+                                                  double density);
 
 }  // namespace InertialCalculations
 

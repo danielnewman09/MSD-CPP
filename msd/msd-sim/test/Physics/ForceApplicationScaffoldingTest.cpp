@@ -493,10 +493,9 @@ TEST(PhysicsIntegration, updatePhysics_semiImplicitEuler_velocityFirst)
   EXPECT_NEAR(state.position.x(), expectedPos, 1e-6);
 }
 
-// DISABLED: Inertia tensor calculation produces NaN for tetrahedron
-// Angular integration produces NaN, affecting ReferenceFrame synchronization test
-// TODO: Fix InertialCalculations to produce valid inertia tensors
-TEST(PhysicsIntegration, DISABLED_updatePhysics_synchronizesReferenceFrame)
+// Ticket: 0025_fix_inertia_tensor_calculation
+// Re-enabled after fixing inertia tensor calculation
+TEST(PhysicsIntegration, updatePhysics_synchronizesReferenceFrame)
 {
   // Ticket: 0023_force_application_system
   WorldModel world;
@@ -556,10 +555,9 @@ TEST(PhysicsIntegration, updatePhysics_clearsForces)
   EXPECT_DOUBLE_EQ(mutableAsset.getAccumulatedTorque().z(), 0.0);
 }
 
-// DISABLED: Inertia tensor calculation produces NaN for tetrahedron
-// This is a pre-existing bug, not related to force application system
-// TODO: Fix InertialCalculations to produce valid inertia tensors
-TEST(PhysicsIntegration, DISABLED_updatePhysics_angularIntegration)
+// Ticket: 0025_fix_inertia_tensor_calculation
+// Re-enabled after fixing inertia tensor calculation
+TEST(PhysicsIntegration, updatePhysics_angularIntegration)
 {
   // Ticket: 0023_force_application_system
   WorldModel world;
@@ -639,9 +637,9 @@ TEST(ProjectileMotion, freeFall_underGravity)
 }
 
 // DISABLED: Inertia tensor calculation produces NaN for tetrahedron
-// Angular integration produces NaN, affecting rotation tests
-// TODO: Fix InertialCalculations to produce valid inertia tensors
-TEST(ProjectileMotion, DISABLED_rotationFromOffsetForce)
+// Ticket: 0025_fix_inertia_tensor_calculation
+// Re-enabled after fixing inertia tensor calculation
+TEST(ProjectileMotion, rotationFromOffsetForce)
 {
   // Ticket: 0023_force_application_system
   WorldModel world;
