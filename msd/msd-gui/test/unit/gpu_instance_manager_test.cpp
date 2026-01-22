@@ -9,7 +9,7 @@
 #include <msd-assets/src/GeometryFactory.hpp>
 #include <msd-gui/src/GPUInstanceManager.hpp>
 #include <msd-sim/src/Environment/Coordinate.hpp>
-#include <msd-sim/src/Environment/EulerAngles.hpp>
+#include <msd-sim/src/Environment/AngularCoordinate.hpp>
 #include <msd-sim/src/Environment/ReferenceFrame.hpp>
 #include <msd-sim/src/Physics/RigidBody/ConvexHull.hpp>
 
@@ -56,7 +56,7 @@ public:
   AssetInertial createAssetWithRotation(uint32_t assetId,
                                         uint32_t instanceId,
                                         const Coordinate& position,
-                                        const EulerAngles& orientation,
+                                        const AngularCoordinate& orientation,
                                         double mass = 1.0)
   {
     ReferenceFrame frame{position, orientation};

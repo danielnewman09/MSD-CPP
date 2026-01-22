@@ -1,3 +1,6 @@
+// Ticket: 0024_angular_coordinate
+// Design: docs/designs/0024_angular_coordinate/design.md
+
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include <cmath>
 
@@ -6,7 +9,7 @@ namespace msd_sim
 
 ReferenceFrame::ReferenceFrame()
   : origin_{0.0, 0.0, 0.0},
-    euler_{},
+    angular_{},
     rotation_{Eigen::Matrix3d::Identity()},
     updated_{false}
 {
@@ -15,7 +18,7 @@ ReferenceFrame::ReferenceFrame()
 
 ReferenceFrame::ReferenceFrame(const Coordinate& origin)
   : origin_{origin},
-    euler_{},
+    angular_{},
     rotation_{Eigen::Matrix3d::Identity()},
     updated_{false}
 {
@@ -23,9 +26,9 @@ ReferenceFrame::ReferenceFrame(const Coordinate& origin)
 }
 
 ReferenceFrame::ReferenceFrame(const Coordinate& origin,
-                               const EulerAngles& euler)
+                               const AngularCoordinate& angular)
   : origin_{origin},
-    euler_{euler},
+    angular_{angular},
     rotation_{Eigen::Matrix3d::Identity()},
     updated_{false}
 {
@@ -97,25 +100,25 @@ void ReferenceFrame::setOrigin(const Coordinate& origin)
   origin_ = origin;
 }
 
-void ReferenceFrame::setRotation(const EulerAngles& euler)
+void ReferenceFrame::setRotation(const AngularCoordinate& angular)
 {
-  euler_ = euler;
+  angular_ = angular;
   updateRotationMatrix();
 }
 
-EulerAngles& ReferenceFrame::getEulerAngles()
+AngularCoordinate& ReferenceFrame::getAngularCoordinate()
 {
   updated_ = false;
-  return euler_;
+  return angular_;
 }
 
 void ReferenceFrame::updateRotationMatrix() const
 {
   // Create rotation matrix using ZYX Euler angle convention
   // Using Eigen's AngleAxis for clarity and efficiency
-  Eigen::AngleAxisd rollAngle{euler_.roll.getRad(), Eigen::Vector3d::UnitX()};
-  Eigen::AngleAxisd pitchAngle{euler_.pitch.getRad(), Eigen::Vector3d::UnitY()};
-  Eigen::AngleAxisd yawAngle{euler_.yaw.getRad(), Eigen::Vector3d::UnitZ()};
+  Eigen::AngleAxisd rollAngle{angular_.roll(), Eigen::Vector3d::UnitX()};
+  Eigen::AngleAxisd pitchAngle{angular_.pitch(), Eigen::Vector3d::UnitY()};
+  Eigen::AngleAxisd yawAngle{angular_.yaw(), Eigen::Vector3d::UnitZ()};
 
   // Combine rotations: R = Rz(yaw) * Ry(pitch) * Rx(roll)
   Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;

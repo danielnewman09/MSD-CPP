@@ -70,7 +70,7 @@ void AssetInertial::applyForce(const Coordinate& force)
 }
 
 void AssetInertial::applyForceAtPoint(const Coordinate& force,
-                                       const Coordinate& worldPoint)
+                                       [[maybe_unused]] const Coordinate& worldPoint)
 {
   accumulatedForce_ += force;
 

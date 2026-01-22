@@ -1,8 +1,11 @@
+// Ticket: 0024_angular_coordinate
+// Design: docs/designs/0024_angular_coordinate/design.md
+
 #include <gtest/gtest.h>
 #include <cmath>
 #include "msd-sim/src/Environment/Angle.hpp"
+#include "msd-sim/src/Environment/AngularCoordinate.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Environment/EulerAngles.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Utils/utils.hpp"
 
@@ -31,10 +34,10 @@ TEST(ReferenceFrameTest, DefaultConstructor)
   EXPECT_DOUBLE_EQ(origin.y(), 0.0);
   EXPECT_DOUBLE_EQ(origin.z(), 0.0);
 
-  EulerAngles euler = frame.getEulerAngles();
-  EXPECT_DOUBLE_EQ(euler.roll.getRad(), 0.0);
-  EXPECT_DOUBLE_EQ(euler.pitch.getRad(), 0.0);
-  EXPECT_DOUBLE_EQ(euler.yaw.getRad(), 0.0);
+  AngularCoordinate angular = frame.getAngularCoordinate();
+  EXPECT_DOUBLE_EQ(angular.roll(), 0.0);
+  EXPECT_DOUBLE_EQ(angular.pitch(), 0.0);
+  EXPECT_DOUBLE_EQ(angular.yaw(), 0.0);
 }
 
 TEST(ReferenceFrameTest, ConstructorWithOrigin)
@@ -47,32 +50,28 @@ TEST(ReferenceFrameTest, ConstructorWithOrigin)
   EXPECT_DOUBLE_EQ(frameOrigin.y(), 2.0);
   EXPECT_DOUBLE_EQ(frameOrigin.z(), 3.0);
 
-  EulerAngles euler = frame.getEulerAngles();
-  EXPECT_DOUBLE_EQ(euler.roll.getRad(), 0.0);
-  EXPECT_DOUBLE_EQ(euler.pitch.getRad(), 0.0);
-  EXPECT_DOUBLE_EQ(euler.yaw.getRad(), 0.0);
+  AngularCoordinate angular = frame.getAngularCoordinate();
+  EXPECT_DOUBLE_EQ(angular.roll(), 0.0);
+  EXPECT_DOUBLE_EQ(angular.pitch(), 0.0);
+  EXPECT_DOUBLE_EQ(angular.yaw(), 0.0);
 }
 
 TEST(ReferenceFrameTest, ConstructorWithOriginAndRotation)
 {
   Coordinate origin{1.0, 2.0, 3.0};
-  EulerAngles euler{
-    Angle::fromRadians(M_PI / 4),  // pitch
-    Angle::fromRadians(M_PI / 6),  // roll
-    Angle::fromRadians(M_PI / 3)   // yaw
-  };
+  AngularCoordinate angular{M_PI / 4, M_PI / 6, M_PI / 3};  // pitch, roll, yaw
 
-  ReferenceFrame frame{origin, euler};
+  ReferenceFrame frame{origin, angular};
 
   Coordinate frameOrigin = frame.getOrigin();
   EXPECT_DOUBLE_EQ(frameOrigin.x(), 1.0);
   EXPECT_DOUBLE_EQ(frameOrigin.y(), 2.0);
   EXPECT_DOUBLE_EQ(frameOrigin.z(), 3.0);
 
-  EulerAngles frameEuler = frame.getEulerAngles();
-  EXPECT_DOUBLE_EQ(frameEuler.pitch.getRad(), M_PI / 4);
-  EXPECT_DOUBLE_EQ(frameEuler.roll.getRad(), M_PI / 6);
-  EXPECT_DOUBLE_EQ(frameEuler.yaw.getRad(), M_PI / 3);
+  AngularCoordinate frameAngular = frame.getAngularCoordinate();
+  EXPECT_DOUBLE_EQ(frameAngular.pitch(), M_PI / 4);
+  EXPECT_DOUBLE_EQ(frameAngular.roll(), M_PI / 6);
+  EXPECT_DOUBLE_EQ(frameAngular.yaw(), M_PI / 3);
 }
 
 // ============================================================================
@@ -95,18 +94,14 @@ TEST(ReferenceFrameTest, SetOrigin)
 TEST(ReferenceFrameTest, SetRotation)
 {
   ReferenceFrame frame;
-  EulerAngles euler{
-    Angle::fromRadians(M_PI / 2),  // pitch
-    Angle::fromRadians(M_PI / 4),  // roll
-    Angle::fromRadians(M_PI / 6)   // yaw
-  };
+  AngularCoordinate angular{M_PI / 2, M_PI / 4, M_PI / 6};  // pitch, roll, yaw
 
-  frame.setRotation(euler);
+  frame.setRotation(angular);
 
-  EulerAngles frameEuler = frame.getEulerAngles();
-  EXPECT_DOUBLE_EQ(frameEuler.pitch.getRad(), M_PI / 2);
-  EXPECT_DOUBLE_EQ(frameEuler.roll.getRad(), M_PI / 4);
-  EXPECT_DOUBLE_EQ(frameEuler.yaw.getRad(), M_PI / 6);
+  AngularCoordinate frameAngular = frame.getAngularCoordinate();
+  EXPECT_DOUBLE_EQ(frameAngular.pitch(), M_PI / 2);
+  EXPECT_DOUBLE_EQ(frameAngular.roll(), M_PI / 4);
+  EXPECT_DOUBLE_EQ(frameAngular.yaw(), M_PI / 6);
 }
 
 // ============================================================================
@@ -196,12 +191,12 @@ TEST(ReferenceFrameTest, TranslationOnlyRoundTrip)
 TEST(ReferenceFrameTest, YawRotation90Degrees)
 {
   // Rotate 90 degrees about Z-axis (yaw)
-  EulerAngles euler{
-    Angle::fromRadians(0.0),      // pitch
-    Angle::fromRadians(0.0),      // roll
-    Angle::fromRadians(M_PI / 2)  // yaw = 90 degrees
+  AngularCoordinate angular{
+    0.0,      // pitch
+    0.0,      // roll
+    M_PI / 2  // yaw = 90 degrees
   };
-  ReferenceFrame frame{Coordinate{0, 0, 0}, euler};
+  ReferenceFrame frame{Coordinate{0, 0, 0}, angular};
 
   // Point at (1, 0, 0) in global frame
   Coordinate globalCoord{1.0, 0.0, 0.0};
@@ -217,12 +212,12 @@ TEST(ReferenceFrameTest, YawRotation90Degrees)
 TEST(ReferenceFrameTest, PitchRotation90Degrees)
 {
   // Rotate 90 degrees about Y-axis (pitch)
-  EulerAngles euler{
-    Angle::fromRadians(M_PI / 2),  // pitch = 90 degrees
-    Angle::fromRadians(0.0),       // roll
-    Angle::fromRadians(0.0)        // yaw
+  AngularCoordinate angular{
+    M_PI / 2,  // pitch = 90 degrees
+    0.0,       // roll
+    0.0        // yaw
   };
-  ReferenceFrame frame{Coordinate{0, 0, 0}, euler};
+  ReferenceFrame frame{Coordinate{0, 0, 0}, angular};
 
   // Point at (1, 0, 0) in global frame
   Coordinate globalCoord{1.0, 0.0, 0.0};
@@ -237,12 +232,12 @@ TEST(ReferenceFrameTest, PitchRotation90Degrees)
 TEST(ReferenceFrameTest, RollRotation90Degrees)
 {
   // Rotate 90 degrees about X-axis (roll)
-  EulerAngles euler{
-    Angle::fromRadians(0.0),       // pitch
-    Angle::fromRadians(M_PI / 2),  // roll = 90 degrees
-    Angle::fromRadians(0.0)        // yaw
+  AngularCoordinate angular{
+    0.0,       // pitch
+    M_PI / 2,  // roll = 90 degrees
+    0.0        // yaw
   };
-  ReferenceFrame frame{Coordinate{0, 0, 0}, euler};
+  ReferenceFrame frame{Coordinate{0, 0, 0}, angular};
 
   // Point at (0, 1, 0) in global frame
   Coordinate globalCoord{0.0, 1.0, 0.0};
@@ -256,12 +251,12 @@ TEST(ReferenceFrameTest, RollRotation90Degrees)
 
 TEST(ReferenceFrameTest, RotationOnlyRoundTrip)
 {
-  EulerAngles euler{
-    Angle::fromRadians(0.3),  // pitch
-    Angle::fromRadians(0.5),  // roll
-    Angle::fromRadians(0.7)   // yaw
+  AngularCoordinate angular{
+    (0.3),  // pitch
+    (0.5),  // roll
+    (0.7)   // yaw
   };
-  ReferenceFrame frame{Coordinate{0, 0, 0}, euler};
+  ReferenceFrame frame{Coordinate{0, 0, 0}, angular};
 
   Coordinate original{1.5, 2.5, 3.5};
 
@@ -278,12 +273,12 @@ TEST(ReferenceFrameTest, RotationOnlyRoundTrip)
 TEST(ReferenceFrameTest, TranslationAndRotationGlobalToLocal)
 {
   Coordinate origin{10.0, 20.0, 30.0};
-  EulerAngles euler{
-    Angle::fromRadians(0.0),      // pitch
-    Angle::fromRadians(0.0),      // roll
-    Angle::fromRadians(M_PI / 2)  // yaw = 90 degrees
+  AngularCoordinate angular{
+    0.0,      // pitch
+    0.0,      // roll
+    M_PI / 2  // yaw = 90 degrees
   };
-  ReferenceFrame frame{origin, euler};
+  ReferenceFrame frame{origin, angular};
 
   // Point at (11, 20, 30) in global frame
   Coordinate globalCoord{11.0, 20.0, 30.0};
@@ -299,12 +294,12 @@ TEST(ReferenceFrameTest, TranslationAndRotationGlobalToLocal)
 TEST(ReferenceFrameTest, TranslationAndRotationLocalToGlobal)
 {
   Coordinate origin{10.0, 20.0, 30.0};
-  EulerAngles euler{
-    Angle::fromRadians(0.0),      // pitch
-    Angle::fromRadians(0.0),      // roll
-    Angle::fromRadians(M_PI / 2)  // yaw = 90 degrees
+  AngularCoordinate angular{
+    0.0,      // pitch
+    0.0,      // roll
+    M_PI / 2  // yaw = 90 degrees
   };
-  ReferenceFrame frame{origin, euler};
+  ReferenceFrame frame{origin, angular};
 
   // Point at (0, -1, 0) in local frame
   Coordinate localCoord{0.0, -1.0, 0.0};
@@ -320,12 +315,12 @@ TEST(ReferenceFrameTest, TranslationAndRotationLocalToGlobal)
 TEST(ReferenceFrameTest, ComplexTransformationRoundTrip)
 {
   Coordinate origin{5.5, 10.3, -2.7};
-  EulerAngles euler{
-    Angle::fromRadians(0.4),   // pitch
-    Angle::fromRadians(-0.3),  // roll
-    Angle::fromRadians(1.2)    // yaw
+  AngularCoordinate angular{
+    (0.4),   // pitch
+    (-0.3),  // roll
+    (1.2)    // yaw
   };
-  ReferenceFrame frame{origin, euler};
+  ReferenceFrame frame{origin, angular};
 
   Coordinate original{100.0, 200.0, 300.0};
 
@@ -369,12 +364,12 @@ TEST(ReferenceFrameTest, NegativeCoordinates)
 TEST(ReferenceFrameTest, LargeRotationAngles)
 {
   // Test with angles that require normalization
-  EulerAngles euler{
-    Angle::fromRadians(3.5 * M_PI),   // pitch
-    Angle::fromRadians(-2.7 * M_PI),  // roll
-    Angle::fromRadians(5.1 * M_PI)    // yaw
+  AngularCoordinate angular{
+    (3.5 * M_PI),   // pitch
+    (-2.7 * M_PI),  // roll
+    (5.1 * M_PI)    // yaw
   };
-  ReferenceFrame frame{Coordinate{0, 0, 0}, euler};
+  ReferenceFrame frame{Coordinate{0, 0, 0}, angular};
 
   Coordinate original{1.0, 2.0, 3.0};
 
@@ -387,9 +382,9 @@ TEST(ReferenceFrameTest, LargeRotationAngles)
 TEST(ReferenceFrameTest, ZeroVector)
 {
   Coordinate origin{5.0, 10.0, 15.0};
-  EulerAngles euler{
-    Angle::fromRadians(0.5), Angle::fromRadians(0.3), Angle::fromRadians(0.7)};
-  ReferenceFrame frame{origin, euler};
+  AngularCoordinate angular{
+    (0.5), (0.3), (0.7)};
+  ReferenceFrame frame{origin, angular};
 
   Coordinate zeroVec{0.0, 0.0, 0.0};
 
@@ -407,10 +402,8 @@ TEST(ReferenceFrameTest, ChainedFrameTransformations)
 {
   // Create two reference frames
   Coordinate origin1{10.0, 0.0, 0.0};
-  EulerAngles euler1{Angle::fromRadians(0.0),
-                     Angle::fromRadians(0.0),
-                     Angle::fromRadians(M_PI / 4)};
-  ReferenceFrame frame1{origin1, euler1};
+  AngularCoordinate angular1{0.0, 0.0, M_PI / 4};
+  ReferenceFrame frame1{origin1, angular1};
 
   Coordinate origin2{5.0, 0.0, 0.0};  // Relative to frame1
   // euler2 declared but unused - test focuses on frame1 operations
@@ -440,10 +433,10 @@ TEST(ReferenceFrameTest, AircraftBodyFrame)
   // Simulate an aircraft at position (1000, 2000, 500) meters
   // with heading 45 degrees (yaw), pitch up 10 degrees, no roll
   Coordinate aircraftPos{1000.0, 2000.0, 500.0};
-  EulerAngles aircraftAttitude{
-    Angle::fromDegrees(10.0),  // pitch up 10 degrees
-    Angle::fromDegrees(0.0),   // no roll
-    Angle::fromDegrees(45.0)   // heading 45 degrees
+  AngularCoordinate aircraftAttitude{
+    10.0 * M_PI / 180.0,  // pitch up 10 degrees
+    0.0,                  // no roll
+    45.0 * M_PI / 180.0   // heading 45 degrees
   };
   ReferenceFrame bodyFrame{aircraftPos, aircraftAttitude};
 
@@ -465,8 +458,8 @@ TEST(ReferenceFrameTest, SensorMountOnRobot)
 {
   // Robot at position (5, 5, 0) facing 90 degrees (north)
   Coordinate robotPos{5.0, 5.0, 0.0};
-  EulerAngles robotOrientation{
-    Angle::fromDegrees(0.0), Angle::fromDegrees(0.0), Angle::fromDegrees(90.0)};
+  AngularCoordinate robotOrientation{
+    0.0, 0.0, 90.0 * M_PI / 180.0};
   ReferenceFrame robotFrame{robotPos, robotOrientation};
 
   // Sensor mounted 1 meter in front and 0.5 meters up

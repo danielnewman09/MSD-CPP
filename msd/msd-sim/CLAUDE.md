@@ -61,7 +61,8 @@ Core mathematical primitives and simulation entity management. Provides type-saf
 **Key Components**:
 - `Coordinate` — 3D vector wrapper (Eigen-based)
 - `Angle` — Type-safe angle with lazy normalization
-- `EulerAngles` — 3D orientation (pitch/roll/yaw)
+- `AngularCoordinate` — Orientation angles with deferred normalization
+- `AngularRate` — Angular velocity/acceleration without normalization
 - `InertialState` — Complete kinematic state (6 DOF)
 - `ReferenceFrame` — Coordinate transformations
 - `Object` — Unified simulation entity (Graphical/Inertial/Environmental/Boundary)
@@ -112,7 +113,7 @@ class Engine {
 
   void spawnInertialObject(const std::string assetName,
                            const Coordinate& position,
-                           const EulerAngles& orientation);
+                           const AngularCoordinate& orientation);
 
   msd_assets::AssetRegistry& getAssetRegistry();
 
@@ -132,7 +133,7 @@ msd_sim::Engine engine{"assets.db"};
 // Spawn objects into simulation
 engine.spawnInertialObject("cube",
                            Coordinate{0, 0, 10},
-                           EulerAngles{});
+                           AngularCoordinate{});
 
 // Run simulation loop
 auto simTime = std::chrono::milliseconds{0};
@@ -151,7 +152,7 @@ while (running) {
 
 ### Dependencies
 - `msd-assets` — Asset loading and management
-- Environment module — WorldModel, Coordinate, EulerAngles
+- Environment module — WorldModel, Coordinate, AngularCoordinate
 
 ---
 
@@ -246,7 +247,8 @@ ctest --preset debug
 | Diagram | Description | Location |
 |---------|-------------|----------|
 | [`msd-sim-core.puml`](../../docs/msd/msd-sim/msd-sim-core.puml) | High-level library architecture | `docs/msd/msd-sim/` |
-| [`mathematical-primitives.puml`](../../docs/msd/msd-sim/Environment/mathematical-primitives.puml) | Coordinate, Angle, InertialState | `docs/msd/msd-sim/Environment/` |
+| [`mathematical-primitives.puml`](../../docs/msd/msd-sim/Environment/mathematical-primitives.puml) | Coordinate, Angle, AngularCoordinate, AngularRate, InertialState | `docs/msd/msd-sim/Environment/` |
+| [`angular-coordinate.puml`](../../docs/msd/msd-sim/Environment/angular-coordinate.puml) | AngularCoordinate and AngularRate detailed design | `docs/msd/msd-sim/Environment/` |
 | [`reference-frame.puml`](../../docs/msd/msd-sim/Environment/reference-frame.puml) | Coordinate transformations | `docs/msd/msd-sim/Environment/` |
 | [`object.puml`](../../docs/msd/msd-sim/Environment/object.puml) | Unified Object entity | `docs/msd/msd-sim/Environment/` |
 | [`world-model.puml`](../../docs/msd/msd-sim/Environment/world-model.puml) | WorldModel container | `docs/msd/msd-sim/Environment/` |
@@ -259,6 +261,50 @@ ctest --preset debug
 ---
 
 ## Recent Architectural Changes
+
+### AngularCoordinate and AngularRate — 2026-01-21
+**Ticket**: [0024_angular_coordinate](../../tickets/0024_angular_coordinate.md)
+**Diagram**: [`angular-coordinate.puml`](../../docs/msd/msd-sim/Environment/angular-coordinate.puml)
+**Type**: Breaking Change
+
+Introduced two type-safe classes for angular quantity representation: `AngularCoordinate` for orientation with deferred normalization, and `AngularRate` for angular velocity/acceleration without normalization. Both inherit from `Eigen::Vector3d` for full matrix operations while providing semantic pitch/roll/yaw accessors.
+
+**Breaking changes**:
+- Removed `EulerAngles` class entirely
+- `InertialState::orientation` changed from `EulerAngles` to `AngularCoordinate`
+- `InertialState::angularVelocity` changed from `Coordinate` to `AngularRate`
+- `InertialState::angularAcceleration` changed from `Coordinate` to `AngularRate`
+- `ReferenceFrame` constructor, `setRotation()`, and `getAngularCoordinate()` now use `AngularCoordinate`
+- Internal `ReferenceFrame::euler_` changed to `ReferenceFrame::angular_`
+
+**Key improvements**:
+- **Type safety**: Prevents accidental assignment of rates to orientations (compile-time error)
+- **Performance**: Deferred normalization with 100π threshold is 10x faster than eager normalization (validated by prototypes)
+- **Semantic clarity**: `orientation.yaw()` vs `angularVelocity.yaw()` makes intent explicit
+- **Memory efficiency**: 24 bytes per instance (same as `Eigen::Vector3d`)
+
+**Migration**:
+```cpp
+// Old (EulerAngles)
+state.angularPosition.yaw.getRad()
+
+// New (AngularCoordinate)
+state.orientation.yaw()
+
+// Old (Coordinate for rates)
+state.angularVelocity.z()
+
+// New (AngularRate)
+state.angularVelocity.yaw()
+```
+
+**Key files**:
+- `src/Environment/AngularCoordinate.hpp` — Orientation with deferred normalization
+- `src/Environment/AngularRate.hpp` — Angular velocity/acceleration without normalization
+- `src/Physics/RigidBody/InertialState.hpp` — Updated angular field types
+- `src/Environment/ReferenceFrame.hpp`, `ReferenceFrame.cpp` — Migrated to AngularCoordinate
+
+---
 
 ### GJK AssetPhysical Transform Support — 2026-01-18
 **Ticket**: [0022_gjk_asset_physical_transform](../../tickets/0022_gjk_asset_physical_transform.md)

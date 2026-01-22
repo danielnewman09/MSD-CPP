@@ -85,7 +85,7 @@ void WorldModel::update(std::chrono::milliseconds deltaTime)
 
 // ========== Private Methods ==========
 
-void WorldModel::updatePhysics(double dt)
+void WorldModel::updatePhysics([[maybe_unused]] double dt)
 {
   for (auto& asset : inertialAssets_)
   {

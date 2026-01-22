@@ -40,7 +40,7 @@ SDLApplication::SDLApplication(const std::string& dbPath)
   // Create player platform with visual object
   // The camera will reference the visual object's ReferenceFrame
   playerPlatformId_ = engine_.spawnPlayerPlatform(
-    "cube", msd_sim::Coordinate{0., 0., 5.}, msd_sim::EulerAngles{});
+    "cube", msd_sim::Coordinate{0., 0., 5.}, msd_sim::AngularCoordinate{});
   SDL_Log("SDLApplication: Player platform created with ID: %u",
           *playerPlatformId_);
 
@@ -202,10 +202,10 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
   // Create random transform
   msd_sim::Coordinate randomPos{posDist(gen), posDist(gen), posDist(gen)};
 
-  msd_sim::EulerAngles randomOrientation{
-    msd_sim::Angle::fromRadians(angleDist(gen)),  // pitch
-    msd_sim::Angle::fromRadians(angleDist(gen)),  // roll
-    msd_sim::Angle::fromRadians(angleDist(gen))   // yaw
+  msd_sim::AngularCoordinate randomOrientation{
+    angleDist(gen),  // pitch (radians)
+    angleDist(gen),  // roll (radians)
+    angleDist(gen)   // yaw (radians)
   };
 
   // Random color
@@ -223,9 +223,9 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
           randomPos.x(),
           randomPos.y(),
           randomPos.z(),
-          randomOrientation.pitch.toDeg(),
-          randomOrientation.roll.toDeg(),
-          randomOrientation.yaw.toDeg(),
+          randomOrientation.pitchDeg(),
+          randomOrientation.rollDeg(),
+          randomOrientation.yawDeg(),
           static_cast<double>(r),
           static_cast<double>(g),
           static_cast<double>(b),

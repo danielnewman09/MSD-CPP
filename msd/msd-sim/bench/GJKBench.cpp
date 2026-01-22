@@ -4,8 +4,9 @@
 #include <benchmark/benchmark.h>
 #include <random>
 #include <vector>
+#include "msd-sim/src/Environment/Angle.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Environment/EulerAngles.hpp"
+#include "msd-sim/src/Environment/AngularCoordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Physics/GJK.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
@@ -18,15 +19,6 @@ using namespace msd_sim;
 // ============================================================================
 
 namespace {
-
-// Create a simple cube as a point cloud
-std::vector<Coordinate> createCubePoints(double size) {
-  double half = size / 2.0;
-  return {Coordinate(-half, -half, -half), Coordinate(half, -half, -half),
-          Coordinate(half, half, -half),   Coordinate(-half, half, -half),
-          Coordinate(-half, -half, half),  Coordinate(half, -half, half),
-          Coordinate(half, half, half),    Coordinate(-half, half, half)};
-}
 
 // Generate random point cloud with fixed seed for reproducibility
 std::vector<Coordinate> generateRandomPointCloud(size_t count) {
@@ -75,7 +67,7 @@ static void BM_GJK_IdentityTransform(benchmark::State& state) {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
-  state.SetComplexityN(vertexCount);
+  state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_IdentityTransform)
     ->Arg(10)     // Simple collision hull
@@ -106,10 +98,11 @@ static void BM_GJK_TransformedCollision(benchmark::State& state) {
   auto hullB = generateRandomHull(vertexCount);
 
   // Non-trivial transformation: translation + rotation
-  EulerAngles rotation{};
-  rotation.pitch = Angle::fromDegrees(15.0);
-  rotation.roll = Angle::fromDegrees(30.0);
-  rotation.yaw = Angle::fromDegrees(45.0);
+  AngularCoordinate rotation{
+    Angle::fromDegrees(15.0).getRad(),  // pitch
+    Angle::fromDegrees(30.0).getRad(),  // roll
+    Angle::fromDegrees(45.0).getRad()   // yaw
+  };
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
   ReferenceFrame frameB{Coordinate{0.5, 0.5, 0.5}, rotation};
@@ -121,7 +114,7 @@ static void BM_GJK_TransformedCollision(benchmark::State& state) {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
-  state.SetComplexityN(vertexCount);
+  state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_TransformedCollision)
     ->Arg(10)
@@ -161,7 +154,7 @@ static void BM_GJK_TranslationOnly(benchmark::State& state) {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
-  state.SetComplexityN(vertexCount);
+  state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_TranslationOnly)
     ->Arg(10)
@@ -184,10 +177,11 @@ static void BM_GJK_RotationOnly(benchmark::State& state) {
   auto hullA = generateRandomHull(vertexCount);
   auto hullB = generateRandomHull(vertexCount);
 
-  EulerAngles rotation{};
-  rotation.pitch = Angle::fromDegrees(30.0);
-  rotation.roll = Angle::fromDegrees(45.0);
-  rotation.yaw = Angle::fromDegrees(60.0);
+  AngularCoordinate rotation{
+    Angle::fromDegrees(30.0).getRad(),  // pitch
+    Angle::fromDegrees(45.0).getRad(),  // roll
+    Angle::fromDegrees(60.0).getRad()   // yaw
+  };
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
   ReferenceFrame frameB{Coordinate{0.0, 0.0, 0.0}, rotation};  // Rotation only
@@ -199,7 +193,7 @@ static void BM_GJK_RotationOnly(benchmark::State& state) {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
-  state.SetComplexityN(vertexCount);
+  state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_RotationOnly)
     ->Arg(10)
@@ -237,7 +231,7 @@ static void BM_GJK_LargeTranslationOffset(benchmark::State& state) {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
-  state.SetComplexityN(vertexCount);
+  state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_LargeTranslationOffset)
     ->Arg(10)
@@ -271,7 +265,7 @@ static void BM_GJK_NonColliding(benchmark::State& state) {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
-  state.SetComplexityN(vertexCount);
+  state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_NonColliding)
     ->Arg(10)

@@ -23,7 +23,7 @@ public:
 
   const AssetInertial& spawnInertialObject(const std::string assetName,
                                            const Coordinate& position,
-                                           const EulerAngles& orientation);
+                                           const AngularCoordinate& orientation);
 
   /**
    * @brief Spawn a player-controlled platform with visual object
@@ -38,7 +38,7 @@ public:
    */
   uint32_t spawnPlayerPlatform(const std::string& assetName,
                                const Coordinate& position,
-                               const EulerAngles& orientation);
+                               const AngularCoordinate& orientation);
 
   /**
    * @brief Set input commands for the player platform

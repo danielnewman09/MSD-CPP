@@ -1,5 +1,6 @@
 // Ticket: 0023a_force_application_scaffolding
 // Design: docs/designs/0023a_force_application_scaffolding/design.md
+// Updated: 0024_angular_coordinate - Replaced EulerAngles with AngularCoordinate/AngularRate
 
 #include <gtest/gtest.h>
 #include <cmath>
@@ -8,7 +9,8 @@
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Environment/EulerAngles.hpp"
+#include "msd-sim/src/Environment/AngularCoordinate.hpp"
+#include "msd-sim/src/Environment/AngularRate.hpp"
 
 using namespace msd_sim;
 
@@ -225,96 +227,50 @@ TEST(ForceApplicationScaffolding, updatePhysics_callsClearForces)
 }
 
 // ============================================================================
-// EulerAngles Conversion Tests
-// ============================================================================
-
-TEST(ForceApplicationScaffolding, toCoordinate_convertsCorrectly)
-{
-  EulerAngles angles{
-    Angle::fromRadians(0.5),
-    Angle::fromRadians(1.0),
-    Angle::fromRadians(1.5)
-  };
-
-  Coordinate coord = angles.toCoordinate();
-
-  EXPECT_DOUBLE_EQ(coord.x(), 0.5);
-  EXPECT_DOUBLE_EQ(coord.y(), 1.0);
-  EXPECT_DOUBLE_EQ(coord.z(), 1.5);
-}
-
-TEST(ForceApplicationScaffolding, fromCoordinate_convertsCorrectly)
-{
-  Coordinate coord{0.3, 0.6, 0.9};
-
-  EulerAngles angles = EulerAngles::fromCoordinate(coord);
-
-  EXPECT_DOUBLE_EQ(angles.pitch.getRad(), 0.3);
-  EXPECT_DOUBLE_EQ(angles.roll.getRad(), 0.6);
-  EXPECT_DOUBLE_EQ(angles.yaw.getRad(), 0.9);
-}
-
-TEST(ForceApplicationScaffolding, roundTrip_preservesValues)
-{
-  EulerAngles original{
-    Angle::fromDegrees(30.0),
-    Angle::fromDegrees(45.0),
-    Angle::fromDegrees(60.0)
-  };
-
-  Coordinate coord = original.toCoordinate();
-  EulerAngles restored = EulerAngles::fromCoordinate(coord);
-
-  EXPECT_NEAR(restored.pitch.getRad(), original.pitch.getRad(), 1e-9);
-  EXPECT_NEAR(restored.roll.getRad(), original.roll.getRad(), 1e-9);
-  EXPECT_NEAR(restored.yaw.getRad(), original.yaw.getRad(), 1e-9);
-}
-
-// ============================================================================
 // InertialState Type Tests
 // ============================================================================
 
-TEST(ForceApplicationScaffolding, angularVelocity_isCoordinateType)
+TEST(ForceApplicationScaffolding, angularVelocity_isAngularRateType)
 {
   InertialState state;
 
-  // Set angular velocity as Coordinate
-  state.angularVelocity = Coordinate{1.0, 2.0, 3.0};
+  // Set angular velocity as AngularRate
+  state.angularVelocity = AngularRate{1.0, 2.0, 3.0};
 
-  // Verify it's accessible as Coordinate
-  EXPECT_DOUBLE_EQ(state.angularVelocity.x(), 1.0);
-  EXPECT_DOUBLE_EQ(state.angularVelocity.y(), 2.0);
-  EXPECT_DOUBLE_EQ(state.angularVelocity.z(), 3.0);
+  // Verify it's accessible as AngularRate with pitch/roll/yaw accessors
+  EXPECT_DOUBLE_EQ(state.angularVelocity.pitch(), 1.0);
+  EXPECT_DOUBLE_EQ(state.angularVelocity.roll(), 2.0);
+  EXPECT_DOUBLE_EQ(state.angularVelocity.yaw(), 3.0);
 }
 
-TEST(ForceApplicationScaffolding, angularAcceleration_isCoordinateType)
+TEST(ForceApplicationScaffolding, angularAcceleration_isAngularRateType)
 {
   InertialState state;
 
-  // Set angular acceleration as Coordinate
-  state.angularAcceleration = Coordinate{0.5, 1.5, 2.5};
+  // Set angular acceleration as AngularRate
+  state.angularAcceleration = AngularRate{0.5, 1.5, 2.5};
 
-  // Verify it's accessible as Coordinate
-  EXPECT_DOUBLE_EQ(state.angularAcceleration.x(), 0.5);
-  EXPECT_DOUBLE_EQ(state.angularAcceleration.y(), 1.5);
-  EXPECT_DOUBLE_EQ(state.angularAcceleration.z(), 2.5);
+  // Verify it's accessible as AngularRate with pitch/roll/yaw accessors
+  EXPECT_DOUBLE_EQ(state.angularAcceleration.pitch(), 0.5);
+  EXPECT_DOUBLE_EQ(state.angularAcceleration.roll(), 1.5);
+  EXPECT_DOUBLE_EQ(state.angularAcceleration.yaw(), 2.5);
 }
 
-TEST(ForceApplicationScaffolding, orientation_isEulerAnglesType)
+TEST(ForceApplicationScaffolding, orientation_isAngularCoordinateType)
 {
   InertialState state;
 
-  // Set orientation as EulerAngles
-  state.orientation = EulerAngles{
-    Angle::fromDegrees(10.0),
-    Angle::fromDegrees(20.0),
-    Angle::fromDegrees(30.0)
-  };
+  // Set orientation as AngularCoordinate (radians)
+  constexpr double pitchRad = 10.0 * M_PI / 180.0;
+  constexpr double rollRad = 20.0 * M_PI / 180.0;
+  constexpr double yawRad = 30.0 * M_PI / 180.0;
 
-  // Verify it's accessible as EulerAngles
-  EXPECT_NEAR(state.orientation.pitch.toDeg(), 10.0, 1e-9);
-  EXPECT_NEAR(state.orientation.roll.toDeg(), 20.0, 1e-9);
-  EXPECT_NEAR(state.orientation.yaw.toDeg(), 30.0, 1e-9);
+  state.orientation = AngularCoordinate{pitchRad, rollRad, yawRad};
+
+  // Verify it's accessible as AngularCoordinate with degree accessors
+  EXPECT_NEAR(state.orientation.pitchDeg(), 10.0, 1e-9);
+  EXPECT_NEAR(state.orientation.rollDeg(), 20.0, 1e-9);
+  EXPECT_NEAR(state.orientation.yawDeg(), 30.0, 1e-9);
 }
 
 // ============================================================================

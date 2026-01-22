@@ -10,7 +10,7 @@
 // Include ReferenceFrame and related types from msd-sim
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Environment/EulerAngles.hpp"
+#include "msd-sim/src/Environment/AngularCoordinate.hpp"
 #include "msd-sim/src/Environment/Angle.hpp"
 
 // Tolerance for floating-point comparisons
@@ -471,10 +471,10 @@ TEST(ReferenceFrameShaderTest, Yaw90Degrees_VertexRotated)
 {
   // ReferenceFrame at origin with 90 degree yaw (Z-axis rotation)
   msd_sim::Coordinate origin{0.0, 0.0, 0.0};
-  msd_sim::EulerAngles euler{
-    msd_sim::Angle::fromDegrees(0.0),   // pitch
-    msd_sim::Angle::fromDegrees(0.0),   // roll
-    msd_sim::Angle::fromDegrees(90.0)   // yaw
+  msd_sim::AngularCoordinate euler{
+    msd_sim::Angle::fromDegrees(0.0).getRad(),   // pitch
+    msd_sim::Angle::fromDegrees(0.0).getRad(),   // roll
+    msd_sim::Angle::fromDegrees(90.0).getRad()   // yaw
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -497,10 +497,10 @@ TEST(ReferenceFrameShaderTest, Pitch90Degrees_VertexRotated)
 {
   // ReferenceFrame at origin with 90 degree pitch (Y-axis rotation)
   msd_sim::Coordinate origin{0.0, 0.0, 0.0};
-  msd_sim::EulerAngles euler{
-    msd_sim::Angle::fromDegrees(90.0),  // pitch
-    msd_sim::Angle::fromDegrees(0.0),   // roll
-    msd_sim::Angle::fromDegrees(0.0)    // yaw
+  msd_sim::AngularCoordinate euler{
+    msd_sim::Angle::fromDegrees(90.0).getRad(),  // pitch
+    msd_sim::Angle::fromDegrees(0.0).getRad(),   // roll
+    msd_sim::Angle::fromDegrees(0.0).getRad()    // yaw
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -523,10 +523,10 @@ TEST(ReferenceFrameShaderTest, Roll90Degrees_VertexRotated)
 {
   // ReferenceFrame at origin with 90 degree roll (X-axis rotation)
   msd_sim::Coordinate origin{0.0, 0.0, 0.0};
-  msd_sim::EulerAngles euler{
-    msd_sim::Angle::fromDegrees(0.0),   // pitch
-    msd_sim::Angle::fromDegrees(90.0),  // roll
-    msd_sim::Angle::fromDegrees(0.0)    // yaw
+  msd_sim::AngularCoordinate euler{
+    msd_sim::Angle::fromDegrees(0.0).getRad(),   // pitch
+    msd_sim::Angle::fromDegrees(90.0).getRad(),  // roll
+    msd_sim::Angle::fromDegrees(0.0).getRad()    // yaw
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -549,10 +549,10 @@ TEST(ReferenceFrameShaderTest, RotationAndTranslation_Combined)
 {
   // ReferenceFrame at (10, 0, 0) with 90 degree yaw
   msd_sim::Coordinate origin{10.0, 0.0, 0.0};
-  msd_sim::EulerAngles euler{
-    msd_sim::Angle::fromDegrees(0.0),   // pitch
-    msd_sim::Angle::fromDegrees(0.0),   // roll
-    msd_sim::Angle::fromDegrees(90.0)   // yaw
+  msd_sim::AngularCoordinate euler{
+    msd_sim::Angle::fromDegrees(0.0).getRad(),   // pitch
+    msd_sim::Angle::fromDegrees(0.0).getRad(),   // roll
+    msd_sim::Angle::fromDegrees(90.0).getRad()   // yaw
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -577,10 +577,10 @@ TEST(ReferenceFrameShaderTest, WComponentPreserved)
 {
   // Any transformation should preserve w=1
   msd_sim::Coordinate origin{100.0, 200.0, 300.0};
-  msd_sim::EulerAngles euler{
-    msd_sim::Angle::fromDegrees(45.0),
-    msd_sim::Angle::fromDegrees(30.0),
-    msd_sim::Angle::fromDegrees(60.0)
+  msd_sim::AngularCoordinate euler{
+    msd_sim::Angle::fromDegrees(45.0).getRad(),
+    msd_sim::Angle::fromDegrees(30.0).getRad(),
+    msd_sim::Angle::fromDegrees(60.0).getRad()
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -599,10 +599,10 @@ TEST(ReferenceFrameShaderTest, ConsistencyWithLocalToGlobal)
 {
   // The shader transformation should match ReferenceFrame::localToGlobalAbsolute
   msd_sim::Coordinate origin{5.0, 10.0, 15.0};
-  msd_sim::EulerAngles euler{
-    msd_sim::Angle::fromDegrees(30.0),
-    msd_sim::Angle::fromDegrees(45.0),
-    msd_sim::Angle::fromDegrees(60.0)
+  msd_sim::AngularCoordinate euler{
+    msd_sim::Angle::fromDegrees(30.0).getRad(),
+    msd_sim::Angle::fromDegrees(45.0).getRad(),
+    msd_sim::Angle::fromDegrees(60.0).getRad()
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -634,10 +634,10 @@ TEST(ReferenceFrameShaderTest, PyramidVertexWithRotation)
 {
   // Simulate a pyramid at position (3, 0, -2) with 45° yaw
   msd_sim::Coordinate origin{3.0, 0.0, -2.0};
-  msd_sim::EulerAngles euler{
-    msd_sim::Angle::fromDegrees(0.0),
-    msd_sim::Angle::fromDegrees(0.0),
-    msd_sim::Angle::fromDegrees(45.0)
+  msd_sim::AngularCoordinate euler{
+    msd_sim::Angle::fromDegrees(0.0).getRad(),
+    msd_sim::Angle::fromDegrees(0.0).getRad(),
+    msd_sim::Angle::fromDegrees(45.0).getRad()
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 

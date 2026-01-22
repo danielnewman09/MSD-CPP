@@ -48,45 +48,29 @@ package "msd_sim" {
         +operator*(scalar): Coordinate
     }
 
-    class Angle {
-        -value_: double
-        -normalization_: Norm
+    class AngularCoordinate {
+        ' Inherits from Eigen::Vector3d
         ..
-        ' Factory methods
-        +{static} fromRadians(rad: double, norm: Norm): Angle
-        +{static} fromDegrees(deg: double, norm: Norm): Angle
-        ..
-        ' Access (lazy normalization)
-        +getRad(): double
-        +toDeg(): double
-        +setRad(rad: double): void
-        +getNormalization(): Norm
-        +setNormalization(norm: Norm): void
-        ..
-        ' Arithmetic operators
-        +operator+(other: Angle): Angle
-        +operator-(other: Angle): Angle
-        +operator*(scalar: double): Angle
-        +operator/(scalar: double): Angle
-        +operator-(): Angle
-        ..
-        ' Compound assignment
-        +operator+=(other: Angle): Angle&
-        +operator-=(other: Angle): Angle&
+        +AngularCoordinate()
+        +AngularCoordinate(pitch, roll, yaw: double)
+        +pitch(): double
+        +roll(): double
+        +yaw(): double
+        +pitchDeg(): double
+        +rollDeg(): double
+        +yawDeg(): double
+        +normalized(): AngularCoordinate
+        +normalize(): void
     }
 
-    enum "Angle::Norm" as AngleNorm {
-        PI
-        TWO_PI
-    }
-
-    class EulerAngles {
-        +pitch: Angle
-        +roll: Angle
-        +yaw: Angle
+    class AngularRate {
+        ' Inherits from Eigen::Vector3d
         ..
-        +EulerAngles()
-        +EulerAngles(pitch, roll, yaw: Angle)
+        +AngularRate()
+        +AngularRate(pitchRate, rollRate, yawRate: double)
+        +pitch(): double& / double
+        +roll(): double& / double
+        +yaw(): double& / double
     }
 
     class InertialState {
@@ -96,9 +80,9 @@ package "msd_sim" {
         +acceleration: Coordinate
         ..
         ' Angular components
-        +angularPosition: EulerAngles
-        +angularVelocity: EulerAngles
-        +angularAcceleration: EulerAngles
+        +orientation: AngularCoordinate
+        +angularVelocity: AngularRate
+        +angularAcceleration: AngularRate
         ..
         +InertialState() = default
     }
@@ -118,12 +102,13 @@ package "Eigen" {
 
 ' Inheritance
 Coordinate --|> EigenVector3d : inherits
+AngularCoordinate --|> EigenVector3d : inherits
+AngularRate --|> EigenVector3d : inherits
 
 ' Composition
-Angle *-- AngleNorm : uses
-EulerAngles *-- "3" Angle : contains
 InertialState *-- "3" Coordinate : linear state
-InertialState *-- "3" EulerAngles : angular state
+InertialState *-- AngularCoordinate : orientation
+InertialState *-- "2" AngularRate : angular rates
 
 ' -----------------------------------------------------------------------------
 ' Notes
@@ -141,33 +126,40 @@ note right of Coordinate
     "{:.2f}" → "(100.00, 200.00, 300.00)"
 end note
 
-note right of Angle
-    Thread safety: Immutable after creation
+note right of AngularCoordinate
+    **Deferred Normalization:**
+    Normalizes to (-π, π] only when
+    |value| exceeds 100π threshold.
 
-    **Lazy Normalization:**
-    Normalization applied on access
-    (getRad(), toDeg()), not on
-    every operation.
+    Check occurs in ALL modifying operations.
+    Accessors return raw values (fast).
 
-    **Norm::PI**: (-π, π]
-    **Norm::TWO_PI**: [0, 2π)
+    **Memory:** 24 bytes
+    **Performance:** 0% accessor overhead
+
+    See angular-coordinate.puml for details.
 end note
 
-note bottom of EulerAngles
-    **Rotation Convention:**
-    ZYX Intrinsic Rotations
+note right of AngularRate
+    **NO Normalization:**
+    Angular rates like 720°/s are
+    valid and should NOT be normalized.
 
-    Order: Yaw → Pitch → Roll
+    **Units:**
+    - Velocity: rad/s
+    - Acceleration: rad/s²
 
-    Roll: X-axis (forward)
-    Pitch: Y-axis (right)
-    Yaw: Z-axis (up)
+    See angular-coordinate.puml for details.
 end note
 
 note bottom of InertialState
     **Complete Kinematic State:**
     6 DOF with first and second
     derivatives.
+
+    **Type Safety:**
+    AngularCoordinate vs AngularRate
+    prevents accidental misuse.
 
     Value semantics - safe to
     copy across threads.

@@ -5,7 +5,7 @@
 #include <cmath>
 #include <vector>
 #include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Environment/EulerAngles.hpp"
+#include "msd-sim/src/Environment/AngularCoordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Physics/GJK.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
@@ -157,8 +157,7 @@ TEST(GJKTest, RotationOnlyCollision)
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
 
-  EulerAngles rotation{};
-  rotation.yaw = Angle::fromDegrees(45.0);
+  AngularCoordinate rotation{0.0, 0.0, 45.0 * M_PI / 180.0};  // pitch, roll, yaw
   ReferenceFrame frameB{Coordinate{0.0, 0.0, 0.0}, rotation};
 
   AssetPhysical assetA{0, 0, hullA, frameA};
@@ -176,8 +175,7 @@ TEST(GJKTest, RotationOnly90Degrees)
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
 
-  EulerAngles rotation{};
-  rotation.yaw = Angle::fromDegrees(90.0);
+  AngularCoordinate rotation{0.0, 0.0, 90.0 * M_PI / 180.0};  // pitch, roll, yaw
   ReferenceFrame frameB{Coordinate{0.0, 0.0, 0.0}, rotation};
 
   AssetPhysical assetA{0, 0, hullA, frameA};
@@ -199,8 +197,7 @@ TEST(GJKTest, CombinedTransformCollision)
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
 
-  EulerAngles rotation{};
-  rotation.yaw = Angle::fromDegrees(45.0);
+  AngularCoordinate rotation{0.0, 0.0, 45.0 * M_PI / 180.0};  // pitch, roll, yaw
   ReferenceFrame frameB{Coordinate{0.5, 0.5, 0.0}, rotation};
 
   AssetPhysical assetA{0, 0, hullA, frameA};
@@ -218,9 +215,11 @@ TEST(GJKTest, CombinedTransformNoCollision)
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
 
-  EulerAngles rotation{};
-  rotation.pitch = Angle::fromDegrees(30.0);
-  rotation.yaw = Angle::fromDegrees(45.0);
+  AngularCoordinate rotation{
+    30.0 * M_PI / 180.0,  // pitch
+    0.0,                  // roll
+    45.0 * M_PI / 180.0   // yaw
+  };
   ReferenceFrame frameB{Coordinate{5.0, 5.0, 5.0}, rotation};
 
   AssetPhysical assetA{0, 0, hullA, frameA};
@@ -236,15 +235,18 @@ TEST(GJKTest, CombinedTransformComplex)
   ConvexHull hullA{points};
   ConvexHull hullB{points};
 
-  EulerAngles rotationA{};
-  rotationA.pitch = Angle::fromDegrees(15.0);
-  rotationA.roll = Angle::fromDegrees(30.0);
+  AngularCoordinate rotationA{
+    15.0 * M_PI / 180.0,  // pitch
+    30.0 * M_PI / 180.0,  // roll
+    0.0                   // yaw
+  };
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}, rotationA};
 
-  EulerAngles rotationB{};
-  rotationB.pitch = Angle::fromDegrees(20.0);
-  rotationB.roll = Angle::fromDegrees(10.0);
-  rotationB.yaw = Angle::fromDegrees(45.0);
+  AngularCoordinate rotationB{
+    20.0 * M_PI / 180.0,  // pitch
+    10.0 * M_PI / 180.0,  // roll
+    45.0 * M_PI / 180.0   // yaw
+  };
   ReferenceFrame frameB{Coordinate{0.3, 0.3, 0.3}, rotationB};
 
   AssetPhysical assetA{0, 0, hullA, frameA};

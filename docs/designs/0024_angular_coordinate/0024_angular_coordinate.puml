@@ -1,0 +1,221 @@
+@startuml 0024_angular_coordinate
+' =============================================================================
+' Feature: AngularCoordinate and AngularRate
+' Ticket: 0024_angular_coordinate
+' Description: Type-safe angular quantity representation with normalization semantics
+' Date: 2026-01-20
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling - Mark NEW and MODIFIED components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BorderColor Black
+}
+
+' skinparam note {
+'     ' BackgroundColor #2d2d2d
+'     ' BorderColor #666666
+' }
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim" {
+
+    ' NEW CLASSES
+
+    class AngularCoordinate <<new>> {
+        ' Inherits from Eigen::Vector3d
+        ..
+        ' Construction
+        +AngularCoordinate()
+        +AngularCoordinate(pitch, roll, yaw: double)
+        +AngularCoordinate(vec: Eigen::Vector3d)
+        +AngularCoordinate(other: Eigen::MatrixBase<OtherDerived>)
+        ..
+        ' Semantic accessors (lazy normalization to (-π, π])
+        +pitch(): double <<const>>
+        +roll(): double <<const>>
+        +yaw(): double <<const>>
+        +pitchDeg(): double <<const>>
+        +rollDeg(): double <<const>>
+        +yawDeg(): double <<const>>
+        ..
+        ' Setters
+        +setPitch(radians: double): void
+        +setRoll(radians: double): void
+        +setYaw(radians: double): void
+        ..
+        ' Normalization control
+        +normalized(): AngularCoordinate <<const>>
+        +normalizeInPlace(): void
+        ..
+        -normalizeAngle(rad: double): double <<static>>
+    }
+
+    class AngularRate <<new>> {
+        ' Inherits from Eigen::Vector3d
+        ..
+        ' Construction
+        +AngularRate()
+        +AngularRate(pitchRate, rollRate, yawRate: double)
+        +AngularRate(vec: Eigen::Vector3d)
+        +AngularRate(other: Eigen::MatrixBase<OtherDerived>)
+        ..
+        ' Semantic accessors (NO normalization)
+        +pitch(): double& / double
+        +roll(): double& / double
+        +yaw(): double& / double
+    }
+
+    ' MODIFIED CLASSES
+
+    class InertialState <<modified>> {
+        ' Linear components (unchanged)
+        +position: Coordinate
+        +velocity: Coordinate
+        +acceleration: Coordinate
+        ..
+        ' Angular components (CHANGED)
+        +orientation: AngularCoordinate <<changed from EulerAngles>>
+        +angularVelocity: AngularRate <<changed from Coordinate>>
+        +angularAcceleration: AngularRate <<changed from Coordinate>>
+        ..
+        +InertialState() = default
+    }
+
+    class ReferenceFrame <<modified>> {
+        -origin_: Coordinate
+        -angular_: AngularCoordinate
+        -rotation_: Eigen::Matrix3d
+        -updated_: bool
+        ..
+        ' Constructors (updated)
+        +ReferenceFrame()
+        +ReferenceFrame(origin: Coordinate)
+        +ReferenceFrame(origin: Coordinate, angular: AngularCoordinate)
+        ..
+        ' Transform methods (unchanged)
+        +globalToLocal(coord: Coordinate): Coordinate
+        +localToGlobal(coord: Coordinate): Coordinate
+        +globalToLocalRelative(vec: Coordinate): Coordinate
+        +localToGlobalRelative(vec: Coordinate): Coordinate
+        ..
+        ' Rotation setter/getter
+        +setRotation(angular: AngularCoordinate): void
+        +getAngularCoordinate(): AngularCoordinate
+    }
+
+    ' EXISTING CLASSES (UNCHANGED)
+
+    class Coordinate {
+        +x(): double
+        +y(): double
+        +z(): double
+        +norm(): double
+        +cross(other): Coordinate
+    }
+
+}
+
+package "Eigen" {
+    class "Eigen::Vector3d" as EigenVector3d {
+        +operator[](index): double&
+        +operator+(other): Eigen::Vector3d
+        +operator*(scalar): Eigen::Vector3d
+        +cross(other): Eigen::Vector3d
+        +dot(other): double
+        +norm(): double
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Inheritance
+AngularCoordinate --|> EigenVector3d : inherits
+AngularRate --|> EigenVector3d : inherits
+Coordinate --|> EigenVector3d : inherits (existing)
+
+' InertialState composition (CHANGED)
+InertialState *-- "3" Coordinate : linear state
+InertialState *-- AngularCoordinate : orientation <<new>>
+InertialState *-- "2" AngularRate : angular rates <<new>>
+
+' ReferenceFrame composition
+ReferenceFrame *-- Coordinate : origin
+ReferenceFrame *-- AngularCoordinate : angular <<new>>
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+note right of AngularCoordinate
+    **Purpose:** Orientation angles with
+    automatic normalization to (-π, π]
+
+    **Normalization:** Lazy (on access)
+    - pitch(), roll(), yaw() return normalized values
+    - Use setPitch(), setRoll(), setYaw() for modification
+
+    **Thread safety:** Immutable after creation
+
+    **Memory:** 24 bytes (same as Eigen::Vector3d)
+
+    **Axis convention (ZYX rotation):**
+    - pitch: Y-axis rotation (component 0)
+    - roll: X-axis rotation (component 1)
+    - yaw: Z-axis rotation (component 2)
+
+    **Replaces:** EulerAngles (removed in this ticket)
+
+    **Supports std::format:**
+    "{:.2f}" → "(0.00, 0.00, 0.79)"
+end note
+
+note right of AngularRate
+    **Purpose:** Angular velocity/acceleration
+    without normalization
+
+    **NO Normalization:** Rates like 720°/s
+    are valid and should not be normalized
+
+    **Thread safety:** Immutable after creation
+
+    **Memory:** 24 bytes (same as Eigen::Vector3d)
+
+    **Units:**
+    - Angular velocity: rad/s
+    - Angular acceleration: rad/s²
+
+    **Supports std::format:**
+    "{:.2f}" → "(12.57, 0.00, 0.00)"
+end note
+
+note bottom of InertialState
+    **Breaking Change:**
+    - orientation: EulerAngles → AngularCoordinate
+    - angularVelocity: Coordinate → AngularRate
+    - angularAcceleration: Coordinate → AngularRate
+
+    **Type Safety Benefit:**
+    Prevents accidental assignment of
+    rates to orientation (compile error)
+end note
+
+note bottom of ReferenceFrame
+    **Breaking Change:**
+    - Internal storage changed from EulerAngles to AngularCoordinate
+    - Constructor signature updated
+    - setRotation() / getAngularCoordinate() use AngularCoordinate
+
+    **Migration Required:**
+    - Old: ReferenceFrame(origin, EulerAngles{p, r, y})
+    - New: ReferenceFrame(origin, AngularCoordinate{p, r, y})
+end note
+
+@enduml

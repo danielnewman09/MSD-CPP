@@ -34,7 +34,8 @@ Platform (Legacy entity type)
 |-----------|----------|---------|---------|
 | Coordinate | `Coordinate.hpp` | 3D coordinate wrapper (Eigen) | [`mathematical-primitives.puml`](../../../../../docs/msd/msd-sim/Environment/mathematical-primitives.puml) |
 | Angle | `Angle.hpp` | Type-safe angle with normalization | [`mathematical-primitives.puml`](../../../../../docs/msd/msd-sim/Environment/mathematical-primitives.puml) |
-| EulerAngles | `EulerAngles.hpp` | 3D orientation (pitch/roll/yaw) | [`mathematical-primitives.puml`](../../../../../docs/msd/msd-sim/Environment/mathematical-primitives.puml) |
+| AngularCoordinate | `AngularCoordinate.hpp` | Orientation angles with deferred normalization | [`angular-coordinate.puml`](../../../../../docs/msd/msd-sim/Environment/angular-coordinate.puml) |
+| AngularRate | `AngularRate.hpp` | Angular velocity/acceleration without normalization | [`angular-coordinate.puml`](../../../../../docs/msd/msd-sim/Environment/angular-coordinate.puml) |
 | InertialState | `InertialState.hpp` | Complete kinematic state | [`mathematical-primitives.puml`](../../../../../docs/msd/msd-sim/Environment/mathematical-primitives.puml) |
 | ReferenceFrame | `ReferenceFrame.hpp` | Coordinate transformations | [`reference-frame.puml`](../../../../../docs/msd/msd-sim/Environment/reference-frame.puml) |
 | Object | `Object.hpp` | Unified simulation entity | [`object.puml`](../../../../../docs/msd/msd-sim/Environment/object.puml) |
@@ -148,33 +149,200 @@ azimuth.getRad();  // Returns 330° equivalent in radians
 
 ---
 
-### EulerAngles
+### AngularCoordinate
 
-**Location**: `EulerAngles.hpp`
+**Location**: `AngularCoordinate.hpp`
 **Type**: Header-only, value type
+**Diagram**: [`angular-coordinate.puml`](../../../../../docs/msd/msd-sim/Environment/angular-coordinate.puml)
+**Introduced**: [Ticket: 0024_angular_coordinate](../../../../../tickets/0024_angular_coordinate.md)
 
 #### Purpose
-Represents 3D orientation using a triplet of Angle objects. Uses ZYX intrinsic rotation convention (yaw → pitch → roll).
+Represents orientation angles with deferred normalization to (-π, π]. Inherits from `Eigen::Vector3d` for full matrix operation support while providing semantic pitch/roll/yaw accessors. Normalization is checked only when values exceed 100π threshold (~50 revolutions), making it 10x faster than eager normalization while maintaining correctness.
+
+#### Key Classes
+
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `AngularCoordinate` | `AngularCoordinate.hpp` | Orientation angle representation with deferred normalization |
 
 #### Key Interfaces
 ```cpp
-struct EulerAngles {
-  Angle pitch;  // Rotation around Y-axis
-  Angle roll;   // Rotation around X-axis
-  Angle yaw;    // Rotation around Z-axis
+class AngularCoordinate : public Eigen::Vector3d {
+public:
+  static constexpr double kNormalizationThreshold = 100.0 * M_PI;
+
+  // Construction
+  AngularCoordinate();
+  AngularCoordinate(double pitch, double roll, double yaw);
+  AngularCoordinate(const Eigen::Vector3d& vec);
+  template <typename OtherDerived>
+  AngularCoordinate(const Eigen::MatrixBase<OtherDerived>& other);
+
+  // Fast accessors (no normalization check - returns raw value)
+  double pitch() const;
+  double roll() const;
+  double yaw() const;
+
+  // Degree accessors
+  double pitchDeg() const;
+  double rollDeg() const;
+  double yawDeg() const;
+
+  // Setters with normalization check
+  void setPitch(double radians);
+  void setRoll(double radians);
+  void setYaw(double radians);
+
+  // Explicit normalization
+  AngularCoordinate normalized() const;
+  void normalize();
+
+  // Compound operators (override to include normalization check)
+  AngularCoordinate& operator+=(const Eigen::MatrixBase<OtherDerived>& other);
+  AngularCoordinate& operator-=(const Eigen::MatrixBase<OtherDerived>& other);
+  AngularCoordinate& operator*=(double scalar);
+  AngularCoordinate& operator/=(double scalar);
 };
 ```
 
-#### Rotation Convention
-- **Order**: ZYX intrinsic rotations
-- **Application**: Yaw (Z) → Pitch (Y) → Roll (X)
-- **Axes**:
-  - Roll: Rotation around X-axis (forward)
-  - Pitch: Rotation around Y-axis (right)
-  - Yaw: Rotation around Z-axis (up)
+#### Usage Example
+```cpp
+// Construction
+AngularCoordinate orientation{0.0, 0.0, M_PI/4};  // 45° yaw
+
+// Fast accessors (0% overhead, validated by prototypes)
+double yaw = orientation.yaw();      // Radians
+double yawDeg = orientation.yawDeg(); // Degrees
+
+// Setters with normalization check
+orientation.setYaw(3 * M_PI);  // Large value stored
+// Normalizes only if exceeds 100π threshold
+
+// Eigen operations preserved
+AngularCoordinate delta{0.1, 0.0, 0.0};
+orientation += delta;  // Compound operator includes normalization check
+
+// Explicit normalization (if needed)
+AngularCoordinate normalized = orientation.normalized();
+
+// Supports std::format
+std::cout << std::format("Orientation: {:.2f}", orientation);
+// Output: Orientation: (0.00, 0.00, 0.79)
+```
+
+#### Axis Convention
+ZYX intrinsic rotation convention:
+- **pitch**: Rotation around Y-axis (component 0)
+- **roll**: Rotation around X-axis (component 1)
+- **yaw**: Rotation around Z-axis (component 2)
+
+#### Normalization Strategy
+**Deferred normalization** with 100π threshold:
+- Normalization check occurs in ALL modifying operations (constructors, assignment, compound operators)
+- Values are normalized only when `|value| > 100π` (~50 revolutions)
+- Accessors return raw values without normalization check (0% overhead)
+- 10x faster than eager-always normalization in typical physics workloads (validated by prototypes P1-P1e)
+
+**Accepted Limitation**: Direct `operator[]` access bypasses normalization. Use semantic accessors (pitch(), roll(), yaw()) for normal use.
 
 #### Thread Safety
-**Immutable after creation** — Value type, safe to copy.
+**Immutable after creation** — Value semantics make it safe to copy across threads.
+
+#### Error Handling
+No exceptions thrown. Normalization handles all input ranges via `std::fmod`.
+
+#### Memory Management
+Pure value type inheriting from `Eigen::Vector3d`. Memory footprint: 24 bytes (same as `Eigen::Vector3d`). No dynamic allocation.
+
+#### Dependencies
+- `Eigen3` — Base class and linear algebra operations
+- `Angle.hpp` — Reference for normalization algorithm (not used internally)
+- `Coordinate.hpp` — Pattern for Eigen inheritance and formatting
+
+#### Design Decisions
+- **Replaces EulerAngles**: Type-safe separation of orientation (AngularCoordinate) vs rates (AngularRate)
+- **Deferred vs Eager**: Prototypes showed 10x speedup with deferred normalization
+- **Raw double storage**: 43x faster than `Angle` object storage, 50% smaller memory footprint
+- **Explicit duplication**: No shared base class with AngularRate for maximum simplicity and performance
+
+---
+
+### AngularRate
+
+**Location**: `AngularRate.hpp`
+**Type**: Header-only, value type
+**Diagram**: [`angular-coordinate.puml`](../../../../../docs/msd/msd-sim/Environment/angular-coordinate.puml)
+**Introduced**: [Ticket: 0024_angular_coordinate](../../../../../tickets/0024_angular_coordinate.md)
+
+#### Purpose
+Represents angular velocity or acceleration without normalization. Inherits from `Eigen::Vector3d` for full matrix operation support. Angular rates can exceed 2π rad/s and should NOT be normalized (e.g., 720°/s is distinct from 0°/s).
+
+#### Key Classes
+
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `AngularRate` | `AngularRate.hpp` | Angular velocity/acceleration representation without normalization |
+
+#### Key Interfaces
+```cpp
+class AngularRate : public Eigen::Vector3d {
+public:
+  // Construction
+  AngularRate();
+  AngularRate(double pitchRate, double rollRate, double yawRate);
+  AngularRate(const Eigen::Vector3d& vec);
+  template <typename OtherDerived>
+  AngularRate(const Eigen::MatrixBase<OtherDerived>& other);
+
+  // Semantic accessors (NO normalization)
+  double& pitch();
+  double& roll();
+  double& yaw();
+  double pitch() const;
+  double roll() const;
+  double yaw() const;
+};
+```
+
+#### Usage Example
+```cpp
+// Angular rates can exceed 2π
+AngularRate angularVelocity{0.0, 0.0, 4 * M_PI};  // 720°/s yaw rate
+double yawRate = angularVelocity.yaw();  // Returns 4π (NOT normalized!)
+
+// Eigen operations work normally
+AngularRate angularAccel = angularVelocity * 2.0;
+double magnitude = angularVelocity.norm();
+
+// Cross product for torque calculation
+AngularRate torque = offsetPosition.cross(force);
+
+// Supports std::format
+std::cout << std::format("Angular velocity: {:.2f}", angularVelocity);
+// Output: Angular velocity: (0.00, 0.00, 12.57)
+```
+
+#### Units
+- **Angular velocity**: rad/s
+- **Angular acceleration**: rad/s²
+
+#### Thread Safety
+**Immutable after creation** — Value semantics make it safe to copy across threads.
+
+#### Error Handling
+No exceptions thrown. No normalization means no invalid input.
+
+#### Memory Management
+Pure value type inheriting from `Eigen::Vector3d`. Memory footprint: 24 bytes (same as `Eigen::Vector3d`). No dynamic allocation.
+
+#### Dependencies
+- `Eigen3` — Base class and linear algebra operations
+- `Coordinate.hpp` — Pattern for Eigen inheritance and formatting
+
+#### Design Decisions
+- **Type Safety**: Separate type from AngularCoordinate prevents accidental assignment of rates to orientations (compile-time error)
+- **No Normalization**: Rates should never be normalized - 720°/s is a valid rate distinct from 0°/s
+- **Performance**: 0% overhead compared to raw `Eigen::Vector3d` (validated by prototypes)
 
 ---
 
@@ -182,9 +350,10 @@ struct EulerAngles {
 
 **Location**: `InertialState.hpp`
 **Type**: Header-only, value type
+**Modified**: [Ticket: 0024_angular_coordinate](../../../../../tickets/0024_angular_coordinate.md)
 
 #### Purpose
-Complete kinematic state representation with 6 degrees of freedom. Contains position, velocity, and acceleration for both linear and angular motion.
+Complete kinematic state representation with 6 degrees of freedom. Contains position, velocity, and acceleration for both linear and angular motion. Uses type-safe angular quantity classes to prevent accidental misuse.
 
 #### Key Interfaces
 ```cpp
@@ -194,10 +363,10 @@ struct InertialState {
   Coordinate velocity;
   Coordinate acceleration;
 
-  // Angular components
-  EulerAngles angularPosition;
-  EulerAngles angularVelocity;
-  EulerAngles angularAcceleration;
+  // Angular components (type-safe)
+  AngularCoordinate orientation;       // Was: EulerAngles angularPosition
+  AngularRate angularVelocity;         // Was: Coordinate
+  AngularRate angularAcceleration;     // Was: Coordinate
 };
 ```
 
@@ -206,8 +375,38 @@ struct InertialState {
 InertialState state;
 state.position = Coordinate{100.0, 200.0, 300.0};
 state.velocity = Coordinate{1.0, 0.0, 0.0};
-state.angularPosition.yaw = Angle::fromDegrees(45.0);
+
+// Type-safe angular quantities
+state.orientation = AngularCoordinate{0.0, 0.0, M_PI/4};  // 45° yaw
+state.angularVelocity = AngularRate{0.0, 0.0, 0.5};       // 0.5 rad/s yaw rate
+
+// Semantic accessors
+double yaw = state.orientation.yaw();           // Radians
+double yawRate = state.angularVelocity.yaw();   // rad/s
 ```
+
+#### Type Safety Benefits
+The use of distinct types provides compile-time safety:
+```cpp
+// This will NOT compile (type mismatch):
+state.orientation = state.angularVelocity;  // ERROR: Cannot assign AngularRate to AngularCoordinate
+
+// Correct usage:
+AngularRate deltaOrientation = state.angularVelocity * dt;
+state.orientation += deltaOrientation;  // Implicit conversion via Eigen expression templates
+```
+
+#### Migration from Previous Version
+Breaking change from ticket 0024_angular_coordinate:
+- **orientation**: Type changed from `EulerAngles` to `AngularCoordinate`
+  - Old: `state.angularPosition.yaw.getRad()`
+  - New: `state.orientation.yaw()`
+- **angularVelocity**: Type changed from `Coordinate` to `AngularRate`
+  - Old: `state.angularVelocity.z()`
+  - New: `state.angularVelocity.yaw()`
+- **angularAcceleration**: Type changed from `Coordinate` to `AngularRate`
+  - Old: `state.angularAcceleration.z()`
+  - New: `state.angularAcceleration.yaw()`
 
 #### Thread Safety
 **Value semantics** — Safe to copy across threads after construction.
@@ -218,16 +417,17 @@ state.angularPosition.yaw = Angle::fromDegrees(45.0);
 
 **Location**: `ReferenceFrame.hpp`, `ReferenceFrame.cpp`
 **Type**: Library component
+**Modified**: [Ticket: 0024_angular_coordinate](../../../../../tickets/0024_angular_coordinate.md)
 
 #### Purpose
-Manages coordinate transformations between reference frames using translation and rotation. Provides efficient batch transformations using Eigen matrix operations.
+Manages coordinate transformations between reference frames using translation and rotation. Provides efficient batch transformations using Eigen matrix operations. Stores orientation as `AngularCoordinate` for type-safe angle representation.
 
 #### Key Interfaces
 ```cpp
 class ReferenceFrame {
   ReferenceFrame();
   ReferenceFrame(const Coordinate& origin);
-  ReferenceFrame(const Coordinate& origin, const EulerAngles& euler);
+  ReferenceFrame(const Coordinate& origin, const AngularCoordinate& angular);
 
   // Single coordinate transforms
   Coordinate globalToLocal(const Coordinate& globalCoord) const;
@@ -245,12 +445,12 @@ class ReferenceFrame {
 
   // Setters
   void setOrigin(const Coordinate& origin);
-  void setRotation(const EulerAngles& euler);
+  void setRotation(const AngularCoordinate& angular);
 
   // Getters
   Coordinate& getOrigin();
   const Coordinate& getOrigin() const;
-  EulerAngles& getEulerAngles();
+  AngularCoordinate getAngularCoordinate() const;
   const Eigen::Matrix3d& getRotation() const;
 };
 ```
@@ -260,11 +460,7 @@ class ReferenceFrame {
 // Create reference frame
 ReferenceFrame localFrame;
 localFrame.setOrigin(Coordinate{10, 20, 30});
-localFrame.setRotation(EulerAngles{
-  Angle::fromDegrees(0),   // pitch
-  Angle::fromDegrees(0),   // roll
-  Angle::fromDegrees(90)   // yaw
-});
+localFrame.setRotation(AngularCoordinate{0.0, 0.0, M_PI/2});  // 90° yaw
 
 // Single coordinate transform
 Coordinate globalPoint{100, 200, 300};
@@ -274,6 +470,25 @@ Coordinate localPoint = localFrame.globalToLocal(globalPoint);
 Eigen::Matrix3Xd points(3, 1000);  // 1000 points
 // ... populate points ...
 localFrame.globalToLocalBatch(points);  // In-place transformation
+```
+
+#### Migration from Previous Version
+Breaking change from ticket 0024_angular_coordinate:
+- **Constructor**: `ReferenceFrame(origin, EulerAngles)` → `ReferenceFrame(origin, AngularCoordinate)`
+- **Setter**: `setRotation(EulerAngles)` → `setRotation(AngularCoordinate)`
+- **Getter**: `getEulerAngles()` → `getAngularCoordinate()`
+- **Internal storage**: `EulerAngles euler_` → `AngularCoordinate angular_`
+
+Old code:
+```cpp
+EulerAngles angles{Angle::fromDegrees(0), Angle::fromDegrees(0), Angle::fromDegrees(90)};
+frame.setRotation(angles);
+```
+
+New code:
+```cpp
+AngularCoordinate angles{0.0, 0.0, M_PI/2};  // Radians
+frame.setRotation(angles);
 ```
 
 #### Transformation Pipeline

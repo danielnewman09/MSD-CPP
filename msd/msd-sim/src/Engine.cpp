@@ -25,7 +25,7 @@ msd_assets::AssetRegistry& Engine::getAssetRegistry()
 
 const AssetInertial& Engine::spawnInertialObject(const std::string assetName,
                                                  const Coordinate& position,
-                                                 const EulerAngles& orientation)
+                                                 const AngularCoordinate& orientation)
 {
   ReferenceFrame objectFrame{position, orientation};
 
@@ -50,7 +50,7 @@ const AssetInertial& Engine::spawnInertialObject(const std::string assetName,
 
 uint32_t Engine::spawnPlayerPlatform(const std::string& assetName,
                                      const Coordinate& position,
-                                     const EulerAngles& orientation)
+                                     const AngularCoordinate& orientation)
 {
   ReferenceFrame objectFrame{position, orientation};
 

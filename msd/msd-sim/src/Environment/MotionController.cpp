@@ -8,7 +8,7 @@
 namespace msd_sim
 {
 
-MotionController::MotionController(Angle rotSpeed, double moveSpeed)
+MotionController::MotionController(double rotSpeed, double moveSpeed)
   : rotSpeed_{rotSpeed}, moveSpeed_{moveSpeed}, sensitivity_{1.0}
 {
 }
@@ -20,13 +20,14 @@ void MotionController::updateTransform(ReferenceFrame& frame,
   // Convert deltaTime to seconds for speed calculations
   const double deltaSeconds = deltaTime.count() / 1000.0;
   const double scaledMoveSpeed = moveSpeed_ * sensitivity_ * deltaSeconds;
-  const Angle scaledRotSpeed = rotSpeed_ * deltaSeconds;
+  const double scaledRotSpeed = rotSpeed_ * deltaSeconds;
 
   auto newOrigin = frame.getOrigin();
-  auto& eulerAngles = frame.getEulerAngles();
+  auto& angular = frame.getAngularCoordinate();
 
   // Linear movement in local frame
-  // Note: Camera's local Z is forward (negative Z is into the screen in camera space)
+  // Note: Camera's local Z is forward (negative Z is into the screen in camera
+  // space)
   if (commands.moveForward)
   {
     // Move forward in local Z direction
@@ -61,30 +62,30 @@ void MotionController::updateTransform(ReferenceFrame& frame,
   // Apply movement
   frame.setOrigin(newOrigin);
 
-  // Rotation
+  // Rotation - modify angular coordinate directly
   if (commands.pitchUp)
   {
     // Pitch up (look up)
-    eulerAngles.pitch += scaledRotSpeed;
+    angular.setPitch(angular.pitch() + scaledRotSpeed);
   }
   if (commands.pitchDown)
   {
     // Pitch down (look down)
-    eulerAngles.pitch -= scaledRotSpeed;
+    angular.setPitch(angular.pitch() - scaledRotSpeed);
   }
   if (commands.yawLeft)
   {
     // Yaw left (turn left)
-    eulerAngles.yaw += scaledRotSpeed;
+    angular.setYaw(angular.yaw() + scaledRotSpeed);
   }
   if (commands.yawRight)
   {
     // Yaw right (turn right)
-    eulerAngles.yaw -= scaledRotSpeed;
+    angular.setYaw(angular.yaw() - scaledRotSpeed);
   }
 
   // Update rotation matrix in reference frame
-  frame.setRotation(eulerAngles);
+  frame.setRotation(angular);
 }
 
 }  // namespace msd_sim

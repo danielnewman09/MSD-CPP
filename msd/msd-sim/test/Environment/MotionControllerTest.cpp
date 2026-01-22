@@ -7,8 +7,8 @@
 
 #include "msd-sim/src/Agent/InputCommands.hpp"
 #include "msd-sim/src/Environment/Angle.hpp"
+#include "msd-sim/src/Environment/AngularCoordinate.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Environment/EulerAngles.hpp"
 #include "msd-sim/src/Environment/MotionController.hpp"
 #include "msd-sim/src/Environment/Platform.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
@@ -42,13 +42,13 @@ constexpr double MOTION_TOLERANCE = 1e-7;
 
 TEST(MotionControllerTest, ConstructorWithParameters)
 {
-  Angle rotSpeed = Angle::fromRadians(0.1);
+  double rotSpeed = 0.1;
   double moveSpeed = 5.0;
 
   MotionController controller{rotSpeed, moveSpeed};
 
   EXPECT_DOUBLE_EQ(controller.getMoveSpeed(), 5.0);
-  EXPECT_DOUBLE_EQ(controller.getRotationSpeed().getRad(), 0.1);
+  EXPECT_DOUBLE_EQ(controller.getRotationSpeed(), 0.1);
   EXPECT_DOUBLE_EQ(controller.getSensitivity(), 1.0);
 }
 
@@ -58,10 +58,10 @@ TEST(MotionControllerTest, ConstructorWithParameters)
 
 TEST(MotionControllerTest, UpdateTransform_MoveForward_TranslatesInLocalZ)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0};
+  MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.moveForward = true;
@@ -82,10 +82,10 @@ TEST(MotionControllerTest, UpdateTransform_MoveForward_TranslatesInLocalZ)
 TEST(MotionControllerTest,
      UpdateTransform_MoveBackward_TranslatesInPositiveLocalZ)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0};
+  MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.moveBackward = true;
@@ -103,10 +103,10 @@ TEST(MotionControllerTest,
 
 TEST(MotionControllerTest, UpdateTransform_MoveLeft_TranslatesInNegativeLocalX)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0};
+  MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.moveLeft = true;
@@ -124,10 +124,10 @@ TEST(MotionControllerTest, UpdateTransform_MoveLeft_TranslatesInNegativeLocalX)
 
 TEST(MotionControllerTest, UpdateTransform_MoveRight_TranslatesInPositiveLocalX)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0};
+  MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.moveRight = true;
@@ -145,10 +145,10 @@ TEST(MotionControllerTest, UpdateTransform_MoveRight_TranslatesInPositiveLocalX)
 
 TEST(MotionControllerTest, UpdateTransform_MoveUp_TranslatesInPositiveLocalY)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0};
+  MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.moveUp = true;
@@ -166,10 +166,10 @@ TEST(MotionControllerTest, UpdateTransform_MoveUp_TranslatesInPositiveLocalY)
 
 TEST(MotionControllerTest, UpdateTransform_MoveDown_TranslatesInNegativeLocalY)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0};
+  MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.moveDown = true;
@@ -191,10 +191,10 @@ TEST(MotionControllerTest, UpdateTransform_MoveDown_TranslatesInNegativeLocalY)
 
 TEST(MotionControllerTest, UpdateTransform_PitchUp_IncreasesEulerPitch)
 {
-  MotionController controller{Angle::fromRadians(1.0), 0.0};
+  MotionController controller{1.0, 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.pitchUp = true;
@@ -202,21 +202,21 @@ TEST(MotionControllerTest, UpdateTransform_PitchUp_IncreasesEulerPitch)
   auto deltaTime = std::chrono::milliseconds{100};
   controller.updateTransform(frame, commands, deltaTime);
 
-  EulerAngles newAngles = frame.getEulerAngles();
+  AngularCoordinate newAngles = frame.getAngularCoordinate();
 
   // rotSpeed = 1.0 rad/s, deltaTime = 100ms = 0.1s
   // Expected pitch change = 1.0 * 0.1 = 0.1 rad
-  EXPECT_NEAR(newAngles.pitch.getRad(), 0.1, MOTION_TOLERANCE);
-  EXPECT_NEAR(newAngles.roll.getRad(), 0.0, MOTION_TOLERANCE);
-  EXPECT_NEAR(newAngles.yaw.getRad(), 0.0, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.pitch(), 0.1, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.roll(), 0.0, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.yaw(), 0.0, MOTION_TOLERANCE);
 }
 
 TEST(MotionControllerTest, UpdateTransform_PitchDown_DecreasesEulerPitch)
 {
-  MotionController controller{Angle::fromRadians(1.0), 0.0};
+  MotionController controller{1.0, 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.pitchDown = true;
@@ -224,20 +224,20 @@ TEST(MotionControllerTest, UpdateTransform_PitchDown_DecreasesEulerPitch)
   auto deltaTime = std::chrono::milliseconds{100};
   controller.updateTransform(frame, commands, deltaTime);
 
-  EulerAngles newAngles = frame.getEulerAngles();
+  AngularCoordinate newAngles = frame.getAngularCoordinate();
 
   // Expected pitch change = -1.0 * 0.1 = -0.1 rad
-  EXPECT_NEAR(newAngles.pitch.getRad(), -0.1, MOTION_TOLERANCE);
-  EXPECT_NEAR(newAngles.roll.getRad(), 0.0, MOTION_TOLERANCE);
-  EXPECT_NEAR(newAngles.yaw.getRad(), 0.0, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.pitch(), -0.1, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.roll(), 0.0, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.yaw(), 0.0, MOTION_TOLERANCE);
 }
 
 TEST(MotionControllerTest, UpdateTransform_YawLeft_IncreasesEulerYaw)
 {
-  MotionController controller{Angle::fromRadians(1.0), 0.0};
+  MotionController controller{1.0, 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.yawLeft = true;
@@ -245,20 +245,20 @@ TEST(MotionControllerTest, UpdateTransform_YawLeft_IncreasesEulerYaw)
   auto deltaTime = std::chrono::milliseconds{100};
   controller.updateTransform(frame, commands, deltaTime);
 
-  EulerAngles newAngles = frame.getEulerAngles();
+  AngularCoordinate newAngles = frame.getAngularCoordinate();
 
   // Expected yaw change = 1.0 * 0.1 = 0.1 rad
-  EXPECT_NEAR(newAngles.pitch.getRad(), 0.0, MOTION_TOLERANCE);
-  EXPECT_NEAR(newAngles.roll.getRad(), 0.0, MOTION_TOLERANCE);
-  EXPECT_NEAR(newAngles.yaw.getRad(), 0.1, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.pitch(), 0.0, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.roll(), 0.0, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.yaw(), 0.1, MOTION_TOLERANCE);
 }
 
 TEST(MotionControllerTest, UpdateTransform_YawRight_DecreasesEulerYaw)
 {
-  MotionController controller{Angle::fromRadians(1.0), 0.0};
+  MotionController controller{1.0, 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.yawRight = true;
@@ -266,12 +266,12 @@ TEST(MotionControllerTest, UpdateTransform_YawRight_DecreasesEulerYaw)
   auto deltaTime = std::chrono::milliseconds{100};
   controller.updateTransform(frame, commands, deltaTime);
 
-  EulerAngles newAngles = frame.getEulerAngles();
+  AngularCoordinate newAngles = frame.getAngularCoordinate();
 
   // Expected yaw change = -1.0 * 0.1 = -0.1 rad
-  EXPECT_NEAR(newAngles.pitch.getRad(), 0.0, MOTION_TOLERANCE);
-  EXPECT_NEAR(newAngles.roll.getRad(), 0.0, MOTION_TOLERANCE);
-  EXPECT_NEAR(newAngles.yaw.getRad(), -0.1, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.pitch(), 0.0, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.roll(), 0.0, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.yaw(), -0.1, MOTION_TOLERANCE);
 }
 
 // ============================================================================
@@ -281,14 +281,14 @@ TEST(MotionControllerTest, UpdateTransform_YawRight_DecreasesEulerYaw)
 TEST(MotionControllerTest,
      UpdateTransform_ScaledByDeltaTime_FrameRateIndependent)
 {
-  MotionController controller{Angle::fromRadians(0.0), 10.0};
+  MotionController controller{0.0, 10.0};
   ReferenceFrame frame1;
   frame1.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame1.setRotation(EulerAngles{});
+  frame1.setRotation(AngularCoordinate{});
 
   ReferenceFrame frame2;
   frame2.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame2.setRotation(EulerAngles{});
+  frame2.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.moveForward = true;
@@ -327,14 +327,14 @@ TEST(MotionControllerTest,
 
 TEST(MotionControllerTest, SetMoveSpeed_UpdatesSpeed_AffectsTranslation)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0};
+  MotionController controller{0.0, 1.0};
   controller.setMoveSpeed(5.0);
 
   EXPECT_DOUBLE_EQ(controller.getMoveSpeed(), 5.0);
 
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.moveForward = true;
@@ -351,14 +351,14 @@ TEST(MotionControllerTest, SetMoveSpeed_UpdatesSpeed_AffectsTranslation)
 
 TEST(MotionControllerTest, SetRotationSpeed_UpdatesSpeed_AffectsRotation)
 {
-  MotionController controller{Angle::fromRadians(0.5), 0.0};
-  controller.setRotationSpeed(Angle::fromRadians(2.0));
+  MotionController controller{0.5, 0.0};
+  controller.setRotationSpeed(2.0);
 
-  EXPECT_DOUBLE_EQ(controller.getRotationSpeed().getRad(), 2.0);
+  EXPECT_DOUBLE_EQ(controller.getRotationSpeed(), 2.0);
 
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.pitchUp = true;
@@ -366,23 +366,23 @@ TEST(MotionControllerTest, SetRotationSpeed_UpdatesSpeed_AffectsRotation)
   auto deltaTime = std::chrono::milliseconds{100};
   controller.updateTransform(frame, commands, deltaTime);
 
-  EulerAngles newAngles = frame.getEulerAngles();
+  AngularCoordinate newAngles = frame.getAngularCoordinate();
 
   // rotSpeed = 2.0 rad/s, deltaTime = 0.1s
   // Expected rotation = 2.0 * 0.1 = 0.2 rad
-  EXPECT_NEAR(newAngles.pitch.getRad(), 0.2, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.pitch(), 0.2, MOTION_TOLERANCE);
 }
 
 TEST(MotionControllerTest, SetSensitivity_UpdatesSensitivity_ScalesMovement)
 {
-  MotionController controller{Angle::fromRadians(0.0), 1.0};
+  MotionController controller{0.0, 1.0};
   controller.setSensitivity(2.0);
 
   EXPECT_DOUBLE_EQ(controller.getSensitivity(), 2.0);
 
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.moveForward = true;
@@ -405,7 +405,7 @@ TEST(MotionControllerTest, Platform_GetMotionController_ReturnsReference)
 {
   ConvexHull hull = createTestHull();
   ReferenceFrame frame;
-  Platform platform{0, 0,0, hull, 1.0, frame};
+  Platform platform{0, 0, 0, hull, 1.0, frame};
   MotionController& controller = platform.getMotionController();
 
   // Verify we can modify through reference
@@ -419,14 +419,14 @@ TEST(MotionControllerTest,
 {
   ConvexHull hull = createTestHull();
   ReferenceFrame frame;
-  Platform platform{0, 0,0, hull, 1.0, frame};
+  Platform platform{0, 0, 0, hull, 1.0, frame};
   const Platform& constPlatform = platform;
 
   const MotionController& controller = constPlatform.getMotionController();
 
   // Should be able to read default values
   EXPECT_DOUBLE_EQ(controller.getMoveSpeed(), 0.1);
-  EXPECT_DOUBLE_EQ(controller.getRotationSpeed().getRad(), 0.05);
+  EXPECT_DOUBLE_EQ(controller.getRotationSpeed(), 0.05);
 }
 
 // ============================================================================
@@ -435,10 +435,10 @@ TEST(MotionControllerTest,
 
 TEST(MotionControllerTest, UpdateTransform_CombinedMovement_AppliesAllCommands)
 {
-  MotionController controller{Angle::fromRadians(1.0), 1.0};
+  MotionController controller{1.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(EulerAngles{});
+  frame.setRotation(AngularCoordinate{});
 
   InputCommands commands;
   commands.moveForward = true;
@@ -449,7 +449,7 @@ TEST(MotionControllerTest, UpdateTransform_CombinedMovement_AppliesAllCommands)
   controller.updateTransform(frame, commands, deltaTime);
 
   Coordinate newOrigin = frame.getOrigin();
-  EulerAngles newAngles = frame.getEulerAngles();
+  AngularCoordinate newAngles = frame.getAngularCoordinate();
 
   // Movement: forward (-Z) and right (+X)
   EXPECT_NEAR(newOrigin.x(), 0.1, MOTION_TOLERANCE);
@@ -457,16 +457,16 @@ TEST(MotionControllerTest, UpdateTransform_CombinedMovement_AppliesAllCommands)
   EXPECT_NEAR(newOrigin.z(), -0.1, MOTION_TOLERANCE);
 
   // Rotation: pitch up
-  EXPECT_NEAR(newAngles.pitch.getRad(), 0.1, MOTION_TOLERANCE);
+  EXPECT_NEAR(newAngles.pitch(), 0.1, MOTION_TOLERANCE);
 }
 
 TEST(MotionControllerTest, UpdateTransform_NoCommands_NoChange)
 {
-  MotionController controller{Angle::fromRadians(1.0), 1.0};
+  MotionController controller{1.0, 1.0};
   ReferenceFrame frame;
   Coordinate initialOrigin{5.0, 10.0, 15.0};
-  EulerAngles initialAngles{
-    Angle::fromDegrees(10), Angle::fromDegrees(20), Angle::fromDegrees(30)};
+  AngularCoordinate initialAngles{
+    10.0 * M_PI / 180.0, 20.0 * M_PI / 180.0, 30.0 * M_PI / 180.0};
   frame.setOrigin(initialOrigin);
   frame.setRotation(initialAngles);
 
@@ -476,14 +476,13 @@ TEST(MotionControllerTest, UpdateTransform_NoCommands_NoChange)
   controller.updateTransform(frame, commands, deltaTime);
 
   Coordinate newOrigin = frame.getOrigin();
-  EulerAngles newAngles = frame.getEulerAngles();
+  AngularCoordinate newAngles = frame.getAngularCoordinate();
 
   // No change expected
   EXPECT_NEAR(newOrigin.x(), 5.0, TOLERANCE);
   EXPECT_NEAR(newOrigin.y(), 10.0, TOLERANCE);
   EXPECT_NEAR(newOrigin.z(), 15.0, TOLERANCE);
-  EXPECT_NEAR(
-    newAngles.pitch.getRad(), initialAngles.pitch.getRad(), TOLERANCE);
-  EXPECT_NEAR(newAngles.roll.getRad(), initialAngles.roll.getRad(), TOLERANCE);
-  EXPECT_NEAR(newAngles.yaw.getRad(), initialAngles.yaw.getRad(), TOLERANCE);
+  EXPECT_NEAR(newAngles.pitch(), initialAngles.pitch(), TOLERANCE);
+  EXPECT_NEAR(newAngles.roll(), initialAngles.roll(), TOLERANCE);
+  EXPECT_NEAR(newAngles.yaw(), initialAngles.yaw(), TOLERANCE);
 }

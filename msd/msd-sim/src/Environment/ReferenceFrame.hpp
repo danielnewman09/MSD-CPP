@@ -1,10 +1,13 @@
+// Ticket: 0024_angular_coordinate
+// Design: docs/designs/0024_angular_coordinate/design.md
+
 #ifndef REFERENCE_FRAME_HPP
 #define REFERENCE_FRAME_HPP
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include "msd-sim/src/Environment/AngularCoordinate.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Environment/EulerAngles.hpp"
 
 namespace msd_sim
 {
@@ -13,14 +16,17 @@ namespace msd_sim
  * @brief A reference frame for coordinate transformations
  *
  * This class represents a reference frame that can be translated and rotated
- * relative to a global frame. It uses Eulerian angles (roll, pitch, yaw) for
+ * relative to a global frame. It uses AngularCoordinate (pitch, roll, yaw) for
  * rotation specification and provides methods to transform coordinates between
  * the global frame and the local frame.
  *
  * Rotation order: ZYX (yaw-pitch-roll) intrinsic rotations
- * - Roll: rotation around X-axis
- * - Pitch: rotation around Y-axis
- * - Yaw: rotation around Z-axis
+ * - Roll: rotation around X-axis (component 1)
+ * - Pitch: rotation around Y-axis (component 0)
+ * - Yaw: rotation around Z-axis (component 2)
+ *
+ * @see docs/designs/0024_angular_coordinate/0024_angular_coordinate.puml
+ * @ticket 0024_angular_coordinate
  */
 class ReferenceFrame
 {
@@ -39,9 +45,9 @@ public:
   /**
    * @brief Constructor with translation and rotation
    * @param origin The origin of this frame in global coordinates
-   * @param euler The euler angles defining the roation
+   * @param angular The angular coordinate defining the rotation
    */
-  ReferenceFrame(const Coordinate& origin, const EulerAngles& euler);
+  ReferenceFrame(const Coordinate& origin, const AngularCoordinate& angular);
 
   /**
    * @brief Transform a coordinate from global frame to this local frame
@@ -150,13 +156,10 @@ public:
   void setOrigin(const Coordinate& origin);
 
   /**
-   * @brief Set the rotation using Eulerian angles
-   * @param roll Rotation around X-axis (radians)
-   * @param pitch Rotation around Y-axis (radians)
-   * @param yaw Rotation around Z-axis (radians)
+   * @brief Set the rotation using AngularCoordinate
+   * @param angular Orientation angles (pitch, roll, yaw) in radians
    */
-  void setRotation(const EulerAngles& euler);
-
+  void setRotation(const AngularCoordinate& angular);
 
   /**
    * @brief Get the origin of this frame in global coordinates
@@ -167,10 +170,10 @@ public:
   }
 
   /**
-   * @brief Get the Eulerian angles (roll, pitch, yaw) in radians
-   * @return Eigen::Vector3d with (roll, pitch, yaw)
+   * @brief Get the orientation as AngularCoordinate
+   * @return AngularCoordinate representing current rotation
    */
-  EulerAngles& getEulerAngles();
+  AngularCoordinate& getAngularCoordinate();
 
   /**
    * @brief Get the rotation matrix
@@ -196,12 +199,12 @@ public:
 
 private:
   /*!
-   * @brief Update rotation matrix from Eulerian angles
+   * @brief Update rotation matrix from AngularCoordinate
    */
   void updateRotationMatrix() const;
 
-  Coordinate origin_;  ///< Origin of this frame in global coordinates
-  EulerAngles euler_;  ///< Rotation matrix from global to local frame
+  Coordinate origin_;             ///< Origin of this frame in global coordinates
+  AngularCoordinate angular_;     ///< Orientation angles (pitch, roll, yaw)
 
   mutable Eigen::Matrix3d rotation_;
 
