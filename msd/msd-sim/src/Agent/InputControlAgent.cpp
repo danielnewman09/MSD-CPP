@@ -17,7 +17,7 @@ InertialState InputControlAgent::updateState(const InertialState& currentState)
   InertialState newState = currentState;
 
   // Calculate linear velocity based on input commands
-  Coordinate velocity{0, 0, 0};
+  CoordinateRate velocity{0, 0, 0};
 
   if (inputCommands_.moveForward)
   {
@@ -52,7 +52,8 @@ InertialState InputControlAgent::updateState(const InertialState& currentState)
 
   if (inputCommands_.pitchUp)
   {
-    angularVelocity.pitch() = maxAngularSpeed_;  // pitch around Y-axis (aerospace convention)
+    angularVelocity.pitch() =
+      maxAngularSpeed_;  // pitch around Y-axis (aerospace convention)
   }
   if (inputCommands_.pitchDown)
   {

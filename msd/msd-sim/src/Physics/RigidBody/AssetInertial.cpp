@@ -68,14 +68,14 @@ const Eigen::Matrix3d& AssetInertial::getInverseInertiaTensor() const
 
 // ========== Force Application API (ticket 0023a) ==========
 
-void AssetInertial::applyForce(const Coordinate& force)
+void AssetInertial::applyForce(const CoordinateRate& force)
 {
   accumulatedForce_ += force;
   // Ticket: 0023a_force_application_scaffolding
 }
 
-void AssetInertial::applyForceAtPoint(const Coordinate& force,
-                                       const Coordinate& worldPoint)
+void AssetInertial::applyForceAtPoint(const CoordinateRate& force,
+                                      const Coordinate& worldPoint)
 {
   // Accumulate linear force
   accumulatedForce_ += force;
@@ -91,7 +91,7 @@ void AssetInertial::applyForceAtPoint(const Coordinate& force,
   // Ticket: 0023_force_application_system
 }
 
-void AssetInertial::applyTorque(const Coordinate& torque)
+void AssetInertial::applyTorque(const CoordinateRate& torque)
 {
   accumulatedTorque_ += torque;
   // Ticket: 0023a_force_application_scaffolding
@@ -104,12 +104,12 @@ void AssetInertial::clearForces()
   // Ticket: 0023a_force_application_scaffolding
 }
 
-const Coordinate& AssetInertial::getAccumulatedForce() const
+const CoordinateRate& AssetInertial::getAccumulatedForce() const
 {
   return accumulatedForce_;
 }
 
-const Coordinate& AssetInertial::getAccumulatedTorque() const
+const CoordinateRate& AssetInertial::getAccumulatedTorque() const
 {
   return accumulatedTorque_;
 }

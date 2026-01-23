@@ -14,12 +14,10 @@ namespace msd_sim
 namespace InertialCalculations
 {
 
-namespace
+struct ProjectionAxes
 {
-// Coordinate indices for projection plane selection
-constexpr int X = 0;
-constexpr int Y = 1;
-constexpr int Z = 2;
+  Eigen::Index A, B, C;
+};
 
 // Helper structures for Mirtich three-layer algorithm
 
@@ -64,32 +62,18 @@ struct FaceIntegrals
 /**
  * @brief Select projection plane based on largest normal component.
  * @param normal Facet normal vector
- * @param[out] A First coordinate index in projection plane
- * @param[out] B Second coordinate index in projection plane
- * @param[out] C Coordinate index perpendicular to projection plane
+ * @returns The projection axes ordered according to the largest normal
  * @ticket 0026_mirtich_inertia_tensor
  */
-void selectProjectionPlane(const Coordinate& normal, int& A, int& B, int& C)
+ProjectionAxes selectProjectionPlane(const Coordinate& normal)
 {
-  double nx = std::abs(normal[X]);
-  double ny = std::abs(normal[Y]);
-  double nz = std::abs(normal[Z]);
+  ProjectionAxes axes;
+  normal.cwiseAbs().maxCoeff(
+    &axes.C);  // C = index of largest absolute component
 
-  if (nx > ny && nx > nz)
-  {
-    C = X;
-  }
-  else if (ny > nz)
-  {
-    C = Y;
-  }
-  else
-  {
-    C = Z;
-  }
-
-  A = (C + 1) % 3;
-  B = (A + 1) % 3;
+  axes.A = (axes.C + 1) % 3;
+  axes.B = (axes.A + 1) % 3;
+  return axes;
 }
 
 /**
@@ -151,23 +135,22 @@ std::array<size_t, 3> getWindingCorrectedIndices(
 ProjectionIntegrals computeProjectionIntegrals(
   const std::vector<Coordinate>& vertices,
   const std::array<size_t, 3>& indices,
-  int A,
-  int B)
+  const ProjectionAxes& axes)
 {
   ProjectionIntegrals proj{};
 
   // Iterate over edges of the triangular facet
-  for (int i = 0; i < 3; ++i)
+  for (size_t i = 0; i < 3; ++i)
   {
-    int j = (i + 1) % 3;
+    size_t j = (i + 1) % 3;
 
     const Coordinate& vert_i = vertices[indices[i]];
     const Coordinate& vert_j = vertices[indices[j]];
 
-    double a0 = vert_i[A];
-    double b0 = vert_i[B];
-    double a1 = vert_j[A];
-    double b1 = vert_j[B];
+    double a0 = vert_i[axes.A];
+    double b0 = vert_i[axes.B];
+    double a1 = vert_j[axes.A];
+    double b1 = vert_j[axes.B];
 
     double da = a1 - a0;
     double db = b1 - b0;
@@ -229,9 +212,7 @@ ProjectionIntegrals computeProjectionIntegrals(
  * @param indices Winding-corrected vertex indices
  * @param normal Facet normal
  * @param proj Projection integrals
- * @param A First projection coordinate index
- * @param B Second projection coordinate index
- * @param C Perpendicular coordinate index
+ * @param axes The projection axes
  * @return Face integrals
  * @ticket 0026_mirtich_inertia_tensor
  *
@@ -241,9 +222,7 @@ FaceIntegrals computeFaceIntegrals(const std::vector<Coordinate>& vertices,
                                    const std::array<size_t, 3>& indices,
                                    const Coordinate& normal,
                                    const ProjectionIntegrals& proj,
-                                   int A,
-                                   int B,
-                                   int C)
+                                   const ProjectionAxes& axes)
 {
   FaceIntegrals face{};
 
@@ -251,52 +230,60 @@ FaceIntegrals computeFaceIntegrals(const std::vector<Coordinate>& vertices,
 
   // w = -n · v0 for any vertex v0 on the plane
   const Coordinate& v0 = vertices[indices[0]];
-  double w = -(n[X] * v0[X] + n[Y] * v0[Y] + n[Z] * v0[Z]);
+  double w = -(n[Coordinate::X] * v0[Coordinate::X] +
+               n[Coordinate::Y] * v0[Coordinate::Y] +
+               n[Coordinate::Z] * v0[Coordinate::Z]);
 
   // The projection plane selection ensures n[C] is the largest component,
   // but check for numerical stability
-  if (std::abs(n[C]) < 1e-10)
+  if (std::abs(n[axes.C]) < 1e-10)
   {
     throw std::runtime_error(
       "Normal component too small - possible degenerate facet");
   }
 
-  double k1 = 1.0 / n[C];
+  double k1 = 1.0 / n[axes.C];
   double k2 = k1 * k1;
   double k3 = k2 * k1;
   double k4 = k3 * k1;
 
   face.Fa = k1 * proj.Pa;
   face.Fb = k1 * proj.Pb;
-  face.Fc = -k2 * (n[A] * proj.Pa + n[B] * proj.Pb + w * proj.P1);
+  face.Fc = -k2 * (n[axes.A] * proj.Pa + n[axes.B] * proj.Pb + w * proj.P1);
 
   face.Faa = k1 * proj.Paa;
   face.Fbb = k1 * proj.Pbb;
-  face.Fcc = k3 * (n[A] * n[A] * proj.Paa + 2 * n[A] * n[B] * proj.Pab +
-                   n[B] * n[B] * proj.Pbb +
-                   w * (2 * (n[A] * proj.Pa + n[B] * proj.Pb) + w * proj.P1));
+  face.Fcc =
+    k3 *
+    (n[axes.A] * n[axes.A] * proj.Paa + 2 * n[axes.A] * n[axes.B] * proj.Pab +
+     n[axes.B] * n[axes.B] * proj.Pbb +
+     w * (2 * (n[axes.A] * proj.Pa + n[axes.B] * proj.Pb) + w * proj.P1));
 
   face.Faaa = k1 * proj.Paaa;
   face.Fbbb = k1 * proj.Pbbb;
   face.Fccc =
-    -k4 * (n[A] * n[A] * n[A] * proj.Paaa + 3 * n[A] * n[A] * n[B] * proj.Paab +
-           3 * n[A] * n[B] * n[B] * proj.Pabb + n[B] * n[B] * n[B] * proj.Pbbb +
-           3 * w *
-             (n[A] * n[A] * proj.Paa + 2 * n[A] * n[B] * proj.Pab +
-              n[B] * n[B] * proj.Pbb) +
-           w * w * (3 * (n[A] * proj.Pa + n[B] * proj.Pb) + w * proj.P1));
+    -k4 *
+    (n[axes.A] * n[axes.A] * n[axes.A] * proj.Paaa +
+     3 * n[axes.A] * n[axes.A] * n[axes.B] * proj.Paab +
+     3 * n[axes.A] * n[axes.B] * n[axes.B] * proj.Pabb +
+     n[axes.B] * n[axes.B] * n[axes.B] * proj.Pbbb +
+     3 * w *
+       (n[axes.A] * n[axes.A] * proj.Paa +
+        2 * n[axes.A] * n[axes.B] * proj.Pab +
+        n[axes.B] * n[axes.B] * proj.Pbb) +
+     w * w * (3 * (n[axes.A] * proj.Pa + n[axes.B] * proj.Pb) + w * proj.P1));
 
   face.Faab = k1 * proj.Paab;
-  face.Fbbc = -k2 * (n[A] * proj.Pabb + n[B] * proj.Pbbb + w * proj.Pbb);
+  face.Fbbc =
+    -k2 * (n[axes.A] * proj.Pabb + n[axes.B] * proj.Pbbb + w * proj.Pbb);
   face.Fcca =
-    k3 * (n[A] * n[A] * proj.Paaa + 2 * n[A] * n[B] * proj.Paab +
-          n[B] * n[B] * proj.Pabb +
-          w * (2 * (n[A] * proj.Paa + n[B] * proj.Pab) + w * proj.Pa));
+    k3 *
+    (n[axes.A] * n[axes.A] * proj.Paaa + 2 * n[axes.A] * n[axes.B] * proj.Paab +
+     n[axes.B] * n[axes.B] * proj.Pabb +
+     w * (2 * (n[axes.A] * proj.Paa + n[axes.B] * proj.Pab) + w * proj.Pa));
 
   return face;
 }
-
-}  // anonymous namespace
 
 Eigen::Matrix3d computeInertiaTensorAboutCentroid(const ConvexHull& hull,
                                                   double density)
@@ -336,10 +323,11 @@ Eigen::Matrix3d computeInertiaTensorAboutCentroid(const ConvexHull& hull,
   }
 
   // Initialize volume integral accumulators
-  double T0 = 0.0;             // Volume
-  std::array<double, 3> T1{};  // First moments
-  std::array<double, 3> T2{};  // Second moments
-  std::array<double, 3> TP{};  // Products
+  // double T0 = 0.0;  // Volume
+  double volume = hull.getVolume();
+  Coordinate T1;    // First moments
+  Coordinate T2{};  // Second moments
+  Coordinate TP{};  // Products
 
   // Iterate over all facets and accumulate volume integrals
   for (const auto& facet : facets)
@@ -348,88 +336,107 @@ Eigen::Matrix3d computeInertiaTensorAboutCentroid(const ConvexHull& hull,
     // This is critical: Qhull provides outward-facing normals, but the vertex
     // order may not match. The Mirtich algorithm requires that the cross
     // product of (v1-v0) x (v2-v1) aligns with the normal.
-    std::array<size_t, 3> indices = getWindingCorrectedIndices(vertices, facet);
+    std::array<size_t, 3> indices =
+      InertialCalculations::getWindingCorrectedIndices(vertices, facet);
 
     const Coordinate& n = facet.normal;
 
     // Select projection plane based on largest normal component
-    int A{}, B{}, C{};
-    selectProjectionPlane(n, A, B, C);
+    InertialCalculations::ProjectionAxes axes =
+      InertialCalculations::selectProjectionPlane(n);
 
     // Compute projection integrals (2D) using winding-corrected indices
-    ProjectionIntegrals proj =
-      computeProjectionIntegrals(vertices, indices, A, B);
+    InertialCalculations::ProjectionIntegrals proj =
+      InertialCalculations::computeProjectionIntegrals(vertices, indices, axes);
 
     // Compute face integrals (3D surface)
-    FaceIntegrals face =
-      computeFaceIntegrals(vertices, indices, n, proj, A, B, C);
+    InertialCalculations::FaceIntegrals face =
+      InertialCalculations::computeFaceIntegrals(
+        vertices, indices, n, proj, axes);
 
     // Accumulate T0 (volume) - transcribed from volInt.c line 291
-    T0 += n[X] * ((A == X) ? face.Fa : ((B == X) ? face.Fb : face.Fc));
+    // T0 += n[X] * ((A == X) ? face.Fa : ((B == X) ? face.Fb : face.Fc));
+
 
     // Accumulate T1 (first moments) - transcribed from volInt.c lines 293-295
-    T1[A] += n[A] * face.Faa;
-    T1[B] += n[B] * face.Fbb;
-    T1[C] += n[C] * face.Fcc;
+    T1[axes.A] += n[axes.A] * face.Faa;
+    T1[axes.B] += n[axes.B] * face.Fbb;
+    T1[axes.C] += n[axes.C] * face.Fcc;
 
     // Accumulate T2 (second moments) - transcribed from volInt.c lines 296-298
-    T2[A] += n[A] * face.Faaa;
-    T2[B] += n[B] * face.Fbbb;
-    T2[C] += n[C] * face.Fccc;
+    T2[axes.A] += n[axes.A] * face.Faaa;
+    T2[axes.B] += n[axes.B] * face.Fbbb;
+    T2[axes.C] += n[axes.C] * face.Fccc;
 
     // Accumulate TP (products) - transcribed from volInt.c lines 299-301
-    TP[A] += n[A] * face.Faab;
-    TP[B] += n[B] * face.Fbbc;
-    TP[C] += n[C] * face.Fcca;
+    TP[axes.A] += n[axes.A] * face.Faab;
+    TP[axes.B] += n[axes.B] * face.Fbbc;
+    TP[axes.C] += n[axes.C] * face.Fcca;
   }
 
   // Finalize volume integrals - transcribed from volInt.c lines 304-306
-  T1[X] /= 2.0;
-  T1[Y] /= 2.0;
-  T1[Z] /= 2.0;
-  T2[X] /= 3.0;
-  T2[Y] /= 3.0;
-  T2[Z] /= 3.0;
-  TP[X] /= 2.0;
-  TP[Y] /= 2.0;
-  TP[Z] /= 2.0;
+  T1[Coordinate::X] /= 2.0;
+  T1[Coordinate::Y] /= 2.0;
+  T1[Coordinate::Z] /= 2.0;
+  T2[Coordinate::X] /= 3.0;
+  T2[Coordinate::Y] /= 3.0;
+  T2[Coordinate::Z] /= 3.0;
+  TP[Coordinate::X] /= 2.0;
+  TP[Coordinate::Y] /= 2.0;
+  TP[Coordinate::Z] /= 2.0;
 
   // Sanity check: volume should be positive
   // (Qhull guarantees outward-facing normals)
-  if (T0 <= 0.0)
+  if (volume <= 0.0)
   {
     throw std::runtime_error("Computed volume is non-positive - possible "
                              "invalid hull or normal orientation issue");
   }
 
   // Compute density
-  double mass = density * T0;
+  double mass = density * volume;
 
   // Compute inertia tensor about origin - transcribed from volInt.c lines
   // 358-363
   Eigen::Matrix3d I_origin;
-  I_origin(X, X) = density * (T2[Y] + T2[Z]);
-  I_origin(Y, Y) = density * (T2[Z] + T2[X]);
-  I_origin(Z, Z) = density * (T2[X] + T2[Y]);
-  I_origin(X, Y) = I_origin(Y, X) = -density * TP[X];
-  I_origin(Y, Z) = I_origin(Z, Y) = -density * TP[Y];
-  I_origin(Z, X) = I_origin(X, Z) = -density * TP[Z];
+  I_origin(Coordinate::X, Coordinate::X) =
+    density * (T2[Coordinate::Y] + T2[Coordinate::Z]);
+  I_origin(Coordinate::Y, Coordinate::Y) =
+    density * (T2[Coordinate::Z] + T2[Coordinate::X]);
+  I_origin(Coordinate::Z, Coordinate::Z) =
+    density * (T2[Coordinate::X] + T2[Coordinate::Y]);
+  I_origin(Coordinate::X, Coordinate::Y) =
+    I_origin(Coordinate::Y, Coordinate::X) = -density * TP[Coordinate::X];
+  I_origin(Coordinate::Y, Coordinate::Z) =
+    I_origin(Coordinate::Z, Coordinate::Y) = -density * TP[Coordinate::Y];
+  I_origin(Coordinate::Z, Coordinate::X) =
+    I_origin(Coordinate::X, Coordinate::Z) = -density * TP[Coordinate::Z];
 
   // Compute center of mass
-  Coordinate r{T1[X] / T0, T1[Y] / T0, T1[Z] / T0};
+  Coordinate r{T1[Coordinate::X] / volume,
+               T1[Coordinate::Y] / volume,
+               T1[Coordinate::Z] / volume};
 
   // Apply parallel axis theorem to shift to center of mass - transcribed from
   // volInt.c lines 366-371
   Eigen::Matrix3d I_centroid = I_origin;
-  I_centroid(X, X) -= mass * (r[Y] * r[Y] + r[Z] * r[Z]);
-  I_centroid(Y, Y) -= mass * (r[Z] * r[Z] + r[X] * r[X]);
-  I_centroid(Z, Z) -= mass * (r[X] * r[X] + r[Y] * r[Y]);
-  I_centroid(X, Y) = I_centroid(Y, X) += mass * r[X] * r[Y];
-  I_centroid(Y, Z) = I_centroid(Z, Y) += mass * r[Y] * r[Z];
-  I_centroid(Z, X) = I_centroid(X, Z) += mass * r[Z] * r[X];
+  I_centroid(Coordinate::X, Coordinate::X) -=
+    mass *
+    (r[Coordinate::Y] * r[Coordinate::Y] + r[Coordinate::Z] * r[Coordinate::Z]);
+  I_centroid(Coordinate::Y, Coordinate::Y) -=
+    mass *
+    (r[Coordinate::Z] * r[Coordinate::Z] + r[Coordinate::X] * r[Coordinate::X]);
+  I_centroid(Coordinate::Z, Coordinate::Z) -=
+    mass *
+    (r[Coordinate::X] * r[Coordinate::X] + r[Coordinate::Y] * r[Coordinate::Y]);
+  I_centroid(Coordinate::X, Coordinate::Y) = I_centroid(
+    Coordinate::Y, Coordinate::X) += mass * r[Coordinate::X] * r[Coordinate::Y];
+  I_centroid(Coordinate::Y, Coordinate::Z) = I_centroid(
+    Coordinate::Z, Coordinate::Y) += mass * r[Coordinate::Y] * r[Coordinate::Z];
+  I_centroid(Coordinate::Z, Coordinate::X) = I_centroid(
+    Coordinate::X, Coordinate::Z) += mass * r[Coordinate::Z] * r[Coordinate::X];
 
   return I_centroid;
 }
-
 }  // namespace InertialCalculations
 }  // namespace msd_sim

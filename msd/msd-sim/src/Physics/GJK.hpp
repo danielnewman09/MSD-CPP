@@ -28,7 +28,8 @@ namespace msd_sim
  * to support collision detection between objects with arbitrary world-space
  * transformations.
  *
- * @see docs/designs/0022_gjk_asset_physical_transform/0022_gjk_asset_physical_transform.puml
+ * @see
+ * docs/designs/0022_gjk_asset_physical_transform/0022_gjk_asset_physical_transform.puml
  * @ticket 0022_gjk_asset_physical_transform
  */
 class GJK
@@ -37,11 +38,15 @@ public:
   /**
    * @brief Construct a GJK solver for two physical assets with transformations.
    *
-   * @param assetA First physical asset (includes collision hull and reference frame)
-   * @param assetB Second physical asset (includes collision hull and reference frame)
+   * @param assetA First physical asset (includes collision hull and reference
+   * frame)
+   * @param assetB Second physical asset (includes collision hull and reference
+   * frame)
    * @param epsilon Numerical tolerance for convergence (default: 1e-6)
    */
-  GJK(const AssetPhysical& assetA, const AssetPhysical& assetB, double epsilon = 1e-6);
+  GJK(const AssetPhysical& assetA,
+      const AssetPhysical& assetB,
+      double epsilon = 1e-6);
 
   /**
    * @brief Test if the two assets intersect in world space.
@@ -68,18 +73,21 @@ private:
   Coordinate support(const ConvexHull& hull, const Coordinate& dir) const;
 
   /**
-   * @brief Minkowski difference support function with world-space transformations.
+   * @brief Minkowski difference support function with world-space
+   * transformations.
    *
    * Applies ReferenceFrame transformations on-the-fly:
-   * 1. Transform search direction from world space to local space (rotation only)
+   * 1. Transform search direction from world space to local space (rotation
+   * only)
    * 2. Find support vertex in local hull geometry
-   * 3. Transform support vertex from local space to world space (rotation + translation)
+   * 3. Transform support vertex from local space to world space (rotation +
+   * translation)
    * 4. Compute Minkowski difference in world space
    *
    * @param dir Search direction in world space
    * @return Support point in world space (supportA - supportB)
    */
-  Coordinate supportMinkowski(const Coordinate& dir) const;
+  Coordinate supportMinkowski(const CoordinateRate& dir) const;
 
   /**
    * @brief Update simplex and search direction.
@@ -109,7 +117,8 @@ private:
 };
 
 /**
- * @brief Convenience function to test intersection using GJK with AssetPhysical objects.
+ * @brief Convenience function to test intersection using GJK with AssetPhysical
+ * objects.
  *
  * @param assetA First physical asset
  * @param assetB Second physical asset

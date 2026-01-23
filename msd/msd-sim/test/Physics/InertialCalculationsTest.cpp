@@ -114,15 +114,16 @@ TEST(InertialCalculationsTest, RectangularBoxAnalytical_Ticket0026)
   auto points = createRectangularBoxPoints(a, b, c);
   ConvexHull hull{points};
   double density = 1.0;
+  double volume = a * b * c;
 
   // Analytical solution:
   // Ixx = m(b² + c²)/12 = (9 + 16)/12 = 25/12 ≈ 2.083333333333
   // Iyy = m(a² + c²)/12 = (4 + 16)/12 = 20/12 ≈ 1.666666666667
   // Izz = m(a² + b²)/12 = (4 + 9)/12 = 13/12 ≈ 1.083333333333
   // Off-diagonal: 0
-  double expected_xx = density * (b * b + c * c) / 12.0;
-  double expected_yy = density * (a * a + c * c) / 12.0;
-  double expected_zz = density * (a * a + b * b) / 12.0;
+  double expected_xx = density * volume * (b * b + c * c) / 12.0;
+  double expected_yy = density * volume * (a * a + c * c) / 12.0;
+  double expected_zz = density * volume * (a * a + b * b) / 12.0;
 
   // Act
   Eigen::Matrix3d I =
@@ -150,12 +151,13 @@ TEST(InertialCalculationsTest, RegularTetrahedronAnalytical_Ticket0026)
   double edgeLength = 2.0;
   auto points = createRegularTetrahedronPoints(edgeLength);
   ConvexHull hull{points};
+  auto volume = hull.getVolume();
   double density = 1.0;
 
   // Analytical solution for regular tetrahedron:
   // Ixx = Iyy = Izz = m*L²/20 = 1.0 * 4.0 / 20.0 = 0.2
   // (when vertices are symmetrically placed as we construct them)
-  double expected_diagonal = density * edgeLength * edgeLength / 20.0;
+  double expected_diagonal = density * volume * edgeLength * edgeLength / 20.0;
 
   // Act
   Eigen::Matrix3d I =
@@ -285,12 +287,13 @@ TEST(InertialCalculationsTest, ExtremeAspectRatio_Ticket0026)
   double a = 0.01, b = 1.0, c = 1.0;
   auto points = createRectangularBoxPoints(a, b, c);
   ConvexHull hull{points};
+  auto volume = hull.getVolume();
   double density = 1.0;
 
   // Analytical solution (box formulas still apply)
-  double expected_xx = density * (b * b + c * c) / 12.0;
-  double expected_yy = density * (a * a + c * c) / 12.0;
-  double expected_zz = density * (a * a + b * b) / 12.0;
+  double expected_xx = density * volume * (b * b + c * c) / 12.0;
+  double expected_yy = density * volume * (a * a + c * c) / 12.0;
+  double expected_zz = density * volume * (a * a + b * b) / 12.0;
 
   // Act
   Eigen::Matrix3d I =
@@ -308,10 +311,11 @@ TEST(InertialCalculationsTest, SingleTetrahedron_Ticket0026)
   double edgeLength = 1.0;
   auto points = createRegularTetrahedronPoints(edgeLength);
   ConvexHull hull{points};
+  auto volume = hull.getVolume();
   double density = 1.0;
 
   // Expected: Valid inertia tensor
-  double expected_diagonal = density * edgeLength * edgeLength / 20.0;
+  double expected_diagonal = density * volume * edgeLength * edgeLength / 20.0;
 
   // Act
   Eigen::Matrix3d I =
@@ -380,6 +384,8 @@ TEST(InertialCalculationsTest, densityScaling_Ticket0026)
   EXPECT_NEAR(I2(2, 2), I1(2, 2) * scale, 1e-10);
 }
 
+// Compare the inertial calculation agains the known reference from the original
+// C source
 TEST(InertialCalculationsTest, Tetrahedron)
 {
   std::vector<msd_sim::Coordinate> points{
@@ -390,5 +396,15 @@ TEST(InertialCalculationsTest, Tetrahedron)
   Eigen::Matrix3d I =
     InertialCalculations::computeInertiaTensorAboutCentroid(hull, 1.0);
 
-  EXPECT_EQ(I(0, 0), 9.375);
+  EXPECT_NEAR(I(0, 0), 9.375, 1e-10);
+  EXPECT_NEAR(I(0, 1), 2.50, 1E-10);
+  EXPECT_NEAR(I(0, 2), 1.875, 1e-10);
+
+  EXPECT_NEAR(I(1, 0), 2.5, 1e-10);
+  EXPECT_NEAR(I(1, 1), 12.75, 1e-10);
+  EXPECT_NEAR(I(1, 2), 1.5, 1e-10);
+
+  EXPECT_NEAR(I(2, 0), 1.875, 1e-10);
+  EXPECT_NEAR(I(2, 1), 1.500, 1e-10);
+  EXPECT_NEAR(I(2, 2), 15.375, 1e-10);
 }

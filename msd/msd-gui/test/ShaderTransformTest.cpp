@@ -4,13 +4,13 @@
 
 #include <gtest/gtest.h>
 #include <Eigen/Dense>
-#include <cmath>
 #include <array>
+#include <cmath>
 
 // Include ReferenceFrame and related types from msd-sim
-#include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
 #include "msd-sim/src/Environment/AngularCoordinate.hpp"
+#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/Environment/ReferenceFrame.hpp"
 
 // Tolerance for floating-point comparisons
 constexpr float FLOAT_TOLERANCE = 1e-5f;
@@ -90,9 +90,9 @@ Eigen::Vector4f simulateShaderTransform(const Eigen::Vector4f& row0,
 /**
  * @brief Creates a model matrix the same way GPUManager::createModelMatrix does
  */
-Eigen::Matrix4f createModelMatrix(const Eigen::Vector3f& position,
-                                  const Eigen::Matrix3f& rotation =
-                                    Eigen::Matrix3f::Identity())
+Eigen::Matrix4f createModelMatrix(
+  const Eigen::Vector3f& position,
+  const Eigen::Matrix3f& rotation = Eigen::Matrix3f::Identity())
 {
   Eigen::Matrix4f modelMatrix = Eigen::Matrix4f::Identity();
 
@@ -144,8 +144,8 @@ TEST(ShaderTransformTest, IdentityMatrix_VertexUnchanged)
 
   // Test vertex at (1, 2, 3)
   Eigen::Vector3f vertex{1.0f, 2.0f, 3.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   // With identity matrix, output should equal input
   Eigen::Vector4f expected{1.0f, 2.0f, 3.0f, 1.0f};
@@ -171,8 +171,8 @@ TEST(ShaderTransformTest, TranslationOnly_VertexTranslated)
 
   // Test vertex at origin
   Eigen::Vector3f vertex{0.0f, 0.0f, 0.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   // Vertex at origin should be translated to (5, 10, 15)
   Eigen::Vector4f expected{5.0f, 10.0f, 15.0f, 1.0f};
@@ -194,8 +194,8 @@ TEST(ShaderTransformTest, TranslationOnly_VertexAtOffset)
 
   // Test vertex at (1, 2, 3)
   Eigen::Vector3f vertex{1.0f, 2.0f, 3.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   // Vertex should be translated: (1+5, 2+0, 3+0) = (6, 2, 3)
   Eigen::Vector4f expected{6.0f, 2.0f, 3.0f, 1.0f};
@@ -219,8 +219,8 @@ TEST(ShaderTransformTest, WComponentIsOne)
   auto rows = extractShaderRows(modelMatrix);
 
   Eigen::Vector3f vertex{1.0f, 2.0f, 3.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   EXPECT_TRUE(floatEqual(result.w(), 1.0f))
     << "W component should be 1.0, got: " << result.w();
@@ -245,8 +245,8 @@ TEST(ShaderTransformTest, Rotation90DegreesY)
 
   // Vertex at (1, 0, 0) should rotate to (0, 0, -1)
   Eigen::Vector3f vertex{1.0f, 0.0f, 0.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   Eigen::Vector4f expected{0.0f, 0.0f, -1.0f, 1.0f};
   EXPECT_TRUE(vec4Equal(result, expected))
@@ -276,8 +276,8 @@ TEST(ShaderTransformTest, RotationAndTranslation)
   // First rotated: (1, 0, 0) -> (0, 0, -1)
   // Then translated: (0, 0, -1) + (10, 0, 0) = (10, 0, -1)
   Eigen::Vector3f vertex{1.0f, 0.0f, 0.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   Eigen::Vector4f expected{10.0f, 0.0f, -1.0f, 1.0f};
   EXPECT_TRUE(vec4Equal(result, expected))
@@ -328,26 +328,22 @@ TEST(ShaderTransformTest, ExtractShaderRows_MatchesColumnMajorLayout)
   auto rows = extractShaderRows(modelMatrix);
 
   // Row0 should be column 0 of the matrix: [1, 0, 0, 0] (identity rotation)
-  EXPECT_TRUE(
-    vec4Equal(rows[0], Eigen::Vector4f{1.0f, 0.0f, 0.0f, 0.0f}))
+  EXPECT_TRUE(vec4Equal(rows[0], Eigen::Vector4f{1.0f, 0.0f, 0.0f, 0.0f}))
     << "Row0 (column 0): (" << rows[0].x() << ", " << rows[0].y() << ", "
     << rows[0].z() << ", " << rows[0].w() << ")";
 
   // Row1 should be column 1: [0, 1, 0, 0]
-  EXPECT_TRUE(
-    vec4Equal(rows[1], Eigen::Vector4f{0.0f, 1.0f, 0.0f, 0.0f}))
+  EXPECT_TRUE(vec4Equal(rows[1], Eigen::Vector4f{0.0f, 1.0f, 0.0f, 0.0f}))
     << "Row1 (column 1): (" << rows[1].x() << ", " << rows[1].y() << ", "
     << rows[1].z() << ", " << rows[1].w() << ")";
 
   // Row2 should be column 2: [0, 0, 1, 0]
-  EXPECT_TRUE(
-    vec4Equal(rows[2], Eigen::Vector4f{0.0f, 0.0f, 1.0f, 0.0f}))
+  EXPECT_TRUE(vec4Equal(rows[2], Eigen::Vector4f{0.0f, 0.0f, 1.0f, 0.0f}))
     << "Row2 (column 2): (" << rows[2].x() << ", " << rows[2].y() << ", "
     << rows[2].z() << ", " << rows[2].w() << ")";
 
   // Row3 should be column 3: [tx, ty, tz, 1] = [5, 10, 15, 1]
-  EXPECT_TRUE(
-    vec4Equal(rows[3], Eigen::Vector4f{5.0f, 10.0f, 15.0f, 1.0f}))
+  EXPECT_TRUE(vec4Equal(rows[3], Eigen::Vector4f{5.0f, 10.0f, 15.0f, 1.0f}))
     << "Row3 (column 3): (" << rows[3].x() << ", " << rows[3].y() << ", "
     << rows[3].z() << ", " << rows[3].w() << ")";
 }
@@ -367,8 +363,8 @@ TEST(ShaderTransformTest, PyramidApex_TranslatedCorrectly)
   auto rows = extractShaderRows(modelMatrix);
 
   Eigen::Vector3f apex{0.0f, 0.5f, 0.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], apex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], apex);
 
   // Apex should be at (3, 0.5, -2) in world space
   Eigen::Vector4f expected{3.0f, 0.5f, -2.0f, 1.0f};
@@ -389,8 +385,8 @@ TEST(ShaderTransformTest, PyramidBaseCorner_TranslatedCorrectly)
   auto rows = extractShaderRows(modelMatrix);
 
   Eigen::Vector3f corner{-0.5f, -0.5f, -0.5f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], corner);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], corner);
 
   // Corner should remain at (-0.5, -0.5, -0.5) since no translation
   Eigen::Vector4f expected{-0.5f, -0.5f, -0.5f, 1.0f};
@@ -436,8 +432,8 @@ TEST(ReferenceFrameShaderTest, IdentityFrame_VertexUnchanged)
   auto rows = extractShaderRows(modelMatrix);
 
   Eigen::Vector3f vertex{1.0f, 2.0f, 3.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   Eigen::Vector4f expected{1.0f, 2.0f, 3.0f, 1.0f};
   EXPECT_TRUE(vec4Equal(result, expected))
@@ -456,8 +452,8 @@ TEST(ReferenceFrameShaderTest, TranslationOnly_VertexTranslated)
   auto rows = extractShaderRows(modelMatrix);
 
   Eigen::Vector3f vertex{0.0f, 0.0f, 0.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   Eigen::Vector4f expected{5.0f, 10.0f, 15.0f, 1.0f};
   EXPECT_TRUE(vec4Equal(result, expected))
@@ -471,9 +467,9 @@ TEST(ReferenceFrameShaderTest, Yaw90Degrees_VertexRotated)
   // ReferenceFrame at origin with 90 degree yaw (Z-axis rotation)
   msd_sim::Coordinate origin{0.0, 0.0, 0.0};
   msd_sim::AngularCoordinate euler{
-    0.0,                      // pitch (radians)
-    0.0,                      // roll (radians)
-    90.0 * M_PI / 180.0       // yaw (radians)
+    0.0,                 // pitch (radians)
+    0.0,                 // roll (radians)
+    90.0 * M_PI / 180.0  // yaw (radians)
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -482,8 +478,8 @@ TEST(ReferenceFrameShaderTest, Yaw90Degrees_VertexRotated)
 
   // Vertex at (1, 0, 0) should rotate to (0, 1, 0) after 90° yaw
   Eigen::Vector3f vertex{1.0f, 0.0f, 0.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   Eigen::Vector4f expected{0.0f, 1.0f, 0.0f, 1.0f};
   EXPECT_TRUE(vec4Equal(result, expected))
@@ -497,9 +493,9 @@ TEST(ReferenceFrameShaderTest, Pitch90Degrees_VertexRotated)
   // ReferenceFrame at origin with 90 degree pitch (Y-axis rotation)
   msd_sim::Coordinate origin{0.0, 0.0, 0.0};
   msd_sim::AngularCoordinate euler{
-    90.0 * M_PI / 180.0,     // pitch (radians)
-    0.0,                     // roll (radians)
-    0.0                      // yaw (radians)
+    90.0 * M_PI / 180.0,  // pitch (radians)
+    0.0,                  // roll (radians)
+    0.0                   // yaw (radians)
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -508,8 +504,8 @@ TEST(ReferenceFrameShaderTest, Pitch90Degrees_VertexRotated)
 
   // Vertex at (1, 0, 0) should rotate to (0, 0, -1) after 90° pitch
   Eigen::Vector3f vertex{1.0f, 0.0f, 0.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   Eigen::Vector4f expected{0.0f, 0.0f, -1.0f, 1.0f};
   EXPECT_TRUE(vec4Equal(result, expected))
@@ -523,9 +519,9 @@ TEST(ReferenceFrameShaderTest, Roll90Degrees_VertexRotated)
   // ReferenceFrame at origin with 90 degree roll (X-axis rotation)
   msd_sim::Coordinate origin{0.0, 0.0, 0.0};
   msd_sim::AngularCoordinate euler{
-    0.0,                     // pitch (radians)
-    90.0 * M_PI / 180.0,     // roll (radians)
-    0.0                      // yaw (radians)
+    0.0,                  // pitch (radians)
+    90.0 * M_PI / 180.0,  // roll (radians)
+    0.0                   // yaw (radians)
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -534,8 +530,8 @@ TEST(ReferenceFrameShaderTest, Roll90Degrees_VertexRotated)
 
   // Vertex at (0, 1, 0) should rotate to (0, 0, 1) after 90° roll
   Eigen::Vector3f vertex{0.0f, 1.0f, 0.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   Eigen::Vector4f expected{0.0f, 0.0f, 1.0f, 1.0f};
   EXPECT_TRUE(vec4Equal(result, expected))
@@ -549,9 +545,9 @@ TEST(ReferenceFrameShaderTest, RotationAndTranslation_Combined)
   // ReferenceFrame at (10, 0, 0) with 90 degree yaw
   msd_sim::Coordinate origin{10.0, 0.0, 0.0};
   msd_sim::AngularCoordinate euler{
-    0.0,                     // pitch (radians)
-    0.0,                     // roll (radians)
-    90.0 * M_PI / 180.0      // yaw (radians)
+    0.0,                 // pitch (radians)
+    0.0,                 // roll (radians)
+    90.0 * M_PI / 180.0  // yaw (radians)
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -562,8 +558,8 @@ TEST(ReferenceFrameShaderTest, RotationAndTranslation_Combined)
   // 1. Rotated by 90° yaw: (1, 0, 0) -> (0, 1, 0)
   // 2. Translated by (10, 0, 0): (0, 1, 0) -> (10, 1, 0)
   Eigen::Vector3f vertex{1.0f, 0.0f, 0.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   Eigen::Vector4f expected{10.0f, 1.0f, 0.0f, 1.0f};
   EXPECT_TRUE(vec4Equal(result, expected))
@@ -577,9 +573,9 @@ TEST(ReferenceFrameShaderTest, WComponentPreserved)
   // Any transformation should preserve w=1
   msd_sim::Coordinate origin{100.0, 200.0, 300.0};
   msd_sim::AngularCoordinate euler{
-    45.0 * M_PI / 180.0,     // pitch (radians)
-    30.0 * M_PI / 180.0,     // roll (radians)
-    60.0 * M_PI / 180.0      // yaw (radians)
+    45.0 * M_PI / 180.0,  // pitch (radians)
+    30.0 * M_PI / 180.0,  // roll (radians)
+    60.0 * M_PI / 180.0   // yaw (radians)
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -587,8 +583,8 @@ TEST(ReferenceFrameShaderTest, WComponentPreserved)
   auto rows = extractShaderRows(modelMatrix);
 
   Eigen::Vector3f vertex{1.0f, 2.0f, 3.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   EXPECT_TRUE(floatEqual(result.w(), 1.0f))
     << "W component must be 1.0, got: " << result.w();
@@ -596,26 +592,27 @@ TEST(ReferenceFrameShaderTest, WComponentPreserved)
 
 TEST(ReferenceFrameShaderTest, ConsistencyWithLocalToGlobal)
 {
-  // The shader transformation should match ReferenceFrame::localToGlobalAbsolute
+  // The shader transformation should match
+  // ReferenceFrame::localToGlobalAbsolute
   msd_sim::Coordinate origin{5.0, 10.0, 15.0};
   msd_sim::AngularCoordinate euler{
-    30.0 * M_PI / 180.0,     // pitch (radians)
-    45.0 * M_PI / 180.0,     // roll (radians)
-    60.0 * M_PI / 180.0      // yaw (radians)
+    30.0 * M_PI / 180.0,  // pitch (radians)
+    45.0 * M_PI / 180.0,  // roll (radians)
+    60.0 * M_PI / 180.0   // yaw (radians)
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
   // Use ReferenceFrame's localToGlobalAbsolute as ground truth
   msd_sim::Coordinate localPoint{1.0, 2.0, 3.0};
-  msd_sim::Coordinate expectedGlobal = frame.localToGlobalAbsolute(localPoint);
+  msd_sim::Coordinate expectedGlobal = frame.localToGlobal(localPoint);
 
   // Now test shader simulation
   Eigen::Matrix4f modelMatrix = createModelMatrixFromReferenceFrame(frame);
   auto rows = extractShaderRows(modelMatrix);
 
   Eigen::Vector3f vertex{1.0f, 2.0f, 3.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], vertex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], vertex);
 
   // Compare shader result with ReferenceFrame result
   EXPECT_TRUE(floatEqual(result.x(), static_cast<float>(expectedGlobal.x())))
@@ -634,9 +631,9 @@ TEST(ReferenceFrameShaderTest, PyramidVertexWithRotation)
   // Simulate a pyramid at position (3, 0, -2) with 45° yaw
   msd_sim::Coordinate origin{3.0, 0.0, -2.0};
   msd_sim::AngularCoordinate euler{
-    0.0,                     // pitch (radians)
-    0.0,                     // roll (radians)
-    45.0 * M_PI / 180.0      // yaw (radians)
+    0.0,                 // pitch (radians)
+    0.0,                 // roll (radians)
+    45.0 * M_PI / 180.0  // yaw (radians)
   };
   msd_sim::ReferenceFrame frame{origin, euler};
 
@@ -645,22 +642,19 @@ TEST(ReferenceFrameShaderTest, PyramidVertexWithRotation)
 
   // Pyramid apex at local (0, 0.5, 0)
   Eigen::Vector3f apex{0.0f, 0.5f, 0.0f};
-  Eigen::Vector4f result = simulateShaderTransform(
-    rows[0], rows[1], rows[2], rows[3], apex);
+  Eigen::Vector4f result =
+    simulateShaderTransform(rows[0], rows[1], rows[2], rows[3], apex);
 
   // Ground truth from ReferenceFrame
   msd_sim::Coordinate localApex{0.0, 0.5, 0.0};
-  msd_sim::Coordinate expectedGlobal = frame.localToGlobalAbsolute(localApex);
+  msd_sim::Coordinate expectedGlobal = frame.localToGlobal(localApex);
 
   EXPECT_TRUE(floatEqual(result.x(), static_cast<float>(expectedGlobal.x())))
-    << "Apex X: shader=" << result.x()
-    << ", expected=" << expectedGlobal.x();
+    << "Apex X: shader=" << result.x() << ", expected=" << expectedGlobal.x();
   EXPECT_TRUE(floatEqual(result.y(), static_cast<float>(expectedGlobal.y())))
-    << "Apex Y: shader=" << result.y()
-    << ", expected=" << expectedGlobal.y();
+    << "Apex Y: shader=" << result.y() << ", expected=" << expectedGlobal.y();
   EXPECT_TRUE(floatEqual(result.z(), static_cast<float>(expectedGlobal.z())))
-    << "Apex Z: shader=" << result.z()
-    << ", expected=" << expectedGlobal.z();
+    << "Apex Z: shader=" << result.z() << ", expected=" << expectedGlobal.z();
   EXPECT_TRUE(floatEqual(result.w(), 1.0f))
     << "Apex W should be 1.0, got: " << result.w();
 }
@@ -705,8 +699,8 @@ TEST(InstanceDataLayoutTest, GeometryIndexOffset)
 
 TEST(InstanceDataLayoutTest, VertexAttributeOffsets)
 {
-  // These must match the SDL_GPUVertexAttribute definitions in SDLGPUManager.cpp
-  // Location 3: Model matrix row 0 at offset 0
+  // These must match the SDL_GPUVertexAttribute definitions in
+  // SDLGPUManager.cpp Location 3: Model matrix row 0 at offset 0
   EXPECT_EQ(sizeof(float) * 0, 0u);
   // Location 4: Model matrix row 1 at offset 16
   EXPECT_EQ(sizeof(float) * 4, 16u);
@@ -738,7 +732,8 @@ TEST(InstanceDataLayoutTest, MatrixRowsMatchShaderExpectation)
   // Verify the layout matches what the shader expects
   // Shader reads at offsets 0, 16, 32, 48 for the 4 float4 rows
   auto* row0 = reinterpret_cast<float*>(&data.modelMatrix[0]);
-  // row1/row2 at offsets 4/8 are intermediate columns, not verified in this test
+  // row1/row2 at offsets 4/8 are intermediate columns, not verified in this
+  // test
   auto* row3 = reinterpret_cast<float*>(&data.modelMatrix[12]);
 
   // These are Eigen columns being read as shader rows
@@ -784,8 +779,8 @@ Eigen::Vector4f simulateMetalShader(const Eigen::Vector4f& row0,
   metalMatrix.col(3) = row3;
 
   // Metal: vector * matrix = row-vector multiplication
-  // Equivalent to: (matrix^T * vector^T)^T = matrix^T * vector (treating as column)
-  // OR: result[i] = sum_j(v[j] * M[j,i]) = sum_j(v[j] * col_j[i])
+  // Equivalent to: (matrix^T * vector^T)^T = matrix^T * vector (treating as
+  // column) OR: result[i] = sum_j(v[j] * M[j,i]) = sum_j(v[j] * col_j[i])
   Eigen::Vector4f pos4{position.x(), position.y(), position.z(), 1.0f};
   Eigen::Vector4f worldPos;
   for (int i = 0; i < 4; ++i)
@@ -808,8 +803,8 @@ Eigen::Vector4f simulateMetalShader(const Eigen::Vector4f& row0,
  * @brief Simulates the OLD shader behavior (before ticket 0001)
  *
  * Old Metal shader:
- *   float3 _35 = in.in_var_TEXCOORD0 + in.in_var_TEXCOORD3;  // position + offset
- *   out.gl_Position = MVP * float4(_35, 1.0);
+ *   float3 _35 = in.in_var_TEXCOORD0 + in.in_var_TEXCOORD3;  // position +
+ * offset out.gl_Position = MVP * float4(_35, 1.0);
  */
 Eigen::Vector4f simulateOldShader(const Eigen::Vector3f& position,
                                   const Eigen::Vector3f& instancePosition,
@@ -1043,11 +1038,11 @@ TEST(OldVsNewShaderTest, IdentityRotation_AllPyramidVertices)
   float half = 0.5f;
   float halfHeight = 0.5f;
   std::vector<Eigen::Vector3f> vertices = {
-    {0.0f, halfHeight, 0.0f},       // apex
-    {-half, -halfHeight, -half},    // base front-left
-    {half, -halfHeight, -half},     // base front-right
-    {half, -halfHeight, half},      // base back-right
-    {-half, -halfHeight, half}      // base back-left
+    {0.0f, halfHeight, 0.0f},     // apex
+    {-half, -halfHeight, -half},  // base front-left
+    {half, -halfHeight, -half},   // base front-right
+    {half, -halfHeight, half},    // base back-right
+    {-half, -halfHeight, half}    // base back-left
   };
 
   // NEW shader setup

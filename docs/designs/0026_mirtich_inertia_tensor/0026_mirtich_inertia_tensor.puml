@@ -1,0 +1,142 @@
+@startuml
+skinparam class {
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor White
+}
+skinparam note {
+    BackgroundColor LightYellow
+}
+
+package "msd-sim::InertialCalculations" {
+    class "computeInertiaTensorAboutCentroid()" <<modified>> {
+        +computeInertiaTensorAboutCentroid(hull, mass): Matrix3d
+        --
+        **OLD IMPLEMENTATION (Ticket 0025)**
+        - Tetrahedron decomposition
+        - Ad-hoc scaling factor (/ 10.0)
+        - ~15% error vs analytical
+        --
+        **NEW IMPLEMENTATION (Ticket 0026)**
+        - Mirtich three-layer algorithm
+        - Mathematically exact
+        - <1e-8% error vs analytical
+    }
+
+    note right of "computeInertiaTensorAboutCentroid()"
+        **Algorithm Replacement**
+        - No API changes
+        - Same function signature
+        - Only internal implementation changes
+        - Eliminates NaN issues
+        - Matches analytical solutions
+    end note
+}
+
+package "Mirtich Algorithm Components" {
+    struct ProjectionIntegrals {
+        +P1: double
+        +Pa, Pb: double
+        +Paa, Pab, Pbb: double
+        +Paaa, Paab, Pabb, Pbbb: double
+    }
+
+    struct FaceIntegrals {
+        +Fa, Fb, Fc: double
+        +Faa, Fbb, Fcc: double
+        +Faaa, Fbbb, Fccc: double
+        +Faab, Fbbc, Fcca: double
+    }
+
+    struct VolumeIntegrals {
+        +T0: double
+        +T1[3]: array<double>
+        +T2[3]: array<double>
+        +TP[3]: array<double>
+    }
+
+    class "Helper Functions" {
+        -selectProjectionPlane(normal, A, B, C): void
+        -computeProjectionIntegrals(facet, A, B): ProjectionIntegrals
+        -computeFaceIntegrals(proj, facet, A, B, C): FaceIntegrals
+        -accumulateVolumeIntegrals(face, normal, T0, T1, T2, TP): void
+        -computeInertiaAboutOrigin(density, T2, TP): Matrix3d
+        -applyParallelAxisTheorem(I_origin, com, mass): Matrix3d
+    }
+}
+
+package "msd-sim::Physics" {
+    class ConvexHull {
+        +getVertices(): vector<Coordinate>
+        +getFacets(): vector<Facet>
+        +getVolume(): double
+        +getCentroid(): Coordinate
+        +isValid(): bool
+    }
+
+    struct Facet {
+        +vertexIndices[3]: array<size_t>
+        +normal: Coordinate
+        +offset: double
+    }
+}
+
+' Dependencies
+"computeInertiaTensorAboutCentroid()" ..> "Helper Functions" : uses internally
+"Helper Functions" ..> ProjectionIntegrals : creates
+"Helper Functions" ..> FaceIntegrals : creates
+"Helper Functions" ..> VolumeIntegrals : accumulates
+"computeInertiaTensorAboutCentroid()" --> ConvexHull : reads geometry
+ConvexHull *-- Facet : contains
+
+' Algorithm flow
+note as AlgorithmFlow
+**Mirtich Three-Layer Algorithm**
+
+**Layer 1: Projection Integrals**
+For each edge in 2D projection:
+  Compute line integrals:
+    P1, Pa, Pb, Paa, Pab, Pbb,
+    Paaa, Paab, Pabb, Pbbb
+
+**Layer 2: Face Integrals**
+Lift to 3D surface:
+  Fa, Fb, Fc, Faa, Fbb, Fcc,
+  Faaa, Fbbb, Fccc, Faab, Fbbc, Fcca
+
+**Layer 3: Volume Integrals**
+Accumulate across all faces:
+  T0 (volume)
+  T1[3] (first moments)
+  T2[3] (second moments)
+  TP[3] (products)
+
+**Final Computation**:
+  - Inertia about origin from T2, TP
+  - Center of mass = T1 / T0
+  - Apply parallel axis theorem
+  - Return inertia about centroid
+end note
+
+AlgorithmFlow .. "Helper Functions"
+
+note as Validation
+**Validation Strategy**
+
+1. **Cross-validation**: Compare against
+   volInt.c reference implementation
+
+2. **Analytical tests**: Unit cube,
+   rectangular box, regular tetrahedron
+
+3. **Regression tests**: Document
+   accuracy improvement vs old implementation
+   (~15% error → <1e-8% error)
+
+4. **Byproduct verification**: Check
+   computed volume and centroid match
+   ConvexHull getters
+end note
+
+Validation .. "computeInertiaTensorAboutCentroid()"
+
+@enduml

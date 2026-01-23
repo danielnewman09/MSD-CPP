@@ -38,10 +38,10 @@ bool GJK::intersects(int maxIterations)
   auto bboxB_local = hullB.getBoundingBox();
 
   // Transform bounding box corners to world space
-  Coordinate bboxA_min_world = frameA.localToGlobalAbsolute(bboxA_local.min);
-  Coordinate bboxA_max_world = frameA.localToGlobalAbsolute(bboxA_local.max);
-  Coordinate bboxB_min_world = frameB.localToGlobalAbsolute(bboxB_local.min);
-  Coordinate bboxB_max_world = frameB.localToGlobalAbsolute(bboxB_local.max);
+  Coordinate bboxA_min_world = frameA.localToGlobal(bboxA_local.min);
+  Coordinate bboxA_max_world = frameA.localToGlobal(bboxA_local.max);
+  Coordinate bboxB_min_world = frameB.localToGlobal(bboxB_local.min);
+  Coordinate bboxB_max_world = frameB.localToGlobal(bboxB_local.max);
 
   // Recompute axis-aligned bounding box in world space
   // (rotation may change which corners are min/max)
@@ -66,10 +66,8 @@ bool GJK::intersects(int maxIterations)
   }
 
   // Initialize: pick initial search direction (from A toward B in world space)
-  Coordinate centroidA_world =
-    frameA.localToGlobalAbsolute(hullA.getCentroid());
-  Coordinate centroidB_world =
-    frameB.localToGlobalAbsolute(hullB.getCentroid());
+  Coordinate centroidA_world = frameA.localToGlobal(hullA.getCentroid());
+  Coordinate centroidB_world = frameB.localToGlobal(hullB.getCentroid());
   direction_ = centroidB_world - centroidA_world;
 
   // Handle edge case where centroids are identical
@@ -141,7 +139,7 @@ Coordinate GJK::support(const ConvexHull& hull, const Coordinate& dir) const
   return furthest;
 }
 
-Coordinate GJK::supportMinkowski(const Coordinate& dir) const
+Coordinate GJK::supportMinkowski(const CoordinateRate& dir) const
 {
   // Get collision hulls and reference frames from assets
   const ConvexHull& hullA = assetA_.getCollisionHull();
@@ -151,19 +149,19 @@ Coordinate GJK::supportMinkowski(const Coordinate& dir) const
 
   // Transform search direction from world space to local space for asset A
   // (rotation only - direction vectors don't translate)
-  Coordinate dirA_local = frameA.globalToLocalRelative(dir);
+  Coordinate dirA_local = frameA.globalToLocal(dir);
 
   // Get support vertex in local space for asset A
   Coordinate supportA_local = support(hullA, dirA_local);
 
   // Transform support vertex from local space to world space
   // (rotation + translation - positions transform fully)
-  Coordinate supportA_world = frameA.localToGlobalAbsolute(supportA_local);
+  Coordinate supportA_world = frameA.localToGlobal(supportA_local);
 
   // Same process for asset B with negated direction
-  Coordinate dirB_local = frameB.globalToLocalRelative(-dir);
+  Coordinate dirB_local = frameB.globalToLocal(CoordinateRate{-dir});
   Coordinate supportB_local = support(hullB, dirB_local);
-  Coordinate supportB_world = frameB.localToGlobalAbsolute(supportB_local);
+  Coordinate supportB_world = frameB.localToGlobal(supportB_local);
 
   // Return Minkowski difference in world space
   return supportA_world - supportB_world;

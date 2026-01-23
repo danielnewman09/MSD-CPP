@@ -1,0 +1,157 @@
+@startuml
+' =============================================================================
+' Mirtich Algorithm for Inertia Tensor Calculation
+' Description: Mathematically exact inertia tensor computation using surface integrals
+' Ticket: 0026_mirtich_inertia_tensor
+' Date: 2026-01-22
+' =============================================================================
+
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam package {
+    BackgroundColor #F5F5F5
+    BorderColor #666666
+}
+
+skinparam note {
+    BackgroundColor #FFFFCC
+    BorderColor #999999
+}
+
+title Mirtich Inertia Tensor Calculation
+
+package "msd-sim::InertialCalculations" {
+    class "computeInertiaTensorAboutCentroid()" {
+        +computeInertiaTensorAboutCentroid(hull, mass): Matrix3d
+        --
+        **Algorithm: Mirtich (1996)**
+        - Three-layer integral computation
+        - Projection → Face → Volume
+        - <1e-10 error vs analytical
+        - Mathematically exact
+    }
+
+    note right of "computeInertiaTensorAboutCentroid()"
+        **Purpose**:
+        Compute inertia tensor about centroid
+        using mathematically exact surface
+        integral formulation.
+
+        **Performance**:
+        - Machine-perfect precision
+        - No ad-hoc scaling factors
+        - Validates volume/centroid
+    end note
+}
+
+package "Mirtich Algorithm Components" {
+    struct ProjectionIntegrals {
+        +P1: double
+        +Pa, Pb: double
+        +Paa, Pab, Pbb: double
+        +Paaa, Paab, Pabb, Pbbb: double
+    }
+
+    struct FaceIntegrals {
+        +Fa, Fb, Fc: double
+        +Faa, Fbb, Fcc: double
+        +Faaa, Fbbb, Fccc: double
+        +Faab, Fbbc, Fcca: double
+    }
+
+    struct VolumeIntegrals {
+        +T0: double
+        +T1[3]: array<double>
+        +T2[3]: array<double>
+        +TP[3]: array<double>
+    }
+
+    class "Helper Functions" {
+        -selectProjectionPlane(normal, A, B, C): void
+        -getWindingCorrectedIndices(facet, hull): array<size_t>
+        -computeProjectionIntegrals(facet, hull, A, B): ProjectionIntegrals
+        -computeFaceIntegrals(proj, facet, hull, A, B, C): FaceIntegrals
+        -accumulateVolumeIntegrals(face, normal, T0, T1, T2, TP): void
+        -computeInertiaAboutOrigin(density, T2, TP): Matrix3d
+        -applyParallelAxisTheorem(I_origin, com, mass): Matrix3d
+    }
+}
+
+package "msd-sim::Physics" {
+    class ConvexHull {
+        +getVertices(): vector<Coordinate>
+        +getFacets(): vector<Facet>
+        +getVolume(): double
+        +getCentroid(): Coordinate
+        +isValid(): bool
+    }
+
+    struct Facet {
+        +vertexIndices[3]: array<size_t>
+        +normal: Coordinate
+        +offset: double
+    }
+}
+
+' Dependencies
+"computeInertiaTensorAboutCentroid()" ..> "Helper Functions" : uses internally
+"Helper Functions" ..> ProjectionIntegrals : creates
+"Helper Functions" ..> FaceIntegrals : creates
+"Helper Functions" ..> VolumeIntegrals : accumulates
+"computeInertiaTensorAboutCentroid()" --> ConvexHull : reads geometry
+ConvexHull *-- Facet : contains
+
+' Algorithm flow
+note as AlgorithmFlow
+**Mirtich Three-Layer Algorithm**
+
+**Layer 1: Projection Integrals**
+For each edge in 2D projection:
+  Compute line integrals:
+    P1, Pa, Pb, Paa, Pab, Pbb,
+    Paaa, Paab, Pabb, Pbbb
+
+**Layer 2: Face Integrals**
+Lift to 3D surface:
+  Fa, Fb, Fc, Faa, Fbb, Fcc,
+  Faaa, Fbbb, Fccc, Faab, Fbbc, Fcca
+
+**Layer 3: Volume Integrals**
+Accumulate across all faces:
+  T0 (volume)
+  T1[3] (first moments)
+  T2[3] (second moments)
+  TP[3] (products)
+
+**Final Computation**:
+  - Inertia about origin from T2, TP
+  - Center of mass = T1 / T0
+  - Apply parallel axis theorem
+  - Return inertia about centroid
+end note
+
+AlgorithmFlow .. "Helper Functions"
+
+note as Implementation
+**Implementation Details**
+
+**Vertex Winding Correction**:
+Qhull provides outward-facing normals,
+but vertex order may not align with
+normal direction. getWindingCorrectedIndices()
+ensures cross product (v1-v0) × (v2-v1)
+aligns with facet normal.
+
+**Validation**:
+- Unit cube: I = (m/6)*I (exact within 1e-10)
+- Rectangular box: Matches analytical formulas
+- Regular tetrahedron: Diagonal elements equal
+- Volume byproduct validates against ConvexHull
+end note
+
+Implementation .. "computeInertiaTensorAboutCentroid()"
+
+@enduml

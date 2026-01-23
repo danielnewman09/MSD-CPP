@@ -279,25 +279,34 @@ state.applyLinearImpulse(Coordinate{0, 100, 0}, 50.0);  // 100 N⋅s, 50 kg
 ### InertialCalculations
 
 **Location**: `RigidBody/InertialCalculations.hpp`, `RigidBody/InertialCalculations.cpp`
+**Diagram**: [`mirtich-inertia-tensor.puml`](../../../../../docs/msd/msd-sim/Physics/mirtich-inertia-tensor.puml)
 **Type**: Utility namespace
+**Tickets**:
+- [0025_fix_inertia_tensor_calculation](../../../../../tickets/0025_fix_inertia_tensor_calculation.md) — Initial scaffolding
+- [0026_mirtich_inertia_tensor](../../../../../tickets/0026_mirtich_inertia_tensor.md) — Mirtich algorithm implementation
 
 #### Purpose
-Utility functions for computing moment of inertia tensors from convex hull geometry, assuming uniform density.
+Utility function for computing moment of inertia tensor from convex hull geometry, assuming uniform density. Uses Brian Mirtich's algorithm from "Fast and Accurate Computation of Polyhedral Mass Properties" (1996), which applies the divergence theorem to convert volume integrals to surface integrals through three layers: projection integrals → face integrals → volume integrals.
+
+This produces results within machine precision of analytical solutions (< 1e-10 error), a significant improvement over the previous tetrahedron decomposition approach which had ~10-15% error.
+
+#### Algorithm Overview
+
+The Mirtich algorithm computes inertia through hierarchical integral computation:
+
+1. **Projection Integrals** (Layer 1): Iterate over face edges in 2D projection plane, computing line integrals (P1, Pa, Pb, Paa, Pab, Pbb, Paaa, Paab, Pabb, Pbbb)
+2. **Face Integrals** (Layer 2): Lift projection integrals to 3D surface integrals (Fa, Fb, Fc, Faa, Fbb, Fcc, Faaa, Fbbb, Fccc, Faab, Fbbc, Fcca)
+3. **Volume Integrals** (Layer 3): Accumulate face integrals across all faces to compute T0 (volume), T1 (first moments), T2 (second moments), TP (products)
+4. **Final Computation**: Derive inertia about origin from T2 and TP, compute center of mass (T1/T0), apply parallel axis theorem to shift to centroid
+
+**Key Implementation Detail**: Includes vertex winding correction via `getWindingCorrectedIndices()` to ensure Qhull's vertex order aligns with facet normals, as required by the Mirtich algorithm.
 
 #### Key Interfaces
 ```cpp
 namespace InertialCalculations {
   /**
-   * Compute inertia tensor about origin.
-   * @throws std::invalid_argument if mass <= 0
-   * @throws std::runtime_error if hull is degenerate
-   */
-  Eigen::Matrix3d computeInertiaTensorAboutOrigin(const ConvexHull& hull,
-                                                   double mass);
-
-  /**
-   * Compute inertia tensor about centroid (most useful for dynamics).
-   * Uses parallel axis theorem.
+   * Compute inertia tensor about centroid (used for rigid body dynamics).
+   * Uses Mirtich algorithm: mathematically exact surface integral formulation.
    * @throws std::invalid_argument if mass <= 0
    * @throws std::runtime_error if hull is degenerate
    */
@@ -319,6 +328,13 @@ Eigen::Matrix3d I_inv = I.inverse();
 Eigen::Vector3d torque{0, 0, 5.0};  // 5 N⋅m about z-axis
 Eigen::Vector3d alpha = I_inv * torque;
 ```
+
+#### Validation
+- **Unit cube**: Ixx = Iyy = Izz = m/6 (exact within 1e-10)
+- **Rectangular box (2×3×4)**: Matches analytical formulas (exact within 1e-10)
+- **Regular tetrahedron**: Diagonal elements equal (exact within 1e-10)
+- **Volume byproduct**: Computed volume matches `ConvexHull::getVolume()` within 1e-10
+- **Large coordinate offsets**: Maintains accuracy within 1e-8 even at offsets of 1e6
 
 ---
 

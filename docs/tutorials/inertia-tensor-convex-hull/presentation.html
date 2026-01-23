@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mirtich Algorithm - Inertia Tensor Computation</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/white.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/plugin/highlight/monokai.min.css">
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .reveal h1, .reveal h2, .reveal h3 { text-transform: none; }
+        .reveal pre { font-size: 0.55em; }
+        .reveal .small { font-size: 0.7em; }
+        .reveal .highlight { color: #e74c3c; font-weight: bold; }
+        .reveal table { font-size: 0.7em; }
+        .two-column { display: flex; }
+        .two-column > div { flex: 1; padding: 10px; }
+        .algorithm-box { background: #f8f9fa; padding: 15px; border-radius: 5px; text-align: left; }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+
+            <!-- Title Slide -->
+            <section>
+                <h1>Mirtich Algorithm</h1>
+                <h3>Fast and Accurate Computation of Polyhedral Mass Properties</h3>
+                <p class="small">Based on Brian Mirtich's 1996 paper</p>
+                <p class="small">Ticket: 0026_mirtich_inertia_tensor</p>
+            </section>
+
+            <!-- Learning Objectives -->
+            <section>
+                <h2>Learning Objectives</h2>
+                <ul>
+                    <li class="fragment">Understand what the <span class="highlight">inertia tensor</span> represents</li>
+                    <li class="fragment">Learn the <span class="highlight">divergence theorem</span> approach to volume integrals</li>
+                    <li class="fragment">Master the <span class="highlight">three-layer algorithm</span>: projection → face → volume</li>
+                    <li class="fragment">Implement and validate against <span class="highlight">analytical solutions</span></li>
+                </ul>
+            </section>
+
+            <!-- The Problem -->
+            <section>
+                <h2>The Problem</h2>
+                <p>Given a convex polyhedron, compute its <strong>moment of inertia tensor</strong></p>
+                <div class="fragment">
+                    \[
+                    \mathbf{I} = \begin{bmatrix} I_{xx} & I_{xy} & I_{xz} \\ I_{xy} & I_{yy} & I_{yz} \\ I_{xz} & I_{yz} & I_{zz} \end{bmatrix}
+                    \]
+                </div>
+                <p class="fragment small">Used in rigid body dynamics: \(\vec{\alpha} = \mathbf{I}^{-1} \vec{\tau}\)</p>
+            </section>
+
+            <!-- Why It Matters -->
+            <section>
+                <h2>Why It Matters</h2>
+                <div class="two-column">
+                    <div>
+                        <h4>Previous Approach</h4>
+                        <ul class="small">
+                            <li>Tetrahedron decomposition</li>
+                            <li>~10-15% accuracy error</li>
+                            <li>Ad-hoc scaling factors</li>
+                            <li>Produced NaN for some shapes</li>
+                        </ul>
+                    </div>
+                    <div class="fragment">
+                        <h4>Mirtich Algorithm</h4>
+                        <ul class="small">
+                            <li>Surface integral formulation</li>
+                            <li>&lt; 10⁻¹⁰ error (machine precision)</li>
+                            <li>Mathematically exact</li>
+                            <li>Industry standard</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Mathematical Definition -->
+            <section>
+                <h2>Mathematical Definition</h2>
+                <p>For a body with density ρ:</p>
+                \[
+                I_{xx} = \rho \iiint (y^2 + z^2) \, dV
+                \]
+                \[
+                I_{xy} = -\rho \iiint xy \, dV
+                \]
+                <p class="fragment small">Computing these volume integrals directly is expensive...</p>
+            </section>
+
+            <!-- The Key Insight -->
+            <section>
+                <h2>The Key Insight</h2>
+                <h3>Divergence Theorem</h3>
+                \[
+                \iiint \nabla \cdot \vec{F} \, dV = \iint \vec{F} \cdot \vec{n} \, dA
+                \]
+                <p class="fragment">Convert <span class="highlight">volume integrals</span> to <span class="highlight">surface integrals</span></p>
+                <p class="fragment small">For \(\iiint x^2 dV\): choose \(\vec{F} = (\frac{x^3}{3}, 0, 0)\) so \(\nabla \cdot \vec{F} = x^2\)</p>
+            </section>
+
+            <!-- Three-Layer Architecture -->
+            <section>
+                <h2>Three-Layer Architecture</h2>
+                <div class="algorithm-box">
+                    <p><strong>Layer 1: Projection Integrals (2D)</strong></p>
+                    <p class="small">Line integrals around polygon edges → P₁, Pₐ, Pᵦ, Pₐₐ, ...</p>
+                    <p><strong>Layer 2: Face Integrals (3D Surface)</strong></p>
+                    <p class="small">Lift 2D integrals to 3D → Fₐ, Fᵦ, Fᶜ, Fₐₐ, ...</p>
+                    <p><strong>Layer 3: Volume Integrals (Accumulation)</strong></p>
+                    <p class="small">Sum across all faces → T₀ (volume), T₁, T₂, Tₚ</p>
+                </div>
+            </section>
+
+            <!-- Layer 1: Projection Integrals -->
+            <section>
+                <h2>Layer 1: Projection Integrals</h2>
+                <p>Project facet onto 2D plane, compute line integrals</p>
+                <pre><code class="cpp">for (each edge i → j):
+    a0, b0 = vert_i[A], vert_i[B]  // 2D coords
+    a1, b1 = vert_j[A], vert_j[B]
+    da = a1 - a0, db = b1 - b0
+
+    // Accumulate using Green's theorem
+    P1  += db * (a1 + a0)
+    Pa  += db * (a1² + a1*a0 + a0²)
+    ...</code></pre>
+            </section>
+
+            <!-- Projection Plane Selection -->
+            <section>
+                <h2>Projection Plane Selection</h2>
+                <p>Choose plane where normal has <strong>largest component</strong></p>
+                <table>
+                    <tr><th>Largest |n|</th><th>Project onto</th><th>A, B, C</th></tr>
+                    <tr><td>|nₓ|</td><td>YZ plane</td><td>Y, Z, X</td></tr>
+                    <tr><td>|nᵧ|</td><td>XZ plane</td><td>Z, X, Y</td></tr>
+                    <tr><td>|n_z|</td><td>XY plane</td><td>X, Y, Z</td></tr>
+                </table>
+                <p class="small fragment">Avoids division by near-zero when lifting back to 3D</p>
+            </section>
+
+            <!-- Layer 2: Face Integrals -->
+            <section>
+                <h2>Layer 2: Face Integrals</h2>
+                <p>Lift 2D projection integrals to 3D surface integrals</p>
+                <pre><code class="cpp">// Plane equation: n·x + w = 0
+w = -n · v0
+
+// Lifting factors
+k1 = 1/n[C], k2 = k1², k3 = k1³
+
+// Face integrals
+Fa = k1 * Pa
+Fb = k1 * Pb
+Fc = -k2 * (n[A]*Pa + n[B]*Pb + w*P1)</code></pre>
+            </section>
+
+            <!-- Layer 3: Volume Integrals -->
+            <section>
+                <h2>Layer 3: Volume Integrals</h2>
+                <p>Accumulate face integrals across all facets</p>
+                <pre><code class="cpp">for (each facet f):
+    // Volume contribution
+    T0 += n[X] * Fx
+
+    // First moments
+    T1[A] += n[A] * Faa
+    T1[B] += n[B] * Fbb
+    T1[C] += n[C] * Fcc
+
+    // Second moments and products...
+
+// Final scaling
+T1 /= 2, T2 /= 3, TP /= 2</code></pre>
+            </section>
+
+            <!-- Final Computation -->
+            <section>
+                <h2>Final Computation</h2>
+                <div class="two-column">
+                    <div>
+                        <h4>Inertia about Origin</h4>
+                        <p class="small">
+                        \(I_{xx} = \rho(T_2^y + T_2^z)\)<br>
+                        \(I_{yy} = \rho(T_2^z + T_2^x)\)<br>
+                        \(I_{zz} = \rho(T_2^x + T_2^y)\)<br>
+                        \(I_{xy} = -\rho \cdot T_P^x\)
+                        </p>
+                    </div>
+                    <div class="fragment">
+                        <h4>Shift to Centroid</h4>
+                        <p class="small">
+                        \(\vec{r} = T_1 / T_0\)<br><br>
+                        \(I_{cm} = I_{origin} - m(r \cdot r \cdot \mathbf{I} - \vec{r} \otimes \vec{r})\)
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Validation Results -->
+            <section>
+                <h2>Validation Results</h2>
+                <table>
+                    <tr><th>Shape</th><th>Expected</th><th>Computed</th><th>Error</th></tr>
+                    <tr><td>Unit Cube</td><td>m/6 = 0.1667</td><td>0.166666...</td><td>&lt; 10⁻¹⁰</td></tr>
+                    <tr><td>Box 2×3×4</td><td>Analytical</td><td>Exact match</td><td>&lt; 10⁻¹⁰</td></tr>
+                    <tr><td>Tetrahedron</td><td>mL²/20</td><td>Exact match</td><td>&lt; 10⁻¹⁰</td></tr>
+                </table>
+                <p class="fragment small">Machine-precision accuracy achieved!</p>
+            </section>
+
+            <!-- Vertex Winding -->
+            <section>
+                <h2>Important: Vertex Winding</h2>
+                <p>Algorithm requires <strong>CCW winding</strong> when viewed from outside</p>
+                <pre><code class="cpp">// Verify: cross product aligns with normal
+edge1 = v1 - v0
+edge2 = v2 - v1
+computed_normal = edge1 × edge2
+
+if (computed_normal · facet_normal < 0):
+    // Winding is reversed - swap vertices
+    swap(v1, v2)</code></pre>
+                <p class="small fragment">Production code includes <code>getWindingCorrectedIndices()</code></p>
+            </section>
+
+            <!-- Code Structure -->
+            <section>
+                <h2>Implementation Structure</h2>
+                <pre><code class="cpp">Mat3 computeInertiaTensorAboutCentroid(mesh, mass) {
+    VolumeIntegrals vol;
+
+    for (each facet):
+        selectProjectionPlane(normal, A, B, C);
+
+        proj = computeProjectionIntegrals(facet, A, B);
+        face = computeFaceIntegrals(facet, proj, A, B, C);
+
+        accumulate(vol, face);
+
+    I_origin = deriveInertiaFromVolumeIntegrals(vol);
+    I_centroid = applyParallelAxisTheorem(I_origin);
+
+    return I_centroid;
+}</code></pre>
+            </section>
+
+            <!-- Performance -->
+            <section>
+                <h2>Performance Characteristics</h2>
+                <ul>
+                    <li><strong>Complexity:</strong> O(F) where F = number of facets</li>
+                    <li class="fragment"><strong>Operations per facet:</strong> ~50-100 floating-point ops</li>
+                    <li class="fragment"><strong>Typical hulls:</strong> 10-100 facets → negligible time</li>
+                    <li class="fragment"><strong>When computed:</strong> Once at object creation (not per-frame)</li>
+                </ul>
+            </section>
+
+            <!-- Summary -->
+            <section>
+                <h2>Summary</h2>
+                <ol>
+                    <li>Divergence theorem converts volume → surface integrals</li>
+                    <li>Three-layer hierarchy: projection → face → volume</li>
+                    <li>Projection plane selection avoids numerical instability</li>
+                    <li>Parallel axis theorem shifts to center of mass</li>
+                    <li>Achieves machine-precision accuracy</li>
+                </ol>
+            </section>
+
+            <!-- References -->
+            <section>
+                <h2>References</h2>
+                <ul class="small">
+                    <li>Mirtich, B. (1996). "Fast and Accurate Computation of Polyhedral Mass Properties." Journal of Graphics Tools, 1(2).</li>
+                    <li><code>source_code/volInt.c</code> - Original reference implementation</li>
+                    <li><code>example.cpp</code> - Tutorial implementation</li>
+                    <li><code>msd-sim/src/Physics/RigidBody/InertialCalculations.cpp</code> - Production code</li>
+                </ul>
+            </section>
+
+            <!-- Try It -->
+            <section>
+                <h2>Try It Yourself</h2>
+                <pre><code class="bash">cd docs/tutorials/inertia-tensor-convex-hull
+mkdir -p build && cd build
+cmake .. && make
+./example</code></pre>
+                <p class="fragment">Questions? See <code>README.md</code> for detailed walkthrough.</p>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/plugin/highlight/highlight.min.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,
+            plugins: [ RevealHighlight ]
+        });
+    </script>
+</body>
+</html>

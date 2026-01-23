@@ -100,7 +100,7 @@ public:
    *
    * @param force Force vector in world coordinates [N]
    */
-  void applyForce(const Coordinate& force);
+  void applyForce(const CoordinateRate& force);
 
   /**
    * @brief Apply a force at a specific world-space point.
@@ -112,7 +112,8 @@ public:
    * @param force Force vector in world coordinates [N]
    * @param worldPoint Application point in world coordinates [m]
    */
-  void applyForceAtPoint(const Coordinate& force, const Coordinate& worldPoint);
+  void applyForceAtPoint(const CoordinateRate& force,
+                         const Coordinate& worldPoint);
 
   /**
    * @brief Apply a torque about the center of mass.
@@ -121,7 +122,7 @@ public:
    *
    * @param torque Torque vector in world coordinates [N·m]
    */
-  void applyTorque(const Coordinate& torque);
+  void applyTorque(const CoordinateRate& torque);
 
   /**
    * @brief Clear all accumulated forces and torques.
@@ -134,13 +135,13 @@ public:
    * @brief Get the accumulated force for this frame.
    * @return Accumulated force vector [N]
    */
-  const Coordinate& getAccumulatedForce() const;
+  const CoordinateRate& getAccumulatedForce() const;
 
   /**
    * @brief Get the accumulated torque for this frame.
    * @return Accumulated torque vector [N·m]
    */
-  const Coordinate& getAccumulatedTorque() const;
+  const CoordinateRate& getAccumulatedTorque() const;
 
 private:
   // Rigid body physics properties
@@ -153,8 +154,8 @@ private:
   InertialState dynamicState_;
 
   // NEW: Force accumulation (ticket 0023a)
-  Coordinate accumulatedForce_{0.0, 0.0, 0.0};
-  Coordinate accumulatedTorque_{0.0, 0.0, 0.0};
+  CoordinateRate accumulatedForce_{0.0, 0.0, 0.0};
+  CoordinateRate accumulatedTorque_{0.0, 0.0, 0.0};
 };
 
 }  // namespace msd_sim

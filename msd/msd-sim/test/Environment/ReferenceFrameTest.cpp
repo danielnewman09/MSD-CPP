@@ -112,7 +112,7 @@ TEST(ReferenceFrameTest, IdentityTransformGlobalToLocal)
   ReferenceFrame frame;  // Identity frame at origin
   Coordinate globalCoord{1.0, 2.0, 3.0};
 
-  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
+  Coordinate localCoord = frame.globalToLocal(globalCoord);
 
   EXPECT_TRUE(coordinatesEqual(localCoord, globalCoord));
 }
@@ -122,7 +122,7 @@ TEST(ReferenceFrameTest, IdentityTransformLocalToGlobal)
   ReferenceFrame frame;  // Identity frame at origin
   Coordinate localCoord{1.0, 2.0, 3.0};
 
-  Coordinate globalCoord = frame.localToGlobalAbsolute(localCoord);
+  Coordinate globalCoord = frame.localToGlobal(localCoord);
 
   EXPECT_TRUE(coordinatesEqual(globalCoord, localCoord));
 }
@@ -132,8 +132,8 @@ TEST(ReferenceFrameTest, IdentityRoundTrip)
   ReferenceFrame frame;
   Coordinate original{1.0, 2.0, 3.0};
 
-  Coordinate local = frame.globalToLocalAbsolute(original);
-  Coordinate global = frame.localToGlobalAbsolute(local);
+  Coordinate local = frame.globalToLocal(original);
+  Coordinate global = frame.localToGlobal(local);
 
   EXPECT_TRUE(coordinatesEqual(global, original));
 }
@@ -148,7 +148,7 @@ TEST(ReferenceFrameTest, TranslationOnlyGlobalToLocal)
   ReferenceFrame frame{origin};
 
   Coordinate globalCoord{15.0, 25.0, 35.0};
-  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
+  Coordinate localCoord = frame.globalToLocal(globalCoord);
 
   // Local coordinate should be global - origin
   EXPECT_DOUBLE_EQ(localCoord.x(), 5.0);
@@ -162,7 +162,7 @@ TEST(ReferenceFrameTest, TranslationOnlyLocalToGlobal)
   ReferenceFrame frame{origin};
 
   Coordinate localCoord{5.0, 5.0, 5.0};
-  Coordinate globalCoord = frame.localToGlobalAbsolute(localCoord);
+  Coordinate globalCoord = frame.localToGlobal(localCoord);
 
   // Global coordinate should be local + origin
   EXPECT_DOUBLE_EQ(globalCoord.x(), 15.0);
@@ -177,8 +177,8 @@ TEST(ReferenceFrameTest, TranslationOnlyRoundTrip)
 
   Coordinate original{150.0, 250.0, 350.0};
 
-  Coordinate local = frame.globalToLocalAbsolute(original);
-  Coordinate global = frame.localToGlobalAbsolute(local);
+  Coordinate local = frame.globalToLocal(original);
+  Coordinate global = frame.localToGlobal(local);
 
   EXPECT_TRUE(coordinatesEqual(global, original));
 }
@@ -199,7 +199,7 @@ TEST(ReferenceFrameTest, YawRotation90Degrees)
 
   // Point at (1, 0, 0) in global frame
   Coordinate globalCoord{1.0, 0.0, 0.0};
-  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
+  Coordinate localCoord = frame.globalToLocal(globalCoord);
 
   // After 90 degree yaw rotation, should be at (0, -1, 0) in local frame
   EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0, 1e-9));
@@ -220,7 +220,7 @@ TEST(ReferenceFrameTest, PitchRotation90Degrees)
 
   // Point at (1, 0, 0) in global frame
   Coordinate globalCoord{1.0, 0.0, 0.0};
-  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
+  Coordinate localCoord = frame.globalToLocal(globalCoord);
 
   // After 90 degree pitch rotation, should be at (0, 0, 1) in local frame
   EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0, 1e-9));
@@ -240,7 +240,7 @@ TEST(ReferenceFrameTest, RollRotation90Degrees)
 
   // Point at (0, 1, 0) in global frame
   Coordinate globalCoord{0.0, 1.0, 0.0};
-  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
+  Coordinate localCoord = frame.globalToLocal(globalCoord);
 
   // After 90 degree roll rotation, should be at (0, 0, -1) in local frame
   EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0, 1e-9));
@@ -259,8 +259,8 @@ TEST(ReferenceFrameTest, RotationOnlyRoundTrip)
 
   Coordinate original{1.5, 2.5, 3.5};
 
-  Coordinate local = frame.globalToLocalAbsolute(original);
-  Coordinate global = frame.localToGlobalAbsolute(local);
+  Coordinate local = frame.globalToLocal(original);
+  Coordinate global = frame.localToGlobal(local);
 
   EXPECT_TRUE(coordinatesEqual(global, original, 1e-9));
 }
@@ -281,7 +281,7 @@ TEST(ReferenceFrameTest, TranslationAndRotationGlobalToLocal)
 
   // Point at (11, 20, 30) in global frame
   Coordinate globalCoord{11.0, 20.0, 30.0};
-  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
+  Coordinate localCoord = frame.globalToLocal(globalCoord);
 
   // First translate: (11, 20, 30) - (10, 20, 30) = (1, 0, 0)
   // Then rotate 90 degrees about Z: (1, 0, 0) -> (0, -1, 0)
@@ -302,7 +302,7 @@ TEST(ReferenceFrameTest, TranslationAndRotationLocalToGlobal)
 
   // Point at (0, -1, 0) in local frame
   Coordinate localCoord{0.0, -1.0, 0.0};
-  Coordinate globalCoord = frame.localToGlobalAbsolute(localCoord);
+  Coordinate globalCoord = frame.localToGlobal(localCoord);
 
   // First rotate back: (0, -1, 0) -> (1, 0, 0)
   // Then translate: (1, 0, 0) + (10, 20, 30) = (11, 20, 30)
@@ -323,8 +323,8 @@ TEST(ReferenceFrameTest, ComplexTransformationRoundTrip)
 
   Coordinate original{100.0, 200.0, 300.0};
 
-  Coordinate local = frame.globalToLocalAbsolute(original);
-  Coordinate global = frame.localToGlobalAbsolute(local);
+  Coordinate local = frame.globalToLocal(original);
+  Coordinate global = frame.localToGlobal(local);
 
   EXPECT_TRUE(coordinatesEqual(global, original, 1e-9));
 }
@@ -339,7 +339,7 @@ TEST(ReferenceFrameTest, OriginPoint)
   ReferenceFrame frame{origin};
 
   // Transform the origin point itself
-  Coordinate localCoord = frame.globalToLocalAbsolute(origin);
+  Coordinate localCoord = frame.globalToLocal(origin);
 
   // Should be at (0, 0, 0) in local frame
   EXPECT_DOUBLE_EQ(localCoord.x(), 0.0);
@@ -353,7 +353,7 @@ TEST(ReferenceFrameTest, NegativeCoordinates)
   ReferenceFrame frame{origin};
 
   Coordinate globalCoord{-3.0, -8.0, -12.0};
-  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
+  Coordinate localCoord = frame.globalToLocal(globalCoord);
 
   EXPECT_DOUBLE_EQ(localCoord.x(), 2.0);
   EXPECT_DOUBLE_EQ(localCoord.y(), 2.0);
@@ -372,8 +372,8 @@ TEST(ReferenceFrameTest, LargeRotationAngles)
 
   Coordinate original{1.0, 2.0, 3.0};
 
-  Coordinate local = frame.globalToLocalAbsolute(original);
-  Coordinate global = frame.localToGlobalAbsolute(local);
+  Coordinate local = frame.globalToLocal(original);
+  Coordinate global = frame.localToGlobal(local);
 
   EXPECT_TRUE(coordinatesEqual(global, original, 1e-9));
 }
@@ -381,14 +381,13 @@ TEST(ReferenceFrameTest, LargeRotationAngles)
 TEST(ReferenceFrameTest, ZeroVector)
 {
   Coordinate origin{5.0, 10.0, 15.0};
-  AngularCoordinate angular{
-    (0.5), (0.3), (0.7)};
+  AngularCoordinate angular{(0.5), (0.3), (0.7)};
   ReferenceFrame frame{origin, angular};
 
   Coordinate zeroVec{0.0, 0.0, 0.0};
 
-  Coordinate local = frame.globalToLocalAbsolute(zeroVec);
-  Coordinate global = frame.localToGlobalAbsolute(local);
+  Coordinate local = frame.globalToLocal(zeroVec);
+  Coordinate global = frame.localToGlobal(local);
 
   EXPECT_TRUE(coordinatesEqual(global, zeroVec, 1e-9));
 }
@@ -412,13 +411,13 @@ TEST(ReferenceFrameTest, ChainedFrameTransformations)
   Coordinate globalPoint{20.0, 5.0, 0.0};
 
   // Transform to frame1
-  Coordinate inFrame1 = frame1.globalToLocalAbsolute(globalPoint);
+  Coordinate inFrame1 = frame1.globalToLocal(globalPoint);
 
   // The origin of frame2 in frame1's local coordinates
   Coordinate frame2Origin = origin2;
 
   // Transform back to global should match
-  Coordinate backToGlobal = frame1.localToGlobalAbsolute(inFrame1);
+  Coordinate backToGlobal = frame1.localToGlobal(inFrame1);
 
   EXPECT_TRUE(coordinatesEqual(backToGlobal, globalPoint, 1e-9));
 }
@@ -443,7 +442,7 @@ TEST(ReferenceFrameTest, AircraftBodyFrame)
   Coordinate pointInBody{10.0, 0.0, 0.0};
 
   // Transform to global frame
-  Coordinate pointInGlobal = bodyFrame.localToGlobalAbsolute(pointInBody);
+  Coordinate pointInGlobal = bodyFrame.localToGlobal(pointInBody);
 
   // Should be displaced from aircraft position
   Coordinate displacement = pointInGlobal - aircraftPos;
@@ -457,16 +456,14 @@ TEST(ReferenceFrameTest, SensorMountOnRobot)
 {
   // Robot at position (5, 5, 0) facing 90 degrees (north)
   Coordinate robotPos{5.0, 5.0, 0.0};
-  AngularCoordinate robotOrientation{
-    0.0, 0.0, 90.0 * M_PI / 180.0};
+  AngularCoordinate robotOrientation{0.0, 0.0, 90.0 * M_PI / 180.0};
   ReferenceFrame robotFrame{robotPos, robotOrientation};
 
   // Sensor mounted 1 meter in front and 0.5 meters up
   Coordinate sensorInRobotFrame{1.0, 0.0, 0.5};
 
   // Get sensor position in global frame
-  Coordinate sensorInGlobal =
-    robotFrame.localToGlobalAbsolute(sensorInRobotFrame);
+  Coordinate sensorInGlobal = robotFrame.localToGlobal(sensorInRobotFrame);
 
   // Sensor should be roughly at (5, 6, 0.5) in global frame
   // (1 meter north of robot position)

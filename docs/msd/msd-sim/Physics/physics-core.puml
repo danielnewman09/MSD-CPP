@@ -70,7 +70,6 @@ package "msd_sim::Physics" {
 
         class InertialCalculations {
             <<utility>>
-            +{static} computeInertiaTensorAboutOrigin(hull, mass): Matrix3d
             +{static} computeInertiaTensorAboutCentroid(hull, mass): Matrix3d
         }
     }

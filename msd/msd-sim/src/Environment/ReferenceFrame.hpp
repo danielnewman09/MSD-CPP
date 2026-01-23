@@ -57,13 +57,6 @@ public:
   void globalToLocalInPlace(Coordinate& globalCoord) const;
 
   /**
-   * @brief Transform a coordinate from global frame to this local frame
-   * @param globalCoord Coordinate in global frame
-   * @return Coordinate in this local frame
-   */
-  Coordinate globalToLocal(const Coordinate& globalCoord) const;
-
-  /**
    * @brief Batch transform coordinates from global frame to this local frame
    *
    * Efficiently transforms all coordinates in a single matrix operation.
@@ -80,13 +73,6 @@ public:
    * @return Coordinate in global frame
    */
   void localToGlobalInPlace(Coordinate& localCoord) const;
-
-  /**
-   * @brief Transform a coordinate from this local frame to global frame
-   * @param localCoord Coordinate in this local frame
-   * @return Coordinate in global frame
-   */
-  Coordinate localToGlobal(const Coordinate& localCoord) const;
 
   /**
    * @brief Batch transform coordinates from this local frame to global frame
@@ -110,7 +96,7 @@ public:
    * @param globalVector Direction vector in global frame
    * @return Direction vector in local frame
    */
-  Coordinate globalToLocalRelative(const Coordinate& globalVector) const;
+  Coordinate globalToLocal(const CoordinateRate& globalVector) const;
 
   /**
    * @brief Transform a direction vector from local frame to global frame
@@ -123,7 +109,7 @@ public:
    * @param localVector Direction vector in local frame
    * @return Direction vector in global frame
    */
-  Coordinate localToGlobalRelative(const Coordinate& localVector) const;
+  Coordinate localToGlobal(const CoordinateRate& localVector) const;
 
   /**
    * @brief Transform a point from global frame to local frame (absolute
@@ -135,7 +121,7 @@ public:
    * @param globalPoint Point in global frame
    * @return Point in local frame
    */
-  Coordinate globalToLocalAbsolute(const Coordinate& globalPoint) const;
+  Coordinate globalToLocal(const Coordinate& globalPoint) const;
 
   /**
    * @brief Transform a point from local frame to global frame (absolute
@@ -147,7 +133,7 @@ public:
    * @param localPoint Point in local frame
    * @return Point in global frame
    */
-  Coordinate localToGlobalAbsolute(const Coordinate& localPoint) const;
+  Coordinate localToGlobal(const Coordinate& localPoint) const;
 
   /**
    * @brief Set the origin of this frame in global coordinates
@@ -209,8 +195,8 @@ private:
    */
   void updateRotationMatrix() const;
 
-  Coordinate origin_;             ///< Origin of this frame in global coordinates
-  AngularCoordinate angular_;     ///< Orientation angles (pitch, roll, yaw)
+  Coordinate origin_;          ///< Origin of this frame in global coordinates
+  AngularCoordinate angular_;  ///< Orientation angles (pitch, roll, yaw)
 
   mutable Eigen::Matrix3d rotation_;
 

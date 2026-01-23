@@ -6,47 +6,68 @@
 
 namespace msd_sim
 {
+namespace detail
+{
 
-/**
- * @brief A 3D coordinate class that inherits from Eigen::Vector3d
- *
- * This class provides a convenient wrapper around Eigen::Vector3d with
- * additional constructors and methods specific to coordinate operations.
- * Uses double precision for numerical stability in physics simulations.
- */
-class Coordinate : public Eigen::Vector3d
+template <typename Derived>
+class Vec3Base : public Eigen::Vector3d
 {
 public:
-  // Default constructor - initializes to (0, 0, 0)
-  Coordinate() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  static inline constexpr Eigen::Index X = 0;
+  static inline constexpr Eigen::Index Y = 1;
+  static inline constexpr Eigen::Index Z = 2;
+
+  Vec3Base() : Eigen::Vector3d{0.0, 0.0, 0.0}
   {
   }
 
-  // Constructor with x, y, z values
-  Coordinate(double x, double y, double z) : Eigen::Vector3d{x, y, z}
+  Vec3Base(double x, double y, double z) : Eigen::Vector3d{x, y, z}
   {
   }
 
-  // Constructor from Eigen::Vector3d
-  Coordinate(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec}
+  Vec3Base(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec}
   {
   }
 
-  // This constructor allows you to construct Coordinate from Eigen expressions
   template <typename OtherDerived>
-  Coordinate(const Eigen::MatrixBase<OtherDerived>& other)
+  Vec3Base(const Eigen::MatrixBase<OtherDerived>& other)
     : Eigen::Vector3d{other}
   {
   }
 
-  // This method allows you to assign Eigen expressions to Coordinate
   template <typename OtherDerived>
-  Coordinate& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  Derived& operator=(const Eigen::MatrixBase<OtherDerived>& other)
   {
     this->Eigen::Vector3d::operator=(other);
-    return *this;
+    return static_cast<Derived&>(*this);
   }
 };
+
+
+}  // namespace detail
+
+struct Coordinate : detail::Vec3Base<Coordinate>
+{
+  using Vec3Base::Vec3Base;
+  using Vec3Base::operator=;
+
+  template <typename OtherDerived>
+  Coordinate(const Eigen::MatrixBase<OtherDerived>& other) : Vec3Base{other}
+  {
+  }
+};
+
+struct CoordinateRate : detail::Vec3Base<CoordinateRate>
+{
+  using Vec3Base::Vec3Base;
+  using Vec3Base::operator=;
+
+  template <typename OtherDerived>
+  CoordinateRate(const Eigen::MatrixBase<OtherDerived>& other) : Vec3Base{other}
+  {
+  }
+};
+
 
 }  // namespace msd_sim
 
@@ -121,14 +142,12 @@ struct std::formatter<msd_sim::Coordinate>
     component_fmt += '}';
 
     // Format as "(x, y, z)"
-    return std::format_to(ctx.out(),
-                          "({}, {}, {})",
-                          std::vformat(component_fmt,
-                                       std::make_format_args(coord.x())),
-                          std::vformat(component_fmt,
-                                       std::make_format_args(coord.y())),
-                          std::vformat(component_fmt,
-                                       std::make_format_args(coord.z())));
+    return std::format_to(
+      ctx.out(),
+      "({}, {}, {})",
+      std::vformat(component_fmt, std::make_format_args(coord.x())),
+      std::vformat(component_fmt, std::make_format_args(coord.y())),
+      std::vformat(component_fmt, std::make_format_args(coord.z())));
   }
 };
 

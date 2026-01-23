@@ -260,10 +260,44 @@ ctest --preset debug
 | [`dynamic-state.puml`](../../docs/msd/msd-sim/Physics/dynamic-state.puml) | DynamicState kinematics | `docs/msd/msd-sim/Physics/` |
 | [`gjk-asset-physical.puml`](../../docs/msd/msd-sim/Physics/gjk-asset-physical.puml) | GJK collision detection with AssetPhysical transforms | `docs/msd/msd-sim/Physics/` |
 | [`force-application.puml`](../../docs/msd/msd-sim/Physics/force-application.puml) | Force application system with semi-implicit Euler integration | `docs/msd/msd-sim/Physics/` |
+| [`mirtich-inertia-tensor.puml`](../../docs/msd/msd-sim/Physics/mirtich-inertia-tensor.puml) | Mirtich algorithm for inertia tensor calculation | `docs/msd/msd-sim/Physics/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Mirtich Algorithm for Inertia Tensor Calculation — 2026-01-22
+**Ticket**: [0026_mirtich_inertia_tensor](../../tickets/0026_mirtich_inertia_tensor.md)
+**Diagram**: [`mirtich-inertia-tensor.puml`](../../docs/msd/msd-sim/Physics/mirtich-inertia-tensor.puml)
+**Type**: Algorithm Replacement (Internal Refactor)
+
+Replaced the inaccurate tetrahedron decomposition approach in `InertialCalculations::computeInertiaTensorAboutCentroid()` with Brian Mirtich's mathematically exact algorithm from "Fast and Accurate Computation of Polyhedral Mass Properties" (1996). This eliminates the ~10-15% accuracy error and ad-hoc scaling factors present in the previous implementation.
+
+The Mirtich algorithm uses the divergence theorem to convert volume integrals to surface integrals through three hierarchical layers: projection integrals (2D line integrals over face edges) → face integrals (3D surface integrals) → volume integrals (accumulated across all faces). From the volume integrals, it computes volume, center of mass, and inertia tensor about the origin, then applies the parallel axis theorem to shift to the centroid.
+
+**Accuracy improvements**:
+- Unit cube: Machine-perfect precision (< 1e-10 error vs analytical solution)
+- Rectangular box: Exact match to analytical formulas within 1e-10
+- Regular tetrahedron: Diagonal inertia elements equal within 1e-10
+- Previous implementation: ~10-15% error with ad-hoc `/10.0` scaling factor
+- New implementation: < 1e-10 relative error (effectively machine precision)
+
+**Key implementation details**:
+- **Vertex winding correction**: Added `getWindingCorrectedIndices()` to ensure Qhull's vertex order aligns with facet normals, as required by Mirtich's algorithm
+- **Volume validation**: Computed volume as byproduct matches `ConvexHull::getVolume()` within 1e-10
+- **No API changes**: Function signature unchanged, internal algorithm replaced
+- **Reference implementation**: Cross-validated against Mirtich's public domain `volInt.c`
+
+**Performance**: O(F) complexity where F = number of facets. Higher constant factor than tetrahedron decomposition (~50-100 operations per facet vs ~10-20), but still negligible for typical hulls (10-100 facets) since inertia calculation is one-time at object creation.
+
+**Known limitation resolved**: This fixes the pre-existing NaN bug that prevented angular physics validation in ticket 0023. Angular dynamics now fully operational.
+
+**Key files**:
+- `src/Physics/RigidBody/InertialCalculations.cpp` — Complete algorithm replacement with Mirtich implementation
+- `src/Physics/RigidBody/InertialCalculations.hpp` — Updated documentation with algorithm reference
+- `test/Physics/InertialCalculationsTest.cpp` — 13 test cases validating analytical solutions and edge cases
+
+---
 
 ### Force Application System for Rigid Body Physics — 2026-01-21
 **Ticket**: [0023_force_application_system](../../tickets/0023_force_application_system.md)
@@ -293,7 +327,7 @@ Implemented a complete force application system for rigid body physics, enabling
 
 **Performance**: O(n) complexity per physics update where n = number of inertial objects. Recommended timestep: 16.67ms (60 FPS).
 
-**Known limitation**: Angular physics integration cannot be fully validated due to pre-existing bug in inertia tensor calculation producing NaN values for certain geometries. Linear physics (gravity, projectile motion) fully validated and operational.
+**Note**: Angular physics integration was initially blocked by a bug in inertia tensor calculation (ticket 0025) that produced NaN values. This was resolved by ticket 0026 which implemented the Mirtich algorithm. Angular dynamics now fully operational.
 
 **Key files**:
 - `src/Physics/RigidBody/AssetInertial.hpp`, `AssetInertial.cpp` — Force application and torque computation

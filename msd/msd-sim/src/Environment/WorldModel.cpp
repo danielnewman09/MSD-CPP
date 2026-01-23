@@ -91,7 +91,7 @@ void WorldModel::updatePhysics(double dt)
   {
     // ===== Apply Gravity =====
     // F_gravity = m * g (where g is acceleration vector)
-    Coordinate gravityForce = gravity_ * asset.getMass();
+    CoordinateRate gravityForce = gravity_ * asset.getMass();
     asset.applyForce(gravityForce);
 
     // ===== Linear Integration (Semi-Implicit Euler) =====
