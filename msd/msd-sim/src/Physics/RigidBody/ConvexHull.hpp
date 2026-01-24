@@ -10,6 +10,7 @@
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-assets/src/GeometryTraits.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/Physics/Facet.hpp"
 
 // Forward declare Qhull C API types
 extern "C"
@@ -17,11 +18,6 @@ extern "C"
   struct qhT;
 #include <libqhull_r/geom_r.h>
 #include <libqhull_r/libqhull_r.h>
-}
-
-namespace msd_assets
-{
-class Geometry;
 }
 
 namespace msd_sim
@@ -54,19 +50,6 @@ public:
   {
     Coordinate min;  // Minimum corner
     Coordinate max;  // Maximum corner
-  };
-
-  /**
-   * @brief Represents a triangular facet of the convex hull.
-   *
-   * Each facet stores indices into the hull's vertex array,
-   * along with the outward-facing normal vector.
-   */
-  struct Facet
-  {
-    std::array<size_t, 3> vertexIndices;  // Indices of triangle vertices
-    Coordinate normal;                    // Outward-facing unit normal
-    double offset;  // Distance from origin (for half-space)
   };
 
   /**

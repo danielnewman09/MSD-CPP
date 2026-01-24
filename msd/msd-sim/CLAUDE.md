@@ -259,12 +259,44 @@ ctest --preset debug
 | [`physics-component.puml`](../../docs/msd/msd-sim/Physics/physics-component.puml) | PhysicsComponent rigid body | `docs/msd/msd-sim/Physics/` |
 | [`dynamic-state.puml`](../../docs/msd/msd-sim/Physics/dynamic-state.puml) | DynamicState kinematics | `docs/msd/msd-sim/Physics/` |
 | [`gjk-asset-physical.puml`](../../docs/msd/msd-sim/Physics/gjk-asset-physical.puml) | GJK collision detection with AssetPhysical transforms | `docs/msd/msd-sim/Physics/` |
+| [`epa.puml`](../../docs/msd/msd-sim/Physics/epa.puml) | EPA contact information extraction and CollisionHandler orchestration | `docs/msd/msd-sim/Physics/` |
 | [`force-application.puml`](../../docs/msd/msd-sim/Physics/force-application.puml) | Force application system with semi-implicit Euler integration | `docs/msd/msd-sim/Physics/` |
 | [`mirtich-inertia-tensor.puml`](../../docs/msd/msd-sim/Physics/mirtich-inertia-tensor.puml) | Mirtich algorithm for inertia tensor calculation | `docs/msd/msd-sim/Physics/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Expanding Polytope Algorithm (EPA) for Contact Information — 2026-01-23
+**Ticket**: [0027a_expanding_polytope_algorithm](../../tickets/0027a_expanding_polytope_algorithm.md)
+**Diagram**: [`epa.puml`](../../docs/msd/msd-sim/Physics/epa.puml)
+**Type**: Feature Enhancement
+
+Implemented the Expanding Polytope Algorithm (EPA) to extract detailed contact information (penetration depth, contact normal, contact point) from GJK collision detection. When GJK detects an intersection, EPA expands the terminating simplex to find the closest point on the Minkowski difference boundary, yielding the geometric data required for realistic collision response.
+
+**Key components**:
+- **CollisionHandler** — Orchestrates GJK→EPA workflow, returns `std::optional<CollisionResult>` (nullopt = no collision)
+- **EPA** — Expanding Polytope Algorithm that computes contact information from GJK simplex
+- **CollisionResult** — Struct containing penetration depth, contact normal (world space, A→B), and contact point
+- **GJK modification** — Added `getSimplex()` method to expose terminating simplex for EPA input
+
+**Architecture**:
+- CollisionHandler provides clean entry point for collision detection, extensible for future enhancements (broadphase, continuous collision)
+- std::optional pattern avoids redundant boolean field in CollisionResult
+- All coordinates in world space, contact normal points from object A toward object B
+- EPA includes simplex completion logic for robustness (handles simplices < 4 vertices)
+
+**Performance**: Typical convergence in 4-11 iterations, < 1ms execution time (debug build), < 10KB memory footprint.
+
+**Key files**:
+- `src/Physics/CollisionHandler.hpp`, `CollisionHandler.cpp` — Orchestration layer
+- `src/Physics/EPA.hpp`, `EPA.cpp` — EPA algorithm implementation
+- `src/Physics/CollisionResult.hpp` — Contact information struct
+- `src/Physics/GJK.hpp` — Added `getSimplex()` accessor
+- `test/Physics/EPATest.cpp` — 9 unit tests
+- `test/Physics/CollisionHandlerTest.cpp` — 8 integration tests
+
+---
 
 ### Mirtich Algorithm for Inertia Tensor Calculation — 2026-01-22
 **Ticket**: [0026_mirtich_inertia_tensor](../../tickets/0026_mirtich_inertia_tensor.md)

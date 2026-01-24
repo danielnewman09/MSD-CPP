@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EPA: Expanding Polytope Algorithm</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/black.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/plugin/highlight/monokai.css">
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 { text-transform: none; }
+    .reveal pre { font-size: 0.55em; }
+    .reveal .small { font-size: 0.7em; }
+    .reveal .highlight { color: #42affa; }
+    .reveal .warning { color: #ff6b6b; }
+    .reveal .success { color: #51cf66; }
+    .reveal table { font-size: 0.7em; margin: auto; }
+    .reveal th, .reveal td { padding: 0.3em 0.6em; }
+    .two-column { display: flex; gap: 2em; }
+    .two-column > div { flex: 1; }
+    code { background: #333; padding: 0.1em 0.3em; border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- Slide 1: Title -->
+<section>
+  <h1>Expanding Polytope Algorithm</h1>
+  <h3>Computing Collision Contact Information</h3>
+  <p class="small">Ticket: 0027a_expanding_polytope_algorithm</p>
+  <p class="small">Learning Objectives:</p>
+  <ul class="small">
+    <li>Understand Minkowski difference and origin containment</li>
+    <li>Learn how EPA extends GJK for contact extraction</li>
+    <li>Implement polytope expansion step-by-step</li>
+  </ul>
+</section>
+
+<!-- Slide 2: The Problem -->
+<section>
+  <h2>The Problem</h2>
+  <p>GJK tells us <span class="highlight">if</span> objects collide...</p>
+  <p class="fragment">But physics engines need more:</p>
+  <ul>
+    <li class="fragment"><strong>Penetration depth</strong> — How far apart to push them?</li>
+    <li class="fragment"><strong>Contact normal</strong> — Which direction to push?</li>
+    <li class="fragment"><strong>Contact point</strong> — Where to apply forces?</li>
+  </ul>
+  <p class="fragment"><span class="success">EPA extracts this information!</span></p>
+</section>
+
+<!-- Slide 3: Minkowski Difference -->
+<section>
+  <h2>The Minkowski Difference</h2>
+  <p>For shapes A and B:</p>
+  <pre><code>A ⊖ B = { a - b | a ∈ A, b ∈ B }</code></pre>
+  <div class="fragment">
+    <p><strong>Key Insight:</strong></p>
+    <blockquote>
+      Shapes A and B intersect ⟺ (A ⊖ B) contains the origin
+    </blockquote>
+  </div>
+  <p class="fragment small">If A and B share point p, then p - p = 0 ∈ (A ⊖ B)</p>
+</section>
+
+<!-- Slide 4: From GJK to EPA -->
+<section>
+  <h2>From GJK to EPA</h2>
+  <div class="two-column">
+    <div>
+      <h4>GJK Does:</h4>
+      <ul>
+        <li>Builds simplex inside A ⊖ B</li>
+        <li>Checks if origin is contained</li>
+        <li>Returns: <code>bool</code></li>
+      </ul>
+    </div>
+    <div>
+      <h4>EPA Does:</h4>
+      <ul>
+        <li>Takes GJK's simplex</li>
+        <li>Expands toward boundary</li>
+        <li>Returns: depth, normal, point</li>
+      </ul>
+    </div>
+  </div>
+  <p class="fragment">EPA finds the <span class="highlight">closest point on A ⊖ B boundary to origin</span></p>
+</section>
+
+<!-- Slide 5: Support Function -->
+<section>
+  <h2>The Support Function</h2>
+  <p>Find the point furthest in a given direction:</p>
+  <pre><code class="cpp">Vec3 support(Shape S, Vec3 direction) {
+    // Return vertex v ∈ S that maximizes v · direction
+}</code></pre>
+  <div class="fragment">
+    <p>For Minkowski difference:</p>
+    <pre><code class="cpp">support(A ⊖ B, d) = support(A, d) - support(B, -d)</code></pre>
+  </div>
+  <p class="fragment small">This lets us query boundary points <em>without</em> computing all of A ⊖ B!</p>
+</section>
+
+<!-- Slide 6: EPA Overview -->
+<section>
+  <h2>EPA Algorithm Overview</h2>
+  <ol>
+    <li class="fragment"><strong>Initialize</strong>: Create polytope from GJK tetrahedron</li>
+    <li class="fragment"><strong>Find closest</strong>: Locate face nearest to origin</li>
+    <li class="fragment"><strong>Query support</strong>: Get new point in face normal direction</li>
+    <li class="fragment"><strong>Check convergence</strong>: If new point ≈ face distance, done!</li>
+    <li class="fragment"><strong>Expand</strong>: Remove visible faces, add new ones</li>
+    <li class="fragment"><strong>Repeat</strong>: Until converged</li>
+  </ol>
+</section>
+
+<!-- Slide 7: Step 1 - Initialize -->
+<section>
+  <h2>Step 1: Initialize Polytope</h2>
+  <p>GJK returns a tetrahedron (4 vertices) containing the origin</p>
+  <pre><code class="cpp">// Create 4 triangular faces
+addFace(0, 1, 2);  // ABC
+addFace(0, 2, 3);  // ACD
+addFace(0, 3, 1);  // ADB
+addFace(1, 3, 2);  // BDC</code></pre>
+  <p class="fragment">Each face stores: <code>vertices</code>, <code>normal</code>, <code>distance</code></p>
+</section>
+
+<!-- Slide 8: Face Data Structure -->
+<section>
+  <h2>Face Data Structure</h2>
+  <pre><code class="cpp">struct EPAFace {
+    std::array<size_t, 3> vertices;  // Indices
+    Vec3 normal;      // Outward-facing, unit length
+    double distance;  // Distance from origin to plane
+};</code></pre>
+  <div class="fragment">
+    <p>Computing normal and distance:</p>
+    <pre><code class="cpp">Vec3 normal = (b - a).cross(c - a).normalized();
+// Ensure normal points away from origin
+if (normal.dot(centroid) < 0) normal = -normal;
+double distance = normal.dot(a);</code></pre>
+  </div>
+</section>
+
+<!-- Slide 9: Step 2 - Find Closest -->
+<section>
+  <h2>Step 2: Find Closest Face</h2>
+  <pre><code class="cpp">size_t findClosestFace(const std::vector<EPAFace>& faces) {
+    double minDist = INFINITY;
+    size_t closest = 0;
+
+    for (size_t i = 0; i < faces.size(); ++i) {
+        if (faces[i].distance < minDist) {
+            minDist = faces[i].distance;
+            closest = i;
+        }
+    }
+    return closest;
+}</code></pre>
+  <p class="fragment small">O(n) scan — could use priority queue for large polytopes</p>
+</section>
+
+<!-- Slide 10: Step 3 - Query Support -->
+<section>
+  <h2>Step 3: Query Support Point</h2>
+  <pre><code class="cpp">// Get new point in direction of closest face normal
+Vec3 newPoint = supportMinkowski(shapeA, shapeB,
+                                  closestFace.normal);</code></pre>
+  <p class="fragment">This finds the farthest point on A ⊖ B in that direction</p>
+  <p class="fragment">If this point is further than the face, we can expand!</p>
+</section>
+
+<!-- Slide 11: Step 4 - Convergence -->
+<section>
+  <h2>Step 4: Convergence Check</h2>
+  <pre><code class="cpp">double distToNewPoint = newPoint.dot(closestFace.normal);
+
+if (distToNewPoint - closestFace.distance < epsilon) {
+    // Converged! Closest face IS the closest point
+    return CollisionResult{
+        .normal = closestFace.normal,
+        .penetrationDepth = closestFace.distance,
+        .contactPoint = centroid(closestFace)
+    };
+}</code></pre>
+  <p class="fragment small">If the new point doesn't extend beyond the face, we've found the answer</p>
+</section>
+
+<!-- Slide 12: Step 5 - Expansion Overview -->
+<section>
+  <h2>Step 5: Polytope Expansion</h2>
+  <p>The new point is further out → expand the polytope:</p>
+  <ol>
+    <li class="fragment"><strong>Find visible faces</strong>: Faces where newPoint is "in front"</li>
+    <li class="fragment"><strong>Build horizon</strong>: Edges shared by exactly one visible face</li>
+    <li class="fragment"><strong>Remove visible faces</strong>: They're now inside</li>
+    <li class="fragment"><strong>Add new faces</strong>: Connect newPoint to horizon edges</li>
+  </ol>
+</section>
+
+<!-- Slide 13: Visibility Test -->
+<section>
+  <h2>Visibility Test</h2>
+  <pre><code class="cpp">bool isVisible(const EPAFace& face,
+               const Vec3& point) {
+    // Point is visible if on positive side of face plane
+    Vec3 toPoint = point - vertices[face.vertices[0]];
+    return face.normal.dot(toPoint) > epsilon;
+}</code></pre>
+  <p class="fragment">A face "sees" the new point if the point is in front of its plane</p>
+</section>
+
+<!-- Slide 14: Horizon Edges -->
+<section>
+  <h2>Building the Horizon</h2>
+  <p>Horizon = silhouette of visible region</p>
+  <pre><code class="cpp">// Collect edges from visible faces
+for (each visible face f) {
+    edges.add(f.v0, f.v1);
+    edges.add(f.v1, f.v2);
+    edges.add(f.v2, f.v0);
+}
+
+// Horizon edges appear exactly once
+// (Shared edges appear twice → internal, not horizon)</code></pre>
+  <p class="fragment small">Edge equality is order-independent: (A,B) == (B,A)</p>
+</section>
+
+<!-- Slide 15: Adding New Faces -->
+<section>
+  <h2>Adding New Faces</h2>
+  <pre><code class="cpp">// Add new vertex to polytope
+size_t newIdx = vertices.size();
+vertices.push_back(newPoint);
+
+// Create fan of triangles from horizon to new vertex
+for (const auto& edge : horizonEdges) {
+    addFace(edge.v0, edge.v1, newIdx);
+}</code></pre>
+  <p class="fragment">The polytope grows by replacing visible faces with a "cone"</p>
+</section>
+
+<!-- Slide 16: Visualization -->
+<section>
+  <h2>Expansion Visualization</h2>
+  <pre>
+  Initial (4 faces)      After Expansion (6+ faces)
+
+       /\                      /|\
+      /  \                    / | \
+     /    \        →         /  *  \
+    / *    \                / * |   \
+   /________\              /___ | ___\
+
+   * = origin              New vertex added
+                           Visible faces removed
+                           Horizon edges connected
+  </pre>
+</section>
+
+<!-- Slide 17: Contact Extraction -->
+<section>
+  <h2>Extracting Contact Information</h2>
+  <p>Once converged, the closest face gives us everything:</p>
+  <pre><code class="cpp">CollisionResult result;
+result.penetrationDepth = closestFace.distance;
+result.normal = closestFace.normal;  // Points A → B
+result.contactPoint = (a + b + c) / 3.0;  // Centroid</code></pre>
+  <p class="fragment"><span class="warning">Note:</span> Centroid is approximate — projection is more accurate</p>
+</section>
+
+<!-- Slide 18: Performance -->
+<section>
+  <h2>Performance Characteristics</h2>
+  <table>
+    <tr><th>Metric</th><th>Typical Value</th></tr>
+    <tr><td>Iterations</td><td>4-20</td></tr>
+    <tr><td>Faces at convergence</td><td>8-30</td></tr>
+    <tr><td>Time complexity</td><td>O(iterations × faces)</td></tr>
+    <tr><td>Memory</td><td>< 10 KB</td></tr>
+  </table>
+  <p class="fragment small">Much cheaper than computing full Minkowski difference!</p>
+</section>
+
+<!-- Slide 19: Production vs Tutorial -->
+<section>
+  <h2>Production vs Tutorial Code</h2>
+  <table>
+    <tr><th>Production (EPA.cpp)</th><th>Tutorial (example.cpp)</th></tr>
+    <tr><td>Eigen-based vectors</td><td>Simple Vec3 struct</td></tr>
+    <tr><td>World-space transforms</td><td>Local-space only</td></tr>
+    <tr><td>Simplex completion</td><td>Assumes valid input</td></tr>
+    <tr><td>Integrated with GJK</td><td>Standalone</td></tr>
+  </table>
+</section>
+
+<!-- Slide 20: Key Takeaways -->
+<section>
+  <h2>Key Takeaways</h2>
+  <ul>
+    <li class="fragment">EPA finds the <span class="highlight">closest point</span> on Minkowski boundary</li>
+    <li class="fragment">Expands GJK simplex by iterative support queries</li>
+    <li class="fragment">Horizon edges form the expansion boundary</li>
+    <li class="fragment">Converges when support point matches face distance</li>
+    <li class="fragment">Returns: penetration depth, contact normal, contact point</li>
+  </ul>
+</section>
+
+<!-- Slide 21: References -->
+<section>
+  <h2>References</h2>
+  <ul class="small">
+    <li>Ericson, "Real-Time Collision Detection" (2004), Ch. 9.3</li>
+    <li>van den Bergen, "Collision Detection in Interactive 3D Environments"</li>
+    <li>Casey Muratori, "Implementing GJK/EPA" (Handmade Hero)</li>
+  </ul>
+  <p><br></p>
+  <p>Production code:</p>
+  <ul class="small">
+    <li><code>msd-sim/src/Physics/EPA.hpp</code></li>
+    <li><code>msd-sim/src/Physics/CollisionHandler.hpp</code></li>
+  </ul>
+</section>
+
+<!-- Slide 22: Try It -->
+<section>
+  <h2>Try It Yourself!</h2>
+  <pre><code class="bash"># Build the tutorial
+cd docs/tutorials/expanding-polytope-algorithm
+mkdir build && cd build
+cmake ..
+make
+
+# Run the example
+./example</code></pre>
+  <p class="fragment">Experiment with different cube positions!</p>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/plugin/highlight/highlight.js"></script>
+<script>
+Reveal.initialize({
+  hash: true,
+  plugins: [RevealHighlight]
+});
+</script>
+</body>
+</html>

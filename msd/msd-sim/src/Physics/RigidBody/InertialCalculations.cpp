@@ -91,7 +91,7 @@ ProjectionAxes selectProjectionPlane(const Coordinate& normal)
  */
 std::array<size_t, 3> getWindingCorrectedIndices(
   const std::vector<Coordinate>& vertices,
-  const ConvexHull::Facet& facet)
+  const Facet& facet)
 {
   const Coordinate& v0 = vertices[facet.vertexIndices[0]];
   const Coordinate& v1 = vertices[facet.vertexIndices[1]];

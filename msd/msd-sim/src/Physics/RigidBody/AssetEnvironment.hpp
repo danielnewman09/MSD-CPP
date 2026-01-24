@@ -2,6 +2,7 @@
 #define MSD_SIM_PHYSICS_ENVIRONMENT_ASSET_HPP
 
 #include <memory>
+#include "msd-assets/src/Geometry.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 
 namespace msd_sim
@@ -48,49 +49,16 @@ class AssetEnvironment : public AssetPhysical
 {
 public:
   /**
-   * @brief Create an AssetEnvironment with automatic hull computation.
-   *
-   * This factory method creates a stationary AssetEnvironment at the
-   * specified reference frame. The convex hull is computed from the visual
-   * geometry.
-   *
-   * @param geometry Shared pointer to visual geometry (must not be null)
-   * @param frame Reference frame defining position and orientation in world
-   * @param computeHull If true, compute convex hull immediately; if false,
-   *                    defer until first access
-   * @return Shared pointer to the created AssetEnvironment
-   * @throws std::invalid_argument if geometry is null or empty
-   */
-  static std::shared_ptr<AssetEnvironment> create(
-    std::shared_ptr<msd_assets::Geometry> geometry,
-    const ReferenceFrame& frame = ReferenceFrame(),
-    bool computeHull = false);
-
-  /**
-   * @brief Create an AssetEnvironment with a custom collision hull.
-   *
-   * Use this when you want a simplified collision hull that differs from
-   * the visual geometry's convex hull (e.g., a box collider for complex
-   * terrain).
+   * @brief Protected constructor - use derived class factory methods.
    *
    * @param geometry Shared pointer to visual geometry
-   * @param collisionHull Custom convex hull for collision detection
-   * @param frame Reference frame defining position and orientation in world
-   * @return Shared pointer to the created AssetEnvironment
+   * @param customHull Optional custom collision hull (if null, computed from
+   * geometry)
    */
-  static std::shared_ptr<AssetEnvironment> createWithCustomHull(
-    std::shared_ptr<msd_assets::Geometry> geometry,
-    std::shared_ptr<ConvexHull> collisionHull,
-    const ReferenceFrame& frame = ReferenceFrame());
-
-private:
-  /**
-   * @brief Private constructor - use factory methods instead.
-   */
-  AssetEnvironment(std::shared_ptr<msd_assets::Geometry> geometry,
-                   std::shared_ptr<ConvexHull> customHull,
-                   const ReferenceFrame& frame,
-                   bool computeHullNow);
+  AssetEnvironment(uint32_t assetId,
+                   uint32_t instanceId,
+                   ConvexHull& hull,
+                   const ReferenceFrame& frame);
 };
 
 }  // namespace msd_sim

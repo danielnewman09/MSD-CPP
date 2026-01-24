@@ -11,4 +11,4 @@ benchmark_results/
 profile_results/
 **/.cache/**
 **/.cmake/**
-docs/tutorials/.DS_Store
+*.DS_Store

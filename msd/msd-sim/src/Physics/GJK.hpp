@@ -56,6 +56,18 @@ public:
    */
   bool intersects(int maxIterations = 64);
 
+  /**
+   * @brief Get the terminating simplex for EPA input.
+   *
+   * @pre intersects() must have been called and returned true.
+   *      Behavior is undefined if called before intersects() or
+   *      after intersects() returned false.
+   *
+   * @return Const reference to simplex vertices (4 vertices forming
+   *         a tetrahedron in Minkowski space that contains the origin)
+   */
+  const std::vector<Coordinate>& getSimplex() const { return simplex_; }
+
 private:
   const AssetPhysical& assetA_;
   const AssetPhysical& assetB_;
@@ -63,31 +75,6 @@ private:
 
   std::vector<Coordinate> simplex_;
   Coordinate direction_;
-
-  /**
-   * @brief Support function: find vertex furthest in given direction.
-   *
-   * This method searches for the vertex with maximum dot product in the
-   * given direction within the hull's local coordinate system.
-   */
-  Coordinate support(const ConvexHull& hull, const Coordinate& dir) const;
-
-  /**
-   * @brief Minkowski difference support function with world-space
-   * transformations.
-   *
-   * Applies ReferenceFrame transformations on-the-fly:
-   * 1. Transform search direction from world space to local space (rotation
-   * only)
-   * 2. Find support vertex in local hull geometry
-   * 3. Transform support vertex from local space to world space (rotation +
-   * translation)
-   * 4. Compute Minkowski difference in world space
-   *
-   * @param dir Search direction in world space
-   * @return Support point in world space (supportA - supportB)
-   */
-  Coordinate supportMinkowski(const CoordinateRate& dir) const;
 
   /**
    * @brief Update simplex and search direction.

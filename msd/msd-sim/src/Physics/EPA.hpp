@@ -1,0 +1,121 @@
+// Ticket: 0027a_expanding_polytope_algorithm
+// Design: docs/designs/0027a_expanding_polytope_algorithm/design.md
+
+#ifndef MSD_SIM_PHYSICS_EPA_HPP
+#define MSD_SIM_PHYSICS_EPA_HPP
+
+#include <array>
+#include <vector>
+#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/Physics/CollisionResult.hpp"
+#include "msd-sim/src/Physics/Facet.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
+
+namespace msd_sim
+{
+
+/**
+ * @brief Expanding Polytope Algorithm (EPA) for contact information extraction.
+ *
+ * EPA computes penetration depth, contact normal, and contact point from a GJK
+ * terminating simplex. When GJK detects an intersection, EPA expands the
+ * terminating simplex (tetrahedron containing the origin) into a polytope until
+ * the closest face to the origin is found, yielding complete collision data.
+ *
+ * Algorithm steps:
+ * 1. Initialize polytope from GJK simplex (4 vertices, 4 triangular faces)
+ * 2. Find closest face to origin
+ * 3. Query support point in direction of face normal
+ * 4. If new point within tolerance, found closest face → terminate
+ * 5. Else, remove visible faces, build horizon edges, add new faces
+ * 6. Repeat until convergence
+ *
+ * Contact extraction:
+ * - Contact normal = closest face normal (normalized, A→B)
+ * - Penetration depth = distance from origin to closest face
+ * - Contact point = barycentric centroid of closest face
+ *
+ * @see
+ * docs/designs/0027a_expanding_polytope_algorithm/0027a_expanding_polytope_algorithm.puml
+ * @ticket 0027a_expanding_polytope_algorithm
+ */
+class EPA
+{
+public:
+  /**
+   * @brief Construct EPA solver for two physical assets.
+   *
+   * @param assetA First physical asset (includes hull and reference frame)
+   * @param assetB Second physical asset (includes hull and reference frame)
+   * @param epsilon Numerical tolerance for convergence (default: 1e-6)
+   */
+  EPA(const AssetPhysical& assetA,
+      const AssetPhysical& assetB,
+      double epsilon = 1e-6);
+
+  /**
+   * @brief Compute contact information from GJK terminating simplex.
+   *
+   * Assumes simplex contains the origin (GJK returned true).
+   * Expands polytope iteratively until closest face found within tolerance.
+   *
+   * @param simplex GJK terminating simplex (4 vertices in Minkowski space)
+   * @param maxIterations Maximum expansion iterations (default: 64)
+   * @return CollisionResult with penetration depth, normal, contact point
+   * @throws std::invalid_argument if simplex size != 4
+   * @throws std::runtime_error if expansion fails to converge
+   */
+  CollisionResult computeContactInfo(const std::vector<Coordinate>& simplex,
+                                     int maxIterations = 64);
+
+  EPA(const EPA&) = default;
+  EPA(EPA&&) noexcept = default;
+  EPA& operator=(const EPA&) = delete;      // Cannot reassign reference members
+  EPA& operator=(EPA&&) noexcept = delete;  // Cannot reassign reference members
+  ~EPA() = default;
+
+
+  /**
+   * @brief Edge in polytope for horizon construction.
+   */
+  struct EPAEdge
+  {
+    size_t v0;  // First vertex index
+    size_t v1;  // Second vertex index
+
+    EPAEdge() = default;
+    EPAEdge(size_t a, size_t b) : v0{a}, v1{b}
+    {
+    }
+
+    // Equality for duplicate detection (order-independent)
+    bool operator==(const EPAEdge& other) const
+    {
+      return (v0 == other.v0 && v1 == other.v1) ||
+             (v0 == other.v1 && v1 == other.v0);
+    }
+  };
+
+  // Core algorithm
+  bool expandPolytope(int maxIterations);
+  size_t findClosestFace() const;
+
+  // Topology management
+  bool isVisible(const Facet& face, const Coordinate& point) const;
+  std::vector<EPAEdge> buildHorizonEdges(const Coordinate& newVertex);
+  void addFace(size_t v0, size_t v1, size_t v2);
+
+  // Contact extraction
+  Coordinate computeContactPoint(const Facet& face) const;
+
+  const AssetPhysical& assetA_;
+  const AssetPhysical& assetB_;
+  double epsilon_;
+
+  std::vector<Coordinate> vertices_;  // Minkowski vertices
+  std::vector<Facet> faces_;          // Triangular faces
+};
+
+}  // namespace msd_sim
+
+#endif  // MSD_SIM_PHYSICS_EPA_HPP

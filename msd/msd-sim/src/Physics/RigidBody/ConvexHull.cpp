@@ -40,7 +40,7 @@ const std::vector<Coordinate>& ConvexHull::getVertices() const
   return vertices_;
 }
 
-const std::vector<ConvexHull::Facet>& ConvexHull::getFacets() const
+const std::vector<Facet>& ConvexHull::getFacets() const
 {
   return facets_;
 }

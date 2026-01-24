@@ -3,8 +3,8 @@
 
 #include "msd-sim/src/Physics/GJK.hpp"
 #include <algorithm>
-#include <limits>
 #include <vector>
+#include "msd-sim/src/Physics/SupportFunction.hpp"
 
 namespace msd_sim
 {
@@ -78,7 +78,7 @@ bool GJK::intersects(int maxIterations)
 
   // Get first support point
   simplex_.clear();
-  simplex_.push_back(supportMinkowski(direction_));
+  simplex_.push_back(SupportFunction::supportMinkowski(assetA_, assetB_, direction_));
 
   // New direction points toward origin
   direction_ = -simplex_[0];
@@ -87,7 +87,7 @@ bool GJK::intersects(int maxIterations)
   for (int iteration = 0; iteration < maxIterations; ++iteration)
   {
     // Get support point in search direction
-    Coordinate newPoint = supportMinkowski(direction_);
+    Coordinate newPoint = SupportFunction::supportMinkowski(assetA_, assetB_, direction_);
 
     // Check if we've passed the origin
     // If the new point isn't past the origin in our search direction,
@@ -117,54 +117,6 @@ bool GJK::intersects(int maxIterations)
   // Maximum iterations reached without conclusion
   // This should be very rare for well-formed convex hulls
   return false;
-}
-
-Coordinate GJK::support(const ConvexHull& hull, const Coordinate& dir) const
-{
-  const auto& vertices = hull.getVertices();
-
-  double maxDot = -std::numeric_limits<double>::infinity();
-  Coordinate furthest{0.0, 0.0, 0.0};
-
-  for (const auto& vertex : vertices)
-  {
-    double dotProduct = vertex.dot(dir);
-    if (dotProduct > maxDot)
-    {
-      maxDot = dotProduct;
-      furthest = vertex;
-    }
-  }
-
-  return furthest;
-}
-
-Coordinate GJK::supportMinkowski(const CoordinateRate& dir) const
-{
-  // Get collision hulls and reference frames from assets
-  const ConvexHull& hullA = assetA_.getCollisionHull();
-  const ConvexHull& hullB = assetB_.getCollisionHull();
-  const ReferenceFrame& frameA = assetA_.getReferenceFrame();
-  const ReferenceFrame& frameB = assetB_.getReferenceFrame();
-
-  // Transform search direction from world space to local space for asset A
-  // (rotation only - direction vectors don't translate)
-  Coordinate dirA_local = frameA.globalToLocal(dir);
-
-  // Get support vertex in local space for asset A
-  Coordinate supportA_local = support(hullA, dirA_local);
-
-  // Transform support vertex from local space to world space
-  // (rotation + translation - positions transform fully)
-  Coordinate supportA_world = frameA.localToGlobal(supportA_local);
-
-  // Same process for asset B with negated direction
-  Coordinate dirB_local = frameB.globalToLocal(CoordinateRate{-dir});
-  Coordinate supportB_local = support(hullB, dirB_local);
-  Coordinate supportB_world = frameB.localToGlobal(supportB_local);
-
-  // Return Minkowski difference in world space
-  return supportA_world - supportB_world;
 }
 
 bool GJK::updateSimplex()

@@ -1,5 +1,5 @@
 target_sources(${MSD_SIM_NAME} PRIVATE
-    # AssetEnvironment.cpp
+    AssetEnvironment.cpp
     AssetInertial.cpp
     AssetPhysical.cpp
     ConvexHull.cpp

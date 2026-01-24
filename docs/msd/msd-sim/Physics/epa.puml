@@ -1,0 +1,139 @@
+@startuml
+
+' CollisionHandler - orchestrates GJK/EPA workflow
+class CollisionHandler {
+    +CollisionHandler(double epsilon = 1e-6)
+    +checkCollision(const AssetPhysical&, const AssetPhysical&): std::optional<CollisionResult>
+    -epsilon_: double
+}
+
+' EPA components
+class EPA {
+    +EPA(const AssetPhysical&, const AssetPhysical&, double epsilon = 1e-6)
+    +computeContactInfo(const std::vector<Coordinate>&): CollisionResult
+    -expandPolytope(int maxIterations): bool
+    -findClosestFace(): size_t
+    -isVisible(const EPAFace&, const Coordinate&): bool
+    -buildHorizonEdges(const Coordinate&): std::vector<EPAEdge>
+    -addFace(size_t v0, size_t v1, size_t v2): void
+    -computeContactPoint(const EPAFace&): Coordinate
+    -supportMinkowski(const Coordinate& dir): Coordinate
+
+    -assetA_: const AssetPhysical&
+    -assetB_: const AssetPhysical&
+    -epsilon_: double
+    -vertices_: std::vector<Coordinate>
+    -faces_: std::vector<EPAFace>
+}
+
+struct CollisionResult {
+    +normal: Coordinate
+    +penetrationDepth: double
+    +contactPoint: Coordinate
+}
+
+struct EPAFace {
+    +vertexIndices: std::array<size_t, 3>
+    +normal: Coordinate
+    +distance: double
+}
+
+struct EPAEdge {
+    +v0: size_t
+    +v1: size_t
+    +operator==(): bool
+}
+
+' GJK class (updated with getSimplex)
+class GJK {
+    +GJK(const AssetPhysical&, const AssetPhysical&, double epsilon = 1e-6)
+    +intersects(int maxIterations): bool
+    +getSimplex(): const std::vector<Coordinate>&
+
+    -assetA_: const AssetPhysical&
+    -assetB_: const AssetPhysical&
+    -epsilon_: double
+    -simplex_: std::vector<Coordinate>
+    -direction_: Coordinate
+    -supportMinkowski(const Coordinate& dir): Coordinate
+}
+
+' Existing unchanged classes for context
+class AssetPhysical {
+    +getCollisionHull(): const ConvexHull&
+    +getReferenceFrame(): const ReferenceFrame&
+}
+
+class ConvexHull {
+    +getVertices(): const std::vector<Coordinate>&
+    +getFacets(): const std::vector<Facet>&
+    +getCentroid(): Coordinate
+}
+
+class ReferenceFrame {
+    +localToGlobal(const Coordinate&): Coordinate
+    +globalToLocal(const Coordinate&): Coordinate
+}
+
+class Coordinate {
+    +x(): double
+    +y(): double
+    +z(): double
+    +dot(const Coordinate&): double
+    +cross(const Coordinate&): Coordinate
+    +norm(): double
+    +normalized(): Coordinate
+}
+
+' Relationships
+CollisionHandler ..> GJK : creates & uses
+CollisionHandler ..> EPA : creates if collision
+CollisionHandler ..> CollisionResult : returns optional
+EPA --> AssetPhysical : uses
+EPA ..> CollisionResult : creates
+EPA ..> EPAFace : manages
+EPA ..> EPAEdge : uses internally
+GJK --> AssetPhysical : uses
+GJK ..> Coordinate : manages simplex
+EPA ..> GJK : receives simplex from
+AssetPhysical --> ConvexHull : contains
+AssetPhysical --> ReferenceFrame : contains
+CollisionResult --> Coordinate : contains
+
+note top of CollisionHandler
+  **Collision Detection Orchestrator**
+  - Coordinates GJK and EPA algorithms
+  - Returns std::optional<CollisionResult>
+    - std::nullopt if no collision
+    - CollisionResult if collision detected
+  - Entry point for collision detection
+  - Can be extended with broadphase, etc.
+end note
+
+note top of EPA
+  Expanding Polytope Algorithm
+  - Accepts GJK terminating simplex (4 vertices)
+  - Expands polytope to find closest point on Minkowski boundary
+  - Extracts penetration depth, contact normal, contact point
+  - Returns world-space contact information
+end note
+
+note right of GJK
+  Exposes terminating simplex via
+  getSimplex() accessor for EPA input.
+
+  Simplex contains origin when
+  intersects() returns true.
+end note
+
+note bottom of CollisionResult
+  Complete collision information
+  for physics response system.
+
+  No 'intersecting' field needed:
+  EPA only called when collision exists.
+  All coordinates in world space.
+  Normal points from A toward B.
+end note
+
+@enduml

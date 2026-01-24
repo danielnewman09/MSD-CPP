@@ -33,8 +33,11 @@ GJK (Collision detection algorithm)
 | ConvexHull | `RigidBody/ConvexHull.hpp` | Convex hull geometry via Qhull | [`convex-hull.puml`](../../../../../docs/msd/msd-sim/Physics/convex-hull.puml) |
 | PhysicsComponent | `RigidBody/PhysicsComponent.hpp` | Rigid body physics properties | [`physics-component.puml`](../../../../../docs/msd/msd-sim/Physics/physics-component.puml) |
 | DynamicState | `RigidBody/DynamicState.hpp` | Velocities and accelerations | [`dynamic-state.puml`](../../../../../docs/msd/msd-sim/Physics/dynamic-state.puml) |
-| InertialCalculations | `RigidBody/InertialCalculations.hpp` | Inertia tensor computation | [`physics-component.puml`](../../../../../docs/msd/msd-sim/Physics/physics-component.puml) |
-| GJK | `GJK.hpp` | Gilbert-Johnson-Keerthi collision | [`gjk.puml`](../../../../../docs/msd/msd-sim/Physics/gjk.puml) |
+| InertialCalculations | `RigidBody/InertialCalculations.hpp` | Inertia tensor computation | [`mirtich-inertia-tensor.puml`](../../../../../docs/msd/msd-sim/Physics/mirtich-inertia-tensor.puml) |
+| GJK | `GJK.hpp` | Gilbert-Johnson-Keerthi collision detection | [`gjk-asset-physical.puml`](../../../../../docs/msd/msd-sim/Physics/gjk-asset-physical.puml) |
+| CollisionHandler | `CollisionHandler.hpp` | GJK/EPA orchestration for collision detection | [`epa.puml`](../../../../../docs/msd/msd-sim/Physics/epa.puml) |
+| EPA | `EPA.hpp` | Expanding Polytope Algorithm for contact info | [`epa.puml`](../../../../../docs/msd/msd-sim/Physics/epa.puml) |
+| CollisionResult | `CollisionResult.hpp` | Contact information struct | [`epa.puml`](../../../../../docs/msd/msd-sim/Physics/epa.puml) |
 
 ---
 
@@ -434,6 +437,221 @@ This approach avoids creating temporary transformed hulls, preserving memory eff
 
 ---
 
+### CollisionHandler
+
+**Location**: `CollisionHandler.hpp`, `CollisionHandler.cpp`
+**Diagram**: [`epa.puml`](../../../../../docs/msd/msd-sim/Physics/epa.puml)
+**Type**: Library component
+**Introduced**: [Ticket: 0027a_expanding_polytope_algorithm](../../../../../tickets/0027a_expanding_polytope_algorithm.md)
+
+#### Purpose
+Orchestrates GJK and EPA algorithms to provide a unified collision detection interface that returns complete contact information. This abstraction enables future enhancements like broadphase optimization and continuous collision detection without changing callers.
+
+#### Key Interfaces
+```cpp
+class CollisionHandler {
+  /**
+   * Construct handler with specified tolerance.
+   * @param epsilon Numerical tolerance for GJK/EPA (default: 1e-6)
+   */
+  explicit CollisionHandler(double epsilon = 1e-6);
+
+  /**
+   * Check for collision between two physical assets.
+   *
+   * Runs GJK to detect intersection. If collision detected,
+   * runs EPA to compute penetration depth, contact normal,
+   * and contact point.
+   *
+   * @param assetA First physical asset
+   * @param assetB Second physical asset
+   * @return std::nullopt if no collision, CollisionResult if collision
+   */
+  std::optional<CollisionResult> checkCollision(
+      const AssetPhysical& assetA,
+      const AssetPhysical& assetB) const;
+};
+```
+
+#### Usage Example
+```cpp
+// Create collision handler
+CollisionHandler collisionHandler{1e-6};
+
+// Check collision between two assets
+auto result = collisionHandler.checkCollision(assetA, assetB);
+if (result) {
+  // Collision detected - apply physics response
+  std::cout << "Penetration depth: " << result->penetrationDepth << " m\n";
+  std::cout << "Contact normal: " << result->normal << "\n";
+  std::cout << "Contact point: " << result->contactPoint << "\n";
+
+  applyImpulse(assetA, assetB, result->normal, result->penetrationDepth);
+}
+// else: no collision
+```
+
+#### Thread Safety
+**Stateless after construction** — Safe to call from multiple threads with different asset pairs.
+
+#### Error Handling
+Propagates exceptions from GJK/EPA. Does not add additional error conditions.
+
+#### Memory Management
+- Lightweight: single double member (epsilon)
+- Creates temporary GJK and EPA instances per collision check
+- No heap allocations for collision detection
+
+---
+
+### EPA (Expanding Polytope Algorithm)
+
+**Location**: `EPA.hpp`, `EPA.cpp`
+**Diagram**: [`epa.puml`](../../../../../docs/msd/msd-sim/Physics/epa.puml)
+**Type**: Library component
+**Introduced**: [Ticket: 0027a_expanding_polytope_algorithm](../../../../../tickets/0027a_expanding_polytope_algorithm.md)
+
+#### Purpose
+Computes penetration depth, contact normal, and contact point from a GJK terminating simplex. When GJK detects an intersection, EPA expands the simplex into a polytope until the closest face to the origin is found, yielding complete collision data for physics response.
+
+#### Algorithm Overview
+1. **Initialize Polytope**: Start with GJK terminating simplex (4 vertices forming a tetrahedron)
+2. **Find Closest Face**: Identify face closest to origin using distance calculation
+3. **Expand Polytope**: Query support point in direction of closest face normal
+4. **Convergence Check**: If new point within tolerance, terminate
+5. **Topology Update**: Remove visible faces, build horizon edges, add new faces
+6. **Extract Contact**: Derive penetration depth, normal, and contact point from closest face
+
+#### Key Interfaces
+```cpp
+class EPA {
+  /**
+   * Construct EPA solver for two physical assets.
+   * @param assetA First physical asset (includes hull and reference frame)
+   * @param assetB Second physical asset (includes hull and reference frame)
+   * @param epsilon Numerical tolerance for convergence (default: 1e-6)
+   */
+  EPA(const AssetPhysical& assetA,
+      const AssetPhysical& assetB,
+      double epsilon = 1e-6);
+
+  /**
+   * Compute contact information from GJK terminating simplex.
+   *
+   * Assumes simplex contains the origin (GJK returned true).
+   * Expands polytope iteratively until closest face found.
+   *
+   * @param simplex GJK terminating simplex (4 vertices in Minkowski space)
+   * @param maxIterations Maximum expansion iterations (default: 64)
+   * @return CollisionResult with penetration depth, normal, contact point
+   * @throws std::invalid_argument if simplex size > 4
+   * @throws std::runtime_error if expansion fails to converge
+   */
+  CollisionResult computeContactInfo(const std::vector<Coordinate>& simplex,
+                                      int maxIterations = 64);
+};
+```
+
+#### Usage Example
+```cpp
+// After GJK detects intersection
+GJK gjk{assetA, assetB};
+if (gjk.intersects()) {
+  // Use EPA to extract contact info
+  EPA epa{assetA, assetB, 1e-6};
+  CollisionResult result = epa.computeContactInfo(gjk.getSimplex());
+
+  std::cout << "Penetration depth: " << result.penetrationDepth << " m\n";
+  std::cout << "Contact normal: " << result.normal << "\n";
+}
+```
+
+#### Performance Characteristics
+- **Typical iterations**: 4-11 for simple shapes (well below 64 max)
+- **Memory footprint**: < 10KB typical polytope size
+- **Complexity**: O(iterations × faces), where faces grows with iterations
+
+#### Thread Safety
+**Not thread-safe** — Contains mutable state during expansion (vertices, faces).
+
+#### Error Handling
+- Throws `std::invalid_argument` if simplex size > 4
+- Throws `std::runtime_error` if expansion fails to converge within max iterations
+- Includes simplex completion logic for simplices < 4 vertices (robustness feature)
+
+#### Memory Management
+- Stores const references to AssetPhysical objects
+- Owns vertex and face vectors internally
+- Copy/move assignment deleted (cannot reassign reference members)
+
+---
+
+### CollisionResult
+
+**Location**: `CollisionResult.hpp`
+**Diagram**: [`epa.puml`](../../../../../docs/msd/msd-sim/Physics/epa.puml)
+**Type**: Struct (POD)
+**Introduced**: [Ticket: 0027a_expanding_polytope_algorithm](../../../../../tickets/0027a_expanding_polytope_algorithm.md)
+
+#### Purpose
+Return value struct containing complete collision information from EPA. Used by physics response systems to resolve penetration and apply impulses.
+
+#### Key Interfaces
+```cpp
+/**
+ * Complete collision information for physics response.
+ *
+ * This struct is returned by EPA when a collision is detected.
+ * It does NOT contain an 'intersecting' boolean because:
+ * - CollisionHandler returns std::optional<CollisionResult>
+ * - std::nullopt indicates no collision
+ * - Presence of CollisionResult implies collision exists
+ *
+ * All coordinates are in world space.
+ * Contact normal points from object A toward object B.
+ */
+struct CollisionResult {
+  Coordinate normal;           // Contact normal (world space, A→B, unit length)
+  double penetrationDepth{std::numeric_limits<double>::quiet_NaN()};  // Overlap distance [m]
+  Coordinate contactPoint;     // Contact location (world space) [m]
+
+  CollisionResult() = default;
+  CollisionResult(const Coordinate& n, double depth, const Coordinate& point);
+};
+```
+
+#### Usage Example
+```cpp
+auto result = collisionHandler.checkCollision(assetA, assetB);
+if (result) {
+  // Access collision data
+  Coordinate separationVector = result->normal * result->penetrationDepth;
+
+  // Apply position correction
+  assetA.translate(-separationVector * 0.5);
+  assetB.translate(separationVector * 0.5);
+
+  // Apply impulse for collision response
+  applyImpulse(assetA, assetB, result->normal);
+}
+```
+
+#### Thread Safety
+**Value type** — Safe to copy across threads.
+
+#### Memory Management
+- Stack-allocated struct (56 bytes: 2×24 bytes for Coordinates + 8 bytes for double)
+- No dynamic allocations
+
+#### Design Rationale
+The `intersecting` boolean was deliberately excluded. Collision state is conveyed by `CollisionHandler::checkCollision()` returning `std::optional<CollisionResult>`:
+- `std::nullopt` = no collision
+- Presence of value = collision exists
+
+This avoids redundant boolean fields and makes collision state explicit at the API boundary.
+
+---
+
 ## Design Patterns in Use
 
 ### Factory Pattern
@@ -481,6 +699,9 @@ All quantities use SI units:
 - **Read-only operations**: Thread-safe for ConvexHull after construction
 - **Mutable operations**: Not thread-safe (DynamicState modification, force application)
 - **GJK**: Safe to use concurrently with different instances
+- **CollisionHandler**: Stateless after construction, safe to call from multiple threads
+- **EPA**: Not thread-safe (mutable state during expansion)
+- **CollisionResult**: Value type, safe to copy across threads
 
 ---
 
