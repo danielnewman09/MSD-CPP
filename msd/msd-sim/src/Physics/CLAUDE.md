@@ -37,7 +37,9 @@ GJK (Collision detection algorithm)
 | GJK | `GJK.hpp` | Gilbert-Johnson-Keerthi collision detection | [`gjk-asset-physical.puml`](../../../../../docs/msd/msd-sim/Physics/gjk-asset-physical.puml) |
 | CollisionHandler | `CollisionHandler.hpp` | GJK/EPA orchestration for collision detection | [`epa.puml`](../../../../../docs/msd/msd-sim/Physics/epa.puml) |
 | EPA | `EPA.hpp` | Expanding Polytope Algorithm for contact info | [`epa.puml`](../../../../../docs/msd/msd-sim/Physics/epa.puml) |
-| CollisionResult | `CollisionResult.hpp` | Contact information struct | [`epa.puml`](../../../../../docs/msd/msd-sim/Physics/epa.puml) |
+| CollisionResult | `CollisionResult.hpp` | Contact information struct with witness points | [`witness-points.puml`](../../../../../docs/msd/msd-sim/Physics/witness-points.puml) |
+| SupportFunction | `SupportFunction.hpp` | Support function utilities with witness tracking | [`witness-points.puml`](../../../../../docs/msd/msd-sim/Physics/witness-points.puml) |
+| MinkowskiVertex | `EPA.hpp` | Minkowski vertex with witness point tracking | [`witness-points.puml`](../../../../../docs/msd/msd-sim/Physics/witness-points.puml) |
 
 ---
 
@@ -589,12 +591,13 @@ if (gjk.intersects()) {
 ### CollisionResult
 
 **Location**: `CollisionResult.hpp`
-**Diagram**: [`epa.puml`](../../../../../docs/msd/msd-sim/Physics/epa.puml)
+**Diagram**: [`witness-points.puml`](../../../../../docs/msd/msd-sim/Physics/witness-points.puml)
 **Type**: Struct (POD)
 **Introduced**: [Ticket: 0027a_expanding_polytope_algorithm](../../../../../tickets/0027a_expanding_polytope_algorithm.md)
+**Modified**: [Ticket: 0028_epa_witness_points](../../../../../tickets/0028_epa_witness_points.md) — Breaking change to support witness points
 
 #### Purpose
-Return value struct containing complete collision information from EPA. Used by physics response systems to resolve penetration and apply impulses.
+Return value struct containing complete collision information from EPA with witness points on both object surfaces. Used by physics response systems to resolve penetration and apply accurate torque during collision response.
 
 #### Key Interfaces
 ```cpp
@@ -609,14 +612,21 @@ Return value struct containing complete collision information from EPA. Used by 
  *
  * All coordinates are in world space.
  * Contact normal points from object A toward object B.
+ *
+ * Ticket 0028: Breaking change from single contactPoint to dual witness points
+ * - contactPointA: Contact location on A's surface (world space)
+ * - contactPointB: Contact location on B's surface (world space)
+ * - Enables accurate torque calculation: τ = (contactPoint - centerOfMass) × impulse
  */
 struct CollisionResult {
   Coordinate normal;           // Contact normal (world space, A→B, unit length)
   double penetrationDepth{std::numeric_limits<double>::quiet_NaN()};  // Overlap distance [m]
-  Coordinate contactPoint;     // Contact location (world space) [m]
+  Coordinate contactPointA;    // Contact point on A's surface (world space) [m]
+  Coordinate contactPointB;    // Contact point on B's surface (world space) [m]
 
   CollisionResult() = default;
-  CollisionResult(const Coordinate& n, double depth, const Coordinate& point);
+  CollisionResult(const Coordinate& n, double depth,
+                  const Coordinate& pointA, const Coordinate& pointB);
 };
 ```
 
@@ -624,15 +634,24 @@ struct CollisionResult {
 ```cpp
 auto result = collisionHandler.checkCollision(assetA, assetB);
 if (result) {
-  // Access collision data
+  // Access collision data with witness points
   Coordinate separationVector = result->normal * result->penetrationDepth;
 
   // Apply position correction
   assetA.translate(-separationVector * 0.5);
   assetB.translate(separationVector * 0.5);
 
-  // Apply impulse for collision response
-  applyImpulse(assetA, assetB, result->normal);
+  // Compute lever arms for accurate torque calculation
+  Coordinate leverArmA = result->contactPointA - assetA.getCenterOfMass();
+  Coordinate leverArmB = result->contactPointB - assetB.getCenterOfMass();
+
+  // Apply torque: τ = r × F
+  Coordinate impulse = result->normal * 100.0;
+  Coordinate torqueA = leverArmA.cross(impulse);
+  Coordinate torqueB = leverArmB.cross(-impulse);
+
+  // Apply impulse for collision response with angular dynamics
+  applyImpulse(assetA, assetB, result->normal, result->contactPointA, result->contactPointB);
 }
 ```
 
@@ -640,7 +659,7 @@ if (result) {
 **Value type** — Safe to copy across threads.
 
 #### Memory Management
-- Stack-allocated struct (56 bytes: 2×24 bytes for Coordinates + 8 bytes for double)
+- Stack-allocated struct (80 bytes: 3×24 bytes for Coordinates + 8 bytes for double)
 - No dynamic allocations
 
 #### Design Rationale
@@ -649,6 +668,149 @@ The `intersecting` boolean was deliberately excluded. Collision state is conveye
 - Presence of value = collision exists
 
 This avoids redundant boolean fields and makes collision state explicit at the API boundary.
+
+#### Breaking Changes (Ticket 0028)
+- **Removed**: `Coordinate contactPoint` — Single point in Minkowski space
+- **Added**: `Coordinate contactPointA` — Contact point on A's surface
+- **Added**: `Coordinate contactPointB` — Contact point on B's surface
+- **Rationale**: Single Minkowski-space contact point cannot be used for accurate torque calculation. Witness points provide physical contact locations on each object's surface, enabling correct lever arm computation for angular dynamics.
+
+---
+
+### SupportFunction
+
+**Location**: `SupportFunction.hpp`, `SupportFunction.cpp`
+**Diagram**: [`witness-points.puml`](../../../../../docs/msd/msd-sim/Physics/witness-points.puml)
+**Type**: Utility namespace
+**Introduced**: [Ticket: 0027a_expanding_polytope_algorithm](../../../../../tickets/0027a_expanding_polytope_algorithm.md)
+**Extended**: [Ticket: 0028_epa_witness_points](../../../../../tickets/0028_epa_witness_points.md) — Added witness point tracking
+
+#### Purpose
+Provides support function utilities for computing extremal points on convex hulls in specified directions. Extended to track witness points (original surface points from both objects) for accurate torque calculation in collision response.
+
+#### Key Interfaces
+```cpp
+namespace SupportFunction {
+  /**
+   * Compute support point on a convex hull.
+   * Returns the vertex farthest in the given direction.
+   */
+  Coordinate support(const ConvexHull& hull, const Coordinate& dir);
+
+  /**
+   * Compute Minkowski difference support point.
+   * Returns supportA - supportB in world space.
+   */
+  Coordinate supportMinkowski(const AssetPhysical& assetA,
+                              const AssetPhysical& assetB,
+                              const CoordinateRate& dir);
+
+  /**
+   * Compute Minkowski support with witness tracking.
+   * Returns Minkowski point along with original witness points from both surfaces.
+   * Ticket 0028: New function for EPA witness point tracking.
+   */
+  SupportResult supportMinkowskiWithWitness(const AssetPhysical& assetA,
+                                            const AssetPhysical& assetB,
+                                            const CoordinateRate& dir);
+}
+
+/**
+ * Result of Minkowski support query with witness tracking.
+ * Ticket 0028: New struct for EPA witness point extraction.
+ */
+struct SupportResult {
+  Coordinate minkowski;  // supportA - supportB (Minkowski space)
+  Coordinate witnessA;   // Support point on A's surface (world space)
+  Coordinate witnessB;   // Support point on B's surface (world space)
+};
+```
+
+#### Usage Example
+```cpp
+// Basic support query
+ConvexHull hull{points};
+Coordinate direction{1.0, 0.0, 0.0};
+Coordinate extremalPoint = SupportFunction::support(hull, direction);
+
+// Minkowski support with transformations (GJK)
+Coordinate minkowskiPoint = SupportFunction::supportMinkowski(assetA, assetB, direction);
+
+// Minkowski support with witness tracking (EPA)
+SupportResult result = SupportFunction::supportMinkowskiWithWitness(assetA, assetB, direction);
+// result.minkowski = supportA - supportB
+// result.witnessA = actual point on A's surface
+// result.witnessB = actual point on B's surface
+```
+
+#### Thread Safety
+**Stateless functions** — Safe to call from multiple threads with different hull instances.
+
+#### Error Handling
+No error conditions. Assumes valid convex hull and non-zero direction.
+
+#### Memory Management
+- Stateless namespace functions
+- `supportMinkowskiWithWitness()` returns `SupportResult` by value (RVO eliminates copy)
+
+#### Design Rationale
+Ticket 0028 added `supportMinkowskiWithWitness()` as a new function rather than modifying `supportMinkowski()` to preserve backward compatibility during transition. The existing function remains unchanged for callers that don't need witness points.
+
+---
+
+### MinkowskiVertex
+
+**Location**: `EPA.hpp`
+**Diagram**: [`witness-points.puml`](../../../../../docs/msd/msd-sim/Physics/witness-points.puml)
+**Type**: Struct (internal to EPA)
+**Introduced**: [Ticket: 0028_epa_witness_points](../../../../../tickets/0028_epa_witness_points.md)
+
+#### Purpose
+Internal structure used by EPA to track Minkowski difference vertices along with their contributing witness points from both object surfaces. Enables extraction of physical contact locations after polytope convergence.
+
+#### Key Interfaces
+```cpp
+/**
+ * Minkowski difference vertex with witness point tracking.
+ * Used internally by EPA to maintain association between
+ * Minkowski space points and their contributing surface points.
+ * Ticket 0028: Replaces std::vector<Coordinate> vertices_.
+ */
+struct MinkowskiVertex {
+  Coordinate point;      // Minkowski difference point (A - B)
+  Coordinate witnessA;   // Support point on A that contributed
+  Coordinate witnessB;   // Support point on B that contributed
+
+  MinkowskiVertex() = default;
+  MinkowskiVertex(const Coordinate& p, const Coordinate& wA, const Coordinate& wB)
+    : point{p}, witnessA{wA}, witnessB{wB} {}
+};
+```
+
+#### Usage Example
+```cpp
+// Internal EPA usage (not public API)
+// Construct MinkowskiVertex from support query
+SupportResult support = SupportFunction::supportMinkowskiWithWitness(assetA, assetB, dir);
+MinkowskiVertex vertex{support.minkowski, support.witnessA, support.witnessB};
+vertices_.push_back(vertex);
+
+// Extract witness points from converged face
+Coordinate witnessA = (vertices_[face.v0].witnessA +
+                       vertices_[face.v1].witnessA +
+                       vertices_[face.v2].witnessA) / 3.0;
+```
+
+#### Thread Safety
+**Value type** — Safe to copy across threads.
+
+#### Memory Management
+- Stack-allocated struct (72 bytes: 3×24 bytes for Coordinates)
+- No dynamic allocations
+- Owned by `EPA::vertices_` vector
+
+#### Design Rationale
+This struct replaced `std::vector<Coordinate>` in EPA to track witness points alongside Minkowski vertices. The barycentric centroid of face vertices' witness points yields the physical contact location on each object's surface, enabling accurate torque calculation.
 
 ---
 

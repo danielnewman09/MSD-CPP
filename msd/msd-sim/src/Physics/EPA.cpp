@@ -26,8 +26,32 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
   {
     // Edge case: GJK detected collision before building full tetrahedron
     // This can happen when direction becomes near-zero during GJK iteration
-    // Build a minimal tetrahedron by adding support points
-    vertices_ = simplex;
+    // Build a minimal tetrahedron by adding support points with witness tracking
+
+    // Re-query support for existing simplex vertices to get proper witness points
+    // We query in the direction of each vertex and adjust witnesses to maintain
+    // the invariant: witnessA - witnessB = minkowski (original point)
+    vertices_.reserve(4);
+    for (const auto& point : simplex)
+    {
+      double norm = point.norm();
+      CoordinateRate dir = (norm < epsilon_) ? CoordinateRate{1, 0, 0}
+                                              : CoordinateRate{point.x() / norm,
+                                                               point.y() / norm,
+                                                               point.z() / norm};
+      SupportResult support =
+        SupportFunction::supportMinkowskiWithWitness(assetA_, assetB_, dir);
+
+      // Adjust witnesses to maintain invariant: witnessA - witnessB = point
+      // offset = point - support.minkowski (difference between original and queried)
+      // witnessA' = witnessA + offset/2, witnessB' = witnessB - offset/2
+      // Then witnessA' - witnessB' = witnessA - witnessB + offset = support.minkowski + offset = point
+      Coordinate offset = point - support.minkowski;
+      Coordinate witnessA = support.witnessA + offset * 0.5;
+      Coordinate witnessB = support.witnessB - offset * 0.5;
+
+      vertices_.emplace_back(point, witnessA, witnessB);
+    }
 
     // Add support points in cardinal directions until we have 4 vertices
     std::vector<CoordinateRate> directions = {CoordinateRate{1.0, 0.0, 0.0},
@@ -42,14 +66,14 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
       if (vertices_.size() >= 4)
         break;
 
-      Coordinate newVertex =
-        SupportFunction::supportMinkowski(assetA_, assetB_, dir);
+      SupportResult support =
+        SupportFunction::supportMinkowskiWithWitness(assetA_, assetB_, dir);
 
       // Only add if not duplicate (within epsilon)
       bool isDuplicate = false;
       for (const auto& existing : vertices_)
       {
-        if ((newVertex - existing).norm() < epsilon_)
+        if ((support.minkowski - existing.point).norm() < epsilon_)
         {
           isDuplicate = true;
           break;
@@ -58,7 +82,7 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
 
       if (!isDuplicate)
       {
-        vertices_.push_back(newVertex);
+        vertices_.emplace_back(support.minkowski, support.witnessA, support.witnessB);
       }
     }
 
@@ -77,7 +101,26 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
   else
   {
     // Normal case: initialize polytope with GJK terminating simplex
-    vertices_ = simplex;
+    // GJK simplex only has Minkowski points, not witness points.
+    // Re-query support function with witness tracking and adjust to maintain invariant.
+    vertices_.reserve(4);
+    for (const auto& point : simplex)
+    {
+      double norm = point.norm();
+      CoordinateRate dir = (norm < epsilon_) ? CoordinateRate{1, 0, 0}
+                                              : CoordinateRate{point.x() / norm,
+                                                               point.y() / norm,
+                                                               point.z() / norm};
+      SupportResult support =
+        SupportFunction::supportMinkowskiWithWitness(assetA_, assetB_, dir);
+
+      // Adjust witnesses to maintain invariant: witnessA - witnessB = point
+      Coordinate offset = point - support.minkowski;
+      Coordinate witnessA = support.witnessA + offset * 0.5;
+      Coordinate witnessB = support.witnessB - offset * 0.5;
+
+      vertices_.emplace_back(point, witnessA, witnessB);
+    }
   }
 
   // Create 4 initial faces from tetrahedron
@@ -102,7 +145,8 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
   CollisionResult result;
   result.normal = closestFace.normal;
   result.penetrationDepth = closestFace.offset;
-  result.contactPoint = computeContactPoint(closestFace);
+  result.contactPointA = computeWitnessA(closestFace);
+  result.contactPointB = computeWitnessB(closestFace);
 
   return result;
 }
@@ -115,13 +159,13 @@ bool EPA::expandPolytope(int maxIterations)
     size_t closestFaceIndex = findClosestFace();
     const Facet& closestFace = faces_[closestFaceIndex];
 
-    // Query support point in direction of closest face normal
-    Coordinate newPoint =
-      SupportFunction::supportMinkowski(assetA_, assetB_, closestFace.normal);
+    // Query support point in direction of closest face normal with witness tracking
+    SupportResult support =
+      SupportFunction::supportMinkowskiWithWitness(assetA_, assetB_, closestFace.normal);
 
     // Convergence check: if new point is within tolerance of face distance,
     // we've found the closest point on the Minkowski boundary
-    double distanceToNewPoint = newPoint.dot(closestFace.normal);
+    double distanceToNewPoint = support.minkowski.dot(closestFace.normal);
     if (distanceToNewPoint - closestFace.offset < epsilon_)
     {
       // Converged - closest face found
@@ -129,11 +173,11 @@ bool EPA::expandPolytope(int maxIterations)
     }
 
     // Expansion: remove visible faces, build horizon, add new faces
-    std::vector<EPAEdge> horizonEdges = buildHorizonEdges(newPoint);
+    std::vector<EPAEdge> horizonEdges = buildHorizonEdges(support.minkowski);
 
-    // Add new vertex to polytope
+    // Add new vertex to polytope with witness tracking
     size_t newVertexIndex = vertices_.size();
-    vertices_.push_back(newPoint);
+    vertices_.emplace_back(support.minkowski, support.witnessA, support.witnessB);
 
     // Create new faces connecting new vertex to horizon edges
     for (const auto& edge : horizonEdges)
@@ -166,7 +210,7 @@ size_t EPA::findClosestFace() const
 bool EPA::isVisible(const Facet& face, const Coordinate& point) const
 {
   // Point is visible from face if it's on the positive side of the face plane
-  return face.normal.dot(point - vertices_[face.vertexIndices[0]]) > epsilon_;
+  return face.normal.dot(point - vertices_[face.vertexIndices[0]].point) > epsilon_;
 }
 
 std::vector<EPA::EPAEdge> EPA::buildHorizonEdges(const Coordinate& newVertex)
@@ -222,9 +266,9 @@ std::vector<EPA::EPAEdge> EPA::buildHorizonEdges(const Coordinate& newVertex)
 
 void EPA::addFace(size_t v0, size_t v1, size_t v2)
 {
-  const Coordinate& a = vertices_[v0];
-  const Coordinate& b = vertices_[v1];
-  const Coordinate& c = vertices_[v2];
+  const Coordinate& a = vertices_[v0].point;
+  const Coordinate& b = vertices_[v1].point;
+  const Coordinate& c = vertices_[v2].point;
 
   // Compute normal via cross product
   Coordinate ab = b - a;
@@ -256,12 +300,31 @@ void EPA::addFace(size_t v0, size_t v1, size_t v2)
 
 Coordinate EPA::computeContactPoint(const Facet& face) const
 {
-  // Barycentric centroid (equal weights)
-  const Coordinate& a = vertices_[face.vertexIndices[0]];
-  const Coordinate& b = vertices_[face.vertexIndices[1]];
-  const Coordinate& c = vertices_[face.vertexIndices[2]];
+  // The closest point on the face to the origin is the projection along the normal
+  // closestPoint = origin + normal * distance = normal * offset
+  return face.normal * face.offset;
+}
 
-  return (a + b + c) / 3.0;
+Coordinate EPA::computeWitnessA(const Facet& face) const
+{
+  // Centroid of witness points on A's surface
+  // This gives the center of the contact region rather than a corner
+  const Coordinate& wA0 = vertices_[face.vertexIndices[0]].witnessA;
+  const Coordinate& wA1 = vertices_[face.vertexIndices[1]].witnessA;
+  const Coordinate& wA2 = vertices_[face.vertexIndices[2]].witnessA;
+
+  return (wA0 + wA1 + wA2) / 3.0;
+}
+
+Coordinate EPA::computeWitnessB(const Facet& face) const
+{
+  // Centroid of witness points on B's surface
+  // This gives the center of the contact region rather than a corner
+  const Coordinate& wB0 = vertices_[face.vertexIndices[0]].witnessB;
+  const Coordinate& wB1 = vertices_[face.vertexIndices[1]].witnessB;
+  const Coordinate& wB2 = vertices_[face.vertexIndices[2]].witnessB;
+
+  return (wB0 + wB1 + wB2) / 3.0;
 }
 
 }  // namespace msd_sim

@@ -1,0 +1,126 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "Physics Module" {
+    ' New support result structure
+    struct SupportResult <<new>> {
+        +minkowski: Coordinate
+        +witnessA: Coordinate
+        +witnessB: Coordinate
+    }
+
+    ' Modified support function namespace
+    namespace SupportFunction <<modified>> {
+        +support(hull, dir): Coordinate
+        +supportMinkowski(assetA, assetB, dir): Coordinate
+        +{static} supportMinkowskiWithWitness(assetA, assetB, dir): SupportResult
+    }
+
+    ' Modified EPA - internal structure changes
+    class EPA <<modified>> {
+        -assetA_: const AssetPhysical&
+        -assetB_: const AssetPhysical&
+        -epsilon_: double
+        -vertices_: std::vector<MinkowskiVertex>
+        -faces_: std::vector<Facet>
+        __
+        +EPA(assetA, assetB, epsilon)
+        +computeContactInfo(simplex, maxIterations): CollisionResult
+        __
+        -expandPolytope(maxIterations): bool
+        -findClosestFace(): size_t
+        -buildHorizonEdges(newVertex): std::vector<EPAEdge>
+        -addFace(v0, v1, v2): void
+        -{static} computeWitnessA(face): Coordinate
+        -{static} computeWitnessB(face): Coordinate
+    }
+
+    ' New MinkowskiVertex structure (internal to EPA)
+    struct MinkowskiVertex <<new>> {
+        +point: Coordinate
+        +witnessA: Coordinate
+        +witnessB: Coordinate
+    }
+
+    ' Modified CollisionResult
+    struct CollisionResult <<modified>> {
+        +normal: Coordinate
+        +penetrationDepth: double
+        +contactPointA: Coordinate
+        +contactPointB: Coordinate
+        __
+        +CollisionResult()
+        +CollisionResult(normal, depth, pointA, pointB)
+    }
+
+    ' Unchanged - shown for context
+    class CollisionHandler {
+        -epsilon_: double
+        __
+        +CollisionHandler(epsilon)
+        +checkCollision(assetA, assetB): std::optional<CollisionResult>
+    }
+
+    ' Unchanged - shown for context
+    struct Facet {
+        +vertexIndices: std::array<size_t, 3>
+        +normal: Coordinate
+        +offset: double
+    }
+
+    ' Unchanged - shown for context
+    class AssetPhysical {
+        -objectId_: ObjectId
+        -assetId_: size_t
+        -collisionHull_: ConvexHull
+        -referenceFrame_: ReferenceFrame
+        __
+        +getCollisionHull(): const ConvexHull&
+        +getReferenceFrame(): const ReferenceFrame&
+    }
+}
+
+' Relationships
+EPA *-- MinkowskiVertex : vertices_
+EPA -- Facet : uses
+EPA --> SupportFunction : calls supportMinkowskiWithWitness()
+SupportFunction ..> SupportResult : returns
+CollisionHandler --> EPA : computeContactInfo()
+EPA ..> CollisionResult : returns
+CollisionHandler --> AssetPhysical : uses
+
+note right of SupportResult
+  New struct returned by
+  supportMinkowskiWithWitness()
+  containing both Minkowski point
+  and original witness points
+end note
+
+note right of MinkowskiVertex
+  Replaces: std::vector<Coordinate>
+  Now tracks witness points
+  alongside Minkowski vertices
+end note
+
+note bottom of CollisionResult
+  Breaking change:
+  contactPoint → contactPointA + contactPointB
+
+  Old: single point in Minkowski space
+  New: two points on object surfaces
+end note
+
+note left of EPA
+  Internal change: vertices_ type
+  std::vector<Coordinate> →
+  std::vector<MinkowskiVertex>
+
+  New methods for witness extraction:
+  - computeWitnessA(face)
+  - computeWitnessB(face)
+end note
+
+@enduml

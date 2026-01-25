@@ -22,20 +22,30 @@ namespace msd_sim
  * All coordinates are in world space.
  * Contact normal points from object A toward object B.
  *
+ * Breaking change (Ticket 0028_epa_witness_points):
+ * - Replaced single contactPoint with contactPointA and contactPointB
+ * - Witness points enable accurate torque calculation (τ = r × F)
+ *
  * @see docs/designs/0027a_expanding_polytope_algorithm/0027a_expanding_polytope_algorithm.puml
+ * @see docs/designs/0028_epa_witness_points/0028_epa_witness_points.puml
  * @ticket 0027a_expanding_polytope_algorithm
+ * @ticket 0028_epa_witness_points
  */
 struct CollisionResult
 {
   Coordinate normal;  // Contact normal (world space, A→B, unit length)
   double penetrationDepth{
       std::numeric_limits<double>::quiet_NaN()};  // Overlap distance [m]
-  Coordinate contactPoint;  // Contact location (world space) [m]
+  Coordinate contactPointA;  // Contact point on A's surface (world space) [m]
+  Coordinate contactPointB;  // Contact point on B's surface (world space) [m]
 
   CollisionResult() = default;
 
-  CollisionResult(const Coordinate& n, double depth, const Coordinate& point)
-    : normal{n}, penetrationDepth{depth}, contactPoint{point}
+  CollisionResult(const Coordinate& n,
+                  double depth,
+                  const Coordinate& pointA,
+                  const Coordinate& pointB)
+    : normal{n}, penetrationDepth{depth}, contactPointA{pointA}, contactPointB{pointB}
   {
   }
 };

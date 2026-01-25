@@ -15,6 +15,29 @@ namespace msd_sim
 {
 
 /**
+ * @brief Minkowski difference vertex with witness point tracking.
+ *
+ * Used internally by EPA to maintain the association between
+ * Minkowski space points and their contributing surface points.
+ * This enables extraction of physical contact locations after
+ * EPA convergence.
+ *
+ * @ticket 0028_epa_witness_points
+ */
+struct MinkowskiVertex
+{
+  Coordinate point;      // Minkowski difference point (A - B)
+  Coordinate witnessA;   // Support point on A that contributed
+  Coordinate witnessB;   // Support point on B that contributed
+
+  MinkowskiVertex() = default;
+  MinkowskiVertex(const Coordinate& p, const Coordinate& wA, const Coordinate& wB)
+    : point{p}, witnessA{wA}, witnessB{wB}
+  {
+  }
+};
+
+/**
  * @brief Expanding Polytope Algorithm (EPA) for contact information extraction.
  *
  * EPA computes penetration depth, contact normal, and contact point from a GJK
@@ -107,13 +130,15 @@ public:
 
   // Contact extraction
   Coordinate computeContactPoint(const Facet& face) const;
+  Coordinate computeWitnessA(const Facet& face) const;
+  Coordinate computeWitnessB(const Facet& face) const;
 
   const AssetPhysical& assetA_;
   const AssetPhysical& assetB_;
   double epsilon_;
 
-  std::vector<Coordinate> vertices_;  // Minkowski vertices
-  std::vector<Facet> faces_;          // Triangular faces
+  std::vector<MinkowskiVertex> vertices_;  // Minkowski vertices with witness tracking
+  std::vector<Facet> faces_;               // Triangular faces
 };
 
 }  // namespace msd_sim

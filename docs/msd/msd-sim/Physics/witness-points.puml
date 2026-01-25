@@ -1,0 +1,122 @@
+@startuml
+' Witness Point Tracking in EPA
+' Adapted from design diagram (highlighting removed for library documentation)
+
+package "Physics Module" {
+    ' Support result structure with witness tracking
+    struct SupportResult {
+        +minkowski: Coordinate
+        +witnessA: Coordinate
+        +witnessB: Coordinate
+    }
+
+    ' Support function namespace
+    namespace SupportFunction {
+        +support(hull, dir): Coordinate
+        +supportMinkowski(assetA, assetB, dir): Coordinate
+        +{static} supportMinkowskiWithWitness(assetA, assetB, dir): SupportResult
+    }
+
+    ' EPA with witness point tracking
+    class EPA {
+        -assetA_: const AssetPhysical&
+        -assetB_: const AssetPhysical&
+        -epsilon_: double
+        -vertices_: std::vector<MinkowskiVertex>
+        -faces_: std::vector<Facet>
+        __
+        +EPA(assetA, assetB, epsilon)
+        +computeContactInfo(simplex, maxIterations): CollisionResult
+        __
+        -expandPolytope(maxIterations): bool
+        -findClosestFace(): size_t
+        -buildHorizonEdges(newVertex): std::vector<EPAEdge>
+        -addFace(v0, v1, v2): void
+        -{static} computeWitnessA(face): Coordinate
+        -{static} computeWitnessB(face): Coordinate
+    }
+
+    ' MinkowskiVertex structure with witness tracking
+    struct MinkowskiVertex {
+        +point: Coordinate
+        +witnessA: Coordinate
+        +witnessB: Coordinate
+    }
+
+    ' CollisionResult with dual contact points
+    struct CollisionResult {
+        +normal: Coordinate
+        +penetrationDepth: double
+        +contactPointA: Coordinate
+        +contactPointB: Coordinate
+        __
+        +CollisionResult()
+        +CollisionResult(normal, depth, pointA, pointB)
+    }
+
+    ' CollisionHandler orchestration
+    class CollisionHandler {
+        -epsilon_: double
+        __
+        +CollisionHandler(epsilon)
+        +checkCollision(assetA, assetB): std::optional<CollisionResult>
+    }
+
+    ' Facet structure
+    struct Facet {
+        +vertexIndices: std::array<size_t, 3>
+        +normal: Coordinate
+        +offset: double
+    }
+
+    ' AssetPhysical context
+    class AssetPhysical {
+        -objectId_: ObjectId
+        -assetId_: size_t
+        -collisionHull_: ConvexHull
+        -referenceFrame_: ReferenceFrame
+        __
+        +getCollisionHull(): const ConvexHull&
+        +getReferenceFrame(): const ReferenceFrame&
+    }
+}
+
+' Relationships
+EPA *-- MinkowskiVertex : vertices_
+EPA -- Facet : uses
+EPA --> SupportFunction : calls supportMinkowskiWithWitness()
+SupportFunction ..> SupportResult : returns
+CollisionHandler --> EPA : computeContactInfo()
+EPA ..> CollisionResult : returns
+CollisionHandler --> AssetPhysical : uses
+
+note right of SupportResult
+  Returned by supportMinkowskiWithWitness()
+  Contains Minkowski point and both
+  original witness points from A and B
+end note
+
+note right of MinkowskiVertex
+  EPA vertices now track witness points
+  alongside Minkowski coordinates
+  Enables extraction of physical
+  contact locations on object surfaces
+end note
+
+note bottom of CollisionResult
+  contactPointA: Contact location on A's surface
+  contactPointB: Contact location on B's surface
+
+  Enables accurate torque calculation:
+  τ = (contactPoint - centerOfMass) × impulse
+end note
+
+note left of EPA
+  Witness extraction via barycentric
+  interpolation of face vertices:
+
+  witnessA = (v0.witnessA + v1.witnessA + v2.witnessA) / 3
+  witnessB = (v0.witnessB + v1.witnessB + v2.witnessB) / 3
+end note
+
+@enduml
