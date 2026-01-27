@@ -45,6 +45,43 @@ const std::vector<Facet>& ConvexHull::getFacets() const
   return facets_;
 }
 
+const Facet& ConvexHull::getFacetAlignedWith(const CoordinateRate& normal) const
+{
+  auto it = std::max_element(
+    facets_.begin(),
+    facets_.end(),
+    [&normal](const Facet& a, const Facet& b) {
+      return a.normal.dot(normal) < b.normal.dot(normal);
+    });
+  return *it;
+}
+
+std::vector<std::reference_wrapper<const Facet>>
+ConvexHull::getFacetsAlignedWith(const CoordinateRate& normal,
+                                 double tolerance) const
+{
+  // First pass: find maximum alignment
+  double maxDot = std::max_element(
+                    facets_.begin(),
+                    facets_.end(),
+                    [&normal](const Facet& a, const Facet& b) {
+                      return a.normal.dot(normal) < b.normal.dot(normal);
+                    })
+                    ->normal.dot(normal);
+
+  // Second pass: collect all facets within tolerance of the maximum
+  std::vector<std::reference_wrapper<const Facet>> result;
+  for (const auto& facet : facets_)
+  {
+    if (facet.normal.dot(normal) >= maxDot - tolerance)
+    {
+      result.push_back(std::cref(facet));
+    }
+  }
+
+  return result;
+}
+
 size_t ConvexHull::getVertexCount() const
 {
   return vertices_.size();

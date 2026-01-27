@@ -12,9 +12,29 @@
 namespace msd_sim
 {
 
-Engine::Engine(const std::string& dbPath)
-  : assetRegistry_{dbPath}, worldModel_{}
+namespace
 {
+// Helper to create cube vertices
+std::vector<Coordinate> createCubeVertices(double size)
+{
+  double half = size / 2.0;
+  return {Coordinate{-half, -half, -half},
+          Coordinate{half, -half, -half},
+          Coordinate{half, half, -half},
+          Coordinate{-half, half, -half},
+          Coordinate{-half, -half, half},
+          Coordinate{half, -half, half},
+          Coordinate{half, half, half},
+          Coordinate{-half, half, half}};
+}
+}  // namespace
+
+Engine::Engine(const std::string& dbPath)
+  : assetRegistry_{dbPath}, floorHull_{createCubeVertices(100.0)}, worldModel_{}
+{
+  // Spawn floor environment object at origin
+  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -60.0}};
+  worldModel_.spawnEnvironmentObject(0, floorHull_, floorFrame);
 }
 
 msd_assets::AssetRegistry& Engine::getAssetRegistry()
@@ -23,9 +43,10 @@ msd_assets::AssetRegistry& Engine::getAssetRegistry()
 }
 
 
-const AssetInertial& Engine::spawnInertialObject(const std::string assetName,
-                                                 const Coordinate& position,
-                                                 const AngularCoordinate& orientation)
+const AssetInertial& Engine::spawnInertialObject(
+  const std::string assetName,
+  const Coordinate& position,
+  const AngularCoordinate& orientation)
 {
   ReferenceFrame objectFrame{position, orientation};
 
@@ -46,6 +67,31 @@ const AssetInertial& Engine::spawnInertialObject(const std::string assetName,
     assetRef.getId(), assetRef.getCollisionGeometry()->get().getVertices());
 
   return worldModel_.spawnObject(assetRef.getId(), hullIt->second, objectFrame);
+}
+
+const AssetEnvironment& Engine::spawnEnvironmentObject(
+  const std::string& assetName,
+  const Coordinate& position,
+  const AngularCoordinate& orientation)
+{
+  ReferenceFrame objectFrame{position, orientation};
+
+  const auto& asset = assetRegistry_.getAsset(assetName);
+
+  if (!asset.has_value())
+  {
+    throw std::runtime_error(
+      "Could not spawn environment object with name: " + assetName +
+      ". It was not found in the asset registry");
+  }
+
+  const auto& assetRef = asset->get();
+
+  auto [hullIt, inserted] = registryHullMap_.try_emplace(
+    assetRef.getId(), assetRef.getCollisionGeometry()->get().getVertices());
+
+  return worldModel_.spawnEnvironmentObject(
+    assetRef.getId(), hullIt->second, objectFrame);
 }
 
 uint32_t Engine::spawnPlayerPlatform(const std::string& assetName,

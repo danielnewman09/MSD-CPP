@@ -26,12 +26,14 @@ namespace msd_sim
  */
 struct MinkowskiVertex
 {
-  Coordinate point;      // Minkowski difference point (A - B)
-  Coordinate witnessA;   // Support point on A that contributed
-  Coordinate witnessB;   // Support point on B that contributed
+  Coordinate point;     // Minkowski difference point (A - B)
+  Coordinate witnessA;  // Support point on A that contributed
+  Coordinate witnessB;  // Support point on B that contributed
 
   MinkowskiVertex() = default;
-  MinkowskiVertex(const Coordinate& p, const Coordinate& wA, const Coordinate& wB)
+  MinkowskiVertex(const Coordinate& p,
+                  const Coordinate& wA,
+                  const Coordinate& wB)
     : point{p}, witnessA{wA}, witnessB{wB}
   {
   }
@@ -130,15 +132,17 @@ public:
 
   // Contact extraction
   Coordinate computeContactPoint(const Facet& face) const;
-  Coordinate computeWitnessA(const Facet& face) const;
-  Coordinate computeWitnessB(const Facet& face) const;
+  // Contact manifold extraction (Ticket: 0029_contact_manifold_generation)
+  size_t extractContactManifold(size_t faceIndex,
+                                std::array<ContactPoint, 4>& contacts) const;
 
   const AssetPhysical& assetA_;
   const AssetPhysical& assetB_;
   double epsilon_;
 
-  std::vector<MinkowskiVertex> vertices_;  // Minkowski vertices with witness tracking
-  std::vector<Facet> faces_;               // Triangular faces
+  std::vector<MinkowskiVertex>
+    vertices_;                // Minkowski vertices with witness tracking
+  std::vector<Facet> faces_;  // Triangular faces
 };
 
 }  // namespace msd_sim

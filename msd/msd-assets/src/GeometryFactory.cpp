@@ -34,7 +34,7 @@ msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
   // Create VisualGeometry from raw coordinates
   // - Computes normals via computeVertexData()
   // - Stores result in cachedVertices_ as vector<Vertex>
-  VisualGeometry geometry{vertices, 0};
+  CollisionGeometry geometry{vertices, 0};
 
   // Serialize using existing populateMeshRecord()
   // - Correctly serializes vector<Vertex> to BLOB

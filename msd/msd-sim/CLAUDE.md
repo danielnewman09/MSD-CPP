@@ -263,10 +263,43 @@ ctest --preset debug
 | [`witness-points.puml`](../../docs/msd/msd-sim/Physics/witness-points.puml) | Witness point tracking for accurate torque calculation | `docs/msd/msd-sim/Physics/` |
 | [`force-application.puml`](../../docs/msd/msd-sim/Physics/force-application.puml) | Force application system with semi-implicit Euler integration | `docs/msd/msd-sim/Physics/` |
 | [`mirtich-inertia-tensor.puml`](../../docs/msd/msd-sim/Physics/mirtich-inertia-tensor.puml) | Mirtich algorithm for inertia tensor calculation | `docs/msd/msd-sim/Physics/` |
+| [`collision-response.puml`](../../docs/msd/msd-sim/Physics/collision-response.puml) | Collision response system with impulse-based physics | `docs/msd/msd-sim/Physics/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Collision Response System — 2026-01-24
+**Ticket**: [0027_collision_response_system](../../tickets/0027_collision_response_system.md)
+**Diagram**: [`collision-response.puml`](../../docs/msd/msd-sim/Physics/collision-response.puml)
+**Type**: Feature Enhancement
+
+Implemented impulse-based collision response for rigid body dynamics. When two AssetInertial objects collide (detected by CollisionHandler), the system computes collision impulses based on coefficients of restitution, applies both linear and angular impulses, and separates overlapping objects via position correction.
+
+**Key components**:
+- **CollisionResponse namespace** — Stateless utility functions for impulse calculation and position correction
+- **AssetInertial modification** — Added `coefficientOfRestitution_` property with validation ([0, 1] range)
+- **WorldModel integration** — Implemented full collision response in `updateCollisions()` method
+- **Impulse formulas** — Uses standard rigid body collision response: `j = -(1 + e) * v_rel · n / (1/m_A + 1/m_B + angular_terms)`
+
+**Architecture**:
+- `CollisionResponse::combineRestitution()` — Combines restitution coefficients using geometric mean `sqrt(e_A * e_B)`
+- `CollisionResponse::computeImpulseMagnitude()` — Computes scalar impulse including angular effects via lever arms
+- `CollisionResponse::applyPositionCorrection()` — Separates objects with slop tolerance (0.01m) to prevent jitter
+- `WorldModel::updateCollisions()` — O(n²) pairwise collision detection and response, called before physics integration
+- Impulses applied to both linear and angular velocities using witness points from EPA for accurate torque calculation
+
+**Performance**: Sequential collision resolution in single pass, sufficient for typical scenarios (< 5 simultaneous collisions per object). Broadphase optimization intentionally deferred.
+
+**Key files**:
+- `src/Physics/CollisionResponse.hpp`, `CollisionResponse.cpp` — Stateless collision response utilities
+- `src/Physics/RigidBody/AssetInertial.hpp`, `AssetInertial.cpp` — Added restitution property and accessors
+- `src/Environment/WorldModel.hpp`, `WorldModel.cpp` — Integrated collision response in update loop
+- `test/Physics/CollisionResponseTest.cpp` — 11 unit tests for impulse calculation and position correction
+- `test/Physics/AssetInertialTest.cpp` — 7 unit tests for restitution property
+- `test/Environment/WorldModelCollisionTest.cpp` — 7 integration tests for collision behavior
+
+---
 
 ### EPA Witness Points for Accurate Torque Calculation — 2026-01-24
 **Ticket**: [0028_epa_witness_points](../../tickets/0028_epa_witness_points.md)

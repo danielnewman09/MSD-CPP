@@ -101,11 +101,25 @@ public:
     }
 
     // Deserialize cached vertex data directly as type T
-    const size_t vertexCount = record.vertex_data.size() / sizeof(T);
-    const T* vertexBegin = reinterpret_cast<const T*>(record.vertex_data.data());
-    const T* vertexEnd = vertexBegin + vertexCount;
+    const size_t vertexCount =
+      record.vertex_data.size() / sizeof(Eigen::Vector3d);
+    const Eigen::Vector3d* vertexBegin =
+      reinterpret_cast<const Eigen::Vector3d*>(record.vertex_data.data());
+    const Eigen::Vector3d* vertexEnd = vertexBegin + vertexCount;
 
-    cachedVertices_ = std::vector<T>(vertexBegin, vertexEnd);
+    std::vector<Eigen::Vector3d> vertices =
+      std::vector<Eigen::Vector3d>(vertexBegin, vertexEnd);
+
+    if constexpr (std::is_same_v<T, Vertex>)
+    {
+      // VisualGeometry: compute normals and convert to Vertex format
+      cachedVertices_ = computeVertexData(vertices);
+    }
+    else
+    {
+      // CollisionGeometry: direct assignment of raw coordinates
+      cachedVertices_ = vertices;
+    }
   }
 
   /**

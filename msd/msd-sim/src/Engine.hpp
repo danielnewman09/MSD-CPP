@@ -26,6 +26,21 @@ public:
                                            const AngularCoordinate& orientation);
 
   /**
+   * @brief Spawn a static environment object from an asset
+   * @param assetName Name of asset in registry
+   * @param position World position
+   * @param orientation World orientation
+   * @return Reference to spawned environment object
+   *
+   * Environment objects are static (immovable) and participate in collision
+   * detection. Dynamic objects will bounce off them.
+   */
+  const AssetEnvironment& spawnEnvironmentObject(
+      const std::string& assetName,
+      const Coordinate& position,
+      const AngularCoordinate& orientation);
+
+  /**
    * @brief Spawn a player-controlled platform with visual object
    * @param assetName Name of visual asset
    * @param position Initial position
@@ -70,6 +85,9 @@ private:
   msd_assets::AssetRegistry assetRegistry_;
 
   std::unordered_map<uint32_t, ConvexHull> registryHullMap_;
+
+  // Floor cube hull (not from registry, created programmatically)
+  ConvexHull floorHull_;
 
   WorldModel worldModel_;
   std::optional<uint32_t> playerPlatformId_;

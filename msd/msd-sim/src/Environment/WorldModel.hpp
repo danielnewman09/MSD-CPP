@@ -4,6 +4,7 @@
 #include <chrono>
 #include <vector>
 #include "msd-sim/src/Environment/Platform.hpp"
+#include "msd-sim/src/Physics/CollisionHandler.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 
@@ -61,6 +62,21 @@ public:
   const AssetInertial& spawnObject(uint32_t assetId,
                                    ConvexHull& hull,
                                    const ReferenceFrame& origin);
+
+  /**
+   * @brief Spawn a new static environment object in the world
+   *
+   * Environment objects are static (immovable) and participate in collision
+   * detection but have no dynamics. Dynamic objects will bounce off them.
+   *
+   * @param assetId Asset type identifier
+   * @param hull Collision hull for the object
+   * @param origin Initial position and orientation
+   * @return Reference to the spawned environment object
+   */
+  const AssetEnvironment& spawnEnvironmentObject(uint32_t assetId,
+                                                 ConvexHull& hull,
+                                                 const ReferenceFrame& origin);
 
   /**
    * @brief Get all objects (const)
@@ -218,9 +234,13 @@ private:
   std::chrono::milliseconds time_{0};
 
   uint32_t inertialAssetIdCounter_{0};
+  uint32_t environmentAssetIdCounter_{0};
 
   // NEW: Gravity (constant after construction, ticket 0023a)
   Coordinate gravity_{0.0, 0.0, -9.81};
+
+  // NEW: Collision detection and response (ticket 0027)
+  CollisionHandler collisionHandler_{1e-6};
 };
 
 }  // namespace msd_sim

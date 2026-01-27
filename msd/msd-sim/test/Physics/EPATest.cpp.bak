@@ -297,12 +297,12 @@ TEST(EPATest, RotatedCubes_WorldSpaceNormal)
   EXPECT_GT(result.penetrationDepth, 0.0);
 
   // Contact points should be in world space (witness points on surfaces)
-  EXPECT_TRUE(std::isfinite(result.contacts[0].pointA.x()));
-  EXPECT_TRUE(std::isfinite(result.contacts[0].pointA.y()));
-  EXPECT_TRUE(std::isfinite(result.contacts[0].pointA.z()));
-  EXPECT_TRUE(std::isfinite(result.contacts[0].pointB.x()));
-  EXPECT_TRUE(std::isfinite(result.contacts[0].pointB.y()));
-  EXPECT_TRUE(std::isfinite(result.contacts[0].pointB.z()));
+  EXPECT_TRUE(std::isfinite(result.contactPointA.x()));
+  EXPECT_TRUE(std::isfinite(result.contactPointA.y()));
+  EXPECT_TRUE(std::isfinite(result.contactPointA.z()));
+  EXPECT_TRUE(std::isfinite(result.contactPointB.x()));
+  EXPECT_TRUE(std::isfinite(result.contactPointB.y()));
+  EXPECT_TRUE(std::isfinite(result.contactPointB.z()));
 }
 
 // ============================================================================
@@ -330,12 +330,12 @@ TEST(CollisionResultTest, ParameterizedConstruction_StoresValues)
   EXPECT_DOUBLE_EQ(result.normal.y(), 0.0);
   EXPECT_DOUBLE_EQ(result.normal.z(), 0.0);
   EXPECT_DOUBLE_EQ(result.penetrationDepth, 0.5);
-  EXPECT_DOUBLE_EQ(result.contacts[0].pointA.x(), 0.25);
-  EXPECT_DOUBLE_EQ(result.contacts[0].pointA.y(), 0.0);
-  EXPECT_DOUBLE_EQ(result.contacts[0].pointA.z(), 0.0);
-  EXPECT_DOUBLE_EQ(result.contacts[0].pointB.x(), -0.25);
-  EXPECT_DOUBLE_EQ(result.contacts[0].pointB.y(), 0.0);
-  EXPECT_DOUBLE_EQ(result.contacts[0].pointB.z(), 0.0);
+  EXPECT_DOUBLE_EQ(result.contactPointA.x(), 0.25);
+  EXPECT_DOUBLE_EQ(result.contactPointA.y(), 0.0);
+  EXPECT_DOUBLE_EQ(result.contactPointA.z(), 0.0);
+  EXPECT_DOUBLE_EQ(result.contactPointB.x(), -0.25);
+  EXPECT_DOUBLE_EQ(result.contactPointB.y(), 0.0);
+  EXPECT_DOUBLE_EQ(result.contactPointB.z(), 0.0);
 }
 
 // ============================================================================
@@ -431,16 +431,16 @@ TEST(EPATest, WitnessPoints_FaceContact)
 
   // Witness points should be in the contact region (between 0.4 and 0.5 in X)
   // They may not be exactly on the face due to barycentric interpolation
-  EXPECT_GT(result->contacts[0].pointA.x(), 0.0);  // On positive side of A
-  EXPECT_LT(result->contacts[0].pointA.x(), 0.6);  // Near A's +X face
-  EXPECT_GT(result->contacts[0].pointB.x(), 0.0);  // On positive side of B (in world space)
-  EXPECT_LT(result->contacts[0].pointB.x(), 0.5);  // Near B's -X face
+  EXPECT_GT(result->contactPointA.x(), 0.0);  // On positive side of A
+  EXPECT_LT(result->contactPointA.x(), 0.6);  // Near A's +X face
+  EXPECT_GT(result->contactPointB.x(), 0.0);  // On positive side of B (in world space)
+  EXPECT_LT(result->contactPointB.x(), 0.5);  // Near B's -X face
 
   // Y and Z should be near center of contact region
-  EXPECT_NEAR(std::abs(result->contacts[0].pointA.y()), 0.0, 0.5);
-  EXPECT_NEAR(std::abs(result->contacts[0].pointA.z()), 0.0, 0.5);
-  EXPECT_NEAR(std::abs(result->contacts[0].pointB.y()), 0.0, 0.5);
-  EXPECT_NEAR(std::abs(result->contacts[0].pointB.z()), 0.0, 0.5);
+  EXPECT_NEAR(std::abs(result->contactPointA.y()), 0.0, 0.5);
+  EXPECT_NEAR(std::abs(result->contactPointA.z()), 0.0, 0.5);
+  EXPECT_NEAR(std::abs(result->contactPointB.y()), 0.0, 0.5);
+  EXPECT_NEAR(std::abs(result->contactPointB.z()), 0.0, 0.5);
 }
 
 TEST(EPATest, WitnessPoints_EnableTorqueCalculation)
@@ -468,8 +468,8 @@ TEST(EPATest, WitnessPoints_EnableTorqueCalculation)
   Coordinate centerOfMassA{0.0, 0.0, 0.0};
   Coordinate centerOfMassB{0.9, 0.3, 0.0};
 
-  Coordinate leverArmA = result->contacts[0].pointA - centerOfMassA;
-  Coordinate leverArmB = result->contacts[0].pointB - centerOfMassB;
+  Coordinate leverArmA = result->contactPointA - centerOfMassA;
+  Coordinate leverArmB = result->contactPointB - centerOfMassB;
 
   // Lever arms should be finite and non-zero
   EXPECT_TRUE(std::isfinite(leverArmA.norm()));
@@ -525,8 +525,8 @@ TEST(EPATest, WitnessPoints_DifferentForDifferentCollisions)
   // Witness points should differ significantly between configurations
   // Configuration 1 has collision in X, Configuration 2 has collision in Y
   // At least one coordinate should differ by a meaningful amount
-  double xDiff = std::abs(result1->contacts[0].pointA.x() - result2->contacts[0].pointA.x());
-  double yDiff = std::abs(result1->contacts[0].pointA.y() - result2->contacts[0].pointA.y());
+  double xDiff = std::abs(result1->contactPointA.x() - result2->contactPointA.x());
+  double yDiff = std::abs(result1->contactPointA.y() - result2->contactPointA.y());
 
   EXPECT_TRUE(xDiff > 0.05 || yDiff > 0.05);  // At least 5cm difference
 }

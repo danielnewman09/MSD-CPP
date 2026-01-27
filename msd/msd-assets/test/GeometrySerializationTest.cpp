@@ -20,5 +20,18 @@ TEST(GeometrySerializationTest, VisualGeometry_Cube_PopulateMeshRecord)
   // Verify record fields
   EXPECT_EQ(vertex_count, 36);
   EXPECT_FALSE(vertex_data_empty);
-  EXPECT_EQ(vertex_data_size, 36 * sizeof(msd_assets::Vertex));
+  EXPECT_EQ(vertex_data_size, 36 * sizeof(Eigen::Vector3d));
+}
+
+TEST(GeometrySerializationTest, CreateCube)
+{
+  // Create CollisionMeshRecord directly from factory
+  auto collisionRecord = msd_assets::GeometryFactory::createCube(1.0);
+
+  msd_assets::CollisionGeometry collisionGeometry{collisionRecord, 1};
+
+  msd_assets::VisualGeometry visualGeometry{collisionRecord, 1};
+
+
+  ASSERT_TRUE(true);
 }

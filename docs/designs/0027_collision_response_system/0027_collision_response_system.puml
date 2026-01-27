@@ -1,0 +1,123 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+' === New Components ===
+
+package "CollisionResponse (new)" <<new>> {
+  class CollisionResponse <<new>> {
+    ' Utility namespace for collision response calculations
+    {static} + computeImpulseMagnitude(...)
+    {static} + applyPositionCorrection(...)
+    {static} + combineRestitution(...)
+  }
+
+  note right of CollisionResponse
+    Static utility namespace
+    No state, pure functions
+    All calculations in world space
+  end note
+}
+
+' === Modified Components ===
+
+class AssetInertial <<modified>> {
+  ' Existing members (not shown for clarity)
+  - mass_: double
+  - inertiaTensor_: Eigen::Matrix3d
+  - inverseInertiaTensor_: Eigen::Matrix3d
+  - dynamicState_: InertialState
+  ..
+  ' NEW: Coefficient of restitution
+  <<new>> - coefficientOfRestitution_: double
+  ..
+  ' Existing methods
+  + getMass(): double
+  + getInertiaTensor(): const Eigen::Matrix3d&
+  + getInverseInertiaTensor(): const Eigen::Matrix3d&
+  + getInertialState(): InertialState&
+  + applyForce(force: CoordinateRate)
+  + applyTorque(torque: CoordinateRate)
+  ..
+  ' NEW: Coefficient of restitution accessors
+  <<new>> + getCoefficientOfRestitution(): double
+  <<new>> + setCoefficientOfRestitution(e: double)
+}
+
+class WorldModel <<modified>> {
+  ' Existing members
+  - inertialAssets_: std::vector<AssetInertial>
+  - gravity_: Coordinate
+  - collisionHandler_: CollisionHandler
+  ..
+  ' Existing methods
+  + update(deltaTime: milliseconds)
+  + getInertialAssets(): const vector<AssetInertial>&
+  ..
+  ' MODIFIED: Implement collision response logic
+  <<modified>> - updateCollisions()
+  <<modified>> - updatePhysics(dt: double)
+}
+
+' === Existing Components (for context) ===
+
+class CollisionHandler {
+  + checkCollision(assetA, assetB): optional<CollisionResult>
+}
+
+struct CollisionResult {
+  + normal: Coordinate
+  + penetrationDepth: double
+  + contactPointA: Coordinate
+  + contactPointB: Coordinate
+}
+
+class InertialState {
+  + orientation: AngularCoordinate
+  + velocity: Coordinate
+  + angularVelocity: AngularRate
+}
+
+class ReferenceFrame {
+  + getOrigin(): Coordinate&
+  + setOrigin(origin: Coordinate)
+  + setRotation(angular: AngularCoordinate)
+  + getRotation(): const Matrix3d&
+}
+
+' === Relationships ===
+
+WorldModel --> CollisionHandler : uses
+WorldModel --> AssetInertial : manages
+WorldModel ..> CollisionResponse : uses (impulse calculation)
+
+CollisionHandler ..> CollisionResult : returns
+CollisionResponse ..> CollisionResult : consumes
+CollisionResponse ..> AssetInertial : modifies state
+
+AssetInertial --> InertialState : owns
+AssetInertial --> ReferenceFrame : inherits
+
+' === Workflow Annotations ===
+
+note bottom of WorldModel
+  updateCollisions() workflow:
+  1. Iterate all inertial asset pairs (O(n²))
+  2. Check collision via CollisionHandler
+  3. If collision:
+     a. Compute impulse magnitude (CollisionResponse)
+     b. Apply impulse to both objects (linear + angular)
+     c. Apply position correction (separate objects)
+end note
+
+note top of CollisionResponse
+  Key formulas:
+  - Combined restitution: e = sqrt(e_A * e_B)
+  - Relative velocity: v_rel = v_A - v_B + (ω_A × r_A) - (ω_B × r_B)
+  - Impulse magnitude: j = -(1 + e) * v_rel · n / (1/m_A + 1/m_B + ...)
+  - Angular impulse: Δω = I⁻¹ * (r × (j * n))
+end note
+
+@enduml

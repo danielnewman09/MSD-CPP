@@ -2,6 +2,7 @@
 #define MSD_SIM_PHYSICS_CONVEX_HULL_HPP
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -108,6 +109,28 @@ public:
    * @return Vector of triangular facets
    */
   const std::vector<Facet>& getFacets() const;
+
+  /**
+   * @brief Get the facet most aligned with a given direction.
+   * @param normal Direction to compare against
+   * @return Reference to the facet with greatest dot product
+   */
+  const Facet& getFacetAlignedWith(const CoordinateRate& normal) const;
+
+  /**
+   * @brief Get all facets aligned with a given direction within tolerance.
+   *
+   * Returns all facets whose alignment (dot product with normal) is within
+   * tolerance of the maximum alignment. Useful for contact manifold generation
+   * when multiple coplanar facets may contribute to the contact.
+   *
+   * @param normal Direction to compare against
+   * @param tolerance How close to max alignment to include (default: 1e-6)
+   * @return Vector of references to aligned facets
+   */
+  std::vector<std::reference_wrapper<const Facet>> getFacetsAlignedWith(
+    const CoordinateRate& normal,
+    double tolerance = 1e-9) const;
 
   /**
    * @brief Get the number of vertices in the hull.

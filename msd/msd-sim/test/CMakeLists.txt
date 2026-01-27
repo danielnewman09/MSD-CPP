@@ -4,6 +4,11 @@ enable_testing()
 find_package(GTest REQUIRED)
 add_executable(${MSD_SIM_TEST_NAME})
 
+# Top-level integration tests
+target_sources(${MSD_SIM_TEST_NAME} PRIVATE
+    EngineIntegrationTest.cpp
+)
+
 add_subdirectory(Environment)
 add_subdirectory(Physics)
 

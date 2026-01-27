@@ -61,6 +61,28 @@ public:
                 const ReferenceFrame& frame);
 
   /**
+   * @brief Extended constructor with coefficient of restitution.
+   *
+   * @param assetId Asset type identifier
+   * @param instanceId Unique instance identifier
+   * @param hull Reference to collision hull
+   * @param mass Mass in kilograms [kg]
+   * @param frame Initial reference frame (position and orientation)
+   * @param coefficientOfRestitution Elasticity [0, 1] (0=inelastic, 1=elastic)
+   *
+   * @throws std::invalid_argument if mass <= 0
+   * @throws std::invalid_argument if coefficientOfRestitution ∉ [0, 1]
+   *
+   * @ticket 0027_collision_response_system
+   */
+  AssetInertial(uint32_t assetId,
+                uint32_t instanceId,
+                ConvexHull& hull,
+                double mass,
+                const ReferenceFrame& frame,
+                double coefficientOfRestitution);
+
+  /**
    * @brief Get the dynamic state (mutable version).
    *
    * Use this to modify velocities and accelerations during physics
@@ -143,6 +165,62 @@ public:
    */
   const CoordinateRate& getAccumulatedTorque() const;
 
+  // ========== NEW: Coefficient of Restitution (ticket 0027) ==========
+
+  /**
+   * @brief Get the coefficient of restitution.
+   *
+   * Determines elasticity of collisions:
+   * - 0.0: Fully inelastic (objects stick together)
+   * - 0.5: Moderate elasticity (default)
+   * - 1.0: Fully elastic (perfect bounce)
+   *
+   * @return Coefficient of restitution [0, 1]
+   */
+  double getCoefficientOfRestitution() const;
+
+  /**
+   * @brief Set the coefficient of restitution.
+   *
+   * @param e Coefficient of restitution [0, 1]
+   * @throws std::invalid_argument if e < 0.0 or e > 1.0
+   *
+   * @ticket 0027_collision_response_system
+   */
+  void setCoefficientOfRestitution(double e);
+
+  // ========== NEW: Impulse Application API (ticket 0027) ==========
+
+  /**
+   * @brief Apply an instantaneous linear impulse at the center of mass.
+   *
+   * Unlike forces which are accumulated and integrated over time,
+   * impulses directly modify velocity: Δv = J / m
+   *
+   * This is used for collision response where velocity changes
+   * must be timestep-independent.
+   *
+   * @param impulse Impulse vector in world coordinates [N·s]
+   *
+   * @ticket 0027_collision_response_system
+   */
+  void applyImpulse(const Coordinate& impulse);
+
+  /**
+   * @brief Apply an instantaneous angular impulse.
+   *
+   * Unlike torques which are accumulated and integrated over time,
+   * angular impulses directly modify angular velocity: Δω = I⁻¹ * L
+   *
+   * This is used for collision response where angular velocity changes
+   * must be timestep-independent.
+   *
+   * @param angularImpulse Angular impulse vector in world coordinates [N·m·s]
+   *
+   * @ticket 0027_collision_response_system
+   */
+  void applyAngularImpulse(const AngularRate& angularImpulse);
+
 private:
   // Rigid body physics properties
   double mass_;                    // Mass in kg
@@ -156,6 +234,9 @@ private:
   // NEW: Force accumulation (ticket 0023a)
   CoordinateRate accumulatedForce_{0.0, 0.0, 0.0};
   CoordinateRate accumulatedTorque_{0.0, 0.0, 0.0};
+
+  // NEW: Coefficient of restitution (ticket 0027)
+  double coefficientOfRestitution_{0.5};  // Default: moderate elasticity
 };
 
 }  // namespace msd_sim

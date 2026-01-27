@@ -7,6 +7,7 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include "msd-sim/src/Environment/AngularCoordinate.hpp"
+#include "msd-sim/src/Environment/AngularRate.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
 
 namespace msd_sim
@@ -96,7 +97,20 @@ public:
    * @param globalVector Direction vector in global frame
    * @return Direction vector in local frame
    */
-  Coordinate globalToLocal(const CoordinateRate& globalVector) const;
+  CoordinateRate globalToLocal(const CoordinateRate& globalVector) const;
+
+  /**
+   * @brief Transform a direction vector from global frame to local frame
+   * (relative transformation)
+   *
+   * This applies only rotation, not translation. Use this for transforming
+   * direction vectors, velocities, or any vector that represents a direction
+   * rather than a position.
+   *
+   * @param globalVector Direction vector in global frame
+   * @return Direction vector in local frame
+   */
+  AngularRate globalToLocal(const AngularRate& globalVector) const;
 
   /**
    * @brief Transform a direction vector from local frame to global frame
@@ -109,7 +123,20 @@ public:
    * @param localVector Direction vector in local frame
    * @return Direction vector in global frame
    */
-  Coordinate localToGlobal(const CoordinateRate& localVector) const;
+  CoordinateRate localToGlobal(const CoordinateRate& localVector) const;
+
+  /**
+   * @brief Transform a direction vector from local frame to global frame
+   * (relative transformation)
+   *
+   * This applies only rotation, not translation. Use this for transforming
+   * direction vectors, velocities, or any vector that represents a direction
+   * rather than a position.
+   *
+   * @param localVector Direction vector in local frame
+   * @return Direction vector in global frame
+   */
+  AngularRate localToGlobal(const AngularRate& localVector) const;
 
   /**
    * @brief Transform a point from global frame to local frame (absolute

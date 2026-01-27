@@ -525,8 +525,8 @@ TEST(EPATest, WitnessPoints_DifferentForDifferentCollisions)
   // Witness points should differ significantly between configurations
   // Configuration 1 has collision in X, Configuration 2 has collision in Y
   // At least one coordinate should differ by a meaningful amount
-  double xDiff = std::abs(result1->contacts[0].pointA.x() - result2->contacts[0].pointA.x());
-  double yDiff = std::abs(result1->contacts[0].pointA.y() - result2->contacts[0].pointA.y());
+  double xDiff = std::abs(result1->contactPointA.x() - result2->contactPointA.x());
+  double yDiff = std::abs(result1->contactPointA.y() - result2->contactPointA.y());
 
   EXPECT_TRUE(xDiff > 0.05 || yDiff > 0.05);  // At least 5cm difference
 }

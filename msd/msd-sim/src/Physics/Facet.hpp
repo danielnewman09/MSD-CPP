@@ -17,9 +17,19 @@ namespace msd_sim
  */
 struct Facet
 {
-  std::array<size_t, 3> vertexIndices;  // Indices of triangle vertices
-  Coordinate normal;                    // Outward-facing unit normal
-  double offset;                        // Distance from origin (for half-space)
+  static inline constexpr size_t facetSize = 3;
+
+  static size_t vertexSize()
+  {
+    return facetSize;
+  }
+
+  std::array<size_t,
+             facetSize>
+    vertexIndices;    // Indices of
+                      // triangle vertices
+  Coordinate normal;  // Outward-facing unit normal
+  double offset;      // Distance from origin (for half-space)
 
   Facet() = default;
   Facet(size_t v0, size_t v1, size_t v2, const Coordinate& n, double d)

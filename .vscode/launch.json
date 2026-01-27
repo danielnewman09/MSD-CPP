@@ -15,7 +15,19 @@
       "stopAtEntry": false,
       "environment": [],
       "externalConsole": false,
-      "MIMode": "lldb"
+      "MIMode": "lldb",
+      "setupCommands": [
+        {
+          "description": "Load Eigen type formatters",
+          "text": "command source ${workspaceFolder}/.lldbinit",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Disable auto-loading of system formatters",
+          "text": "settings set target.load-script-from-symbol-file false",
+          "ignoreFailures": true
+        }
+      ]
     },
     {
       "name": "Debug msd_exe (No Build)",
@@ -24,6 +36,33 @@
       "program": "${workspaceFolder}/build/Debug/debug/msd_exe",
       "args": [],
       "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "lldb",
+      "setupCommands": [
+        {
+          "description": "Load Eigen type formatters",
+          "text": "command source ${workspaceFolder}/.lldbinit",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Disable auto-loading of system formatters",
+          "text": "settings set target.load-script-from-symbol-file false",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
+      "name": "Debug msd-asset-gen",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Debug/debug/generate_assets",
+      "args": [
+        "test_assets.db"
+      ],
+      "preLaunchTask": "CMake Build",
+      "cwd": "${workspaceFolder}/build/Debug/debug/",
       "stopAtEntry": false,
       "environment": [],
       "externalConsole": false,
@@ -54,6 +93,31 @@
       "environment": [],
       "externalConsole": false,
       "MIMode": "lldb"
+    },
+    {
+      "name": "Debug msd_exe (CodeLLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Debug/debug/msd_exe",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "CMake Build",
+      "initCommands": [
+        "settings set target.skip-prologue false"
+      ],
+      "sourceLanguages": ["cpp"]
+    },
+    {
+      "name": "Debug msd_exe (CodeLLDB, No Build)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Debug/debug/msd_exe",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "initCommands": [
+        "settings set target.skip-prologue false"
+      ],
+      "sourceLanguages": ["cpp"]
     }
   ]
 }

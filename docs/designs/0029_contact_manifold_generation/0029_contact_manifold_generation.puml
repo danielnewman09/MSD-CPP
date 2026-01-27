@@ -1,0 +1,184 @@
+@startuml 0029_contact_manifold_generation
+
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+' === Contact Manifold Generation System ===
+' Extends collision response to use multiple contact points
+' Ticket: 0029_contact_manifold_generation
+
+package "Physics Module" {
+
+  ' === Modified Components ===
+
+  struct CollisionResult <<modified>> {
+    + normal: Coordinate
+    + penetrationDepth: double
+    ..
+    ' Contact manifold storage (replaces contactPointA/B)
+    + contacts: std::array<ContactPoint, 4>
+    + contactCount: size_t
+  }
+
+  class EPA <<modified>> {
+    ' Existing members
+    - assetA_: const AssetPhysical&
+    - assetB_: const AssetPhysical&
+    - epsilon_: double
+    - vertices_: std::vector<MinkowskiVertex>
+    - faces_: std::vector<Facet>
+    ..
+    ' Existing methods
+    + computeContactInfo(simplex, maxIterations): CollisionResult
+    - findClosestFace(): size_t
+    - computeWitnessA(face): Coordinate
+    - computeWitnessB(face): Coordinate
+    ..
+    ' NEW: Manifold extraction
+    - extractContactManifold(closestFace): void
+    - deduplicateContacts(contacts, count, epsilon): size_t
+  }
+
+  class "CollisionResponse" <<modified>> <<namespace>> {
+    ' Existing functions
+    {static} + combineRestitution(eA, eB): double
+    {static} + computeImpulseMagnitude(...): double
+    ..
+    ' Manifold-aware functions (replace legacy single-contact)
+    {static} + applyImpulseManifold(assetA, assetB, result, combinedE): void
+    {static} + applyPositionCorrectionManifold(assetA, assetB, result): void
+  }
+
+  class WorldModel <<modified>> {
+    ' Existing members
+    - inertialAssets_: std::vector<AssetInertial>
+    - gravity_: Coordinate
+    - collisionHandler_: CollisionHandler
+    ..
+    ' Existing methods
+    + update(deltaTime): void
+    ..
+    ' MODIFIED: Use manifold-aware functions
+    - updateCollisions(): void
+  }
+
+  ' === New Components ===
+
+  struct ContactPoint <<new>> {
+    + pointA: Coordinate
+    + pointB: Coordinate
+    ..
+    + ContactPoint()
+    + ContactPoint(pointA, pointB)
+  }
+
+  ' === Existing Components (for context) ===
+
+  struct MinkowskiVertex {
+    + point: Coordinate
+    + witnessA: Coordinate
+    + witnessB: Coordinate
+  }
+
+  struct Facet {
+    + vertexIndices: std::array<size_t, 3>
+    + normal: Coordinate
+    + offset: double
+  }
+
+  class AssetInertial {
+    + getMass(): double
+    + getInverseInertiaTensor(): const Matrix3d&
+    + getInertialState(): InertialState&
+    + getCoefficientOfRestitution(): double
+  }
+
+  class CollisionHandler {
+    + checkCollision(assetA, assetB): optional<CollisionResult>
+  }
+
+}
+
+' === Relationships ===
+
+CollisionResult *-- ContactPoint : contacts[4]
+
+EPA ..> CollisionResult : returns with manifold
+EPA ..> MinkowskiVertex : uses witness points
+EPA ..> Facet : extracts from closest face
+
+CollisionResponse ..> CollisionResult : consumes manifold
+CollisionResponse ..> AssetInertial : modifies state
+
+WorldModel --> CollisionHandler : uses
+WorldModel ..> CollisionResponse : calls manifold functions
+
+CollisionHandler ..> CollisionResult : returns
+
+' === Annotations ===
+
+note right of ContactPoint
+  **New struct for manifold storage**
+
+  Stores contact points on both surfaces
+  for a single contact in the manifold.
+
+  48 bytes per contact
+  (2 × Coordinate @ 24 bytes each)
+end note
+
+note bottom of CollisionResult
+  **Clean API: Single contact → manifold**
+
+  Old: contactPointA, contactPointB (removed)
+  New: contacts[] array (up to 4 contacts)
+
+  Access first contact:
+  - contacts[0].pointA
+  - contacts[0].pointB
+
+  Total size: ~232 bytes
+  (4 contacts × 48 bytes + metadata)
+end note
+
+note left of EPA
+  **Manifold extraction algorithm**
+
+  1. Find closest face to origin
+  2. Extract 3 witness points from face vertices
+  3. Deduplicate within epsilon tolerance
+  4. Store in CollisionResult.contacts[]
+
+  Fallback: If all points collapse to single
+  point, store centroid as single contact
+end note
+
+note top of CollisionResponse
+  **Manifold-aware impulse distribution**
+
+  applyImpulseManifold():
+  1. Divide total impulse equally: j_per_contact = j_total / contactCount
+  2. For each contact point:
+     a. Apply linear impulse (same for all)
+     b. Compute lever arm: r = contactPoint - centerOfMass
+     c. Apply angular impulse: Δω = I⁻¹ * (r × J)
+
+  applyPositionCorrectionManifold():
+  - Use average of all contact points for correction direction
+  - Same correction magnitude as single-point version
+end note
+
+note bottom of WorldModel
+  **Integration workflow**
+
+  updateCollisions():
+  1. For each asset pair:
+     a. Check collision (CollisionHandler)
+     b. Combine restitution
+     c. Apply impulse manifold (new)
+     d. Apply position correction manifold (new)
+end note
+
+@enduml

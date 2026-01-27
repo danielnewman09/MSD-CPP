@@ -40,6 +40,7 @@ GJK (Collision detection algorithm)
 | CollisionResult | `CollisionResult.hpp` | Contact information struct with witness points | [`witness-points.puml`](../../../../../docs/msd/msd-sim/Physics/witness-points.puml) |
 | SupportFunction | `SupportFunction.hpp` | Support function utilities with witness tracking | [`witness-points.puml`](../../../../../docs/msd/msd-sim/Physics/witness-points.puml) |
 | MinkowskiVertex | `EPA.hpp` | Minkowski vertex with witness point tracking | [`witness-points.puml`](../../../../../docs/msd/msd-sim/Physics/witness-points.puml) |
+| CollisionResponse | `CollisionResponse.hpp` | Impulse calculation and position correction utilities | [`collision-response.puml`](../../../../../docs/msd/msd-sim/Physics/collision-response.puml) |
 
 ---
 
@@ -811,6 +812,130 @@ Coordinate witnessA = (vertices_[face.v0].witnessA +
 
 #### Design Rationale
 This struct replaced `std::vector<Coordinate>` in EPA to track witness points alongside Minkowski vertices. The barycentric centroid of face vertices' witness points yields the physical contact location on each object's surface, enabling accurate torque calculation.
+
+---
+
+### CollisionResponse
+
+**Location**: `CollisionResponse.hpp`, `CollisionResponse.cpp`
+**Diagram**: [`collision-response.puml`](../../../../../docs/msd/msd-sim/Physics/collision-response.puml)
+**Type**: Utility namespace
+**Introduced**: [Ticket: 0027_collision_response_system](../../../../../tickets/0027_collision_response_system.md)
+
+#### Purpose
+Stateless utility namespace providing collision impulse calculation and position correction for rigid body dynamics. Enables realistic collision response with configurable elasticity using impulse-based physics formulas.
+
+#### Key Interfaces
+```cpp
+namespace CollisionResponse {
+  /**
+   * Combine two coefficients of restitution using geometric mean.
+   * Formula: e_combined = sqrt(e_A * e_B)
+   *
+   * This ensures:
+   * - If either object is fully inelastic (e=0), collision is inelastic
+   * - If both are fully elastic (e=1), collision is fully elastic
+   * - Symmetric: e(A,B) = e(B,A)
+   */
+  double combineRestitution(double eA, double eB);
+
+  /**
+   * Compute scalar impulse magnitude for collision resolution.
+   *
+   * Uses the impulse-based collision response formula:
+   *   j = -(1 + e) * (v_rel · n) / denominator
+   *
+   * Where:
+   *   v_rel = relative velocity at contact point
+   *   n = contact normal (A → B)
+   *   e = combined coefficient of restitution
+   *   denominator = (1/m_A + 1/m_B) + angular terms
+   *
+   * Angular terms account for rotational effects:
+   *   denominator += (I_A^-1 * (r_A × n)) × r_A · n
+   *                + (I_B^-1 * (r_B × n)) × r_B · n
+   */
+  double computeImpulseMagnitude(
+      const AssetInertial& assetA,
+      const AssetInertial& assetB,
+      const CollisionResult& result,
+      double combinedRestitution);
+
+  /**
+   * Apply position correction to separate overlapping objects.
+   *
+   * Uses linear projection with slop tolerance to prevent jitter.
+   * Only corrects when penetration exceeds slop threshold.
+   *
+   * Correction formula:
+   *   correction = max(penetrationDepth - kSlop, 0.0) * kCorrectionFactor
+   *   separationVector = normal * correction
+   *
+   * Each object is moved by weighted fraction based on inverse mass.
+   */
+  void applyPositionCorrection(
+      AssetInertial& assetA,
+      AssetInertial& assetB,
+      const CollisionResult& result);
+
+  // Constants
+  constexpr double kSlop = 0.01;              // 1cm slop tolerance [m]
+  constexpr double kCorrectionFactor = 0.8;   // Position correction factor [0, 1]
+}
+```
+
+#### Usage Example
+```cpp
+// Within WorldModel::updateCollisions()
+auto result = collisionHandler_.checkCollision(assetA, assetB);
+if (result) {
+  // Combine restitution coefficients
+  double combinedE = CollisionResponse::combineRestitution(
+      assetA.getCoefficientOfRestitution(),
+      assetB.getCoefficientOfRestitution());
+
+  // Compute impulse magnitude
+  double j = CollisionResponse::computeImpulseMagnitude(
+      assetA, assetB, *result, combinedE);
+
+  // Apply linear impulse
+  CoordinateRate impulse = result->normal * j;
+  assetA.getInertialState().velocity += impulse / assetA.getMass();
+  assetB.getInertialState().velocity -= impulse / assetB.getMass();
+
+  // Apply angular impulse
+  Coordinate leverArmA = result->contactPointA - assetA.getInertialState().position;
+  AngularRate angularImpulseA = assetA.getInverseInertiaTensor() *
+                                 leverArmA.cross(impulse);
+  assetA.getInertialState().angularVelocity += angularImpulseA;
+
+  // Apply position correction
+  CollisionResponse::applyPositionCorrection(assetA, assetB, *result);
+}
+```
+
+#### Thread Safety
+**Stateless functions** — Safe to call from multiple threads with different object instances.
+
+#### Error Handling
+No exceptions thrown. Assumes valid inputs from CollisionHandler (non-zero mass, valid collision result).
+
+#### Memory Management
+- Stateless namespace functions
+- No heap allocations during collision response
+- All calculations use stack-based temporaries
+
+#### Design Rationale
+- **Namespace over class**: No state needed, pure functions are sufficient
+- **Separate impulse/position correction**: Allows independent testing and future customization
+- **Geometric mean**: Symmetric, intuitive behavior, standard in physics engines
+- **Slop tolerance**: Prevents objects from vibrating at rest due to floating-point jitter
+- **Hardcoded constants**: Initial implementation simplicity; can be made configurable in future ticket if needed
+
+#### Integration Points
+- **CollisionHandler**: Provides `CollisionResult` with contact information
+- **AssetInertial**: Reads mass/inertia/state, modifies velocities and position
+- **WorldModel**: Orchestrates collision detection and response in `updateCollisions()`
 
 ---
 

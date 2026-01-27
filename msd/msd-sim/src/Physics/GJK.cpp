@@ -37,26 +37,43 @@ bool GJK::intersects(int maxIterations)
   auto bboxA_local = hullA.getBoundingBox();
   auto bboxB_local = hullB.getBoundingBox();
 
-  // Transform bounding box corners to world space
-  Coordinate bboxA_min_world = frameA.localToGlobal(bboxA_local.min);
-  Coordinate bboxA_max_world = frameA.localToGlobal(bboxA_local.max);
-  Coordinate bboxB_min_world = frameB.localToGlobal(bboxB_local.min);
-  Coordinate bboxB_max_world = frameB.localToGlobal(bboxB_local.max);
-
-  // Recompute axis-aligned bounding box in world space
-  // (rotation may change which corners are min/max)
-  auto recomputeAABB = [](const Coordinate& c1, const Coordinate& c2)
+  // Helper: compute world-space AABB by transforming all 8 local corners
+  // This is necessary because rotation changes which corners are min/max
+  auto computeWorldAABB =
+      [](const ConvexHull::BoundingBox& localBbox, const ReferenceFrame& frame)
   {
-    return std::make_pair(Coordinate{std::min(c1.x(), c2.x()),
-                                     std::min(c1.y(), c2.y()),
-                                     std::min(c1.z(), c2.z())},
-                          Coordinate{std::max(c1.x(), c2.x()),
-                                     std::max(c1.y(), c2.y()),
-                                     std::max(c1.z(), c2.z())});
+    // Build 3x8 matrix with all 8 corners of the local AABB
+    Eigen::Matrix3Xd corners(3, 8);
+    const double minX = localBbox.min.x(), minY = localBbox.min.y(),
+                 minZ = localBbox.min.z();
+    const double maxX = localBbox.max.x(), maxY = localBbox.max.y(),
+                 maxZ = localBbox.max.z();
+
+    corners.col(0) << minX, minY, minZ;
+    corners.col(1) << maxX, minY, minZ;
+    corners.col(2) << minX, maxY, minZ;
+    corners.col(3) << maxX, maxY, minZ;
+    corners.col(4) << minX, minY, maxZ;
+    corners.col(5) << maxX, minY, maxZ;
+    corners.col(6) << minX, maxY, maxZ;
+    corners.col(7) << maxX, maxY, maxZ;
+
+    // Batch transform all 8 corners to world space
+    frame.localToGlobalBatch(corners);
+
+    // Find min/max across all transformed corners
+    Coordinate worldMin{corners.row(0).minCoeff(),
+                        corners.row(1).minCoeff(),
+                        corners.row(2).minCoeff()};
+    Coordinate worldMax{corners.row(0).maxCoeff(),
+                        corners.row(1).maxCoeff(),
+                        corners.row(2).maxCoeff()};
+
+    return std::make_pair(worldMin, worldMax);
   };
 
-  auto [bboxA_min, bboxA_max] = recomputeAABB(bboxA_min_world, bboxA_max_world);
-  auto [bboxB_min, bboxB_max] = recomputeAABB(bboxB_min_world, bboxB_max_world);
+  auto [bboxA_min, bboxA_max] = computeWorldAABB(bboxA_local, frameA);
+  auto [bboxB_min, bboxB_max] = computeWorldAABB(bboxB_local, frameB);
 
   if (bboxA_max.x() < bboxB_min.x() || bboxA_min.x() > bboxB_max.x() ||
       bboxA_max.y() < bboxB_min.y() || bboxA_min.y() > bboxB_max.y() ||

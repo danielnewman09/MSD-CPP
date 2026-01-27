@@ -14,6 +14,13 @@ set_target_properties(generate_assets PROPERTIES
     CXX_STANDARD_REQUIRED ON
 )
 
+# Reduce debug symbol size for boost::describe templates
+# -gsimple-template-names: Clang flag to simplify template names in debug info
+# This dramatically reduces memory usage when debugging code with heavy template use
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(generate_assets PRIVATE -gsimple-template-names)
+endif()
+
 # Add include directories
 target_include_directories(generate_assets
     PRIVATE

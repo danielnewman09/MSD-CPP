@@ -39,8 +39,10 @@ SDLApplication::SDLApplication(const std::string& dbPath)
   SDL_Log("SDLApplication: Creating player platform...");
   // Create player platform with visual object
   // The camera will reference the visual object's ReferenceFrame
-  playerPlatformId_ = engine_.spawnPlayerPlatform(
-    "cube", msd_sim::Coordinate{0., 0., 5.}, msd_sim::AngularCoordinate{});
+  playerPlatformId_ =
+    engine_.spawnPlayerPlatform("cube",
+                                msd_sim::Coordinate{0., -15., -5.},
+                                msd_sim::AngularCoordinate{0, M_PI / 2, 0});
   SDL_Log("SDLApplication: Player platform created with ID: %u",
           *playerPlatformId_);
 
@@ -102,12 +104,14 @@ int SDLApplication::runApp()
   // Register assets with GPU manager before rendering
   registerAssets();
 
+  std::chrono::milliseconds currentTime{0};
+  std::chrono::milliseconds frameDelta{10};
+
   // Native: blocking main loop
   while (status_ == Status::Running)
   {
     // Calculate frame delta time
-    auto currentTime = std::chrono::milliseconds{SDL_GetTicks()};
-    frameDeltaTime_ = currentTime - lastFrameTime_;
+    currentTime += frameDelta;
     lastFrameTime_ = currentTime;
 
     handleEvents();
@@ -200,13 +204,17 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
   static std::uniform_real_distribution<float> colorDist{0.0f, 1.0f};
 
   // Create random transform
-  msd_sim::Coordinate randomPos{posDist(gen), posDist(gen), posDist(gen)};
+  // msd_sim::Coordinate randomPos{posDist(gen), posDist(gen), posDist(gen)};
 
-  msd_sim::AngularCoordinate randomOrientation{
-    angleDist(gen),  // pitch (radians)
-    angleDist(gen),  // roll (radians)
-    angleDist(gen)   // yaw (radians)
-  };
+  msd_sim::Coordinate randomPos{0., 0., 0.};
+
+  // msd_sim::AngularCoordinate randomOrientation{
+  //   angleDist(gen),  // pitch (radians)
+  //   angleDist(gen),  // roll (radians)
+  //   angleDist(gen)   // yaw (radians)
+  // };
+
+  msd_sim::AngularCoordinate randomOrientation{0.1, 0., 0.};
 
   // Random color
   float r = colorDist(gen);

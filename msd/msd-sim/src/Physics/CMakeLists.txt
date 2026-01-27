@@ -6,6 +6,7 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     EPA.cpp
     CollisionHandler.cpp
     SupportFunction.cpp
+    CollisionResponse.cpp
 )
 
 set(
@@ -16,5 +17,6 @@ set(
         ${CMAKE_CURRENT_SOURCE_DIR}/CollisionHandler.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/CollisionResult.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/SupportFunction.hpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/CollisionResponse.hpp
     PARENT_SCOPE
 )

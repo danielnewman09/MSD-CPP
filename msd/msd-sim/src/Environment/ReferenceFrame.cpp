@@ -65,19 +65,27 @@ void ReferenceFrame::localToGlobalBatch(Eigen::Matrix3Xd& localCoords) const
   localCoords.colwise() += origin_;
 }
 
-Coordinate ReferenceFrame::globalToLocal(
+CoordinateRate ReferenceFrame::globalToLocal(
   const CoordinateRate& globalVector) const
 {
   // Apply only rotation (transpose for inverse), no translation
   return rotation_.transpose() * globalVector;
 }
 
-Coordinate ReferenceFrame::localToGlobal(
+CoordinateRate ReferenceFrame::localToGlobal(
   const CoordinateRate& localVector) const
 {
   // Apply only rotation, no translation
   return rotation_ * localVector;
 }
+
+
+AngularRate ReferenceFrame::localToGlobal(const AngularRate& localVector) const
+{
+  // Apply only rotation, no translation
+  return rotation_ * localVector;
+}
+
 
 Coordinate ReferenceFrame::globalToLocal(const Coordinate& globalPoint) const
 {

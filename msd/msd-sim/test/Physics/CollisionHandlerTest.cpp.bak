@@ -111,12 +111,12 @@ TEST(CollisionHandlerTest, CollisionResult_ContainsValidData)
   EXPECT_TRUE(std::isfinite(result->penetrationDepth));
 
   // Contact points should be finite (witness points on surfaces)
-  EXPECT_TRUE(std::isfinite(result->contacts[0].pointA.x()));
-  EXPECT_TRUE(std::isfinite(result->contacts[0].pointA.y()));
-  EXPECT_TRUE(std::isfinite(result->contacts[0].pointA.z()));
-  EXPECT_TRUE(std::isfinite(result->contacts[0].pointB.x()));
-  EXPECT_TRUE(std::isfinite(result->contacts[0].pointB.y()));
-  EXPECT_TRUE(std::isfinite(result->contacts[0].pointB.z()));
+  EXPECT_TRUE(std::isfinite(result->contactPointA.x()));
+  EXPECT_TRUE(std::isfinite(result->contactPointA.y()));
+  EXPECT_TRUE(std::isfinite(result->contactPointA.z()));
+  EXPECT_TRUE(std::isfinite(result->contactPointB.x()));
+  EXPECT_TRUE(std::isfinite(result->contactPointB.y()));
+  EXPECT_TRUE(std::isfinite(result->contactPointB.z()));
 }
 
 // ============================================================================
