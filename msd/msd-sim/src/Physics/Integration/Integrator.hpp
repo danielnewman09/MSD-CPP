@@ -1,16 +1,20 @@
 // Ticket: 0030_lagrangian_quaternion_physics
 // Design: docs/designs/0030_lagrangian_quaternion_physics/design.md
+// Modified: 0031_generalized_lagrange_constraints (constraint vector)
 
 #ifndef MSD_SIM_PHYSICS_INTEGRATOR_HPP
 #define MSD_SIM_PHYSICS_INTEGRATOR_HPP
 
 #include <Eigen/Dense>
+#include <vector>
 #include "msd-sim/src/Environment/Coordinate.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
-#include "msd-sim/src/Physics/Constraints/QuaternionConstraint.hpp"
 
 namespace msd_sim
 {
+
+// Forward declaration
+class Constraint;
 
 /**
  * @brief Abstract interface for numerical integration of rigid body dynamics
@@ -20,10 +24,15 @@ namespace msd_sim
  * - Isolated testing of integration math
  * - WorldModel as pure orchestrator
  *
+ * Ticket 0031 breaking change: Replaced QuaternionConstraint& with
+ * std::vector<Constraint*>& to support arbitrary constraint combinations.
+ *
  * Thread safety: Implementations should be stateless and thread-safe
  *
  * @see docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml
+ * @see docs/designs/0031_generalized_lagrange_constraints/0031_generalized_lagrange_constraints.puml
  * @ticket 0030_lagrangian_quaternion_physics
+ * @ticket 0031_generalized_lagrange_constraints
  */
 class Integrator
 {
@@ -37,15 +46,18 @@ public:
    * @param torque Net torque in world frame [N·m]
    * @param mass Object mass [kg]
    * @param inverseInertia Inverse inertia tensor in body frame [1/(kg·m²)]
-   * @param constraint Quaternion constraint for normalization
+   * @param constraints Vector of constraint pointers (non-owning)
    * @param dt Timestep [s]
+   *
+   * Ticket 0031 breaking change: Parameter changed from single QuaternionConstraint&
+   * to std::vector<Constraint*>& to support multiple constraints per object.
    */
   virtual void step(InertialState& state,
                     const Coordinate& force,
                     const Coordinate& torque,
                     double mass,
                     const Eigen::Matrix3d& inverseInertia,
-                    QuaternionConstraint& constraint,
+                    const std::vector<Constraint*>& constraints,
                     double dt) = 0;
 
 protected:

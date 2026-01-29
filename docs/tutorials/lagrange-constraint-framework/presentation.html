@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lagrange Multiplier Constraint Framework</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/theme/black.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/plugin/highlight/monokai.css">
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 { text-transform: none; }
+    .reveal pre { font-size: 0.55em; }
+    .reveal .small { font-size: 0.7em; }
+    .reveal .highlight { color: #42affa; }
+    .reveal .warning { color: #ff6b6b; }
+    .reveal .success { color: #51cf66; }
+    .reveal table { font-size: 0.7em; margin: auto; }
+    .reveal th, .reveal td { padding: 0.3em 0.6em; }
+    .two-column { display: flex; gap: 2em; }
+    .two-column > div { flex: 1; }
+    code { background: #333; padding: 0.1em 0.3em; border-radius: 3px; }
+    .reveal .MathJax { font-size: 0.9em; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- Slide 1: Title -->
+<section>
+  <h1>Lagrange Multiplier<br>Constraint Framework</h1>
+  <h3>Physically Correct Constraint Enforcement</h3>
+  <p class="small">Ticket: 0031_generalized_lagrange_constraints</p>
+  <p class="small">Learning Objectives:</p>
+  <ul class="small">
+    <li>Understand Lagrange multiplier formulation for constraints</li>
+    <li>Implement Baumgarte stabilization for numerical drift</li>
+    <li>Build an extensible constraint solver</li>
+  </ul>
+</section>
+
+<!-- Slide 2: The Problem -->
+<section>
+  <h2>The Problem</h2>
+  <p>Rigid body physics needs to enforce relationships:</p>
+  <ul>
+    <li class="fragment"><strong>Quaternion normalization</strong>: |Q| = 1</li>
+    <li class="fragment"><strong>Fixed distance</strong>: Object tethered at radius d</li>
+    <li class="fragment"><strong>Joints</strong>: Two objects connected at a pivot</li>
+  </ul>
+  <p class="fragment"><span class="warning">Naive rescaling violates Newton's laws!</span></p>
+  <p class="fragment"><span class="success">Lagrange multipliers compute exact constraint forces.</span></p>
+</section>
+
+<!-- Slide 3: Constraint Formulation -->
+<section>
+  <h2>Constraint Formulation</h2>
+  <p>A <span class="highlight">holonomic constraint</span> is expressed as:</p>
+  <p>\[ C(q, t) = 0 \]</p>
+  <div class="fragment">
+    <p>For a rigid body with position X and quaternion Q:</p>
+    <p>\[ q = [X_x, X_y, X_z, Q_w, Q_x, Q_y, Q_z]^T \in \mathbb{R}^7 \]</p>
+  </div>
+  <p class="fragment small">The constraint function C(q) measures how far we are from the constraint surface.</p>
+</section>
+
+<!-- Slide 4: Example Constraints -->
+<section>
+  <h2>Example Constraints</h2>
+  <div class="two-column">
+    <div>
+      <h4>Unit Quaternion</h4>
+      <p>\[ C(Q) = |Q|^2 - 1 = 0 \]</p>
+      <p class="small">Ensures valid rotation representation</p>
+    </div>
+    <div>
+      <h4>Distance from Origin</h4>
+      <p>\[ C(X) = |X|^2 - d^2 = 0 \]</p>
+      <p class="small">Keeps object on sphere of radius d</p>
+    </div>
+  </div>
+</section>
+
+<!-- Slide 5: The Jacobian -->
+<section>
+  <h2>The Constraint Jacobian</h2>
+  <p>The <span class="highlight">Jacobian</span> captures how C changes with q:</p>
+  <p>\[ J = \frac{\partial C}{\partial q} \]</p>
+  <div class="fragment">
+    <p><strong>Unit Quaternion Jacobian:</strong></p>
+    <p>\[ J = [0, 0, 0, 2Q_w, 2Q_x, 2Q_y, 2Q_z] \]</p>
+  </div>
+  <div class="fragment">
+    <p><strong>Distance Jacobian:</strong></p>
+    <p>\[ J = [2X_x, 2X_y, 2X_z, 0, 0, 0, 0] \]</p>
+  </div>
+</section>
+
+<!-- Slide 6: Lagrange Multiplier Formulation -->
+<section>
+  <h2>Lagrange Multiplier Formulation</h2>
+  <p>Find constraint force \( F_c = J^T \lambda \) that satisfies:</p>
+  <p>\[ J M^{-1} J^T \lambda = b \]</p>
+  <div class="fragment">
+    <p>Where:</p>
+    <ul class="small">
+      <li>\( M^{-1} \) = Inverse mass matrix (block diagonal)</li>
+      <li>\( b \) = RHS with external forces and stabilization</li>
+      <li>\( \lambda \) = Lagrange multipliers (force magnitudes)</li>
+    </ul>
+  </div>
+  <p class="fragment small">This is a linear system: solve with Cholesky (LLT) decomposition!</p>
+</section>
+
+<!-- Slide 7: Why Not Just Rescale? -->
+<section>
+  <h2>Why Not Just Rescale?</h2>
+  <p>Naive quaternion normalization:</p>
+  <pre><code class="cpp">Q = Q / |Q|;  // DON'T DO THIS!</code></pre>
+  <p class="fragment">Problems:</p>
+  <ul>
+    <li class="fragment"><span class="warning">Violates Newton's laws</span> — no corresponding force</li>
+    <li class="fragment"><span class="warning">Injects energy</span> — system slowly speeds up</li>
+    <li class="fragment"><span class="warning">Doesn't extend</span> — can't handle multiple constraints</li>
+  </ul>
+  <p class="fragment"><span class="success">Lagrange multipliers compute the physically correct force!</span></p>
+</section>
+
+<!-- Slide 8: Numerical Drift -->
+<section>
+  <h2>The Numerical Drift Problem</h2>
+  <p>Even with perfect math, integration causes drift:</p>
+  <pre>
+  Step 1: |Q|² = 1.0000
+  Step 100: |Q|² = 1.0001
+  Step 1000: |Q|² = 1.0042
+  Step 10000: |Q|² = 1.0523  ← Quaternion "explodes"
+  </pre>
+  <p class="fragment"><span class="highlight">Baumgarte stabilization</span> adds feedback to correct drift.</p>
+</section>
+
+<!-- Slide 9: Baumgarte Stabilization -->
+<section>
+  <h2>Baumgarte Stabilization</h2>
+  <p>Add feedback terms to the RHS:</p>
+  <p>\[ b = -J M^{-1} F_{ext} - \alpha C - \beta \dot{C} \]</p>
+  <div class="fragment">
+    <p>Where:</p>
+    <ul class="small">
+      <li>\( -\alpha C \) = Position correction (spring)</li>
+      <li>\( -\beta \dot{C} \) = Velocity correction (damper)</li>
+      <li>Typical values: \( \alpha = \beta = 10.0 \)</li>
+    </ul>
+  </div>
+  <p class="fragment small">The system acts like a critically damped spring pulling back to the constraint surface.</p>
+</section>
+
+<!-- Slide 10: Algorithm Overview -->
+<section>
+  <h2>Complete Algorithm</h2>
+  <ol>
+    <li class="fragment"><strong>Assemble Jacobian</strong> J by stacking all constraints</li>
+    <li class="fragment"><strong>Build mass matrix</strong> M⁻¹ (block diagonal)</li>
+    <li class="fragment"><strong>Form constraint matrix</strong> A = J M⁻¹ Jᵀ</li>
+    <li class="fragment"><strong>Compute RHS</strong> b = -J M⁻¹ F_ext - αC - βĊ</li>
+    <li class="fragment"><strong>Solve</strong> Aλ = b using Cholesky (LLT)</li>
+    <li class="fragment"><strong>Extract forces</strong> F_c = Jᵀλ</li>
+    <li class="fragment"><strong>Integrate</strong> with total force F_ext + F_c</li>
+  </ol>
+</section>
+
+<!-- Slide 11: Constraint Interface -->
+<section>
+  <h2>Constraint Interface</h2>
+  <pre><code class="cpp">class Constraint {
+public:
+    // Number of scalar equations
+    virtual int dimension() const = 0;
+
+    // Evaluate C(q, t) - constraint violation
+    virtual Vector evaluate(const State& s, double t) const = 0;
+
+    // Compute J = dC/dq - the Jacobian
+    virtual Matrix jacobian(const State& s, double t) const = 0;
+
+    // Baumgarte gains
+    virtual double alpha() const { return 10.0; }
+    virtual double beta() const { return 10.0; }
+};</code></pre>
+  <p class="fragment small">Any constraint that implements this interface works with the solver!</p>
+</section>
+
+<!-- Slide 12: Unit Quaternion Implementation -->
+<section>
+  <h2>Unit Quaternion Constraint</h2>
+  <pre><code class="cpp">Vector evaluate(const State& s, double t) const override {
+    const Quaternion& Q = s.orientation;
+    Vector C(1);
+    C[0] = Q.squaredNorm() - 1.0;  // |Q|² - 1
+    return C;
+}
+
+Matrix jacobian(const State& s, double t) const override {
+    const Quaternion& Q = s.orientation;
+    Matrix J(1, 7);
+    J.setZero();
+    // dC/dQ = 2Q^T
+    J(0, 3) = 2.0 * Q.w;
+    J(0, 4) = 2.0 * Q.x;
+    J(0, 5) = 2.0 * Q.y;
+    J(0, 6) = 2.0 * Q.z;
+    return J;
+}</code></pre>
+</section>
+
+<!-- Slide 13: Mass Matrix -->
+<section>
+  <h2>The Mass Matrix</h2>
+  <p>Block diagonal structure for single rigid body:</p>
+  <p>\[ M^{-1} = \begin{bmatrix} \frac{1}{m}I_3 & 0 & 0 \\ 0 & I^{-1}_{3\times3} & 0 \\ 0 & 0 & 1 \end{bmatrix} \]</p>
+  <div class="fragment">
+    <pre><code class="cpp">// Linear mass inverse (1/m * I_3)
+M_inv(0, 0) = M_inv(1, 1) = M_inv(2, 2) = 1.0 / mass;
+
+// Angular mass inverse (I^-1)
+M_inv(3, 3) = inverseInertia[0];
+M_inv(4, 4) = inverseInertia[1];
+M_inv(5, 5) = inverseInertia[2];</code></pre>
+  </div>
+</section>
+
+<!-- Slide 14: Solving the System -->
+<section>
+  <h2>Solving A λ = b</h2>
+  <p>A = J M⁻¹ Jᵀ is symmetric positive definite</p>
+  <p class="fragment">Use <span class="highlight">Cholesky decomposition</span>:</p>
+  <pre class="fragment"><code class="cpp">// Factor: A = L * L^T
+LLT<Matrix> llt(A);
+
+// Solve: L * y = b (forward substitution)
+// Then: L^T * x = y (back substitution)
+Vector lambda = llt.solve(b);</code></pre>
+  <p class="fragment small">O(n³/3) complexity — efficient for small constraint counts (n &lt; 100)</p>
+</section>
+
+<!-- Slide 15: Extracting Forces -->
+<section>
+  <h2>Extracting Constraint Forces</h2>
+  <pre><code class="cpp">// F_c = J^T * lambda (generalized force)
+Vector F_c = J.transpose() * lambda;
+
+// Separate components
+Vec3 linearForce{F_c[0], F_c[1], F_c[2]};
+Vec3 angularForce{F_c[3], F_c[4], F_c[5]};</code></pre>
+  <div class="fragment">
+    <p>Add to external forces before integration:</p>
+    <pre><code class="cpp">Vec3 totalForce = externalForce + result.linearForce;
+state.velocity += (totalForce / mass) * dt;</code></pre>
+  </div>
+</section>
+
+<!-- Slide 16: Multiple Constraints -->
+<section>
+  <h2>Multiple Constraints</h2>
+  <p>Stack all constraint Jacobians:</p>
+  <p>\[ J = \begin{bmatrix} J_1 \\ J_2 \\ \vdots \\ J_n \end{bmatrix} \]</p>
+  <pre class="fragment"><code class="cpp">// Stack all constraint Jacobians
+int rowOffset = 0;
+for (const auto* c : constraints) {
+    Matrix Ji = c->jacobian(state, time);
+    J.block(rowOffset, 0, c->dimension(), 7) = Ji;
+    rowOffset += c->dimension();
+}</code></pre>
+  <p class="fragment small">The solver handles all constraints simultaneously!</p>
+</section>
+
+<!-- Slide 17: Condition Number -->
+<section>
+  <h2>Solver Health: Condition Number</h2>
+  <p>The condition number κ(A) indicates numerical stability:</p>
+  <table>
+    <tr><th>κ(A)</th><th>Status</th></tr>
+    <tr><td>&lt; 100</td><td><span class="success">Well-conditioned (typical)</span></td></tr>
+    <tr><td>10³ - 10⁶</td><td><span class="warning">Moderately ill-conditioned</span></td></tr>
+    <tr><td>&gt; 10⁶</td><td><span class="warning">Nearly singular (constraint redundancy)</span></td></tr>
+    <tr><td>∞</td><td><span class="warning">Singular (degenerate constraints)</span></td></tr>
+  </table>
+  <p class="fragment small">Production code reports condition number for diagnostics.</p>
+</section>
+
+<!-- Slide 18: Production vs Tutorial -->
+<section>
+  <h2>Production vs Tutorial Code</h2>
+  <table>
+    <tr><th>Production (msd-sim)</th><th>Tutorial (example.cpp)</th></tr>
+    <tr><td>Eigen matrices</td><td>Simple dense Matrix class</td></tr>
+    <tr><td>std::unique_ptr ownership</td><td>Value semantics</td></tr>
+    <tr><td>AssetInertial integration</td><td>Standalone state struct</td></tr>
+    <tr><td>Thread-safe const methods</td><td>Single-threaded</td></tr>
+    <tr><td>Full 3x3 inertia tensor</td><td>Diagonal approximation</td></tr>
+  </table>
+</section>
+
+<!-- Slide 19: Extensibility -->
+<section>
+  <h2>Adding New Constraints</h2>
+  <p>The framework is extensible by design:</p>
+  <pre><code class="cpp">class BallJointConstraint : public Constraint {
+    // C(q_A, q_B) = X_A + R_A*r_A - X_B - R_B*r_B = 0
+    // 3 scalar constraints (positions must match)
+    int dimension() const override { return 3; }
+    // ... implement evaluate() and jacobian()
+};
+
+// Just add to the constraint list!
+constraints.push_back(&ballJoint);</code></pre>
+  <p class="fragment small">Future constraints: revolute joints, prismatic joints, contact constraints...</p>
+</section>
+
+<!-- Slide 20: Key Takeaways -->
+<section>
+  <h2>Key Takeaways</h2>
+  <ul>
+    <li class="fragment">Lagrange multipliers compute <span class="highlight">exact constraint forces</span></li>
+    <li class="fragment">Baumgarte stabilization corrects numerical drift</li>
+    <li class="fragment">The system A λ = b is solved via Cholesky (LLT)</li>
+    <li class="fragment">Multiple constraints are handled by stacking Jacobians</li>
+    <li class="fragment">New constraint types implement the <code>Constraint</code> interface</li>
+  </ul>
+</section>
+
+<!-- Slide 21: References -->
+<section>
+  <h2>References</h2>
+  <ul class="small">
+    <li>Baraff, D. (1996). "Linear-Time Dynamics using Lagrange Multipliers"</li>
+    <li>Baumgarte, J. (1972). "Stabilization of constraints and integrals of motion"</li>
+    <li>Cline, M. B. (2002). "Rigid Body Simulation with Contact and Constraints"</li>
+  </ul>
+  <p><br></p>
+  <p>Production code:</p>
+  <ul class="small">
+    <li><code>msd-sim/src/Physics/Constraints/Constraint.hpp</code></li>
+    <li><code>msd-sim/src/Physics/Constraints/ConstraintSolver.hpp</code></li>
+    <li><code>msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp</code></li>
+  </ul>
+</section>
+
+<!-- Slide 22: Try It -->
+<section>
+  <h2>Try It Yourself!</h2>
+  <pre><code class="bash"># Build the tutorial
+cd docs/tutorials/lagrange-constraint-framework
+mkdir build && cd build
+cmake ..
+make
+
+# Run the example
+./example</code></pre>
+  <p class="fragment">Experiment with different Baumgarte gains!</p>
+  <p class="fragment">Try adding your own constraint type.</p>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.5.0/plugin/math/math.js"></script>
+<script>
+Reveal.initialize({
+  hash: true,
+  plugins: [RevealHighlight, RevealMath.MathJax3]
+});
+</script>
+</body>
+</html>

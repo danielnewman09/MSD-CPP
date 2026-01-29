@@ -2,9 +2,10 @@
 #define MSD_SIM_PHYSICS_INERTIAL_ASSET_HPP
 
 #include <memory>
+#include <vector>
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
-#include "msd-sim/src/Physics/Constraints/QuaternionConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 
 
 namespace msd_sim
@@ -82,6 +83,15 @@ public:
                 double mass,
                 const ReferenceFrame& frame,
                 double coefficientOfRestitution);
+
+  // Rule of Five: Move-only type due to std::unique_ptr<Constraint> ownership
+  // Note: Move assignment deleted because base class has reference member
+  // Ticket: 0031_generalized_lagrange_constraints
+  ~AssetInertial() = default;
+  AssetInertial(const AssetInertial&) = delete;
+  AssetInertial& operator=(const AssetInertial&) = delete;
+  AssetInertial(AssetInertial&&) noexcept = default;
+  AssetInertial& operator=(AssetInertial&&) noexcept = delete;
 
   /**
    * @brief Get the dynamic state (mutable version).
@@ -222,27 +232,71 @@ public:
    */
   void applyAngularImpulse(const AngularRate& angularImpulse);
 
-  // ========== NEW: Quaternion Constraint (ticket 0030) ==========
+  // ========== NEW: Constraint Management (ticket 0031) ==========
 
   /**
-   * @brief Get the quaternion constraint (mutable).
+   * @brief Add a constraint to this object
    *
-   * Each asset owns its own constraint for better encapsulation.
-   * Used by Integrator to enforce |Q|=1 during physics integration.
+   * Transfers ownership of the constraint to this asset. The constraint will
+   * be enforced during physics integration.
    *
-   * @return Mutable reference to quaternion constraint
+   * @param constraint Constraint to add (ownership transferred)
    *
-   * @ticket 0030_lagrangian_quaternion_physics
+   * @ticket 0031_generalized_lagrange_constraints
    */
-  QuaternionConstraint& getQuaternionConstraint();
+  void addConstraint(std::unique_ptr<Constraint> constraint);
 
   /**
-   * @brief Get the quaternion constraint (const).
-   * @return Const reference to quaternion constraint
+   * @brief Remove constraint at specified index
    *
-   * @ticket 0030_lagrangian_quaternion_physics
+   * @param index Index of constraint to remove [0, getConstraintCount())
+   * @throws std::out_of_range if index >= getConstraintCount()
+   *
+   * @ticket 0031_generalized_lagrange_constraints
    */
-  const QuaternionConstraint& getQuaternionConstraint() const;
+  void removeConstraint(size_t index);
+
+  /**
+   * @brief Get all constraints (mutable)
+   *
+   * Returns raw pointers for integration (non-owning access).
+   * Used by Integrator to enforce constraints during physics integration.
+   *
+   * @return Vector of non-owning constraint pointers
+   *
+   * @ticket 0031_generalized_lagrange_constraints
+   */
+  std::vector<Constraint*> getConstraints();
+
+  /**
+   * @brief Get all constraints (const)
+   *
+   * Returns raw pointers for query (non-owning access).
+   *
+   * @return Vector of non-owning const constraint pointers
+   *
+   * @ticket 0031_generalized_lagrange_constraints
+   */
+  std::vector<const Constraint*> getConstraints() const;
+
+  /**
+   * @brief Clear all constraints
+   *
+   * Removes all constraints from this object. Quaternion normalization
+   * constraint will need to be manually re-added if desired.
+   *
+   * @ticket 0031_generalized_lagrange_constraints
+   */
+  void clearConstraints();
+
+  /**
+   * @brief Get number of constraints
+   *
+   * @return Number of constraints attached to this object
+   *
+   * @ticket 0031_generalized_lagrange_constraints
+   */
+  size_t getConstraintCount() const;
 
 private:
   // Rigid body physics properties
@@ -261,8 +315,8 @@ private:
   // NEW: Coefficient of restitution (ticket 0027)
   double coefficientOfRestitution_{0.5};  // Default: moderate elasticity
 
-  // NEW: Quaternion constraint (ticket 0030)
-  QuaternionConstraint quaternionConstraint_{10.0, 10.0};  // Default Baumgarte parameters
+  // NEW: Constraint management (ticket 0031)
+  std::vector<std::unique_ptr<Constraint>> constraints_;
 };
 
 }  // namespace msd_sim

@@ -4,6 +4,8 @@
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialCalculations.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include "msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp"
 
 namespace msd_sim
 {
@@ -39,6 +41,10 @@ AssetInertial::AssetInertial(uint32_t assetId,
   dynamicState_.orientation = frame.getQuaternion();
   dynamicState_.quaternionRate = Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
   // Ticket: 0030_lagrangian_quaternion_physics
+
+  // Add default UnitQuaternionConstraint for quaternion normalization
+  constraints_.push_back(std::make_unique<UnitQuaternionConstraint>(10.0, 10.0));
+  // Ticket: 0031_generalized_lagrange_constraints
 }
 
 AssetInertial::AssetInertial(uint32_t assetId,
@@ -80,6 +86,10 @@ AssetInertial::AssetInertial(uint32_t assetId,
   dynamicState_.orientation = frame.getQuaternion();
   dynamicState_.quaternionRate = Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
   // Ticket: 0030_lagrangian_quaternion_physics
+
+  // Add default UnitQuaternionConstraint for quaternion normalization
+  constraints_.push_back(std::make_unique<UnitQuaternionConstraint>(10.0, 10.0));
+  // Ticket: 0031_generalized_lagrange_constraints
 }
 
 double AssetInertial::getMass() const
@@ -195,16 +205,54 @@ void AssetInertial::applyAngularImpulse(const AngularRate& angularImpulse)
   // Ticket: 0027_collision_response_system (updated for quaternions, ticket 0030)
 }
 
-// ========== Quaternion Constraint (ticket 0030) ==========
+// ========== Constraint Management (ticket 0031) ==========
 
-QuaternionConstraint& AssetInertial::getQuaternionConstraint()
+void AssetInertial::addConstraint(std::unique_ptr<Constraint> constraint)
 {
-  return quaternionConstraint_;
+  constraints_.push_back(std::move(constraint));
 }
 
-const QuaternionConstraint& AssetInertial::getQuaternionConstraint() const
+void AssetInertial::removeConstraint(size_t index)
 {
-  return quaternionConstraint_;
+  if (index >= constraints_.size())
+  {
+    throw std::out_of_range("Constraint index out of range: " +
+                            std::to_string(index) + " >= " +
+                            std::to_string(constraints_.size()));
+  }
+  constraints_.erase(constraints_.begin() + static_cast<long>(index));
+}
+
+std::vector<Constraint*> AssetInertial::getConstraints()
+{
+  std::vector<Constraint*> result;
+  result.reserve(constraints_.size());
+  for (auto& constraint : constraints_)
+  {
+    result.push_back(constraint.get());
+  }
+  return result;
+}
+
+std::vector<const Constraint*> AssetInertial::getConstraints() const
+{
+  std::vector<const Constraint*> result;
+  result.reserve(constraints_.size());
+  for (const auto& constraint : constraints_)
+  {
+    result.push_back(constraint.get());
+  }
+  return result;
+}
+
+void AssetInertial::clearConstraints()
+{
+  constraints_.clear();
+}
+
+size_t AssetInertial::getConstraintCount() const
+{
+  return constraints_.size();
 }
 
 }  // namespace msd_sim

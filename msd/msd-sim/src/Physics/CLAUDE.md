@@ -45,7 +45,13 @@ GJK (Collision detection algorithm)
 | SemiImplicitEulerIntegrator | `Integration/SemiImplicitEulerIntegrator.hpp` | Symplectic integrator implementation | [`0030_lagrangian_quaternion_physics.puml`](../../../../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml) |
 | PotentialEnergy | `PotentialEnergy/PotentialEnergy.hpp` | Abstract interface for environmental potentials | [`0030_lagrangian_quaternion_physics.puml`](../../../../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml) |
 | GravityPotential | `PotentialEnergy/GravityPotential.hpp` | Uniform gravity implementation | [`0030_lagrangian_quaternion_physics.puml`](../../../../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml) |
-| QuaternionConstraint | `Constraints/QuaternionConstraint.hpp` | Baumgarte stabilization for quaternion normalization | [`0030_lagrangian_quaternion_physics.puml`](../../../../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml) |
+| QuaternionConstraint | `Constraints/QuaternionConstraint.hpp` | Baumgarte stabilization for quaternion normalization (deprecated) | [`0030_lagrangian_quaternion_physics.puml`](../../../../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml) |
+| Constraint | `Constraints/Constraint.hpp` | Abstract constraint interface for Lagrange multipliers | [`generalized-constraints.puml`](../../../../../docs/msd/msd-sim/Physics/generalized-constraints.puml) |
+| BilateralConstraint | `Constraints/BilateralConstraint.hpp` | Abstract interface for equality constraints (C = 0) | [`generalized-constraints.puml`](../../../../../docs/msd/msd-sim/Physics/generalized-constraints.puml) |
+| UnilateralConstraint | `Constraints/UnilateralConstraint.hpp` | Abstract interface for inequality constraints (C ≥ 0) | [`generalized-constraints.puml`](../../../../../docs/msd/msd-sim/Physics/generalized-constraints.puml) |
+| UnitQuaternionConstraint | `Constraints/UnitQuaternionConstraint.hpp` | Unit quaternion normalization constraint | [`generalized-constraints.puml`](../../../../../docs/msd/msd-sim/Physics/generalized-constraints.puml) |
+| DistanceConstraint | `Constraints/DistanceConstraint.hpp` | Fixed distance constraint between positions | [`generalized-constraints.puml`](../../../../../docs/msd/msd-sim/Physics/generalized-constraints.puml) |
+| ConstraintSolver | `Constraints/ConstraintSolver.hpp` | Lagrange multiplier solver for constraint enforcement | [`generalized-constraints.puml`](../../../../../docs/msd/msd-sim/Physics/generalized-constraints.puml) |
 
 ---
 
@@ -1355,6 +1361,280 @@ No exceptions thrown. All quaternion operations are numerically stable.
 - **Ownership**: Each asset owns its constraint since each has its own quaternion state
 - **Performance**: ~40 FLOPs per enforcement, negligible overhead (< 1% of physics loop)
 - **Accuracy**: Maintains |Q²-1| < 1e-10 over 10000 integration steps (validated by tests)
+
+---
+
+### Generalized Constraint Framework
+
+**Location**: `Constraints/Constraint.hpp`, `Constraints/BilateralConstraint.hpp`, `Constraints/UnilateralConstraint.hpp`, `Constraints/ConstraintSolver.hpp`
+**Diagram**: [`generalized-constraints.puml`](../../../../../docs/msd/msd-sim/Physics/generalized-constraints.puml)
+**Type**: Library infrastructure
+**Introduced**: [Ticket: 0031_generalized_lagrange_constraints](../../../../../tickets/0031_generalized_lagrange_constraints.md)
+
+#### Purpose
+Provides an extensible constraint framework using Lagrange multipliers that enables users to define arbitrary constraints by implementing the Constraint interface. The system separates constraint definition (evaluation, Jacobian) from constraint solving (Lagrange multiplier computation), enabling a library of constraint types that all use the same solver infrastructure.
+
+**Key benefit**: New constraint types (joints, contacts, limits) can be added by implementing the Constraint interface without modifying the solver or integration infrastructure.
+
+#### Architecture Components
+
+**Constraint (Abstract Base Class)**
+- Abstract interface defining mathematical requirements for constraint definitions
+- Pure virtual methods: `dimension()`, `evaluate()`, `jacobian()`, `typeName()`
+- Optional virtual methods: `partialTimeDerivative()`, Baumgarte parameters `alpha()` and `beta()`
+- Location: `Constraints/Constraint.hpp`
+
+**BilateralConstraint (Abstract Subclass)**
+- Specialization for equality constraints C(q, t) = 0 with unrestricted Lagrange multipliers
+- Semantic marker for bilateral constraints (C must equal zero)
+- Location: `Constraints/BilateralConstraint.hpp`
+
+**UnilateralConstraint (Abstract Subclass)**
+- Specialization for inequality constraints C(q, t) ≥ 0 with complementarity conditions
+- Includes `isActive()` method for contact activation/deactivation
+- **Note**: Unilateral solver not yet implemented, interface defined for future use
+- Location: `Constraints/UnilateralConstraint.hpp`
+
+**ConstraintSolver**
+- Computes Lagrange multipliers λ for a set of constraints using direct LLT solve
+- Returns `SolveResult` containing lambdas, constraint forces, convergence status, condition number
+- Stateless utility — all matrices are local variables (thread-safe after construction)
+- Location: `Constraints/ConstraintSolver.hpp`
+
+**UnitQuaternionConstraint**
+- Concrete implementation of BilateralConstraint for unit quaternion enforcement
+- Constraint function: C(Q) = Q^T*Q - 1 = 0
+- Jacobian: J = 2*Q^T (1x7 matrix, only quaternion components non-zero)
+- Replaces deprecated `QuaternionConstraint` class
+- Location: `Constraints/UnitQuaternionConstraint.hpp`
+
+**DistanceConstraint**
+- Concrete implementation of BilateralConstraint for fixed distance between positions
+- Constraint function: C(x) = |x|² - d² = 0
+- Jacobian: J = 2*x^T (1x7 matrix, only position components non-zero)
+- Example constraint demonstrating single-object constraints
+- Location: `Constraints/DistanceConstraint.hpp`
+
+#### Mathematical Framework
+
+A constraint is defined by:
+```
+1. Constraint function: C(q, t) = 0 (holonomic) or C(q, q̇, t) = 0 (non-holonomic)
+2. Constraint Jacobian: J = ∂C/∂q (how constraint changes with configuration)
+3. Constraint time derivative: Ċ = J·q̇ + ∂C/∂t
+4. Baumgarte stabilization terms: α (position gain), β (velocity gain)
+```
+
+The Lagrange multiplier λ is computed to satisfy:
+```
+J·M⁻¹·Jᵀ·λ = -J·M⁻¹·F_ext - J̇·q̇ - α·C - β·Ċ
+```
+
+The constraint force applied is:
+```
+F_constraint = Jᵀ·λ
+```
+
+#### Key Interfaces
+
+**Constraint Interface**:
+```cpp
+class Constraint {
+public:
+  virtual ~Constraint() = default;
+
+  // Number of scalar constraint equations
+  virtual int dimension() const = 0;
+
+  // Evaluate constraint function C(q, t)
+  // Returns vector of constraint violations
+  virtual Eigen::VectorXd evaluate(
+      const InertialState& state,
+      double time) const = 0;
+
+  // Compute constraint Jacobian J = ∂C/∂q
+  // Returns (dimension x 7) matrix for single-object constraints
+  virtual Eigen::MatrixXd jacobian(
+      const InertialState& state,
+      double time) const = 0;
+
+  // Compute constraint time derivative ∂C/∂t (optional, default: zero)
+  virtual Eigen::VectorXd partialTimeDerivative(
+      const InertialState& state,
+      double time) const;
+
+  // Baumgarte stabilization parameters
+  virtual double alpha() const { return 10.0; }
+  virtual double beta() const { return 10.0; }
+
+  // Constraint type for debugging/logging
+  virtual std::string typeName() const = 0;
+
+protected:
+  Constraint() = default;
+  // Rule of Five with = default
+};
+```
+
+**ConstraintSolver Interface**:
+```cpp
+class ConstraintSolver {
+public:
+  struct SolveResult {
+    Eigen::VectorXd lambdas;           // Lagrange multipliers
+    Eigen::VectorXd constraintForces;  // Generalized forces (Jᵀ·λ)
+    bool converged;                    // Whether solve succeeded
+    double conditionNumber;            // Condition number (for diagnostics)
+  };
+
+  ConstraintSolver() = default;
+
+  /**
+   * @brief Solve for Lagrange multipliers given system state
+   *
+   * Computes λ satisfying: J·M⁻¹·Jᵀ·λ = RHS
+   * where RHS includes external forces, Baumgarte stabilization, etc.
+   *
+   * @param constraints Vector of constraint pointers (non-owning)
+   * @param state Current inertial state
+   * @param externalForces Currently applied forces
+   * @param massMatrix Inverse mass matrix M⁻¹ (7x7 for single object)
+   * @param dt Integration timestep
+   * @return SolveResult with λ, forces, and convergence status
+   */
+  SolveResult solve(
+      const std::vector<Constraint*>& constraints,
+      const InertialState& state,
+      const Eigen::VectorXd& externalForces,
+      const Eigen::MatrixXd& massMatrix,
+      double dt) const;
+
+  // Rule of Five with = default
+};
+```
+
+**UnitQuaternionConstraint Example**:
+```cpp
+class UnitQuaternionConstraint : public BilateralConstraint {
+public:
+  explicit UnitQuaternionConstraint(double alpha = 10.0, double beta = 10.0);
+
+  int dimension() const override { return 1; }  // Scalar constraint
+
+  Eigen::VectorXd evaluate(const InertialState& state, double time) const override;
+  Eigen::MatrixXd jacobian(const InertialState& state, double time) const override;
+
+  double alpha() const override { return alpha_; }
+  double beta() const override { return beta_; }
+  std::string typeName() const override { return "UnitQuaternionConstraint"; }
+
+  // Setters for Baumgarte parameters
+  void setAlpha(double alpha);
+  void setBeta(double beta);
+
+  // Rule of Five with = default
+
+private:
+  double alpha_{10.0};
+  double beta_{10.0};
+};
+```
+
+#### Usage Example
+```cpp
+#include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
+#include "msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/DistanceConstraint.hpp"
+
+// AssetInertial owns constraints via std::unique_ptr
+AssetInertial asset{/* ... */};
+
+// Default: UnitQuaternionConstraint automatically added to every AssetInertial
+// asset.getConstraints() returns {UnitQuaternionConstraint*}
+
+// Add additional constraints
+asset.addConstraint(std::make_unique<DistanceConstraint>(5.0));  // 5m distance
+// asset.getConstraints() now returns {UnitQuaternionConstraint*, DistanceConstraint*}
+
+// SemiImplicitEulerIntegrator uses ConstraintSolver automatically:
+// (Called internally by WorldModel::updatePhysics)
+ConstraintSolver solver;
+auto result = solver.solve(
+    asset.getConstraints(),  // Non-owning pointers
+    asset.getInertialState(),
+    externalForces,
+    massMatrix,
+    dt);
+
+if (result.converged) {
+  // Apply constraint forces: F_total = F_ext + F_constraint
+  Eigen::VectorXd totalForces = externalForces + result.constraintForces;
+  // Proceed with integration...
+} else {
+  // Handle singular constraint matrix (rare)
+  // Condition number available in result.conditionNumber
+}
+```
+
+#### Integration with Physics Pipeline
+
+The constraint framework integrates with the existing physics pipeline:
+
+1. **AssetInertial ownership**: Each `AssetInertial` owns a vector of constraints via `std::vector<std::unique_ptr<Constraint>>`
+2. **Default constraint**: Every `AssetInertial` automatically includes a `UnitQuaternionConstraint` (maintains quaternion normalization)
+3. **Constraint gathering**: `WorldModel::updatePhysics()` gathers constraints from all assets
+4. **Solver invocation**: `SemiImplicitEulerIntegrator::step()` uses `ConstraintSolver` to compute constraint forces
+5. **Force application**: Constraint forces are added to external forces before integration
+
+**Integrator signature change (breaking)**:
+```cpp
+// Old (ticket 0030)
+void step(InertialState& state,
+          double mass,
+          const Eigen::Matrix3d& inertia,
+          const Coordinate& netForce,
+          const Coordinate& netTorque,
+          QuaternionConstraint& constraint,
+          double dt);
+
+// New (ticket 0031)
+void step(InertialState& state,
+          double mass,
+          const Eigen::Matrix3d& inertia,
+          const Coordinate& netForce,
+          const Coordinate& netTorque,
+          const std::vector<Constraint*>& constraints,  // Non-owning pointers
+          double dt);
+```
+
+#### Thread Safety
+**Read-only operations thread-safe after construction** — Constraint evaluation, Jacobian computation, and solving are const methods.
+
+**Not thread-safe for constraint modification** — Adding/removing constraints from AssetInertial must happen outside physics loop.
+
+#### Error Handling
+- **Singular constraint matrices**: `ConstraintSolver::solve()` returns `converged = false` when LLT decomposition fails
+- **Invalid parameters**: Constraint constructors throw `std::invalid_argument` for invalid parameters (e.g., negative distance)
+- **Empty constraint sets**: Solver handles empty constraint vector gracefully (returns zero forces, converged = true)
+
+#### Memory Management
+- **Ownership**: `AssetInertial` owns constraints via `std::vector<std::unique_ptr<Constraint>>`
+- **Non-owning access**: `getConstraints()` returns `std::vector<Constraint*>` (raw pointers, non-owning)
+- **Lifetime**: Constraint pointers valid as long as owning `AssetInertial` exists
+- **Solver stateless**: `ConstraintSolver` allocates matrices locally, no persistent state
+
+#### Performance
+- **Solver complexity**: O(n³) where n = total constraint dimension (direct LLT solve)
+- **Typical usage**: n < 10 constraints per object (< 1ms solve time)
+- **Overhead**: ~1-2% of physics loop for typical constraint sets (validated by prototypes)
+- **Condition number**: Reported in `SolveResult` for diagnostics (well-conditioned: < 100)
+
+#### Design Notes
+- **Extensibility**: New constraint types added by implementing `Constraint` interface
+- **Separation of concerns**: Constraint definition (evaluate, Jacobian) separate from solving
+- **Future work**: Unilateral solver (projected Gauss-Seidel), multi-object constraints (joints, contacts)
+- **Migration path**: Old `QuaternionConstraint` deprecated, use `UnitQuaternionConstraint` instead
+- **Backward compatibility**: Existing code using `QuaternionConstraint` continues to work (separate API)
 
 ---
 

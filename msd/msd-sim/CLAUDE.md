@@ -265,10 +265,60 @@ ctest --preset debug
 | [`mirtich-inertia-tensor.puml`](../../docs/msd/msd-sim/Physics/mirtich-inertia-tensor.puml) | Mirtich algorithm for inertia tensor calculation | `docs/msd/msd-sim/Physics/` |
 | [`collision-response.puml`](../../docs/msd/msd-sim/Physics/collision-response.puml) | Collision response system with impulse-based physics | `docs/msd/msd-sim/Physics/` |
 | [`0030_lagrangian_quaternion_physics.puml`](../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml) | Lagrangian quaternion physics with potential energy and constraints | `docs/designs/0030_lagrangian_quaternion_physics/` |
+| [`generalized-constraints.puml`](../../docs/msd/msd-sim/Physics/generalized-constraints.puml) | Generalized Lagrange multiplier constraint system with extensible constraint library | `docs/msd/msd-sim/Physics/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Generalized Lagrange Multiplier Constraint System — 2026-01-28
+**Ticket**: [0031_generalized_lagrange_constraints](../../tickets/0031_generalized_lagrange_constraints.md)
+**Diagram**: [`generalized-constraints.puml`](../../docs/msd/msd-sim/Physics/generalized-constraints.puml)
+**Type**: Breaking Change (Extensibility Enhancement)
+
+Replaced the hard-coded `QuaternionConstraint` with an extensible constraint framework that enables users to define arbitrary constraints by implementing the `Constraint` interface. The system separates constraint definition (evaluation, Jacobian) from constraint solving (Lagrange multiplier computation), enabling a library of constraint types that all use the same solver infrastructure.
+
+**Key components**:
+- **Constraint interface** — Abstract base class defining mathematical requirements: `dimension()`, `evaluate()`, `jacobian()`, `typeName()`
+- **BilateralConstraint** — Abstract subclass for equality constraints (C = 0) with unrestricted Lagrange multipliers
+- **UnilateralConstraint** — Abstract subclass for inequality constraints (C ≥ 0) with complementarity conditions (interface only, solver deferred)
+- **ConstraintSolver** — Computes Lagrange multipliers λ using direct LLT solve on J·M⁻¹·Jᵀ, returns `SolveResult` with convergence status and condition number
+- **UnitQuaternionConstraint** — Concrete implementation replacing deprecated `QuaternionConstraint`, enforces C(Q) = Q^T*Q - 1 = 0
+- **DistanceConstraint** — Example constraint enforcing fixed distance between positions, demonstrates single-object constraints
+- **AssetInertial modifications** — Owns constraints via `std::vector<std::unique_ptr<Constraint>>`, default includes `UnitQuaternionConstraint`
+- **Integrator signature change** — `step()` now accepts `std::vector<Constraint*>` instead of single `QuaternionConstraint&`
+
+**Architecture**:
+- `Constraint::evaluate(state, time)` returns constraint violation C(q, t)
+- `Constraint::jacobian(state, time)` returns ∂C/∂q matrix (dimension × 7 for single-object constraints)
+- `Constraint::alpha()` and `beta()` provide Baumgarte stabilization parameters (default: 10.0)
+- `ConstraintSolver::solve()` computes λ satisfying: J·M⁻¹·Jᵀ·λ = -J·M⁻¹·F_ext - J̇·q̇ - α·C - β·Ċ
+- Constraint forces applied: F_constraint = Jᵀ·λ
+- AssetInertial owns constraints, `getConstraints()` returns non-owning `std::vector<Constraint*>`
+- SemiImplicitEulerIntegrator uses ConstraintSolver automatically for all constraints
+
+**Breaking changes**:
+- `Integrator::step()` signature: `QuaternionConstraint&` → `std::vector<Constraint*>&`
+- `AssetInertial` constraint management: Single `QuaternionConstraint` → `std::vector<std::unique_ptr<Constraint>>`
+- Deprecated: `QuaternionConstraint` class (use `UnitQuaternionConstraint` with `ConstraintSolver` instead)
+
+**Benefits**:
+- Extensibility: New constraint types (joints, contacts, limits) added by implementing `Constraint` interface
+- Separation of concerns: Constraint definition separate from solving algorithm
+- Multi-constraint support: Multiple constraints per object enforced simultaneously
+- Unified solver: Single solving algorithm for all constraint types
+
+**Key files**:
+- `src/Physics/Constraints/Constraint.hpp`, `Constraint.cpp` — Abstract constraint interface
+- `src/Physics/Constraints/BilateralConstraint.hpp` — Equality constraint marker
+- `src/Physics/Constraints/UnilateralConstraint.hpp` — Inequality constraint interface (solver deferred)
+- `src/Physics/Constraints/UnitQuaternionConstraint.hpp`, `UnitQuaternionConstraint.cpp` — Unit quaternion constraint
+- `src/Physics/Constraints/DistanceConstraint.hpp`, `DistanceConstraint.cpp` — Distance constraint example
+- `src/Physics/Constraints/ConstraintSolver.hpp`, `ConstraintSolver.cpp` — Lagrange multiplier solver
+- `src/Physics/Integration/SemiImplicitEulerIntegrator.hpp`, `SemiImplicitEulerIntegrator.cpp` — Updated to use ConstraintSolver
+- `test/Physics/Constraints/ConstraintTest.cpp` — 30 unit tests covering all framework components
+
+---
 
 ### Lagrangian Quaternion Physics — 2026-01-28
 **Ticket**: [0030_lagrangian_quaternion_physics](../../tickets/0030_lagrangian_quaternion_physics.md)

@@ -131,7 +131,11 @@ void WorldModel::updatePhysics(double dt)
     netForce += asset.getAccumulatedForce();
     netTorque += asset.getAccumulatedTorque();
 
-    // ===== Step 2: Delegate Integration to Integrator =====
+    // ===== Step 2: Gather Constraints =====
+    // Get all constraints attached to this asset
+    std::vector<Constraint*> constraints = asset.getConstraints();
+
+    // ===== Step 3: Delegate Integration to Integrator =====
     // Integrator handles: velocity update, position update, constraint enforcement
     integrator_->step(
       state,
@@ -139,16 +143,16 @@ void WorldModel::updatePhysics(double dt)
       netTorque,
       mass,
       asset.getInverseInertiaTensor(),
-      asset.getQuaternionConstraint(),
+      constraints,
       dt);
 
-    // ===== Step 3: Synchronize ReferenceFrame =====
+    // ===== Step 4: Synchronize ReferenceFrame =====
     // ReferenceFrame must match InertialState for collision detection and rendering
     ReferenceFrame& frame = asset.getReferenceFrame();
     frame.setOrigin(state.position);
     frame.setQuaternion(state.orientation);
 
-    // ===== Step 4: Clear Forces for Next Frame =====
+    // ===== Step 5: Clear Forces for Next Frame =====
     asset.clearForces();
   }
   // Ticket: 0030_lagrangian_quaternion_physics

@@ -1,0 +1,414 @@
+@startuml 0031_generalized_lagrange_constraints
+' =============================================================================
+' Feature: Generalized Lagrange Multiplier Constraint System
+' Ticket: 0031_generalized_lagrange_constraints
+' Description: Extensible constraint framework using Lagrange multipliers
+'              enabling arbitrary constraint definitions with unified solving
+' Date: 2026-01-28
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling - Mark NEW and MODIFIED components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BorderColor Black
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim::Physics::Constraints" {
+
+    ' ========================================================================
+    ' NEW COMPONENTS - Constraint Framework
+    ' ========================================================================
+
+    abstract class Constraint <<new>> {
+        ' Abstract base class for constraint definitions
+        ..
+        +{abstract} dimension(): int <<const>>
+        +{abstract} evaluate(state: InertialState&, time: double): Eigen::VectorXd <<const>>
+        +{abstract} jacobian(state: InertialState&, time: double): Eigen::MatrixXd <<const>>
+        +{abstract} partialTimeDerivative(state: InertialState&, time: double): Eigen::VectorXd <<const>>
+        +{abstract} typeName(): std::string <<const>>
+        ..
+        ' Baumgarte stabilization parameters
+        +alpha(): double <<const>> {default: 10.0}
+        +beta(): double <<const>> {default: 10.0}
+        ..
+        +~Constraint() = default
+    }
+
+    abstract class BilateralConstraint <<new>> {
+        ' Equality constraint: C(q, t) = 0
+        ' Unrestricted Lagrange multiplier λ ∈ ℝ
+        ..
+        ' No additional interface beyond Constraint
+    }
+
+    abstract class UnilateralConstraint <<new>> {
+        ' Inequality constraint: C(q, t) ≥ 0
+        ' Complementarity: λ ≥ 0, C ≥ 0, λ·C = 0
+        ..
+        +{abstract} isActive(state: InertialState&, time: double): bool <<const>>
+    }
+
+    class UnitQuaternionConstraint <<new>> {
+        ' Migrated from QuaternionConstraint
+        -alpha_: double
+        -beta_: double
+        ..
+        +UnitQuaternionConstraint(alpha: double = 10.0, beta: double = 10.0)
+        ..
+        ' BilateralConstraint interface
+        +dimension(): int <<const>>
+        +evaluate(state: InertialState&, time: double): Eigen::VectorXd <<const>>
+        +jacobian(state: InertialState&, time: double): Eigen::MatrixXd <<const>>
+        +partialTimeDerivative(state: InertialState&, time: double): Eigen::VectorXd <<const>>
+        +typeName(): std::string <<const>>
+        +alpha(): double <<const>>
+        +beta(): double <<const>>
+        ..
+        +setAlpha(alpha: double): void
+        +setBeta(beta: double): void
+    }
+
+    class DistanceConstraint <<new>> {
+        ' Fixed distance between two points
+        ' C(q) = |p₁ - p₂|² - d² = 0
+        -targetDistance_: double
+        -alpha_: double
+        -beta_: double
+        ..
+        +DistanceConstraint(targetDistance: double, alpha: double = 10.0, beta: double = 10.0)
+        ..
+        ' BilateralConstraint interface
+        +dimension(): int <<const>>
+        +evaluate(state: InertialState&, time: double): Eigen::VectorXd <<const>>
+        +jacobian(state: InertialState&, time: double): Eigen::MatrixXd <<const>>
+        +partialTimeDerivative(state: InertialState&, time: double): Eigen::VectorXd <<const>>
+        +typeName(): std::string <<const>>
+        +alpha(): double <<const>>
+        +beta(): double <<const>>
+    }
+
+    ' ========================================================================
+    ' NEW COMPONENTS - Constraint Solving
+    ' ========================================================================
+
+    class ConstraintSolver <<new>> {
+        ' Computes Lagrange multipliers for arbitrary constraints
+        -epsilon_: double
+        ..
+        +ConstraintSolver(epsilon: double = 1e-10)
+        ..
+        +solve(constraints: std::vector<Constraint*>&,\n       state: InertialState&,\n       externalForce: Coordinate&,\n       externalTorque: Coordinate&,\n       mass: double,\n       inverseInertia: Eigen::Matrix3d&,\n       dt: double): SolveResult
+        ..
+        -assembleConstraintMatrix(constraints, state, time): Eigen::MatrixXd
+        -assembleRHS(constraints, state, force, torque, mass, inverseInertia, time, dt): Eigen::VectorXd
+        -extractConstraintForces(lambdas, constraints, state, time): std::pair<Coordinate, Coordinate>
+    }
+
+    class SolveResult <<new>> {
+        ' Result of constraint solving
+        ..
+        +lambdas: Eigen::VectorXd
+        +linearConstraintForce: Coordinate
+        +angularConstraintForce: Coordinate
+        +converged: bool
+        +conditionNumber: double
+        ..
+        +SolveResult() = default
+        +SolveResult(lambdas: Eigen::VectorXd,\n             linearForce: Coordinate,\n             angularForce: Coordinate,\n             converged: bool,\n             conditionNumber: double)
+    }
+
+}
+
+package "msd_sim::Physics::Integration" {
+
+    ' ========================================================================
+    ' MODIFIED COMPONENTS - Integration
+    ' ========================================================================
+
+    abstract class Integrator <<modified>> {
+        ' Abstract interface for numerical integration
+        ..
+        +{abstract} step(state: InertialState&,\n                 force: Coordinate&,\n                 torque: Coordinate&,\n                 mass: double,\n                 inverseInertia: Eigen::Matrix3d&,\n                 constraints: std::vector<Constraint*>&,\n                 dt: double): void <<modified>>
+    }
+
+    class SemiImplicitEulerIntegrator <<modified>> {
+        ' Symplectic integrator with constraint enforcement
+        -solver_: ConstraintSolver <<new>>
+        ..
+        +SemiImplicitEulerIntegrator()
+        +SemiImplicitEulerIntegrator(solver: ConstraintSolver) <<new>>
+        ..
+        +step(state: InertialState&,\n     force: Coordinate&,\n     torque: Coordinate&,\n     mass: double,\n     inverseInertia: Eigen::Matrix3d&,\n     constraints: std::vector<Constraint*>&,\n     dt: double): void <<modified>>
+    }
+
+}
+
+package "msd_sim::Environment" {
+
+    ' ========================================================================
+    ' MODIFIED COMPONENTS - World Management
+    ' ========================================================================
+
+    class AssetInertial <<modified>> {
+        -inertialState_: InertialState
+        -mass_: double
+        -inertiaTensor_: Eigen::Matrix3d
+        -inverseInertiaTensor_: Eigen::Matrix3d
+        -referenceFrame_: ReferenceFrame
+        -constraints_: std::vector<std::unique_ptr<Constraint>> <<new>>
+        ..
+        ' Constraint management
+        +addConstraint(constraint: std::unique_ptr<Constraint>): void <<new>>
+        +removeConstraint(index: size_t): void <<new>>
+        +getConstraints(): std::vector<Constraint*> <<new>>
+        +clearConstraints(): void <<new>>
+        ..
+        ' Existing interface (unchanged)
+        +applyForce(force: CoordinateRate): void
+        +applyTorque(torque: AngularRate): void
+        +getInertialState(): InertialState&
+        +getMass(): double
+        +getInertiaTensor(): Eigen::Matrix3d&
+        +getInverseInertiaTensor(): Eigen::Matrix3d&
+    }
+
+    class WorldModel <<modified>> {
+        -inertialAssets_: std::vector<AssetInertial>
+        -integrator_: std::unique_ptr<Integrator>
+        -potentialEnergies_: std::vector<std::unique_ptr<PotentialEnergy>>
+        ..
+        ' Physics integration (CHANGED)
+        -updatePhysics(dt: double): void <<modified>>
+        ..
+        ' Integrator management (unchanged)
+        +setIntegrator(integrator: std::unique_ptr<Integrator>): void
+        +getIntegrator(): Integrator&
+    }
+
+}
+
+package "msd_sim::Physics::RigidBody" {
+
+    ' ========================================================================
+    ' EXISTING COMPONENTS (UNCHANGED)
+    ' ========================================================================
+
+    class InertialState {
+        ' 14-component state vector (X, Q, Ẋ, Q̇)
+        +position: Coordinate
+        +velocity: Coordinate
+        +acceleration: Coordinate
+        +orientation: Eigen::Quaterniond
+        +quaternionRate: Eigen::Vector4d
+        +angularAcceleration: AngularRate
+        ..
+        +getAngularVelocity(): AngularRate <<const>>
+        +setAngularVelocity(omega: AngularRate&): void
+    }
+
+}
+
+package "Eigen" {
+    class "Eigen::VectorXd" as EigenVectorXd {
+        +size(): int
+        +operator()(i): double&
+        +norm(): double
+    }
+
+    class "Eigen::MatrixXd" as EigenMatrixXd {
+        +rows(): int
+        +cols(): int
+        +operator()(i, j): double&
+        +transpose(): Eigen::MatrixXd
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Constraint hierarchy
+Constraint <|-- BilateralConstraint : extends
+Constraint <|-- UnilateralConstraint : extends
+BilateralConstraint <|-- UnitQuaternionConstraint : implements
+BilateralConstraint <|-- DistanceConstraint : implements
+
+' Composition
+ConstraintSolver ..> SolveResult : creates
+Constraint ..> EigenVectorXd : returns (evaluate)
+Constraint ..> EigenMatrixXd : returns (jacobian)
+SolveResult *-- EigenVectorXd : lambdas
+
+' AssetInertial constraint management
+AssetInertial *-- "0..*" Constraint : owns constraints <<new>>
+AssetInertial ..> Constraint : provides to integrator
+
+' Integration
+Integrator <|-- SemiImplicitEulerIntegrator : implements
+SemiImplicitEulerIntegrator *-- ConstraintSolver : uses <<new>>
+Integrator ..> Constraint : receives via step()
+SemiImplicitEulerIntegrator ..> ConstraintSolver : delegates solving
+ConstraintSolver ..> Constraint : evaluates/computes jacobians
+
+' WorldModel orchestration
+WorldModel *-- Integrator : owns
+WorldModel o-- "0..*" AssetInertial : manages
+WorldModel ..> Integrator : calls step() <<modified>>
+
+' State dependencies
+Constraint ..> InertialState : evaluates against
+SemiImplicitEulerIntegrator ..> InertialState : modifies
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+
+note right of Constraint
+    **Purpose:** Abstract interface for constraint definitions
+
+    **Mathematical Framework:**
+    - Constraint function: C(q, t) = 0 (holonomic)
+    - Jacobian: J = ∂C/∂q
+    - Time derivative: Ċ = J·q̇ + ∂C/∂t
+
+    **Constraint Equation:**
+    J·M⁻¹·Jᵀ·λ = -J·M⁻¹·F_ext - J̇·q̇ - α·C - β·Ċ
+
+    **Baumgarte Stabilization:**
+    - α: Position error gain (default: 10.0)
+    - β: Velocity error gain (default: 10.0)
+
+    **Thread Safety:** Read-only after construction
+end note
+
+note right of BilateralConstraint
+    **Equality Constraint:** C(q, t) = 0
+
+    **Properties:**
+    - Always active (enforced at all times)
+    - Lagrange multiplier λ ∈ ℝ (unrestricted)
+
+    **Examples:**
+    - Unit quaternion: Q^T·Q - 1 = 0
+    - Fixed distance: |p₁ - p₂|² - d² = 0
+    - Revolute joint: 5 constraints (3 position + 2 orientation)
+end note
+
+note right of UnilateralConstraint
+    **Inequality Constraint:** C(q, t) ≥ 0
+
+    **Complementarity Condition:**
+    - λ ≥ 0 (constraint force non-negative)
+    - C ≥ 0 (constraint satisfied)
+    - λ·C = 0 (constraint active OR force zero)
+
+    **Activity:**
+    - Active when C ≈ 0 (contact established)
+    - Inactive when C > 0 (separation)
+
+    **Examples:**
+    - Contact non-penetration: n·(p₁ - p₂) - d ≥ 0
+    - Joint angle limits: θ - θ_max ≥ 0
+end note
+
+note right of ConstraintSolver
+    **Purpose:** Compute Lagrange multipliers for constraint system
+
+    **Algorithm (Direct Solve):**
+    1. Assemble constraint Jacobian matrix J (all constraints)
+    2. Compute mass matrix M⁻¹ (block diagonal)
+    3. Form constraint matrix: A = J·M⁻¹·Jᵀ
+    4. Build RHS: b = -J·M⁻¹·F_ext - J̇·q̇ - α·C - β·Ċ
+    5. Solve linear system: A·λ = b (Eigen LLT decomposition)
+    6. Extract forces: F_c = Jᵀ·λ
+
+    **Complexity:** O(n³) where n = total constraint dimension
+    **Suitable for:** n < 100 (typical: 1-10 constraints per object)
+
+    **Future:** Iterative solver for large systems
+end note
+
+note right of SolveResult
+    **Purpose:** Return value from constraint solver
+
+    **Fields:**
+    - lambdas: Lagrange multipliers (one per constraint equation)
+    - linearConstraintForce: Net force to apply to linear state
+    - angularConstraintForce: Net torque to apply to angular state
+    - converged: Solver convergence status
+    - conditionNumber: Matrix conditioning (health metric)
+
+    **Usage:** Apply forces to state, log conditioning
+end note
+
+note bottom of SemiImplicitEulerIntegrator
+    **Integration with Constraints:**
+
+    1. Compute unconstrained accelerations:
+       a_free = F_ext / m
+       α_free = I⁻¹ * τ_ext
+
+    2. Solve constraint system:
+       result = solver_.solve(constraints, state, F_ext, τ_ext, m, I⁻¹, dt)
+
+    3. Apply constraint forces:
+       a_total = a_free + result.linearConstraintForce / m
+       α_total = α_free + I⁻¹ * result.angularConstraintForce
+
+    4. Semi-implicit Euler update:
+       v_new = v_old + a_total * dt
+       x_new = x_old + v_new * dt
+       ω_new = ω_old + α_total * dt
+       Q̇_new = omegaToQuaternionRate(ω_new)
+       Q_new = Q_old + Q̇_new * dt
+       normalize(Q_new)  (implicit constraint enforcement)
+
+    **Note:** Constraint forces are acceleration-level corrections
+end note
+
+note bottom of AssetInertial
+    **Constraint Ownership:**
+    - Each AssetInertial owns its constraints
+    - Constraints are per-object (e.g., quaternion normalization)
+    - Multi-object constraints (joints) added in future ticket
+
+    **Constraint Lifecycle:**
+    1. Create: addConstraint(std::make_unique<UnitQuaternionConstraint>())
+    2. Integration: Integrator receives constraint pointers
+    3. Solve: ConstraintSolver evaluates and computes forces
+    4. Remove: removeConstraint(index) or clearConstraints()
+
+    **Default Constraints:**
+    - UnitQuaternionConstraint added automatically at construction
+end note
+
+note bottom of WorldModel
+    **Physics Integration Loop (updatePhysics):**
+
+    1. Accumulate external forces (gravity, user-applied)
+       for each asset:
+           F_ext = Σ potential.computeForce(...)
+           τ_ext = Σ potential.computeTorque(...)
+
+    2. Call integrator with constraints
+       for each asset:
+           constraints = asset.getConstraints()
+           integrator_->step(asset.state, F_ext, τ_ext, m, I⁻¹, constraints, dt)
+
+    3. Synchronize ReferenceFrame
+       for each asset:
+           asset.referenceFrame_.setPosition(asset.state.position)
+           asset.referenceFrame_.setQuaternion(asset.state.orientation)
+
+    **Constraint Solving:** Delegated to Integrator → ConstraintSolver
+end note
+
+@enduml

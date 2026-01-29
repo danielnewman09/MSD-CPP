@@ -221,7 +221,7 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
   float g = colorDist(gen);
   float b = colorDist(gen);
 
-  auto object =
+  auto& object =
     engine_.spawnInertialObject(geometryType, randomPos, randomOrientation);
   gpuManager_->addObject(object, r, g, b);
 
