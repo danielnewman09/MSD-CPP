@@ -2,9 +2,12 @@
 #define WORLD_MODEL_HPP
 
 #include <chrono>
+#include <memory>
 #include <vector>
 #include "msd-sim/src/Environment/Platform.hpp"
 #include "msd-sim/src/Physics/CollisionHandler.hpp"
+#include "msd-sim/src/Physics/Integration/Integrator.hpp"
+#include "msd-sim/src/Physics/PotentialEnergy/PotentialEnergy.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 
@@ -46,7 +49,16 @@ namespace msd_sim
 class WorldModel
 {
 public:
-  WorldModel() = default;
+  /**
+   * @brief Construct WorldModel with default integrator and gravity
+   *
+   * Initializes:
+   * - SemiImplicitEulerIntegrator as default integrator
+   * - GravityPotential with (0, 0, -9.81) m/s² as default potential
+   *
+   * @ticket 0030_lagrangian_quaternion_physics
+   */
+  WorldModel();
   ~WorldModel() = default;
 
   // ========== Object Management ==========
@@ -149,12 +161,47 @@ public:
     return time_;
   }
 
-  // ========== NEW: Gravity Configuration (ticket 0023a) ==========
+  // ========== NEW: Potential Energy Configuration (ticket 0030) ==========
 
   /**
-   * @brief Get the world gravity vector.
-   * @return Gravity acceleration vector [m/s²]
+   * @brief Add a potential energy field to the world.
+   *
+   * Potential energies compute generalized forces from energy gradients.
+   * Multiple potentials can be added and their forces are summed.
+   *
+   * @param energy Potential energy implementation (ownership transferred)
+   *
+   * @ticket 0030_lagrangian_quaternion_physics
    */
+  void addPotentialEnergy(std::unique_ptr<PotentialEnergy> energy);
+
+  /**
+   * @brief Clear all potential energies.
+   *
+   * @ticket 0030_lagrangian_quaternion_physics
+   */
+  void clearPotentialEnergies();
+
+  // ========== NEW: Integrator Configuration (ticket 0030) ==========
+
+  /**
+   * @brief Set the numerical integrator for physics updates.
+   *
+   * The integrator handles the mathematical integration of equations
+   * of motion. Allows swapping integration schemes (Euler, RK4, etc.).
+   *
+   * @param integrator Integrator implementation (ownership transferred)
+   *
+   * @ticket 0030_lagrangian_quaternion_physics
+   */
+  void setIntegrator(std::unique_ptr<Integrator> integrator);
+
+  /**
+   * @brief Get the world gravity vector (deprecated).
+   * @return Gravity acceleration vector [m/s²]
+   * @deprecated Use PotentialEnergy interface instead
+   */
+  [[deprecated("Use PotentialEnergy interface instead")]]
   const Coordinate& getGravity() const;
 
   // ========== Platform Management (Legacy) ==========
@@ -236,11 +283,16 @@ private:
   uint32_t inertialAssetIdCounter_{0};
   uint32_t environmentAssetIdCounter_{0};
 
-  // NEW: Gravity (constant after construction, ticket 0023a)
+  // NEW: Gravity (deprecated, ticket 0023a, replaced by potentialEnergies_ in ticket 0030)
+  [[deprecated("Use potentialEnergies_ instead")]]
   Coordinate gravity_{0.0, 0.0, -9.81};
 
   // NEW: Collision detection and response (ticket 0027)
   CollisionHandler collisionHandler_{1e-6};
+
+  // NEW: Potential energies and integrator (ticket 0030)
+  std::vector<std::unique_ptr<PotentialEnergy>> potentialEnergies_;
+  std::unique_ptr<Integrator> integrator_;
 };
 
 }  // namespace msd_sim

@@ -51,6 +51,43 @@ public:
   ReferenceFrame(const Coordinate& origin, const AngularCoordinate& angular);
 
   /**
+   * @brief Constructor from local X and Z axes (right-hand rule)
+   *
+   * Constructs a reference frame from two vectors representing the local X-axis
+   * (tangent direction) and Z-axis (normal direction). The Y-axis is computed
+   * using the cross product Y = Z × X to follow the right-hand rule.
+   *
+   * The input vectors do not need to be normalized or perfectly orthogonal -
+   * they will be processed as follows:
+   * 1. Z is normalized (takes precedence as the primary/normal direction)
+   * 2. X is orthogonalized against Z and normalized
+   * 3. Y is computed as Z × X
+   *
+   * This is useful for constructing a local coordinate frame based on a surface
+   * normal (Z) and tangent direction (X), common in collision response.
+   *
+   * @param origin The origin of this frame in global coordinates
+   * @param xDirection Vector representing the local positive X-axis direction
+   * @param zDirection Vector representing the local positive Z-axis direction
+   * @throws std::invalid_argument if either vector is zero or if vectors are
+   *         parallel
+   */
+  ReferenceFrame(const Coordinate& origin,
+                 const Coordinate& xDirection,
+                 const Coordinate& zDirection);
+
+  /**
+   * @brief Constructor with origin and quaternion orientation
+   *
+   * Constructs a reference frame using a quaternion to specify orientation.
+   * The quaternion will be normalized internally for robustness.
+   *
+   * @param origin The origin of this frame in global coordinates
+   * @param quaternion The orientation as a unit quaternion (will be normalized)
+   */
+  ReferenceFrame(const Coordinate& origin, const Eigen::Quaterniond& quaternion);
+
+  /**
    * @brief Transform a coordinate from global frame to this local frame
    * @param globalCoord Coordinate in global frame
    * @return Coordinate in this local frame
@@ -171,8 +208,18 @@ public:
   /**
    * @brief Set the rotation using AngularCoordinate
    * @param angular Orientation angles (pitch, roll, yaw) in radians
+   * @deprecated Use setQuaternion() for gimbal-lock-free orientation
    */
+  [[deprecated("Use setQuaternion() for gimbal-lock-free orientation")]]
   void setRotation(const AngularCoordinate& angular);
+
+  /**
+   * @brief Set the orientation using a quaternion
+   * @param quaternion The orientation as a unit quaternion (will be normalized)
+   *
+   * @ticket 0030_lagrangian_quaternion_physics
+   */
+  void setQuaternion(const Eigen::Quaterniond& quaternion);
 
   /**
    * @brief Get the origin of this frame in global coordinates
@@ -193,6 +240,12 @@ public:
    * @return Const reference to AngularCoordinate representing current rotation
    */
   const AngularCoordinate& getAngularCoordinate() const;
+
+  /**
+   * @brief Get the orientation as a quaternion
+   * @return Unit quaternion representing the frame's orientation
+   */
+  [[nodiscard]] Eigen::Quaterniond getQuaternion() const;
 
   /**
    * @brief Get the rotation matrix
@@ -221,6 +274,18 @@ private:
    * @brief Update rotation matrix from AngularCoordinate
    */
   void updateRotationMatrix() const;
+
+  /**
+   * @brief Extract Euler angles (ZYX convention) from a rotation matrix
+   *
+   * Extracts pitch, roll, yaw angles from a rotation matrix using the
+   * ZYX intrinsic rotation convention (R = Rz(yaw) * Ry(pitch) * Rx(roll)).
+   * Handles gimbal lock at pitch = ±π/2.
+   *
+   * @param rotation The 3x3 rotation matrix to decompose
+   * @return AngularCoordinate containing (pitch, roll, yaw) in radians
+   */
+  static AngularCoordinate extractEulerAngles(const Eigen::Matrix3d& rotation);
 
   Coordinate origin_;          ///< Origin of this frame in global coordinates
   AngularCoordinate angular_;  ///< Orientation angles (pitch, roll, yaw)

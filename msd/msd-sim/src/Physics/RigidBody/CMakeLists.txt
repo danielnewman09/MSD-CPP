@@ -4,6 +4,7 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     AssetPhysical.cpp
     ConvexHull.cpp
     InertialCalculations.cpp
+    InertialState.cpp
 )
 
 set(

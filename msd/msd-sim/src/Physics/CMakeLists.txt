@@ -1,5 +1,8 @@
 
 add_subdirectory(RigidBody)
+add_subdirectory(Constraints)
+add_subdirectory(Integration)
+add_subdirectory(PotentialEnergy)
 
 target_sources(${MSD_SIM_NAME} PRIVATE
     GJK.cpp

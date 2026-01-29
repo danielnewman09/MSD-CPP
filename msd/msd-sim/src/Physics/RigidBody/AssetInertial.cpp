@@ -36,8 +36,9 @@ AssetInertial::AssetInertial(uint32_t assetId,
 
   // Initialize InertialState position and orientation from ReferenceFrame
   dynamicState_.position = frame.getOrigin();
-  dynamicState_.orientation = frame.getAngularCoordinate();
-  // Ticket: 0023_force_application_system
+  dynamicState_.orientation = frame.getQuaternion();
+  dynamicState_.quaternionRate = Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
+  // Ticket: 0030_lagrangian_quaternion_physics
 }
 
 AssetInertial::AssetInertial(uint32_t assetId,
@@ -76,8 +77,9 @@ AssetInertial::AssetInertial(uint32_t assetId,
 
   // Initialize InertialState position and orientation from ReferenceFrame
   dynamicState_.position = frame.getOrigin();
-  dynamicState_.orientation = frame.getAngularCoordinate();
-  // Ticket: 0027_collision_response_system
+  dynamicState_.orientation = frame.getQuaternion();
+  dynamicState_.quaternionRate = Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
+  // Ticket: 0030_lagrangian_quaternion_physics
 }
 
 double AssetInertial::getMass() const
@@ -187,8 +189,22 @@ void AssetInertial::applyAngularImpulse(const AngularRate& angularImpulse)
 {
   // Angular impulse directly modifies angular velocity: Δω = I⁻¹ * L
   // Unlike torques, this is timestep-independent
-  dynamicState_.angularVelocity += angularImpulse;
-  // Ticket: 0027_collision_response_system
+  AngularRate omega = dynamicState_.getAngularVelocity();
+  omega += angularImpulse;
+  dynamicState_.setAngularVelocity(omega);
+  // Ticket: 0027_collision_response_system (updated for quaternions, ticket 0030)
+}
+
+// ========== Quaternion Constraint (ticket 0030) ==========
+
+QuaternionConstraint& AssetInertial::getQuaternionConstraint()
+{
+  return quaternionConstraint_;
+}
+
+const QuaternionConstraint& AssetInertial::getQuaternionConstraint() const
+{
+  return quaternionConstraint_;
 }
 
 }  // namespace msd_sim

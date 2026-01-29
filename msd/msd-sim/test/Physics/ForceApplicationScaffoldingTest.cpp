@@ -237,13 +237,14 @@ TEST(ForceApplicationScaffolding, angularVelocity_isAngularRateType)
 {
   InertialState state;
 
-  // Set angular velocity as AngularRate
-  state.angularVelocity = AngularRate{1.0, 2.0, 3.0};
+  // Set angular velocity via setter (converts to quaternion rate internally)
+  state.setAngularVelocity(AngularRate{1.0, 2.0, 3.0});
 
-  // Verify it's accessible as AngularRate with pitch/roll/yaw accessors
-  EXPECT_DOUBLE_EQ(state.angularVelocity.pitch(), 1.0);
-  EXPECT_DOUBLE_EQ(state.angularVelocity.roll(), 2.0);
-  EXPECT_DOUBLE_EQ(state.angularVelocity.yaw(), 3.0);
+  // Verify it's accessible via getter and returns AngularRate with pitch/roll/yaw accessors
+  AngularRate omega = state.getAngularVelocity();
+  EXPECT_NEAR(omega.pitch(), 1.0, 1e-10);
+  EXPECT_NEAR(omega.roll(), 2.0, 1e-10);
+  EXPECT_NEAR(omega.yaw(), 3.0, 1e-10);
 }
 
 TEST(ForceApplicationScaffolding, angularAcceleration_isAngularRateType)
@@ -259,21 +260,31 @@ TEST(ForceApplicationScaffolding, angularAcceleration_isAngularRateType)
   EXPECT_DOUBLE_EQ(state.angularAcceleration.yaw(), 2.5);
 }
 
-TEST(ForceApplicationScaffolding, orientation_isAngularCoordinateType)
+TEST(ForceApplicationScaffolding, orientation_isQuaternionType)
 {
   InertialState state;
 
-  // Set orientation as AngularCoordinate (radians)
-  constexpr double pitchRad = 10.0 * M_PI / 180.0;
-  constexpr double rollRad = 20.0 * M_PI / 180.0;
-  constexpr double yawRad = 30.0 * M_PI / 180.0;
+  // Orientation is now Eigen::Quaterniond (w, x, y, z)
+  // Set to identity quaternion
+  state.orientation = Eigen::Quaterniond::Identity();
 
-  state.orientation = AngularCoordinate{pitchRad, rollRad, yawRad};
+  // Verify it's a unit quaternion
+  EXPECT_NEAR(state.orientation.norm(), 1.0, 1e-10);
+  EXPECT_NEAR(state.orientation.w(), 1.0, 1e-10);
+  EXPECT_NEAR(state.orientation.x(), 0.0, 1e-10);
+  EXPECT_NEAR(state.orientation.y(), 0.0, 1e-10);
+  EXPECT_NEAR(state.orientation.z(), 0.0, 1e-10);
 
-  // Verify it's accessible as AngularCoordinate with degree accessors
-  EXPECT_NEAR(state.orientation.pitchDeg(), 10.0, 1e-9);
-  EXPECT_NEAR(state.orientation.rollDeg(), 20.0, 1e-9);
-  EXPECT_NEAR(state.orientation.yawDeg(), 30.0, 1e-9);
+  // Set to 90° rotation about Z-axis
+  state.orientation = Eigen::Quaterniond{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
+  EXPECT_NEAR(state.orientation.norm(), 1.0, 1e-10);
+
+  // Deprecated getEulerAngles() is available for backward compatibility
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+  AngularCoordinate euler = state.getEulerAngles();
+  EXPECT_NEAR(euler.yaw(), M_PI / 2, 1e-9);
+  #pragma GCC diagnostic pop
 }
 
 // ============================================================================
@@ -520,10 +531,12 @@ TEST(PhysicsIntegration, updatePhysics_synchronizesReferenceFrame)
   EXPECT_DOUBLE_EQ(refFrame.getOrigin().y(), state.position.y());
   EXPECT_DOUBLE_EQ(refFrame.getOrigin().z(), state.position.z());
 
-  AngularCoordinate frameOrientation = refFrame.getAngularCoordinate();
-  EXPECT_DOUBLE_EQ(frameOrientation.pitch(), state.orientation.pitch());
-  EXPECT_DOUBLE_EQ(frameOrientation.roll(), state.orientation.roll());
-  EXPECT_DOUBLE_EQ(frameOrientation.yaw(), state.orientation.yaw());
+  // Compare quaternions directly (orientation is now Eigen::Quaterniond)
+  Eigen::Quaterniond frameQuat = refFrame.getQuaternion();
+  EXPECT_NEAR(frameQuat.w(), state.orientation.w(), 1e-10);
+  EXPECT_NEAR(frameQuat.x(), state.orientation.x(), 1e-10);
+  EXPECT_NEAR(frameQuat.y(), state.orientation.y(), 1e-10);
+  EXPECT_NEAR(frameQuat.z(), state.orientation.z(), 1e-10);
 }
 
 TEST(PhysicsIntegration, updatePhysics_clearsForces)
@@ -591,10 +604,15 @@ TEST(PhysicsIntegration, updatePhysics_angularIntegration)
   EXPECT_NEAR(state.angularAcceleration.yaw(), expectedAngularAccel.z(), 1e-6);
 
   // Check angular velocity
-  EXPECT_NEAR(state.angularVelocity.yaw(), expectedAngularVel.z(), 1e-6);
+  // Tolerance increased to 1e-4 due to quaternion constraint enforcement (Baumgarte stabilization)
+  EXPECT_NEAR(state.getAngularVelocity().yaw(), expectedAngularVel.z(), 1e-4);
 
-  // Check orientation change
-  EXPECT_NEAR(state.orientation.yaw(), expectedOrientation.z(), 1e-6);
+  // Check orientation change (use deprecated getEulerAngles() for backward compatibility test)
+  // Tolerance increased to 1e-5 due to quaternion integration and constraint enforcement
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+  EXPECT_NEAR(state.getEulerAngles().yaw(), expectedOrientation.z(), 1e-5);
+  #pragma GCC diagnostic pop
 }
 
 // ============================================================================
@@ -614,10 +632,12 @@ TEST(ProjectileMotion, freeFall_underGravity)
 
   // Drop from 10m height, simulate for ~1 second
   int steps = 60;     // ~1 second at 60 FPS
+  auto simTime = std::chrono::milliseconds{0};
 
   for (int i = 0; i < steps; ++i)
   {
-    world.update(std::chrono::milliseconds{16});
+    simTime += std::chrono::milliseconds{16};
+    world.update(simTime);
   }
 
   // After 1 second:
@@ -652,16 +672,21 @@ TEST(ProjectileMotion, rotationFromOffsetForce)
 
   // Apply constant force at offset point to generate rotation
   // r = (1, 0, 0), F = (0, 10, 0) → τ = (0, 0, 10)
+  auto simTime = std::chrono::milliseconds{0};
   for (int i = 0; i < 10; ++i)
   {
     mutableAsset.applyForceAtPoint(Coordinate{0, 10, 0}, Coordinate{1, 0, 0});
-    world.update(std::chrono::milliseconds{16});
+    simTime += std::chrono::milliseconds{16};
+    world.update(simTime);
   }
 
   const InertialState& state = mutableAsset.getInertialState();
 
   // Object should have both linear and angular velocity
   EXPECT_GT(state.velocity.y(), 0.0);           // Linear motion in +Y
-  EXPECT_GT(state.angularVelocity.yaw(), 0.0);  // Rotation about +Z
-  EXPECT_GT(state.orientation.yaw(), 0.0);      // Accumulated rotation
+  EXPECT_GT(state.getAngularVelocity().yaw(), 0.0);  // Rotation about +Z
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+  EXPECT_GT(state.getEulerAngles().yaw(), 0.0);      // Accumulated rotation
+  #pragma GCC diagnostic pop
 }

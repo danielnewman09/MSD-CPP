@@ -1,4 +1,5 @@
 // Ticket: 0027_collision_response_system
+// Refactored: Lagrangian mechanics with frictionless constraints
 // Design: docs/designs/0027_collision_response_system/design.md
 
 #include <gtest/gtest.h>
@@ -83,12 +84,12 @@ TEST(CollisionResponseTest, combineRestitution_HalfHalf)
 }
 
 // ============================================================================
-// computeImpulseMagnitude() Tests
+// computeLagrangeMultiplier() Tests (was computeImpulseMagnitude)
 // ============================================================================
 
-TEST(CollisionResponseTest, computeImpulseMagnitude_SeparatingObjects)
+TEST(CollisionResponseTest, computeLagrangeMultiplier_SeparatingObjects)
 {
-  // Objects moving apart should have zero impulse
+  // Objects moving apart: constraint satisfied → λ = 0
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
@@ -98,7 +99,6 @@ TEST(CollisionResponseTest, computeImpulseMagnitude_SeparatingObjects)
   AssetInertial assetB{0, 1, hull, 10.0, frameB};
 
   // Set velocities: moving apart (A moving left, B moving right)
-  // A is at origin, B is to the right at x=1
   assetA.getInertialState().velocity = Coordinate{-1.0, 0.0, 0.0};
   assetB.getInertialState().velocity = Coordinate{1.0, 0.0, 0.0};
 
@@ -108,17 +108,17 @@ TEST(CollisionResponseTest, computeImpulseMagnitude_SeparatingObjects)
                          Coordinate{0.5, 0.0, 0.0},   // contact point A
                          Coordinate{0.5, 0.0, 0.0}};  // contact point B
 
-  double impulse =
-    CollisionResponse::computeImpulseMagnitude(assetA, assetB, result, 1.0);
+  double lambda =
+    CollisionResponse::computeLagrangeMultiplier(assetA, assetB, result, 1.0);
 
-  // vRel = vA - vB = (-1, 0, 0) - (1, 0, 0) = (-2, 0, 0)
-  // vRelNormal = vRel · n = -2 < 0 → objects separating → impulse = 0
-  EXPECT_EQ(impulse, 0.0);
+  // vRel · n < 0 → constraint satisfied → λ = 0
+  EXPECT_EQ(lambda, 0.0);
 }
 
-TEST(CollisionResponseTest, computeImpulseMagnitude_HeadOnElastic)
+TEST(CollisionResponseTest, computeLagrangeMultiplier_HeadOnElastic)
 {
-  // Equal mass head-on collision with e=1.0 should produce specific impulse
+  // Equal mass head-on collision with e=1.0
+  // Lagrange multiplier = (1+e) * vRelNormal / effectiveMass
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
@@ -137,15 +137,20 @@ TEST(CollisionResponseTest, computeImpulseMagnitude_HeadOnElastic)
                          Coordinate{0.45, 0.0, 0.0},   // contact point A
                          Coordinate{0.45, 0.0, 0.0}};  // contact point B
 
-  double impulse = CollisionResponse::computeImpulseMagnitude(
+  double lambda = CollisionResponse::computeLagrangeMultiplier(
     assetA, assetB, result, 1.0);  // Fully elastic
 
-  EXPECT_NEAR(impulse, 40.0, 1e-10);
+  // λ = (1+e) * vRelNormal / (1/mA + 1/mB + angular)
+  // vRel = (2,0,0) - (-2,0,0) = (4,0,0)
+  // vRelNormal = 4
+  // effectiveMass ≈ 1/10 + 1/10 = 0.2 (angular terms small for center contact)
+  // λ = 2 * 4 / 0.2 = 40
+  EXPECT_NEAR(lambda, 40.0, 1e-10);
 }
 
-TEST(CollisionResponseTest, computeImpulseMagnitude_StaticObjectsNoImpulse)
+TEST(CollisionResponseTest, computeLagrangeMultiplier_StaticObjectsZeroLambda)
 {
-  // Both objects at rest → no impulse needed
+  // Both objects at rest → constraint satisfied → λ = 0
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
@@ -163,20 +168,18 @@ TEST(CollisionResponseTest, computeImpulseMagnitude_StaticObjectsNoImpulse)
                          Coordinate{0.45, 0.0, 0.0},   // contact A
                          Coordinate{0.45, 0.0, 0.0}};  // contact B
 
-  double impulse =
-    CollisionResponse::computeImpulseMagnitude(assetA, assetB, result, 1.0);
+  double lambda =
+    CollisionResponse::computeLagrangeMultiplier(assetA, assetB, result, 1.0);
 
-  // At rest: vRel = 0, vRelNormal = 0
-  // This triggers the separating check (vRelNormal > 0? Actually = 0)
-  // Formula: j = -(1 + e) * 0 / denom = 0
-  EXPECT_DOUBLE_EQ(0.0, impulse);
+  // vRelNormal = 0 → not violating constraint → λ = 0
+  EXPECT_DOUBLE_EQ(0.0, lambda);
 }
 
 // ============================================================================
-// applyPositionCorrection() Tests
+// applyPositionStabilization() Tests (was applyPositionCorrection)
 // ============================================================================
 
-TEST(CollisionResponseTest, applyPositionCorrection_NoPenetration)
+TEST(CollisionResponseTest, applyPositionStabilization_NoPenetration)
 {
   // Penetration below slop threshold → no correction
   auto points = createCubePoints(1.0);
@@ -196,16 +199,16 @@ TEST(CollisionResponseTest, applyPositionCorrection_NoPenetration)
                          Coordinate{0.5, 0.0, 0.0},
                          Coordinate{0.5, 0.0, 0.0}};
 
-  CollisionResponse::applyPositionCorrection(assetA, assetB, result);
+  CollisionResponse::applyPositionStabilization(assetA, assetB, result);
 
   // Positions should not change
   EXPECT_DOUBLE_EQ(originalPosA.x(), assetA.getInertialState().position.x());
   EXPECT_DOUBLE_EQ(originalPosB.x(), assetB.getInertialState().position.x());
 }
 
-TEST(CollisionResponseTest, applyPositionCorrection_DeepPenetration)
+TEST(CollisionResponseTest, applyPositionStabilization_DeepPenetration)
 {
-  // Significant penetration → objects separated
+  // Significant penetration → Baumgarte stabilization applied
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
@@ -225,14 +228,13 @@ TEST(CollisionResponseTest, applyPositionCorrection_DeepPenetration)
                          Coordinate{0.4, 0.0, 0.0},
                          Coordinate{0.4, 0.0, 0.0}};
 
-  CollisionResponse::applyPositionCorrection(assetA, assetB, result);
+  CollisionResponse::applyPositionStabilization(assetA, assetB, result);
 
   // Expected correction: max(0.2 - 0.01, 0) * 0.8 = 0.19 * 0.8 = 0.152
   double expectedCorrection = (penetration - CollisionResponse::kSlop) *
                               CollisionResponse::kCorrectionFactor;
 
   // Equal mass → each moves half the correction
-  // A moves in -normal direction, B moves in +normal direction
   Coordinate expectedPosA =
     Coordinate{0.0, 0.0, 0.0} -
     Coordinate{1.0, 0.0, 0.0} * (expectedCorrection * 0.5);
@@ -244,9 +246,9 @@ TEST(CollisionResponseTest, applyPositionCorrection_DeepPenetration)
   EXPECT_NEAR(expectedPosB.x(), assetB.getInertialState().position.x(), 1e-10);
 }
 
-TEST(CollisionResponseTest, applyPositionCorrection_MassWeighting)
+TEST(CollisionResponseTest, applyPositionStabilization_MassWeighting)
 {
-  // Heavier object should move less than lighter object
+  // Heavier object should move less (mass-weighted correction)
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
@@ -268,12 +270,12 @@ TEST(CollisionResponseTest, applyPositionCorrection_MassWeighting)
                          Coordinate{0.45, 0.0, 0.0},
                          Coordinate{0.45, 0.0, 0.0}};
 
-  CollisionResponse::applyPositionCorrection(assetA, assetB, result);
+  CollisionResponse::applyPositionStabilization(assetA, assetB, result);
 
   // Mass weighting:
-  // invMassSum = 1/30 + 1/10 = 1/30 + 3/30 = 4/30
-  // weightA = (1/30) / (4/30) = 1/4 = 0.25
-  // weightB = (1/10) / (4/30) = 3/4 = 0.75
+  // invMassSum = 1/30 + 1/10 = 4/30
+  // weightA = (1/30) / (4/30) = 0.25
+  // weightB = (1/10) / (4/30) = 0.75
 
   double correction = (penetration - CollisionResponse::kSlop) *
                       CollisionResponse::kCorrectionFactor;
@@ -296,9 +298,9 @@ TEST(CollisionResponseTest, applyPositionCorrection_MassWeighting)
 // Dynamic-Static Collision Tests (Inertial vs Environment)
 // ============================================================================
 
-TEST(CollisionResponseStaticTest, computeImpulseMagnitudeStatic_SeparatingObject)
+TEST(CollisionResponseStaticTest, computeLagrangeMultiplierStatic_SeparatingObject)
 {
-  // Dynamic object moving away from static should have zero impulse
+  // Dynamic object moving away from static → constraint satisfied → λ = 0
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
@@ -316,16 +318,16 @@ TEST(CollisionResponseStaticTest, computeImpulseMagnitudeStatic_SeparatingObject
                          Coordinate{0.5, 0.0, 0.0},   // contact point A
                          Coordinate{0.5, 0.0, 0.0}};  // contact point B
 
-  double impulse = CollisionResponse::computeImpulseMagnitudeStatic(
+  double lambda = CollisionResponse::computeLagrangeMultiplierStatic(
       dynamic, staticObj, result, 1.0);
 
-  // vRel · n = -1.0 < 0 → separating → no impulse
-  EXPECT_EQ(impulse, 0.0);
+  // vRel · n < 0 → separating → λ = 0
+  EXPECT_EQ(lambda, 0.0);
 }
 
-TEST(CollisionResponseStaticTest, computeImpulseMagnitudeStatic_ApproachingObject)
+TEST(CollisionResponseStaticTest, computeLagrangeMultiplierStatic_ApproachingObject)
 {
-  // Dynamic object approaching static should receive impulse
+  // Dynamic object approaching static → λ > 0
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
@@ -343,22 +345,21 @@ TEST(CollisionResponseStaticTest, computeImpulseMagnitudeStatic_ApproachingObjec
                          Coordinate{0.45, 0.0, 0.0},   // contact point A
                          Coordinate{0.45, 0.0, 0.0}};  // contact point B
 
-  double impulse = CollisionResponse::computeImpulseMagnitudeStatic(
+  double lambda = CollisionResponse::computeLagrangeMultiplierStatic(
       dynamic, staticObj, result, 1.0);  // Fully elastic
 
-  // Should have positive impulse
-  EXPECT_GT(impulse, 0.0);
+  // Should have positive λ
+  EXPECT_GT(lambda, 0.0);
 
-  // For elastic collision with static wall:
-  // j = (1 + e) * vRelNormal / (1/m + angular_term)
+  // λ = (1 + e) * vRelNormal / (1/m + angular_term)
   // With contact at center, angular_term ≈ 0
-  // j = 2.0 * 2.0 / 0.1 = 40.0
-  EXPECT_NEAR(impulse, 40.0, 0.1);
+  // λ = 2.0 * 2.0 / 0.1 = 40.0
+  EXPECT_NEAR(lambda, 40.0, 0.1);
 }
 
-TEST(CollisionResponseStaticTest, computeImpulseMagnitudeStatic_InelasticCollision)
+TEST(CollisionResponseStaticTest, computeLagrangeMultiplierStatic_InelasticCollision)
 {
-  // Inelastic collision with static wall
+  // Inelastic collision: λ_inelastic = λ_elastic / 2
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
@@ -375,20 +376,18 @@ TEST(CollisionResponseStaticTest, computeImpulseMagnitudeStatic_InelasticCollisi
                          Coordinate{0.45, 0.0, 0.0}};
 
   // Fully inelastic (e=0)
-  double impulseInelastic = CollisionResponse::computeImpulseMagnitudeStatic(
+  double lambdaInelastic = CollisionResponse::computeLagrangeMultiplierStatic(
       dynamic, staticObj, result, 0.0);
 
   // Fully elastic (e=1)
-  double impulseElastic = CollisionResponse::computeImpulseMagnitudeStatic(
+  double lambdaElastic = CollisionResponse::computeLagrangeMultiplierStatic(
       dynamic, staticObj, result, 1.0);
 
-  // Elastic impulse should be twice inelastic
-  // Inelastic: j = 1 * vRelNormal / denom
-  // Elastic: j = 2 * vRelNormal / denom
-  EXPECT_NEAR(impulseElastic, 2.0 * impulseInelastic, 0.01);
+  // λ_elastic = (1+1) * v / m_eff = 2 * λ_inelastic
+  EXPECT_NEAR(lambdaElastic, 2.0 * lambdaInelastic, 0.01);
 }
 
-TEST(CollisionResponseStaticTest, applyPositionCorrectionStatic_NoPenetration)
+TEST(CollisionResponseStaticTest, applyPositionStabilizationStatic_NoPenetration)
 {
   // Penetration below slop threshold → no correction
   auto points = createCubePoints(1.0);
@@ -406,15 +405,15 @@ TEST(CollisionResponseStaticTest, applyPositionCorrectionStatic_NoPenetration)
   CollisionResult result{Coordinate{1.0, 0.0, 0.0}, 0.005,  // < kSlop
                          Coordinate{0.5, 0.0, 0.0}, Coordinate{0.5, 0.0, 0.0}};
 
-  CollisionResponse::applyPositionCorrectionStatic(dynamic, staticObj, result);
+  CollisionResponse::applyPositionStabilizationStatic(dynamic, staticObj, result);
 
   // Position should not change
   EXPECT_DOUBLE_EQ(originalPos.x(), dynamic.getInertialState().position.x());
 }
 
-TEST(CollisionResponseStaticTest, applyPositionCorrectionStatic_FullCorrectionToDynamic)
+TEST(CollisionResponseStaticTest, applyPositionStabilizationStatic_FullCorrectionToDynamic)
 {
-  // All correction should be applied to dynamic object (static is immovable)
+  // All correction applied to dynamic object (static has infinite mass)
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
@@ -430,13 +429,13 @@ TEST(CollisionResponseStaticTest, applyPositionCorrectionStatic_FullCorrectionTo
   CollisionResult result{Coordinate{1.0, 0.0, 0.0}, penetration,
                          Coordinate{0.4, 0.0, 0.0}, Coordinate{0.4, 0.0, 0.0}};
 
-  CollisionResponse::applyPositionCorrectionStatic(dynamic, staticObj, result);
+  CollisionResponse::applyPositionStabilizationStatic(dynamic, staticObj, result);
 
   // Expected correction: (0.2 - 0.01) * 0.8 = 0.152
   double expectedCorrection = (penetration - CollisionResponse::kSlop) *
                               CollisionResponse::kCorrectionFactor;
 
-  // Dynamic should move full correction in -x direction (away from static)
+  // Dynamic should move full correction in -x direction
   Coordinate expectedPos = Coordinate{0.0, 0.0, 0.0} -
                            Coordinate{1.0, 0.0, 0.0} * expectedCorrection;
 
@@ -449,11 +448,11 @@ TEST(CollisionResponseStaticTest, kEnvironmentRestitution_DefaultValue)
   EXPECT_DOUBLE_EQ(0.5, CollisionResponse::kEnvironmentRestitution);
 }
 
-// ========== Manifold-Aware Static Collision Tests (Ticket: 0029) ==========
+// ========== Lagrangian Constraint Response Tests (Frictionless) ==========
 
-TEST(CollisionResponseStaticManifoldTest, applyImpulseManifoldStatic_SingleContact)
+TEST(CollisionResponseStaticConstraintTest, applyConstraintResponseStatic_SingleContact)
 {
-  // Single contact should behave same as non-manifold version
+  // Single contact: frictionless constraint response
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
@@ -474,18 +473,18 @@ TEST(CollisionResponseStaticManifoldTest, applyImpulseManifoldStatic_SingleConta
   result.contacts[0] = ContactPoint{Coordinate{0.5, 0.0, 0.0}, Coordinate{0.5, 0.0, 0.0}};
 
   double restitution = 1.0;  // Elastic
-  CollisionResponse::applyImpulseManifoldStatic(dynamic, staticObj, result, restitution);
+  CollisionResponse::applyConstraintResponseStatic(dynamic, staticObj, result, restitution);
 
-  // Velocity should change (impulse applied)
+  // Velocity should change (constraint force applied)
   EXPECT_NE(originalVel.x(), dynamic.getInertialState().velocity.x());
 
-  // For elastic collision, velocity should reverse sign (approximately)
+  // For elastic collision, normal velocity should reverse sign
   EXPECT_LT(dynamic.getInertialState().velocity.x(), 0.0);
 }
 
-TEST(CollisionResponseStaticManifoldTest, applyImpulseManifoldStatic_MultipleContacts)
+TEST(CollisionResponseStaticConstraintTest, applyConstraintResponseStatic_MultipleContacts)
 {
-  // Multiple contacts should distribute impulse and apply angular effects
+  // Multiple contacts: constraint force distributed across manifold
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
@@ -497,36 +496,33 @@ TEST(CollisionResponseStaticManifoldTest, applyImpulseManifoldStatic_MultipleCon
   dynamic.getInertialState().position = frameDynamic.getOrigin();
   double initialVx = 2.0;
   dynamic.getInertialState().velocity = Coordinate{initialVx, 0.0, 0.0};
-  AngularRate originalAngularVel = dynamic.getInertialState().angularVelocity;
+  AngularRate originalAngularVel = dynamic.getInertialState().getAngularVelocity();
 
   // 3-contact manifold (face-face collision)
-  // Use contacts at center position to minimize angular effects on impulse magnitude
   CollisionResult result;
   result.normal = Coordinate{1.0, 0.0, 0.0};
   result.penetrationDepth = 0.1;
   result.contactCount = 3;
-  // Contacts at different vertical positions to generate opposing torques
+  // Symmetric contacts to minimize angular effects
   result.contacts[0] = ContactPoint{Coordinate{0.5, 0.0, 0.5}, Coordinate{0.5, 0.0, 0.5}};
   result.contacts[1] = ContactPoint{Coordinate{0.5, 0.0, 0.0}, Coordinate{0.5, 0.0, 0.0}};
   result.contacts[2] = ContactPoint{Coordinate{0.5, 0.0, -0.5}, Coordinate{0.5, 0.0, -0.5}};
 
   double restitution = 1.0;
-  CollisionResponse::applyImpulseManifoldStatic(dynamic, staticObj, result, restitution);
+  CollisionResponse::applyConstraintResponseStatic(dynamic, staticObj, result, restitution);
 
-  // Linear velocity should decrease (impulse applied in -x direction)
+  // Linear velocity should decrease (constraint force in -x direction)
   EXPECT_LT(dynamic.getInertialState().velocity.x(), initialVx);
 
-  // With symmetric contact points around vertical axis, net angular impulse
-  // about Y axis should be near zero (opposing torques from top/bottom contacts cancel)
-  // The Y component represents rotation about the axis perpendicular to collision normal
-  double angularChangeY = std::abs(dynamic.getInertialState().angularVelocity.y() -
+  // With symmetric contacts, net angular impulse about Y axis should be ~zero
+  double angularChangeY = std::abs(dynamic.getInertialState().getAngularVelocity().y() -
                                    originalAngularVel.y());
   EXPECT_LT(angularChangeY, 1e-10);
 }
 
-TEST(CollisionResponseStaticManifoldTest, applyImpulseManifoldStatic_SeparatingNoImpulse)
+TEST(CollisionResponseStaticConstraintTest, applyConstraintResponseStatic_SeparatingNoForce)
 {
-  // Objects separating should not receive impulse
+  // Objects separating: constraint satisfied → no force applied
   auto points = createCubePoints(1.0);
   ConvexHull hull{points};
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
@@ -536,7 +532,7 @@ TEST(CollisionResponseStaticManifoldTest, applyImpulseManifoldStatic_SeparatingN
   AssetEnvironment staticObj{0, 1, hull, frameStatic};
 
   dynamic.getInertialState().position = frameDynamic.getOrigin();
-  dynamic.getInertialState().velocity = Coordinate{-2.0, 0.0, 0.0};  // Moving away from static
+  dynamic.getInertialState().velocity = Coordinate{-2.0, 0.0, 0.0};  // Moving away
   Coordinate originalVel = dynamic.getInertialState().velocity;
 
   CollisionResult result;
@@ -546,8 +542,82 @@ TEST(CollisionResponseStaticManifoldTest, applyImpulseManifoldStatic_SeparatingN
   result.contacts[0] = ContactPoint{Coordinate{0.5, 0.0, 0.0}, Coordinate{0.5, 0.0, 0.0}};
 
   double restitution = 1.0;
-  CollisionResponse::applyImpulseManifoldStatic(dynamic, staticObj, result, restitution);
+  CollisionResponse::applyConstraintResponseStatic(dynamic, staticObj, result, restitution);
 
-  // Velocity should not change (objects separating)
+  // Velocity should not change (constraint already satisfied)
   EXPECT_DOUBLE_EQ(originalVel.x(), dynamic.getInertialState().velocity.x());
+}
+
+// ============================================================================
+// applyConstraintResponse() Tests (Dynamic-Dynamic)
+// ============================================================================
+
+TEST(CollisionResponseConstraintTest, applyConstraintResponse_HeadOnFrictionless)
+{
+  // Head-on collision: frictionless constraint response
+  auto points = createCubePoints(1.0);
+  ConvexHull hull{points};
+  ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
+  ReferenceFrame frameB{Coordinate{0.9, 0.0, 0.0}};
+
+  AssetInertial assetA{0, 0, hull, 10.0, frameA};
+  AssetInertial assetB{0, 1, hull, 10.0, frameB};
+
+  // Head-on collision: A moving right, B moving left
+  assetA.getInertialState().velocity = Coordinate{2.0, 0.0, 0.0};
+  assetB.getInertialState().velocity = Coordinate{-2.0, 0.0, 0.0};
+
+  Coordinate originalVelA = assetA.getInertialState().velocity;
+  Coordinate originalVelB = assetB.getInertialState().velocity;
+
+  CollisionResult result;
+  result.normal = Coordinate{1.0, 0.0, 0.0};  // A→B
+  result.penetrationDepth = 0.1;
+  result.contactCount = 1;
+  result.contacts[0] = ContactPoint{Coordinate{0.45, 0.0, 0.0}, Coordinate{0.45, 0.0, 0.0}};
+
+  CollisionResponse::applyConstraintResponse(assetA, assetB, result, 1.0);  // elastic
+
+  // Velocities should have exchanged (equal mass elastic collision)
+  // A was going right (+2), now should go left (~-2)
+  // B was going left (-2), now should go right (~+2)
+  EXPECT_NEAR(assetA.getInertialState().velocity.x(), originalVelB.x(), 0.1);
+  EXPECT_NEAR(assetB.getInertialState().velocity.x(), originalVelA.x(), 0.1);
+}
+
+TEST(CollisionResponseConstraintTest, applyConstraintResponse_FrictionlessSliding)
+{
+  // Tangential velocity preserved (frictionless)
+  auto points = createCubePoints(1.0);
+  ConvexHull hull{points};
+  ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
+  ReferenceFrame frameB{Coordinate{0.9, 0.0, 0.0}};
+
+  AssetInertial assetA{0, 0, hull, 10.0, frameA};
+  AssetInertial assetB{0, 1, hull, 10.0, frameB};
+
+  // A moving diagonally: normal (+x) and tangential (+y) components
+  assetA.getInertialState().velocity = Coordinate{2.0, 3.0, 0.0};
+  assetB.getInertialState().velocity = Coordinate{0.0, 0.0, 0.0};
+
+  double originalTangentVelA = assetA.getInertialState().velocity.y();
+
+  CollisionResult result;
+  result.normal = Coordinate{1.0, 0.0, 0.0};  // A→B along x
+  result.penetrationDepth = 0.1;
+  result.contactCount = 1;
+  result.contacts[0] = ContactPoint{Coordinate{0.45, 0.0, 0.0}, Coordinate{0.45, 0.0, 0.0}};
+
+  CollisionResponse::applyConstraintResponse(assetA, assetB, result, 1.0);
+
+  // Normal velocity should change
+  EXPECT_NE(2.0, assetA.getInertialState().velocity.x());
+
+  // Tangential velocity should be preserved (frictionless!)
+  // Without friction, only the normal component is affected
+  double totalTangentMomentum = assetA.getMass() * assetA.getInertialState().velocity.y() +
+                                assetB.getMass() * assetB.getInertialState().velocity.y();
+  double originalTangentMomentum = assetA.getMass() * originalTangentVelA;
+
+  EXPECT_NEAR(originalTangentMomentum, totalTangentMomentum, 1e-10);
 }

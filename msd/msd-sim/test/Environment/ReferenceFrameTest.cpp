@@ -74,6 +74,260 @@ TEST(ReferenceFrameTest, ConstructorWithOriginAndRotation)
 }
 
 // ============================================================================
+// Constructor from X and Z Axes Tests
+// ============================================================================
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_IdentityAxes)
+{
+  // Standard world axes should produce identity rotation
+  Coordinate origin{0.0, 0.0, 0.0};
+  Coordinate xDir{1.0, 0.0, 0.0};
+  Coordinate zDir{0.0, 0.0, 1.0};
+
+  ReferenceFrame frame{origin, xDir, zDir};
+
+  // Verify rotation matrix is identity (or very close)
+  const Eigen::Matrix3d& rotation = frame.getRotation();
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(0, 0), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(1, 1), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(2, 2), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(0, 1), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(0, 2), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(1, 0), 0.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_90DegYaw)
+{
+  // X pointing in +Y direction, Z pointing in +Z direction
+  // This should be a 90 degree yaw rotation
+  Coordinate origin{0.0, 0.0, 0.0};
+  Coordinate xDir{0.0, 1.0, 0.0};
+  Coordinate zDir{0.0, 0.0, 1.0};
+
+  ReferenceFrame frame{origin, xDir, zDir};
+
+  // Point at (1, 0, 0) in local frame should map to (0, 1, 0) in global
+  Coordinate localPoint{1.0, 0.0, 0.0};
+  Coordinate globalPoint = frame.localToGlobal(localPoint);
+
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.z(), 0.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_90DegPitch)
+{
+  // X pointing in -Z direction, Z pointing in +X direction
+  // This should be a -90 degree pitch rotation
+  Coordinate origin{0.0, 0.0, 0.0};
+  Coordinate xDir{0.0, 0.0, -1.0};
+  Coordinate zDir{1.0, 0.0, 0.0};
+
+  ReferenceFrame frame{origin, xDir, zDir};
+
+  // Point at (1, 0, 0) in local frame should map to (0, 0, -1) in global
+  Coordinate localPoint{1.0, 0.0, 0.0};
+  Coordinate globalPoint = frame.localToGlobal(localPoint);
+
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.z(), -1.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_UnnormalizedInputs)
+{
+  // Vectors that are not unit length should still work
+  Coordinate origin{5.0, 10.0, 15.0};
+  Coordinate xDir{3.0, 0.0, 0.0};    // Length 3
+  Coordinate zDir{0.0, 0.0, 100.0};  // Length 100
+
+  ReferenceFrame frame{origin, xDir, zDir};
+
+  // Should still produce identity rotation (just with normalization)
+  Coordinate localPoint{1.0, 2.0, 3.0};
+  Coordinate globalPoint = frame.localToGlobal(localPoint);
+
+  // Expected: localPoint + origin = (6, 12, 18)
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 6.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 12.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.z(), 18.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_NonOrthogonalInputs)
+{
+  // X and Z are not perfectly orthogonal - X should be orthogonalized against Z
+  Coordinate origin{0.0, 0.0, 0.0};
+  Coordinate xDir{1.0, 0.0, 0.5};  // Not orthogonal to Z
+  Coordinate zDir{0.0, 0.0, 1.0};  // Z takes precedence
+
+  ReferenceFrame frame{origin, xDir, zDir};
+
+  // After orthogonalization, X should be purely in +X direction
+  // Z should be +Z
+  // Y should be +Y (from Z × X)
+  const Eigen::Matrix3d& rotation = frame.getRotation();
+
+  // X-axis column should be (1, 0, 0)
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(0, 0), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(1, 0), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(2, 0), 0.0, 1e-9));
+
+  // Z-axis column should be (0, 0, 1)
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(0, 2), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(1, 2), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(2, 2), 1.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_RightHandRule)
+{
+  // Verify the Y-axis follows right-hand rule: Y = Z × X
+  Coordinate origin{0.0, 0.0, 0.0};
+  Coordinate xDir{1.0, 0.0, 0.0};
+  Coordinate zDir{0.0, 0.0, 1.0};
+
+  ReferenceFrame frame{origin, xDir, zDir};
+
+  const Eigen::Matrix3d& rotation = frame.getRotation();
+
+  // Y-axis should be (0, 1, 0) following right-hand rule
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(0, 1), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(1, 1), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(2, 1), 0.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_RoundTrip)
+{
+  // Arbitrary frame - verify round-trip transformation
+  Coordinate origin{5.0, 10.0, 15.0};
+  Coordinate xDir{1.0, 1.0, 0.0};    // X at 45 degrees in XY plane
+  Coordinate zDir{0.0, 0.0, 1.0};
+
+  ReferenceFrame frame{origin, xDir, zDir};
+
+  Coordinate original{100.0, 200.0, 300.0};
+  Coordinate local = frame.globalToLocal(original);
+  Coordinate backToGlobal = frame.localToGlobal(local);
+
+  EXPECT_TRUE(coordinatesEqual(backToGlobal, original, 1e-9));
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_CollisionResponseUseCase)
+{
+  // Typical collision response scenario:
+  // - Contact normal (Z) pointing from surface
+  // - Tangent direction (X) along surface
+  Coordinate contactPoint{10.0, 5.0, 0.0};
+  Coordinate normal{0.0, 0.0, 1.0};    // Pointing up
+  Coordinate tangent{1.0, 0.0, 0.0};   // Along X-axis
+
+  ReferenceFrame contactFrame{contactPoint, tangent, normal};
+
+  // A velocity in world frame
+  Coordinate worldVelocity{2.0, 3.0, -5.0};  // Moving with some downward component
+
+  // Transform to contact frame
+  CoordinateRate localVelocity = contactFrame.globalToLocal(
+    CoordinateRate{worldVelocity});
+
+  // In contact frame:
+  // - Z component should be the normal component (penetrating = negative)
+  // - X component should be the tangent component
+  EXPECT_TRUE(msd_sim::almostEqual(localVelocity.x(), 2.0, 1e-9));  // Tangent X
+  EXPECT_TRUE(msd_sim::almostEqual(localVelocity.y(), 3.0, 1e-9));  // Tangent Y
+  EXPECT_TRUE(msd_sim::almostEqual(localVelocity.z(), -5.0, 1e-9)); // Normal (penetrating)
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_ZeroXDirectionThrows)
+{
+  Coordinate origin{0.0, 0.0, 0.0};
+  Coordinate xDir{0.0, 0.0, 0.0};  // Zero vector
+  Coordinate zDir{0.0, 0.0, 1.0};
+
+  EXPECT_THROW(ReferenceFrame(origin, xDir, zDir), std::invalid_argument);
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_ZeroZDirectionThrows)
+{
+  Coordinate origin{0.0, 0.0, 0.0};
+  Coordinate xDir{1.0, 0.0, 0.0};
+  Coordinate zDir{0.0, 0.0, 0.0};  // Zero vector
+
+  EXPECT_THROW(ReferenceFrame(origin, xDir, zDir), std::invalid_argument);
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_ParallelVectorsThrows)
+{
+  Coordinate origin{0.0, 0.0, 0.0};
+  Coordinate xDir{1.0, 0.0, 0.0};
+  Coordinate zDir{2.0, 0.0, 0.0};  // Parallel to X
+
+  EXPECT_THROW(ReferenceFrame(origin, xDir, zDir), std::invalid_argument);
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_AntiParallelVectorsThrows)
+{
+  Coordinate origin{0.0, 0.0, 0.0};
+  Coordinate xDir{1.0, 0.0, 0.0};
+  Coordinate zDir{-5.0, 0.0, 0.0};  // Anti-parallel to X
+
+  EXPECT_THROW(ReferenceFrame(origin, xDir, zDir), std::invalid_argument);
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_DiagonalNormal)
+{
+  // Diagonal normal - tests more complex Euler angle extraction
+  Coordinate origin{0.0, 0.0, 0.0};
+  Coordinate xDir{1.0, 0.0, 0.0};
+  Coordinate zDir{1.0, 1.0, 1.0};  // Diagonal normal
+
+  ReferenceFrame frame{origin, xDir, zDir};
+
+  // Verify the frame is valid by checking orthonormality
+  const Eigen::Matrix3d& R = frame.getRotation();
+
+  // Check orthogonality: R^T * R should be identity
+  Eigen::Matrix3d product = R.transpose() * R;
+  EXPECT_TRUE(msd_sim::almostEqual(product(0, 0), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(product(1, 1), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(product(2, 2), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(product(0, 1), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(product(0, 2), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(product(1, 2), 0.0, 1e-9));
+
+  // Check determinant is +1 (proper rotation, not reflection)
+  EXPECT_TRUE(msd_sim::almostEqual(R.determinant(), 1.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, ConstructorFromAxes_EulerAnglesConsistent)
+{
+  // Create frame from axes, then verify the Euler angles are consistent
+  // by creating another frame from those Euler angles and comparing rotations
+  Coordinate origin{5.0, 10.0, 15.0};
+  Coordinate xDir{1.0, 1.0, 0.0};  // 45 degree yaw
+  Coordinate zDir{0.0, 0.0, 1.0};
+
+  ReferenceFrame frameFromAxes{origin, xDir, zDir};
+  AngularCoordinate extractedAngles = frameFromAxes.getAngularCoordinate();
+
+  // Create another frame from the extracted Euler angles
+  ReferenceFrame frameFromAngles{origin, extractedAngles};
+
+  // Both frames should have the same rotation matrix
+  const Eigen::Matrix3d& R1 = frameFromAxes.getRotation();
+  const Eigen::Matrix3d& R2 = frameFromAngles.getRotation();
+
+  for (int i = 0; i < 3; ++i)
+  {
+    for (int j = 0; j < 3; ++j)
+    {
+      EXPECT_TRUE(msd_sim::almostEqual(R1(i, j), R2(i, j), 1e-9))
+        << "Mismatch at (" << i << ", " << j << "): " << R1(i, j) << " vs "
+        << R2(i, j);
+    }
+  }
+}
+
+// ============================================================================
 // Setter Tests
 // ============================================================================
 
@@ -470,4 +724,306 @@ TEST(ReferenceFrameTest, SensorMountOnRobot)
   EXPECT_TRUE(msd_sim::almostEqual(sensorInGlobal.x(), 5.0, 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(sensorInGlobal.y(), 6.0, 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(sensorInGlobal.z(), 0.5, 1e-9));
+}
+
+// ============================================================================
+// Quaternion Constructor and Getter Tests
+// ============================================================================
+
+TEST(ReferenceFrameTest, QuaternionConstructor_IdentityQuaternion)
+{
+  // Identity quaternion should produce identity rotation
+  Coordinate origin{0.0, 0.0, 0.0};
+  Eigen::Quaterniond identity{Eigen::Quaterniond::Identity()};
+
+  ReferenceFrame frame{origin, identity};
+
+  // Verify rotation matrix is identity
+  const Eigen::Matrix3d& rotation = frame.getRotation();
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(0, 0), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(1, 1), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(2, 2), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(0, 1), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(0, 2), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(1, 0), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(1, 2), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(2, 0), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(rotation(2, 1), 0.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, QuaternionConstructor_90DegYaw)
+{
+  // 90 degree rotation about Z-axis (yaw)
+  Coordinate origin{0.0, 0.0, 0.0};
+  Eigen::Quaterniond quat{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
+
+  ReferenceFrame frame{origin, quat};
+
+  // Point at (1, 0, 0) in local frame should map to (0, 1, 0) in global
+  Coordinate localPoint{1.0, 0.0, 0.0};
+  Coordinate globalPoint = frame.localToGlobal(localPoint);
+
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.z(), 0.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, QuaternionConstructor_90DegPitch)
+{
+  // 90 degree rotation about Y-axis (pitch)
+  Coordinate origin{0.0, 0.0, 0.0};
+  Eigen::Quaterniond quat{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitY()}};
+
+  ReferenceFrame frame{origin, quat};
+
+  // Point at (1, 0, 0) in local frame should map to (0, 0, -1) in global
+  Coordinate localPoint{1.0, 0.0, 0.0};
+  Coordinate globalPoint = frame.localToGlobal(localPoint);
+
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.z(), -1.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, QuaternionConstructor_90DegRoll)
+{
+  // 90 degree rotation about X-axis (roll)
+  Coordinate origin{0.0, 0.0, 0.0};
+  Eigen::Quaterniond quat{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitX()}};
+
+  ReferenceFrame frame{origin, quat};
+
+  // Point at (0, 1, 0) in local frame should map to (0, 0, 1) in global
+  Coordinate localPoint{0.0, 1.0, 0.0};
+  Coordinate globalPoint = frame.localToGlobal(localPoint);
+
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.z(), 1.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, QuaternionConstructor_ArbitraryRotation)
+{
+  // Arbitrary rotation: combine roll, pitch, yaw
+  Coordinate origin{5.0, 10.0, 15.0};
+
+  // Create quaternion from combined rotations
+  Eigen::Quaterniond qRoll{Eigen::AngleAxisd{0.3, Eigen::Vector3d::UnitX()}};
+  Eigen::Quaterniond qPitch{Eigen::AngleAxisd{0.5, Eigen::Vector3d::UnitY()}};
+  Eigen::Quaterniond qYaw{Eigen::AngleAxisd{0.7, Eigen::Vector3d::UnitZ()}};
+  Eigen::Quaterniond quat = qYaw * qPitch * qRoll;  // ZYX order
+
+  ReferenceFrame frame{origin, quat};
+
+  // Verify rotation matrix is orthonormal
+  const Eigen::Matrix3d& R = frame.getRotation();
+  Eigen::Matrix3d product = R.transpose() * R;
+  EXPECT_TRUE(msd_sim::almostEqual(product(0, 0), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(product(1, 1), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(product(2, 2), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(product(0, 1), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(product(0, 2), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(product(1, 2), 0.0, 1e-9));
+
+  // Check determinant is +1 (proper rotation)
+  EXPECT_TRUE(msd_sim::almostEqual(R.determinant(), 1.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, QuaternionConstructor_RoundTrip)
+{
+  // Create frame from quaternion, transform point, transform back
+  Coordinate origin{5.0, 10.0, 15.0};
+  Eigen::Quaterniond quat{Eigen::AngleAxisd{M_PI / 3, Eigen::Vector3d{1, 1, 1}.normalized()}};
+
+  ReferenceFrame frame{origin, quat};
+
+  Coordinate original{100.0, 200.0, 300.0};
+  Coordinate local = frame.globalToLocal(original);
+  Coordinate backToGlobal = frame.localToGlobal(local);
+
+  EXPECT_TRUE(coordinatesEqual(backToGlobal, original, 1e-9));
+}
+
+TEST(ReferenceFrameTest, QuaternionConstructor_UnnormalizedInput)
+{
+  // Constructor should normalize the input quaternion
+  Coordinate origin{0.0, 0.0, 0.0};
+
+  // Create an unnormalized quaternion (scaled by 3)
+  Eigen::Quaterniond normalizedQuat{
+    Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
+  Eigen::Quaterniond unnormalizedQuat{normalizedQuat.w() * 3.0,
+                                       normalizedQuat.x() * 3.0,
+                                       normalizedQuat.y() * 3.0,
+                                       normalizedQuat.z() * 3.0};
+
+  ReferenceFrame frame{origin, unnormalizedQuat};
+
+  // Should still produce correct rotation
+  Coordinate localPoint{1.0, 0.0, 0.0};
+  Coordinate globalPoint = frame.localToGlobal(localPoint);
+
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalPoint.z(), 0.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, GetQuaternion_Identity)
+{
+  // Default frame should return identity quaternion
+  ReferenceFrame frame;
+
+  Eigen::Quaterniond quat = frame.getQuaternion();
+
+  // Identity quaternion is (w=1, x=0, y=0, z=0) or (w=-1, x=0, y=0, z=0)
+  // Both represent the same rotation
+  EXPECT_TRUE(msd_sim::almostEqual(std::abs(quat.w()), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(quat.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(quat.y(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(quat.z(), 0.0, 1e-9));
+}
+
+TEST(ReferenceFrameTest, GetQuaternion_FromEulerAngles)
+{
+  // Create frame from Euler angles, get quaternion, verify rotation equivalence
+  Coordinate origin{0.0, 0.0, 0.0};
+  AngularCoordinate angular{0.3, 0.5, 0.7};  // pitch, roll, yaw
+
+  ReferenceFrame frame{origin, angular};
+  Eigen::Quaterniond quat = frame.getQuaternion();
+
+  // The quaternion should represent the same rotation as the rotation matrix
+  Eigen::Matrix3d quatRotation = quat.toRotationMatrix();
+  const Eigen::Matrix3d& frameRotation = frame.getRotation();
+
+  for (int i = 0; i < 3; ++i)
+  {
+    for (int j = 0; j < 3; ++j)
+    {
+      EXPECT_TRUE(msd_sim::almostEqual(quatRotation(i, j), frameRotation(i, j), 1e-9))
+        << "Mismatch at (" << i << ", " << j << "): " << quatRotation(i, j)
+        << " vs " << frameRotation(i, j);
+    }
+  }
+}
+
+TEST(ReferenceFrameTest, QuaternionRoundTrip)
+{
+  // Create frame from quaternion, get quaternion back, verify equivalence
+  Coordinate origin{5.0, 10.0, 15.0};
+  Eigen::Quaterniond originalQuat{
+    Eigen::AngleAxisd{M_PI / 3, Eigen::Vector3d{1, 2, 3}.normalized()}};
+
+  ReferenceFrame frame{origin, originalQuat};
+  Eigen::Quaterniond retrievedQuat = frame.getQuaternion();
+
+  // Quaternions q and -q represent the same rotation
+  // Check that they produce the same rotation matrix
+  Eigen::Matrix3d originalRotation = originalQuat.normalized().toRotationMatrix();
+  Eigen::Matrix3d retrievedRotation = retrievedQuat.toRotationMatrix();
+
+  for (int i = 0; i < 3; ++i)
+  {
+    for (int j = 0; j < 3; ++j)
+    {
+      EXPECT_TRUE(msd_sim::almostEqual(originalRotation(i, j), retrievedRotation(i, j), 1e-9))
+        << "Mismatch at (" << i << ", " << j << ")";
+    }
+  }
+}
+
+TEST(ReferenceFrameTest, QuaternionConstructor_GimbalLockPitchPositive)
+{
+  // Test gimbal lock at pitch = +π/2
+  Coordinate origin{0.0, 0.0, 0.0};
+
+  // Create quaternion for pitch = +90 degrees
+  Eigen::Quaterniond quat{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitY()}};
+
+  ReferenceFrame frame{origin, quat};
+
+  // Round-trip should still work
+  Coordinate original{1.0, 2.0, 3.0};
+  Coordinate local = frame.globalToLocal(original);
+  Coordinate backToGlobal = frame.localToGlobal(local);
+
+  EXPECT_TRUE(coordinatesEqual(backToGlobal, original, 1e-9));
+
+  // Quaternion round-trip should also work
+  Eigen::Quaterniond retrieved = frame.getQuaternion();
+  Eigen::Matrix3d originalRotation = quat.toRotationMatrix();
+  Eigen::Matrix3d retrievedRotation = retrieved.toRotationMatrix();
+
+  for (int i = 0; i < 3; ++i)
+  {
+    for (int j = 0; j < 3; ++j)
+    {
+      EXPECT_TRUE(msd_sim::almostEqual(originalRotation(i, j), retrievedRotation(i, j), 1e-9));
+    }
+  }
+}
+
+TEST(ReferenceFrameTest, QuaternionConstructor_GimbalLockPitchNegative)
+{
+  // Test gimbal lock at pitch = -π/2
+  Coordinate origin{0.0, 0.0, 0.0};
+
+  // Create quaternion for pitch = -90 degrees
+  Eigen::Quaterniond quat{Eigen::AngleAxisd{-M_PI / 2, Eigen::Vector3d::UnitY()}};
+
+  ReferenceFrame frame{origin, quat};
+
+  // Round-trip should still work
+  Coordinate original{1.0, 2.0, 3.0};
+  Coordinate local = frame.globalToLocal(original);
+  Coordinate backToGlobal = frame.localToGlobal(local);
+
+  EXPECT_TRUE(coordinatesEqual(backToGlobal, original, 1e-9));
+
+  // Quaternion round-trip should also work
+  Eigen::Quaterniond retrieved = frame.getQuaternion();
+  Eigen::Matrix3d originalRotation = quat.toRotationMatrix();
+  Eigen::Matrix3d retrievedRotation = retrieved.toRotationMatrix();
+
+  for (int i = 0; i < 3; ++i)
+  {
+    for (int j = 0; j < 3; ++j)
+    {
+      EXPECT_TRUE(msd_sim::almostEqual(originalRotation(i, j), retrievedRotation(i, j), 1e-9));
+    }
+  }
+}
+
+TEST(ReferenceFrameTest, EulerQuaternionConsistency)
+{
+  // Create frame from Euler angles, compare with equivalent quaternion-based frame
+  Coordinate origin{10.0, 20.0, 30.0};
+  double pitch = 0.4;
+  double roll = -0.3;
+  double yaw = 1.2;
+
+  // Frame from Euler angles
+  AngularCoordinate angular{pitch, roll, yaw};
+  ReferenceFrame frameFromEuler{origin, angular};
+
+  // Equivalent quaternion (ZYX convention: yaw * pitch * roll)
+  Eigen::Quaterniond qRoll{Eigen::AngleAxisd{roll, Eigen::Vector3d::UnitX()}};
+  Eigen::Quaterniond qPitch{Eigen::AngleAxisd{pitch, Eigen::Vector3d::UnitY()}};
+  Eigen::Quaterniond qYaw{Eigen::AngleAxisd{yaw, Eigen::Vector3d::UnitZ()}};
+  Eigen::Quaterniond quat = qYaw * qPitch * qRoll;
+  ReferenceFrame frameFromQuat{origin, quat};
+
+  // Both should produce the same rotation matrix
+  const Eigen::Matrix3d& R1 = frameFromEuler.getRotation();
+  const Eigen::Matrix3d& R2 = frameFromQuat.getRotation();
+
+  for (int i = 0; i < 3; ++i)
+  {
+    for (int j = 0; j < 3; ++j)
+    {
+      EXPECT_TRUE(msd_sim::almostEqual(R1(i, j), R2(i, j), 1e-9))
+        << "Mismatch at (" << i << ", " << j << "): " << R1(i, j) << " vs "
+        << R2(i, j);
+    }
+  }
 }

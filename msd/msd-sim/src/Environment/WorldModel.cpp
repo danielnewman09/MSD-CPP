@@ -2,9 +2,23 @@
 #include <iostream>
 #include <stdexcept>
 #include "msd-sim/src/Physics/CollisionResponse.hpp"
+#include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
+#include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
 
 namespace msd_sim
 {
+
+// Constructor initializes default integrator and gravity potential
+WorldModel::WorldModel()
+{
+  // Initialize default integrator (semi-implicit Euler)
+  integrator_ = std::make_unique<SemiImplicitEulerIntegrator>();
+
+  // Initialize default gravity potential
+  potentialEnergies_.push_back(
+    std::make_unique<GravityPotential>(Coordinate{0.0, 0.0, -9.81}));
+  // Ticket: 0030_lagrangian_quaternion_physics
+}
 
 
 // ========== Object Management ==========
@@ -99,99 +113,45 @@ void WorldModel::updatePhysics(double dt)
 {
   for (auto& asset : inertialAssets_)
   {
-    // ===== Apply Gravity =====
-    // F_gravity = m * g (where g is acceleration vector)
-    CoordinateRate gravityForce = gravity_ * asset.getMass();
-    asset.applyForce(gravityForce);
+    // ===== Step 1: Compute Generalized Forces from Potential Energies =====
+    Coordinate netForce{0.0, 0.0, 0.0};
+    Coordinate netTorque{0.0, 0.0, 0.0};
 
-    // ===== Linear Integration (Semi-Implicit Euler) =====
-    // Get accumulated forces
-    const Coordinate& netForce = asset.getAccumulatedForce();
-
-    // Compute linear acceleration: a = F_net / m
-    Coordinate linearAccel = netForce / asset.getMass();
-
-    // Update velocity: v_new = v_old + a * dt
     InertialState& state = asset.getInertialState();
-    state.velocity += linearAccel * dt;
-    state.acceleration = linearAccel;
+    double mass = asset.getMass();
+    const Eigen::Matrix3d& inertiaTensor = asset.getInertiaTensor();
 
-    // Update position using NEW velocity: x_new = x_old + v_new * dt
-    state.position += state.velocity * dt;
-
-    // ===== Angular Integration (Semi-Implicit Euler) =====
-    // Get accumulated torque
-    const Coordinate& netTorque = asset.getAccumulatedTorque();
-
-    // Compute angular acceleration: α = I⁻¹ * τ
-    Eigen::Vector3d angularAccel = asset.getInverseInertiaTensor() * netTorque;
-
-    // Update angular velocity: ω_new = ω_old + α * dt
-    AngularRate& omega = state.angularVelocity;
-    omega += angularAccel * dt;
-    state.angularAcceleration = AngularRate{angularAccel};
-
-    // Update orientation using proper Euler angle rate transformation
-    // Angular velocity is in world frame, but Euler angle rates require
-    // body-frame angular velocity with a Jacobian transformation.
-    //
-    // For ZYX Euler angles (R = Rz * Ry * Rx):
-    // ω_body = R^T * ω_world
-    //
-    // Then Euler angle rates are:
-    // [roll_dot ]   [1, sin(roll)*tan(pitch),  cos(roll)*tan(pitch)] [ωx_body]
-    // [pitch_dot] = [0, cos(roll),            -sin(roll)           ] [ωy_body]
-    // [yaw_dot  ]   [0, sin(roll)/cos(pitch),  cos(roll)/cos(pitch)] [ωz_body]
-
-    // Convert world-frame ω to body-frame
-    const Eigen::Matrix3d& R = asset.getReferenceFrame().getRotation();
-    Eigen::Vector3d omega_body = R.transpose() * omega;
-
-    // Get current Euler angles
-    double roll = state.orientation.roll();
-    double pitch = state.orientation.pitch();
-
-    // Compute trig functions
-    double sr = std::sin(roll);
-    double cr = std::cos(roll);
-    double sp = std::sin(pitch);
-    double cp = std::cos(pitch);
-
-    // Avoid gimbal lock singularity (pitch near ±90°)
-    constexpr double kGimbalLockThreshold = 0.9999;
-    if (std::abs(cp) < (1.0 - kGimbalLockThreshold))
+    for (const auto& potential : potentialEnergies_)
     {
-      // Near gimbal lock - fall back to simple integration
-      // This is a known limitation of Euler angles
-      state.orientation += omega * dt;
+      netForce += potential->computeForce(state, mass);
+      netTorque += potential->computeTorque(state, inertiaTensor);
     }
-    else
-    {
-      double tp = sp / cp;  // tan(pitch)
 
-      // Compute Euler angle rates from body-frame angular velocity
-      double roll_dot = omega_body.x() + sr * tp * omega_body.y() +
-                        cr * tp * omega_body.z();
-      double pitch_dot = cr * omega_body.y() - sr * omega_body.z();
-      double yaw_dot =
-        (sr / cp) * omega_body.y() + (cr / cp) * omega_body.z();
+    // Add accumulated forces (from collisions, thrusters, etc.)
+    netForce += asset.getAccumulatedForce();
+    netTorque += asset.getAccumulatedTorque();
 
-      // Integrate Euler angles
-      state.orientation.setRoll(roll + roll_dot * dt);
-      state.orientation.setPitch(pitch + pitch_dot * dt);
-      state.orientation.setYaw(state.orientation.yaw() + yaw_dot * dt);
-    }
-    // ===== Synchronize ReferenceFrame =====
-    // ReferenceFrame must match InertialState for collision detection
-    // and rendering to work correctly
+    // ===== Step 2: Delegate Integration to Integrator =====
+    // Integrator handles: velocity update, position update, constraint enforcement
+    integrator_->step(
+      state,
+      netForce,
+      netTorque,
+      mass,
+      asset.getInverseInertiaTensor(),
+      asset.getQuaternionConstraint(),
+      dt);
+
+    // ===== Step 3: Synchronize ReferenceFrame =====
+    // ReferenceFrame must match InertialState for collision detection and rendering
     ReferenceFrame& frame = asset.getReferenceFrame();
     frame.setOrigin(state.position);
-    frame.setRotation(state.orientation);
+    frame.setQuaternion(state.orientation);
 
-    // ===== Clear Forces for Next Frame =====
+    // ===== Step 4: Clear Forces for Next Frame =====
     asset.clearForces();
   }
-  // Ticket: 0023_force_application_system
+  // Ticket: 0030_lagrangian_quaternion_physics
 }
 
 void WorldModel::updateCollisions()
@@ -221,10 +181,12 @@ void WorldModel::updateCollisions()
         assetA.getCoefficientOfRestitution(),
         assetB.getCoefficientOfRestitution());
 
-      // ===== Apply Manifold-Aware Collision Response (Ticket: 0029) =====
-      CollisionResponse::applyImpulseManifold(
+      // ===== Apply Lagrangian Constraint Response (Frictionless) =====
+      // Computes Lagrange multiplier for non-penetration constraint
+      // and applies constraint forces along contact normal only.
+      CollisionResponse::applyConstraintResponse(
         assetA, assetB, *result, combinedE);
-      CollisionResponse::applyPositionCorrectionManifold(
+      CollisionResponse::applyPositionStabilization(
         assetA, assetB, *result);
     }
   }
@@ -247,14 +209,15 @@ void WorldModel::updateCollisions()
         inertial.getCoefficientOfRestitution(),
         CollisionResponse::kEnvironmentRestitution);
 
-      // ===== Apply Manifold-Aware Collision Response (Ticket: 0029) =====
-      CollisionResponse::applyImpulseManifoldStatic(
+      // ===== Apply Lagrangian Constraint Response (Frictionless) =====
+      CollisionResponse::applyConstraintResponseStatic(
         inertial, environment, *result, combinedE);
-      CollisionResponse::applyPositionCorrectionStatic(
+      CollisionResponse::applyPositionStabilizationStatic(
         inertial, environment, *result);
     }
   }
-  // Ticket: 0027_collision_response_system, 0029_contact_manifold_generation
+  // Ticket: 0027_collision_response_system (refactored to Lagrangian mechanics)
+  // Frictionless constraints only - tangential forces removed
 }
 
 
@@ -263,7 +226,26 @@ uint32_t WorldModel::getInertialAssetId()
   return ++inertialAssetIdCounter_;
 }
 
-// ========== Gravity Configuration (ticket 0023a) ==========
+// ========== Potential Energy Configuration (ticket 0030) ==========
+
+void WorldModel::addPotentialEnergy(std::unique_ptr<PotentialEnergy> energy)
+{
+  potentialEnergies_.push_back(std::move(energy));
+}
+
+void WorldModel::clearPotentialEnergies()
+{
+  potentialEnergies_.clear();
+}
+
+// ========== Integrator Configuration (ticket 0030) ==========
+
+void WorldModel::setIntegrator(std::unique_ptr<Integrator> integrator)
+{
+  integrator_ = std::move(integrator);
+}
+
+// ========== Gravity Configuration (deprecated, ticket 0023a) ==========
 
 const Coordinate& WorldModel::getGravity() const
 {

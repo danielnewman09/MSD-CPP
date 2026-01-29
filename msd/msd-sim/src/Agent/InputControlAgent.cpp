@@ -76,7 +76,9 @@ InertialState InputControlAgent::updateState(const InertialState& currentState)
     angularVelocity.yaw() = -maxAngularSpeed_;
   }
 
-  newState.angularVelocity = angularVelocity;
+  // Convert angular velocity to quaternion rate and store
+  newState.setAngularVelocity(angularVelocity);
+  // Ticket: 0030_lagrangian_quaternion_physics
 
   // Note: Jump command not yet implemented (requires physics integration)
   // TODO: Implement jump as impulse when physics component is present

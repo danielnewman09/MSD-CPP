@@ -4,6 +4,7 @@
 #include <memory>
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
+#include "msd-sim/src/Physics/Constraints/QuaternionConstraint.hpp"
 
 
 namespace msd_sim
@@ -221,6 +222,28 @@ public:
    */
   void applyAngularImpulse(const AngularRate& angularImpulse);
 
+  // ========== NEW: Quaternion Constraint (ticket 0030) ==========
+
+  /**
+   * @brief Get the quaternion constraint (mutable).
+   *
+   * Each asset owns its own constraint for better encapsulation.
+   * Used by Integrator to enforce |Q|=1 during physics integration.
+   *
+   * @return Mutable reference to quaternion constraint
+   *
+   * @ticket 0030_lagrangian_quaternion_physics
+   */
+  QuaternionConstraint& getQuaternionConstraint();
+
+  /**
+   * @brief Get the quaternion constraint (const).
+   * @return Const reference to quaternion constraint
+   *
+   * @ticket 0030_lagrangian_quaternion_physics
+   */
+  const QuaternionConstraint& getQuaternionConstraint() const;
+
 private:
   // Rigid body physics properties
   double mass_;                    // Mass in kg
@@ -237,6 +260,9 @@ private:
 
   // NEW: Coefficient of restitution (ticket 0027)
   double coefficientOfRestitution_{0.5};  // Default: moderate elasticity
+
+  // NEW: Quaternion constraint (ticket 0030)
+  QuaternionConstraint quaternionConstraint_{10.0, 10.0};  // Default Baumgarte parameters
 };
 
 }  // namespace msd_sim

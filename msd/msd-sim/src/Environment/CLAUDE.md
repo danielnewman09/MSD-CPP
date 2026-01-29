@@ -348,12 +348,14 @@ Pure value type inheriting from `Eigen::Vector3d`. Memory footprint: 24 bytes (s
 
 ### InertialState
 
-**Location**: `InertialState.hpp`
-**Type**: Header-only, value type
-**Modified**: [Ticket: 0024_angular_coordinate](../../../../../tickets/0024_angular_coordinate.md)
+**Location**: `InertialState.hpp`, `InertialState.cpp`
+**Type**: Library component with value semantics
+**Modified**:
+- [Ticket: 0024_angular_coordinate](../../../../../tickets/0024_angular_coordinate.md)
+- [Ticket: 0030_lagrangian_quaternion_physics](../../../../../tickets/0030_lagrangian_quaternion_physics.md) — Breaking change to quaternion representation
 
 #### Purpose
-Complete kinematic state representation with 6 degrees of freedom. Contains position, velocity, and acceleration for both linear and angular motion. Uses type-safe angular quantity classes to prevent accidental misuse.
+Complete kinematic state representation with 6 degrees of freedom. Contains position, velocity, and acceleration for both linear and angular motion. Uses quaternion-based orientation to eliminate gimbal lock singularities.
 
 #### Key Interfaces
 ```cpp
@@ -363,11 +365,28 @@ struct InertialState {
   Coordinate velocity;
   Coordinate acceleration;
 
-  // Angular components (type-safe)
-  AngularCoordinate orientation;       // Was: EulerAngles angularPosition
-  AngularRate angularVelocity;         // Was: Coordinate
-  AngularRate angularAcceleration;     // Was: Coordinate
+  // Angular components (quaternion-based)
+  Eigen::Quaterniond orientation;      // Was: AngularCoordinate
+  Eigen::Vector4d quaternionRate;      // New: Q̇ (quaternion time derivative)
+  AngularRate angularVelocity;         // ω (angular velocity vector)
+  AngularRate angularAcceleration;     // α (angular acceleration vector)
+
+  // Conversion utilities (ticket 0030)
+  AngularRate quaternionRateToOmega() const;
+  static Eigen::Vector4d omegaToQuaternionRate(const AngularRate& omega,
+                                                const Eigen::Quaterniond& Q);
+
+  // Deprecated accessor for backward compatibility
+  [[deprecated("Use orientation (Eigen::Quaterniond) instead")]]
+  AngularCoordinate getEulerAngles() const;
 };
+```
+
+#### State Vector Components
+The state now uses a 14-component representation:
+```
+Position-level:  q = [X, Q]ᵀ     (7 components: 3 position + 4 quaternion)
+Velocity-level:  q̇ = [Ẋ, Q̇]ᵀ    (7 components: 3 linear vel + 4 quat rate)
 ```
 
 #### Usage Example
@@ -376,40 +395,59 @@ InertialState state;
 state.position = Coordinate{100.0, 200.0, 300.0};
 state.velocity = Coordinate{1.0, 0.0, 0.0};
 
-// Type-safe angular quantities
-state.orientation = AngularCoordinate{0.0, 0.0, M_PI/4};  // 45° yaw
-state.angularVelocity = AngularRate{0.0, 0.0, 0.5};       // 0.5 rad/s yaw rate
+// Quaternion orientation (no gimbal lock)
+state.orientation = Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};  // Identity (w, x, y, z)
 
-// Semantic accessors
-double yaw = state.orientation.yaw();           // Radians
-double yawRate = state.angularVelocity.yaw();   // rad/s
+// Angular velocity (ω) for physics
+state.angularVelocity = AngularRate{0.0, 0.0, 0.5};  // 0.5 rad/s yaw rate
+
+// Quaternion rate (Q̇) for integration
+state.quaternionRate = InertialState::omegaToQuaternionRate(
+    state.angularVelocity, state.orientation);
 ```
 
-#### Type Safety Benefits
-The use of distinct types provides compile-time safety:
+#### Quaternion ↔ Angular Velocity Conversions
 ```cpp
-// This will NOT compile (type mismatch):
-state.orientation = state.angularVelocity;  // ERROR: Cannot assign AngularRate to AngularCoordinate
+// ω → Q̇ conversion (for integration)
+AngularRate omega{0.0, 0.0, 1.0};  // 1 rad/s yaw
+Eigen::Quaterniond Q{1.0, 0.0, 0.0, 0.0};  // Identity
+Eigen::Vector4d Qdot = InertialState::omegaToQuaternionRate(omega, Q);
+// Result: Q̇ = ½ * Q ⊗ [0, ω]
 
-// Correct usage:
-AngularRate deltaOrientation = state.angularVelocity * dt;
-state.orientation += deltaOrientation;  // Implicit conversion via Eigen expression templates
+// Q̇ → ω conversion (for physics/rendering)
+state.quaternionRate = Qdot;
+AngularRate omega_recovered = state.quaternionRateToOmega();
+// Result: ω = 2 * Q̄ ⊗ Q̇  (where Q̄ is conjugate)
 ```
 
 #### Migration from Previous Version
-Breaking change from ticket 0024_angular_coordinate:
-- **orientation**: Type changed from `EulerAngles` to `AngularCoordinate`
-  - Old: `state.angularPosition.yaw.getRad()`
-  - New: `state.orientation.yaw()`
-- **angularVelocity**: Type changed from `Coordinate` to `AngularRate`
-  - Old: `state.angularVelocity.z()`
-  - New: `state.angularVelocity.yaw()`
-- **angularAcceleration**: Type changed from `Coordinate` to `AngularRate`
-  - Old: `state.angularAcceleration.z()`
-  - New: `state.angularAcceleration.yaw()`
+Breaking change from ticket 0030_lagrangian_quaternion_physics:
+- **orientation**: Type changed from `AngularCoordinate` to `Eigen::Quaterniond`
+  - Old: `state.orientation.yaw()`
+  - New: `state.orientation.toRotationMatrix()` or use deprecated `state.getEulerAngles().yaw()`
+- **quaternionRate**: New member (Eigen::Vector4d) representing Q̇
+  - Must be updated during integration: `state.quaternionRate = omegaToQuaternionRate(omega, Q)`
+- **State size**: Increased from 13 to 14 components (added quaternionRate)
+- **No gimbal lock**: Quaternions have no singularities at any orientation
+
+#### Type Safety Benefits
+The quaternion representation prevents gimbal lock:
+```cpp
+// Euler angles have gimbal lock at pitch = ±90°
+AngularCoordinate euler{M_PI/2, 0.0, 0.0};  // Gimbal lock!
+
+// Quaternions have no singularities
+Eigen::Quaterniond quat = Eigen::AngleAxisd{M_PI/2, Eigen::Vector3d::UnitX()};
+// Remains valid, no numerical instability
+```
 
 #### Thread Safety
 **Value semantics** — Safe to copy across threads after construction.
+
+#### Memory Management
+- 14 component state (3×3 Coordinate + 4 quaternion + 4 quaternion rate + 2×3 AngularRate = 14 doubles)
+- 112 bytes total (8 bytes per double)
+- Quaternion conversion utilities are static methods (no state)
 
 ---
 
@@ -417,16 +455,22 @@ Breaking change from ticket 0024_angular_coordinate:
 
 **Location**: `ReferenceFrame.hpp`, `ReferenceFrame.cpp`
 **Type**: Library component
-**Modified**: [Ticket: 0024_angular_coordinate](../../../../../tickets/0024_angular_coordinate.md)
+**Modified**:
+- [Ticket: 0024_angular_coordinate](../../../../../tickets/0024_angular_coordinate.md)
+- [Ticket: 0030_lagrangian_quaternion_physics](../../../../../tickets/0030_lagrangian_quaternion_physics.md) — Breaking change to quaternion storage
 
 #### Purpose
-Manages coordinate transformations between reference frames using translation and rotation. Provides efficient batch transformations using Eigen matrix operations. Stores orientation as `AngularCoordinate` for type-safe angle representation.
+Manages coordinate transformations between reference frames using translation and rotation. Provides efficient batch transformations using Eigen matrix operations. Stores orientation as `Eigen::Quaterniond` to eliminate gimbal lock in transformations.
 
 #### Key Interfaces
 ```cpp
 class ReferenceFrame {
   ReferenceFrame();
   ReferenceFrame(const Coordinate& origin);
+  ReferenceFrame(const Coordinate& origin, const Eigen::Quaterniond& quaternion);
+
+  // Deprecated constructor
+  [[deprecated("Use ReferenceFrame(origin, Eigen::Quaterniond) instead")]]
   ReferenceFrame(const Coordinate& origin, const AngularCoordinate& angular);
 
   // Single coordinate transforms
@@ -445,22 +489,31 @@ class ReferenceFrame {
 
   // Setters
   void setOrigin(const Coordinate& origin);
+  void setQuaternion(const Eigen::Quaterniond& quaternion);  // New in ticket 0030
+
+  [[deprecated("Use setQuaternion(Eigen::Quaterniond) instead")]]
   void setRotation(const AngularCoordinate& angular);
 
   // Getters
   Coordinate& getOrigin();
   const Coordinate& getOrigin() const;
-  AngularCoordinate getAngularCoordinate() const;
+  Eigen::Quaterniond getQuaternion() const;  // New in ticket 0030
   const Eigen::Matrix3d& getRotation() const;
+
+  [[deprecated("Use getQuaternion() instead")]]
+  AngularCoordinate getAngularCoordinate() const;
 };
 ```
 
 #### Usage Example
 ```cpp
-// Create reference frame
+// Create reference frame with quaternion
 ReferenceFrame localFrame;
 localFrame.setOrigin(Coordinate{10, 20, 30});
-localFrame.setRotation(AngularCoordinate{0.0, 0.0, M_PI/2});  // 90° yaw
+
+// Set rotation using quaternion (no gimbal lock)
+Eigen::Quaterniond rotation = Eigen::AngleAxisd{M_PI/2, Eigen::Vector3d::UnitZ()};
+localFrame.setQuaternion(rotation);
 
 // Single coordinate transform
 Coordinate globalPoint{100, 200, 300};
@@ -470,25 +523,28 @@ Coordinate localPoint = localFrame.globalToLocal(globalPoint);
 Eigen::Matrix3Xd points(3, 1000);  // 1000 points
 // ... populate points ...
 localFrame.globalToLocalBatch(points);  // In-place transformation
+
+// Access quaternion directly
+Eigen::Quaterniond quat = localFrame.getQuaternion();
 ```
 
 #### Migration from Previous Version
-Breaking change from ticket 0024_angular_coordinate:
-- **Constructor**: `ReferenceFrame(origin, EulerAngles)` → `ReferenceFrame(origin, AngularCoordinate)`
-- **Setter**: `setRotation(EulerAngles)` → `setRotation(AngularCoordinate)`
-- **Getter**: `getEulerAngles()` → `getAngularCoordinate()`
-- **Internal storage**: `EulerAngles euler_` → `AngularCoordinate angular_`
+Breaking change from ticket 0030_lagrangian_quaternion_physics:
+- **Constructor**: `ReferenceFrame(origin, AngularCoordinate)` → `ReferenceFrame(origin, Eigen::Quaterniond)` (old constructor deprecated)
+- **Setter**: `setRotation(AngularCoordinate)` → `setQuaternion(Eigen::Quaterniond)` (old setter deprecated)
+- **Getter**: `getAngularCoordinate()` → `getQuaternion()` (old getter deprecated)
+- **Internal storage**: `AngularCoordinate angular_` → `Eigen::Quaterniond quaternion_`
 
 Old code:
 ```cpp
-EulerAngles angles{Angle::fromDegrees(0), Angle::fromDegrees(0), Angle::fromDegrees(90)};
+AngularCoordinate angles{0.0, 0.0, M_PI/2};  // Radians
 frame.setRotation(angles);
 ```
 
 New code:
 ```cpp
-AngularCoordinate angles{0.0, 0.0, M_PI/2};  // Radians
-frame.setRotation(angles);
+Eigen::Quaterniond quat = Eigen::AngleAxisd{M_PI/2, Eigen::Vector3d::UnitZ()};
+frame.setQuaternion(quat);
 ```
 
 #### Transformation Pipeline
@@ -502,11 +558,31 @@ Viewer coordinates (camera frame)
 Screen coordinates (2D pixels)
 ```
 
+#### Rotation Matrix Update
+The internal rotation matrix is lazily computed from the quaternion:
+```cpp
+void ReferenceFrame::updateRotationMatrix() {
+  if (!updated_) {
+    rotation_ = quaternion_.toRotationMatrix();  // Eigen's efficient conversion
+    updated_ = true;
+  }
+}
+```
+
 #### Thread Safety
 **Not thread-safe** — The rotation matrix is lazily computed and cached. Concurrent access to a single instance is not safe.
 
 #### Memory Management
-Stores origin coordinate and rotation matrix internally. Caches inverse rotation matrix for efficiency.
+- Stores origin coordinate (24 bytes)
+- Stores quaternion (32 bytes: 4 doubles)
+- Caches rotation matrix (72 bytes: 9 doubles)
+- Caches inverse rotation matrix (72 bytes)
+- Total: ~200 bytes per instance
+
+#### Design Notes
+- **No gimbal lock**: Quaternion storage eliminates singularities at ±90° pitch
+- **Backward compatibility**: Deprecated methods provide Euler angle conversion for legacy code
+- **Efficient transforms**: Rotation matrix cached for repeated transformations
 
 ---
 

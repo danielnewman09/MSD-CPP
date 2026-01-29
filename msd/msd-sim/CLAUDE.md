@@ -264,10 +264,63 @@ ctest --preset debug
 | [`force-application.puml`](../../docs/msd/msd-sim/Physics/force-application.puml) | Force application system with semi-implicit Euler integration | `docs/msd/msd-sim/Physics/` |
 | [`mirtich-inertia-tensor.puml`](../../docs/msd/msd-sim/Physics/mirtich-inertia-tensor.puml) | Mirtich algorithm for inertia tensor calculation | `docs/msd/msd-sim/Physics/` |
 | [`collision-response.puml`](../../docs/msd/msd-sim/Physics/collision-response.puml) | Collision response system with impulse-based physics | `docs/msd/msd-sim/Physics/` |
+| [`0030_lagrangian_quaternion_physics.puml`](../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml) | Lagrangian quaternion physics with potential energy and constraints | `docs/designs/0030_lagrangian_quaternion_physics/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Lagrangian Quaternion Physics — 2026-01-28
+**Ticket**: [0030_lagrangian_quaternion_physics](../../tickets/0030_lagrangian_quaternion_physics.md)
+**Diagram**: [`0030_lagrangian_quaternion_physics.puml`](../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml)
+**Type**: Breaking Change
+
+Replaced Euler angle-based orientation with quaternion representation to eliminate gimbal lock singularities and implemented Lagrangian mechanics with general potential energy abstraction. The InertialState now uses a 14-component state vector (X, Q, Ẋ, Q̇) with quaternion normalization maintained via Baumgarte stabilization constraints.
+
+**Key components**:
+- **Integrator interface** — Abstract interface for numerical integration schemes, enabling swappable integrators (Euler, RK4, Verlet)
+- **SemiImplicitEulerIntegrator** — Symplectic integrator with velocity-first integration for energy conservation
+- **PotentialEnergy interface** — Abstract interface for environmental potential energy fields (gravity, tidal forces, magnetic fields)
+- **GravityPotential** — Uniform gravitational field implementation producing constant force F = m*g
+- **QuaternionConstraint** — Lagrange multiplier constraint with Baumgarte stabilization (α=10, β=10) maintaining |Q|=1 within 1e-10
+- **InertialState modifications** — Added quaternionRate (Q̇) alongside quaternion orientation, with ω ↔ Q̇ conversion utilities
+- **ReferenceFrame modifications** — Added setQuaternion()/getQuaternion() for quaternion-based transforms
+- **WorldModel refactoring** — Owns Integrator and PotentialEnergy instances, refactored updatePhysics() for Lagrangian mechanics
+
+**Architecture**:
+- `Integrator` abstract interface decouples integration scheme from physics computation
+- `SemiImplicitEulerIntegrator` implements symplectic integration: v_new = v_old + a*dt, x_new = x_old + v_new*dt
+- `PotentialEnergy::computeForce()` and `computeTorque()` derive generalized forces from energy gradients (F = -∂V/∂X, τ = -∂V/∂Q)
+- `QuaternionConstraint::enforceConstraint()` applies Baumgarte stabilization: λ = -α*g - β*ġ where g = Q^T*Q - 1
+- InertialState stores both quaternion Q and quaternion rate Q̇, with conversion utilities: ω = 2*Q̄⊗Q̇ and Q̇ = ½*Q⊗[0,ω]
+- WorldModel owns integrator (default: SemiImplicitEuler) and potential energies (default: GravityPotential)
+- AssetInertial owns its own QuaternionConstraint instance (one per asset)
+
+**Breaking changes**:
+- `InertialState::orientation`: Changed from `AngularCoordinate` to `Eigen::Quaterniond`
+- `InertialState::quaternionRate`: New member (Eigen::Vector4d) representing Q̇
+- `ReferenceFrame` internal storage: Changed from `AngularCoordinate` to `Eigen::Quaterniond`
+- Deprecated accessors: `InertialState::getEulerAngles()`, `ReferenceFrame::setRotation(AngularCoordinate)`, `ReferenceFrame::getAngularCoordinate()`
+- State vector size increased from 13 to 14 components (added quaternionRate)
+
+**Benefits**:
+- No gimbal lock: Quaternions have no singularities at any orientation
+- Numerical stability: Constraint maintains |Q|=1 within 1e-10 tolerance over 10000 steps
+- Extensibility: Potential energy abstraction enables future force fields (tidal, magnetic, atmospheric)
+- Mathematical rigor: Lagrangian formulation provides clear separation between kinematics and dynamics
+
+**Key files**:
+- `src/Physics/Integration/Integrator.hpp` — Abstract integrator interface
+- `src/Physics/Integration/SemiImplicitEulerIntegrator.hpp`, `SemiImplicitEulerIntegrator.cpp` — Symplectic integrator
+- `src/Physics/PotentialEnergy/PotentialEnergy.hpp` — Potential energy interface
+- `src/Physics/PotentialEnergy/GravityPotential.hpp`, `GravityPotential.cpp` — Uniform gravity implementation
+- `src/Physics/Constraints/QuaternionConstraint.hpp`, `QuaternionConstraint.cpp` — Baumgarte stabilization
+- `src/Physics/RigidBody/InertialState.hpp`, `InertialState.cpp` — Quaternion state with conversion utilities
+- `src/Environment/ReferenceFrame.hpp`, `ReferenceFrame.cpp` — Quaternion-based transforms
+- `src/Environment/WorldModel.hpp`, `WorldModel.cpp` — Lagrangian mechanics integration
+- `test/Physics/Integration/QuaternionPhysicsTest.cpp` — 16 integration tests covering all acceptance criteria
+
+---
 
 ### Collision Response System — 2026-01-24
 **Ticket**: [0027_collision_response_system](../../tickets/0027_collision_response_system.md)

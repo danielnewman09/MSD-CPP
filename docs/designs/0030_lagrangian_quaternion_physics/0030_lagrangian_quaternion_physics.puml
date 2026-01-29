@@ -1,0 +1,347 @@
+@startuml 0030_lagrangian_quaternion_physics
+' =============================================================================
+' Feature: Lagrangian Quaternion Physics
+' Ticket: 0030_lagrangian_quaternion_physics
+' Description: Quaternion-based state representation with Lagrangian mechanics
+'              and constraint-based integration for stable gravity simulation
+' Date: 2026-01-28
+' =============================================================================
+
+' -----------------------------------------------------------------------------
+' Styling - Mark NEW and MODIFIED components
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor White
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BorderColor Black
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim" {
+
+    ' ========================================================================
+    ' MODIFIED COMPONENTS
+    ' ========================================================================
+
+    class InertialState <<modified>> {
+        ' Linear components (unchanged)
+        +position: Coordinate
+        +velocity: Coordinate
+        +acceleration: Coordinate
+        ..
+        ' Angular components (CHANGED)
+        +orientation: Eigen::Quaterniond <<changed from AngularCoordinate>>
+        +quaternionRate: Eigen::Vector4d <<new>>
+        +angularVelocity: AngularRate <<unchanged>>
+        +angularAcceleration: AngularRate <<unchanged>>
+        ..
+        ' Conversion utilities
+        +quaternionRateToOmega(): AngularRate
+        +omegaToQuaternionRate(omega: AngularRate): Eigen::Vector4d
+        +getEulerAngles(): AngularCoordinate <<deprecated>>
+    }
+
+    class ReferenceFrame <<modified>> {
+        -origin_: Coordinate
+        -quaternion_: Eigen::Quaterniond <<new>>
+        -rotation_: Eigen::Matrix3d
+        -updated_: bool
+        ..
+        ' Constructors (updated)
+        +ReferenceFrame()
+        +ReferenceFrame(origin: Coordinate)
+        +ReferenceFrame(origin: Coordinate, quat: Eigen::Quaterniond) <<new>>
+        +ReferenceFrame(origin: Coordinate, angular: AngularCoordinate) <<deprecated>>
+        ..
+        ' Transform methods (unchanged)
+        +globalToLocal(coord: Coordinate): Coordinate
+        +localToGlobal(coord: Coordinate): Coordinate
+        +globalToLocalRelative(vec: Coordinate): Coordinate
+        +localToGlobalRelative(vec: Coordinate): Coordinate
+        ..
+        ' Rotation setter/getter
+        +setQuaternion(quat: Eigen::Quaterniond): void <<new>>
+        +getQuaternion(): Eigen::Quaterniond <<new>>
+        +setRotation(angular: AngularCoordinate): void <<deprecated>>
+        +getAngularCoordinate(): AngularCoordinate <<deprecated>>
+    }
+
+    class WorldModel <<modified>> {
+        -inertialAssets_: std::vector<AssetInertial>
+        -environmentalAssets_: std::vector<AssetEnvironment>
+        -gravity_: Coordinate
+        -collisionHandler_: CollisionHandler
+        -time_: std::chrono::milliseconds
+        -potentialEnergies_: std::vector<std::unique_ptr<PotentialEnergy>> <<new>>
+        -quaternionConstraint_: QuaternionConstraint <<new>>
+        ..
+        ' Physics integration (CHANGED)
+        -updatePhysics(dt: double): void <<modified>>
+        ..
+        ' Potential energy management
+        +addPotentialEnergy(energy: std::unique_ptr<PotentialEnergy>): void <<new>>
+        +clearPotentialEnergies(): void <<new>>
+    }
+
+    ' ========================================================================
+    ' NEW COMPONENTS
+    ' ========================================================================
+
+    abstract class PotentialEnergy <<new>> {
+        ' Abstract interface for potential energy fields
+        ..
+        +{abstract} computeForce(state: InertialState, mass: double): CoordinateRate
+        +{abstract} computeTorque(state: InertialState, inertia: Eigen::Matrix3d): AngularRate
+        +{abstract} computeEnergy(state: InertialState, mass: double): double
+        ..
+        +~PotentialEnergy() = default
+    }
+
+    class GravityPotential <<new>> {
+        -g_: Coordinate
+        ..
+        +GravityPotential(gravityVector: Coordinate)
+        ..
+        ' PotentialEnergy interface implementation
+        +computeForce(state: InertialState, mass: double): CoordinateRate
+        +computeTorque(state: InertialState, inertia: Eigen::Matrix3d): AngularRate
+        +computeEnergy(state: InertialState, mass: double): double
+        ..
+        +setGravity(gravityVector: Coordinate): void
+        +getGravity(): Coordinate <<const>>
+    }
+
+    class QuaternionConstraint <<new>> {
+        -alpha_: double
+        -beta_: double
+        ..
+        +QuaternionConstraint(alpha: double = 10.0, beta: double = 10.0)
+        ..
+        ' Constraint enforcement
+        +enforceConstraint(Q: Eigen::Quaterniond&, Qdot: Eigen::Vector4d&): void
+        +computeConstraintForce(Q: Eigen::Quaterniond, Qdot: Eigen::Vector4d): Eigen::Vector4d
+        ..
+        ' Baumgarte stabilization parameters
+        +setAlpha(alpha: double): void
+        +setBeta(beta: double): void
+        +getAlpha(): double <<const>>
+        +getBeta(): double <<const>>
+        ..
+        ' Constraint violation queries
+        +positionViolation(Q: Eigen::Quaterniond): double <<const>>
+        +velocityViolation(Q: Eigen::Quaterniond, Qdot: Eigen::Vector4d): double <<const>>
+    }
+
+    ' ========================================================================
+    ' EXISTING COMPONENTS (UNCHANGED)
+    ' ========================================================================
+
+    class Coordinate {
+        +x(): double
+        +y(): double
+        +z(): double
+        +norm(): double
+        +cross(other): Coordinate
+    }
+
+    class AngularRate {
+        +pitch(): double
+        +roll(): double
+        +yaw(): double
+    }
+
+    class AssetInertial {
+        -inertialState_: InertialState
+        -mass_: double
+        -inertiaTensor_: Eigen::Matrix3d
+        -referenceFrame_: ReferenceFrame
+        ..
+        +applyForce(force: CoordinateRate): void
+        +applyTorque(torque: AngularRate): void
+        +getInertialState(): InertialState&
+        +getMass(): double
+        +getInertiaTensor(): Eigen::Matrix3d
+    }
+
+}
+
+package "Eigen" {
+    class "Eigen::Quaterniond" as EigenQuaterniond {
+        +w(): double
+        +x(): double
+        +y(): double
+        +z(): double
+        +coeffs(): Eigen::Vector4d&
+        +normalized(): Eigen::Quaterniond
+        +toRotationMatrix(): Eigen::Matrix3d
+    }
+
+    class "Eigen::Vector4d" as EigenVector4d {
+        +operator[](index): double&
+        +norm(): double
+    }
+
+    class "Eigen::Vector3d" as EigenVector3d {
+        +operator[](index): double&
+        +cross(other): Eigen::Vector3d
+        +dot(other): double
+    }
+}
+
+' -----------------------------------------------------------------------------
+' Relationships
+' -----------------------------------------------------------------------------
+
+' Inheritance
+PotentialEnergy <|-- GravityPotential : implements
+AngularRate --|> EigenVector3d : inherits
+Coordinate --|> EigenVector3d : inherits
+
+' InertialState composition (CHANGED)
+InertialState *-- "3" Coordinate : linear state
+InertialState *-- EigenQuaterniond : orientation <<new>>
+InertialState *-- EigenVector4d : quaternionRate <<new>>
+InertialState *-- "2" AngularRate : angular rates
+
+' ReferenceFrame composition (CHANGED)
+ReferenceFrame *-- Coordinate : origin
+ReferenceFrame *-- EigenQuaterniond : quaternion <<new>>
+
+' WorldModel composition (NEW)
+WorldModel *-- "0..*" PotentialEnergy : potential energies <<new>>
+WorldModel *-- QuaternionConstraint : constraint <<new>>
+WorldModel o-- "0..*" AssetInertial : manages
+
+' AssetInertial composition
+AssetInertial *-- InertialState : state
+AssetInertial *-- ReferenceFrame : transform
+
+' Dependencies
+WorldModel ..> GravityPotential : creates
+WorldModel ..> PotentialEnergy : uses for force computation
+WorldModel ..> QuaternionConstraint : uses for constraint enforcement
+AssetInertial ..> InertialState : updates
+
+' -----------------------------------------------------------------------------
+' Notes
+' -----------------------------------------------------------------------------
+
+note right of InertialState
+    **Breaking Change:**
+    - orientation: AngularCoordinate → Eigen::Quaterniond
+    - Added quaternionRate: Eigen::Vector4d (Q̇)
+    - angularVelocity (ω) preserved for compatibility
+
+    **State Vector (14 components):**
+    Position-level:  q = [X, Q]ᵀ     (7: 3 position + 4 quaternion)
+    Velocity-level:  q̇ = [Ẋ, Q̇]ᵀ    (7: 3 linear vel + 4 quat rate)
+
+    **Conversions:**
+    Q̇ → ω:  ω = 2 * Q̄ ⊗ Q̇  (Q̄ = conjugate)
+    ω → Q̇:  Q̇ = ½ * Q ⊗ [0, ω]
+
+    **Deprecated Methods:**
+    - getEulerAngles() for backward compatibility
+end note
+
+note right of ReferenceFrame
+    **Breaking Change:**
+    - Internal storage: AngularCoordinate → Eigen::Quaterniond
+    - New constructor: ReferenceFrame(origin, Eigen::Quaterniond)
+    - New methods: setQuaternion(), getQuaternion()
+
+    **Backward Compatibility:**
+    - Old constructor/setters marked deprecated
+    - Euler angle conversions via quaternion internally
+    - No gimbal lock when using quaternions
+
+    **Migration:**
+    Old: ReferenceFrame(origin, AngularCoordinate{p, r, y})
+    New: ReferenceFrame(origin, Eigen::Quaterniond(...))
+end note
+
+note right of PotentialEnergy
+    **Purpose:** Abstract interface for potential energy fields
+
+    **Lagrangian Mechanics:**
+    L = T - V  (Kinetic - Potential)
+
+    **Generalized Forces:**
+    F = -∂V/∂X  (Force from potential gradient)
+    τ = -∂V/∂Q  (Torque from orientation-dependent potential)
+
+    **Extensibility:**
+    - GravityPotential (uniform field)
+    - Future: TidalPotential, MagneticPotential, etc.
+
+    **Thread Safety:** Read-only after construction
+end note
+
+note right of GravityPotential
+    **Purpose:** Uniform gravitational field
+
+    **Potential Energy:**
+    V = m * g * z  (z-up convention)
+
+    **Force:**
+    F = m * g  (constant, orientation-independent)
+
+    **Torque:**
+    τ = 0  (uniform field produces no torque)
+
+    **Example:**
+    GravityPotential gravity{Coordinate{0, 0, -9.81}};
+    auto force = gravity.computeForce(state, mass);
+    // Returns F = (0, 0, -9.81 * mass)
+end note
+
+note right of QuaternionConstraint
+    **Purpose:** Enforce unit quaternion constraint via Lagrange multipliers
+
+    **Constraints:**
+    Position: g(Q) = QᵀQ - 1 = 0  (unit quaternion)
+    Velocity: ġ = 2QᵀQ̇ = 0       (Q̇ ⊥ Q)
+
+    **Baumgarte Stabilization:**
+    λ = -α * g - β * ġ  (corrects drift)
+    α, β > 0  (tuning parameters)
+
+    **Constraint Force:**
+    F_constraint = G^T * λ  (where G = ∂g/∂Q = 2Qᵀ)
+
+    **Default Parameters:**
+    α = 10.0, β = 10.0  (may need tuning)
+end note
+
+note bottom of WorldModel
+    **Physics Integration Order (updatePhysics):**
+    1. Compute generalized forces from potential energies
+       F = Σ V_i.computeForce(state, mass)
+       τ = Σ V_i.computeTorque(state, inertia)
+
+    2. Solve linear dynamics
+       F = ma  →  a = F_net / m
+       ẍ = a
+
+    3. Solve angular dynamics (in ω space)
+       τ = I * α  →  α = I⁻¹ * τ_net
+       ω̇ = α
+       Convert: Q̇ = ½ * Q ⊗ [0, ω]
+
+    4. Apply quaternion constraint
+       enforceConstraint(Q, Q̇)  (Baumgarte stabilization)
+
+    5. Semi-implicit Euler integration
+       v_new = v_old + a * dt
+       x_new = x_old + v_new * dt
+       ω_new = ω_old + α * dt
+       Q̇_new = omegaToQuaternionRate(ω_new)
+       Q_new = (Q_old + Q̇_new * dt).normalized()
+
+    **Collision Response:** OUT OF SCOPE (separate ticket)
+end note
+
+@enduml
