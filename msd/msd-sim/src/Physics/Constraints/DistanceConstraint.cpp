@@ -2,8 +2,8 @@
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 
 #include "msd-sim/src/Physics/Constraints/DistanceConstraint.hpp"
-#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 #include <stdexcept>
+#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
 {
@@ -16,8 +16,8 @@ DistanceConstraint::DistanceConstraint(double targetDistance,
   if (targetDistance <= 0.0)
   {
     throw std::invalid_argument(
-        "DistanceConstraint: targetDistance must be positive, got " +
-        std::to_string(targetDistance));
+      "DistanceConstraint: targetDistance must be positive, got " +
+      std::to_string(targetDistance));
   }
 }
 
@@ -27,13 +27,13 @@ int DistanceConstraint::dimension() const
 }
 
 Eigen::VectorXd DistanceConstraint::evaluate(const InertialState& state,
-                                              double /* time */) const
+                                             double /* time */) const
 {
   // Constraint: C(X) = |X|² - d²
   const Coordinate& X = state.position;
 
   // Compute |X|² = X·X (dot product)
-  double X_squared = X.x() * X.x() + X.y() * X.y() + X.z() * X.z();
+  double X_squared = X.dot(X);
 
   // Constraint violation: |X|² - d²
   Eigen::VectorXd C(1);
@@ -43,7 +43,7 @@ Eigen::VectorXd DistanceConstraint::evaluate(const InertialState& state,
 }
 
 Eigen::MatrixXd DistanceConstraint::jacobian(const InertialState& state,
-                                              double /* time */) const
+                                             double /* time */) const
 {
   // Jacobian: J = ∂C/∂q where C = |X|² - d²
   // ∂C/∂X = 2·X^T
@@ -73,8 +73,8 @@ Eigen::MatrixXd DistanceConstraint::jacobian(const InertialState& state,
 }
 
 Eigen::VectorXd DistanceConstraint::partialTimeDerivative(
-    const InertialState& /* state */,
-    double /* time */) const
+  const InertialState& /* state */,
+  double /* time */) const
 {
   // Time derivative: ∂C/∂t = 0 (time-independent constraint)
   Eigen::VectorXd result(1);

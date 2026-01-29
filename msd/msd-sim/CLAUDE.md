@@ -74,17 +74,15 @@ Core mathematical primitives and simulation entity management. Provides type-saf
 **Documentation**: [`Physics/CLAUDE.md`](src/Physics/CLAUDE.md)
 **Diagrams**: [`docs/msd/msd-sim/Physics/`](../../docs/msd/msd-sim/Physics/)
 
-Force-based rigid body dynamics and collision detection. Provides convex hull geometry, GJK collision detection, inertia tensor calculation, dynamic state management, and force application with semi-implicit Euler integration.
+Force-based rigid body dynamics and collision detection. Provides rigid body representation, convex hull geometry, collision detection and response system, inertia tensor calculation, numerical integration systems, and constraint enforcement.
 
 **Key Components**:
-- `ConvexHull` — Convex hull geometry via Qhull
-- `PhysicsComponent` — Rigid body physics properties
-- `DynamicState` — Velocities and accelerations
-- `InertialCalculations` — Inertia tensor computation
-- `GJK` — Gilbert-Johnson-Keerthi collision detection with AssetPhysical transform support
-- `AssetPhysical` — Combines collision hull with world-space ReferenceFrame transformation
-- `AssetInertial` — Dynamic physics object with force accumulation and integration
-- `WorldModel` — Physics integration with gravity and semi-implicit Euler
+- **RigidBody System** — Rigid body representation, convex hulls, inertial properties, quaternion orientation (see [`src/Physics/RigidBody/CLAUDE.md`](src/Physics/RigidBody/CLAUDE.md))
+- **Collision System** — GJK/EPA collision detection and response (see [`src/Physics/Collision/CLAUDE.md`](src/Physics/Collision/CLAUDE.md))
+- **Integration** — Numerical integration framework (see [`src/Physics/Integration/CLAUDE.md`](src/Physics/Integration/CLAUDE.md))
+- **PotentialEnergy** — Environmental potential energy fields for Lagrangian mechanics (see [`src/Physics/PotentialEnergy/CLAUDE.md`](src/Physics/PotentialEnergy/CLAUDE.md))
+- **Constraints** — Lagrange multiplier constraint system (see [`src/Physics/Constraints/CLAUDE.md`](src/Physics/Constraints/CLAUDE.md))
+- `WorldModel` — Physics integration with gravity and constraint enforcement
 
 ### Utils Module
 

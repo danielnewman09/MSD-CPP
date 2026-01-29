@@ -23,7 +23,10 @@ This project follows specific coding standards from CLAUDE.md including:
 
 | Current Status | Action | Agent File |
 |----------------|--------|------------|
-| Draft | Inform human ticket isn't ready | None |
+| Draft | Check Requires Math Design flag, advance appropriately | None |
+| Ready for Math Design | Execute Math Designer | `.claude/agents/math-designer.md` |
+| Math Design Complete — Awaiting Review | Execute Math Reviewer | `.claude/agents/math-reviewer.md` |
+| Math Design Approved — Ready for Architectural Design | Advance to Ready for Design | None |
 | Ready for Design | Execute Designer | `.claude/agents/cpp-architect.md` |
 | Design Complete — Awaiting Review | Execute Design Reviewer | `.claude/agents/design-reviewer.md` |
 | Design Approved — Ready for Prototype | Execute Prototyper | `.claude/agents/cpp-prototyper.md` |
@@ -48,6 +51,37 @@ Generate Tutorial: Yes
 2. If `Generate Tutorial: No` or not specified → Skip to "Merged / Complete"
 
 When processing tickets, check the Metadata section for the tutorial flag before advancing from the documentation phase.
+
+### Math Design (Conditional Phase)
+
+The Math Design phase is **optional** and only executes when the ticket metadata contains:
+```
+Requires Math Design: Yes
+```
+
+**Workflow branching at Draft:**
+1. If `Requires Math Design: Yes` → Advance to "Ready for Math Design"
+2. If `Requires Math Design: No` or not specified → Skip to "Ready for Design"
+
+When processing the "Draft" status:
+1. Check ticket Metadata for `Requires Math Design: Yes`
+2. **If math design requested**:
+   - Update status to "Ready for Math Design"
+   - Report that mathematical formulation is the next step
+   - On next invocation, execute math-designer agent
+3. **If math design NOT requested**:
+   - Skip math design phase entirely
+   - Advance directly to "Ready for Design"
+   - Report that architectural design is the next step
+
+The math-designer agent produces:
+- `docs/designs/{feature-name}/math-formulation.md` — LaTeX equations, derivations, numerical examples
+
+The math-reviewer agent validates:
+- Derivation correctness (step-by-step verification)
+- Numerical stability analysis completeness
+- Test example adequacy (verifies at least one by hand)
+- Coverage of edge/degenerate cases
 
 ### Quality Gate Loop
 

@@ -2,6 +2,9 @@
 
 ## Status
 - [ ] Draft
+- [ ] Ready for Math Design (if Requires Math Design: Yes)
+- [ ] Math Design Complete — Awaiting Review (if Requires Math Design: Yes)
+- [ ] Math Design Approved — Ready for Architectural Design (if Requires Math Design: Yes)
 - [ ] Ready for Design
 - [ ] Design Complete — Awaiting Review
 - [ ] Design Approved — Ready for Prototype
@@ -21,6 +24,7 @@
 - **Estimated Complexity**: Small / Medium / Large / XL
 - **Target Component(s)**: {e.g., networking, storage, ui}
 - **Generate Tutorial**: No (set to Yes for features with educational value)
+- **Requires Math Design**: No (set to Yes for features with significant mathematical content)
 
 ---
 
@@ -87,6 +91,19 @@
 
 {This section is automatically updated as the workflow progresses}
 
+### Math Design Phase (if Requires Math Design: Yes)
+- **Started**:
+- **Completed**:
+- **Artifacts**:
+  - `docs/designs/{feature-name}/math-formulation.md`
+- **Notes**:
+
+### Math Design Review Phase (if Requires Math Design: Yes)
+- **Started**:
+- **Completed**:
+- **Status**:
+- **Reviewer Notes**:
+
 ### Design Phase
 - **Started**: 
 - **Completed**: 
@@ -148,6 +165,9 @@
 ## Human Feedback
 
 {Add feedback here at any point. Agents will read this section.}
+
+### Feedback on Math Design (if Requires Math Design: Yes)
+{Your comments on the mathematical formulation}
 
 ### Feedback on Design
 {Your comments on the design}

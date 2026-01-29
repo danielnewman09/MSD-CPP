@@ -41,6 +41,11 @@ Revise an existing design based on reviewer feedback. This mode is triggered whe
 
 ### 1. Analyze Current Architecture
 Before designing, thoroughly examine:
+- **If math-formulation.md exists**: Read `docs/designs/{feature-name}/math-formulation.md` first
+  - Extract the mathematical framework to understand WHAT will be implemented
+  - Note numerical examples that will become test cases
+  - Respect precision requirements when choosing data types
+  - Incorporate numerical stability mitigations into the design
 - Existing class hierarchies and inheritance relationships
 - Current `.puml` diagrams in `docs/designs/` and `docs/msd/` directories
 - Header files for interfaces you'll interact with
