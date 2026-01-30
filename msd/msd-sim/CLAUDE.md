@@ -264,10 +264,66 @@ ctest --preset debug
 | [`collision-response.puml`](../../docs/msd/msd-sim/Physics/collision-response.puml) | Collision response system with impulse-based physics | `docs/msd/msd-sim/Physics/` |
 | [`0030_lagrangian_quaternion_physics.puml`](../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml) | Lagrangian quaternion physics with potential energy and constraints | `docs/designs/0030_lagrangian_quaternion_physics/` |
 | [`generalized-constraints.puml`](../../docs/msd/msd-sim/Physics/generalized-constraints.puml) | Generalized Lagrange multiplier constraint system with extensible constraint library | `docs/msd/msd-sim/Physics/` |
+| [`two-body-constraints.puml`](../../docs/msd/msd-sim/Physics/two-body-constraints.puml) | Two-body constraint infrastructure with ContactConstraint for collision response | `docs/msd/msd-sim/Physics/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Two-Body Constraint Infrastructure — 2026-01-29
+**Ticket**: [0032a_two_body_constraint_infrastructure](../../tickets/0032a_two_body_constraint_infrastructure.md)
+**Diagram**: [`two-body-constraints.puml`](../../docs/msd/msd-sim/Physics/two-body-constraints.puml)
+**Type**: Feature Enhancement (Additive)
+
+Extended the generalized constraint framework (ticket 0031) to support two-body constraints — constraints that couple the motion of two rigid bodies. Introduced `TwoBodyConstraint` abstract class and `ContactConstraint` concrete implementation for non-penetration constraints with Baumgarte stabilization and restitution handling. This lays the foundation for replacing the impulse-based collision response with a unified constraint-based approach.
+
+**Key components**:
+- **TwoBodyConstraint** — Abstract interface for constraints operating on two rigid bodies with 12-DOF velocity-level Jacobian [v_A, ω_A, v_B, ω_B]
+- **ContactConstraint** — Concrete non-penetration constraint C(q) = (x_B - x_A) · n ≥ 0 with dimension=1 per contact point
+- **ContactConstraintFactory** — Stateless utility namespace for creating ContactConstraint instances from CollisionResult manifolds
+- **AssetEnvironment extensions** — Added `getInverseMass()` (returns 0.0) and `getInverseInertiaTensor()` (returns zero matrix) for unified solver path with infinite-mass static objects
+- **AssetInertial extensions** — Added `getInverseMass()` convenience method returning 1.0/mass
+
+**Architecture**:
+- `TwoBodyConstraint` extends `UnilateralConstraint` with two-body evaluation methods: `evaluateTwoBody()`, `jacobianTwoBody()`, `isActiveTwoBody()`
+- Single-body methods (`evaluate()`, `jacobian()`, `isActive()`) throw `std::logic_error` to enforce API correctness — two-body constraints must use two-body interface
+- `ContactConstraint::dimension()` returns 1 — one constraint row per contact point, enabling multi-point contact manifolds via multiple ContactConstraint objects
+- Jacobian structure (1 × 12): `J = [-n^T, -(r_A × n)^T, n^T, (r_B × n)^T]` for linear and angular constraint coupling
+- Baumgarte stabilization uses Error Reduction Parameter (ERP) formulation: ERP=0.2 default, equivalent to α_accel≈781 [1/s²] at 60 FPS
+- Restitution handling: Stores pre-impact relative normal velocity for constraint RHS computation with correct formula `v_target = -e·v_pre`
+- `ContactConstraintFactory::createFromCollision()` generates one ContactConstraint per contact point in CollisionResult manifold
+- `AssetEnvironment` with inverseMass=0 enables unified solver code path — static bodies receive zero velocity change from constraint impulses
+
+**Thread safety**: ContactConstraint immutable after construction (thread-safe reads). Factory functions stateless (thread-safe).
+
+**Memory management**: ContactConstraint instances created per-frame and owned via `std::unique_ptr` (transient lifecycle). Pre-computed lever arms stored at construction to avoid recomputation.
+
+**Error handling**:
+- ContactConstraint constructor validates normal is unit length (within 1e-6), penetration depth ≥ 0, restitution in [0, 1]
+- Single-body method overrides throw `std::logic_error` for API misuse detection
+- AssetEnvironment constructor validates restitution in [0, 1], throws `std::invalid_argument` otherwise
+
+**Design rationale**:
+- Subclassing approach avoids modifying existing `Constraint` interface, preserving backward compatibility for all single-body constraints (UnitQuaternionConstraint, DistanceConstraint)
+- Solver can use `dynamic_cast<TwoBodyConstraint*>` to dispatch between single-body and two-body constraint evaluation
+- ERP formulation (velocity-level bias) preferred over acceleration-level Baumgarte (α·C + β·Ċ) to match physics engine industry standard and avoid parameter unit confusion
+- Zero inverse mass for AssetEnvironment enables treating static objects identically to dynamic objects in solver, eliminating duplicate code paths
+
+**Key files**:
+- `src/Physics/Constraints/TwoBodyConstraint.hpp`, `TwoBodyConstraint.cpp` — Abstract two-body constraint interface
+- `src/Physics/Constraints/ContactConstraint.hpp`, `ContactConstraint.cpp` — Non-penetration constraint implementation
+- `src/Physics/Constraints/ContactConstraintFactory.hpp`, `ContactConstraintFactory.cpp` — Factory for creating constraints from collisions
+- `src/Physics/RigidBody/AssetEnvironment.hpp`, `AssetEnvironment.cpp` — Extended with inverse mass/inertia and restitution property
+- `src/Physics/RigidBody/AssetInertial.hpp`, `AssetInertial.cpp` — Added getInverseMass() convenience method
+- `test/Physics/Constraints/ContactConstraintTest.cpp` — 33 unit tests covering constraint evaluation, Jacobian validation, factory functions
+
+**Limitations** (to be addressed in subsequent sub-tickets):
+- No solver integration yet — PGS solver extension deferred to ticket 0032b
+- No WorldModel integration — contact constraint creation and solving deferred to ticket 0032c
+- Transient constraints only — no warm starting or contact persistence (future enhancement)
+- Single normal constraint per contact point — friction constraints deferred to future work
+
+---
 
 ### Generalized Lagrange Multiplier Constraint System — 2026-01-28
 **Ticket**: [0031_generalized_lagrange_constraints](../../tickets/0031_generalized_lagrange_constraints.md)

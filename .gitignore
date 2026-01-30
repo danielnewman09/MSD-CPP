@@ -12,3 +12,5 @@ profile_results/
 **/.cache/**
 **/.cmake/**
 *.DS_Store
+**/build_diag/**
+.debug-sessions/*

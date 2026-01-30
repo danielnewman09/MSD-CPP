@@ -1,7 +1,7 @@
 #include "msd-sim/src/Environment/WorldModel.hpp"
 #include <iostream>
 #include <stdexcept>
-#include "msd-sim/src/Physics/CollisionResponse.hpp"
+#include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
 
@@ -95,10 +95,11 @@ void WorldModel::update(std::chrono::milliseconds simTime)
     platform.update(simTime);
   }
 
-  // IMPORTANT: Collision response BEFORE physics integration
-  // Order matters: collision impulses must be applied before velocity
-  // integration
-  updateCollisions();
+  // IMPORTANT: Contact constraint forces BEFORE physics integration
+  // Order matters: constraint forces must be accumulated before velocity
+  // integration so they are included in the force-based integration step
+  // Ticket: 0032_contact_constraint_refactor
+  updateCollisions(dt);
 
   // Update physics for all dynamic objects
   updatePhysics(dt);
@@ -158,70 +159,172 @@ void WorldModel::updatePhysics(double dt)
   // Ticket: 0030_lagrangian_quaternion_physics
 }
 
-void WorldModel::updateCollisions()
+void WorldModel::updateCollisions(double dt)
 {
-  // O(n²) pairwise collision detection and response
-  // For typical scene sizes (< 100 objects), this is acceptable
-  // Future optimization: broadphase spatial partitioning in separate ticket
+  // Constraint-based collision response using Projected Gauss-Seidel (PGS)
+  // Replaces per-pair impulse-based CollisionResponse with a unified solver.
+  //
+  // Solver body indexing:
+  //   [0 .. numInertial-1]                   = inertial bodies
+  //   [numInertial .. numInertial+numEnv-1]   = environment bodies (infinite mass)
+  //
+  // Ticket: 0032_contact_constraint_refactor
 
-  const size_t assetCount = inertialAssets_.size();
+  const size_t numInertial = inertialAssets_.size();
+  const size_t numEnvironment = environmentalAssets_.size();
+  const size_t numBodies = numInertial + numEnvironment;
 
-  for (size_t i = 0; i < assetCount; ++i)
+  if (numBodies == 0 || dt <= 0.0)
   {
-    for (size_t j = i + 1; j < assetCount; ++j)
-    {
-      AssetInertial& assetA = inertialAssets_[i];
-      AssetInertial& assetB = inertialAssets_[j];
+    return;
+  }
 
-      // ===== Collision Detection =====
-      auto result = collisionHandler_.checkCollision(assetA, assetB);
+  // ===== Phase 1: Collision Detection =====
+  // Collect all collision pairs with their body indices
+
+  struct CollisionPair
+  {
+    size_t bodyAIndex;
+    size_t bodyBIndex;
+    CollisionResult result;
+    double restitution;
+  };
+
+  std::vector<CollisionPair> collisions;
+
+  // Inertial vs Inertial (O(n²) pairwise)
+  for (size_t i = 0; i < numInertial; ++i)
+  {
+    for (size_t j = i + 1; j < numInertial; ++j)
+    {
+      auto result = collisionHandler_.checkCollision(
+          inertialAssets_[i], inertialAssets_[j]);
       if (!result)
       {
-        continue;  // No collision
+        continue;
       }
 
-      // ===== Combine Restitution Coefficients =====
-      double combinedE = CollisionResponse::combineRestitution(
-        assetA.getCoefficientOfRestitution(),
-        assetB.getCoefficientOfRestitution());
+      double combinedE = ContactConstraintFactory::combineRestitution(
+          inertialAssets_[i].getCoefficientOfRestitution(),
+          inertialAssets_[j].getCoefficientOfRestitution());
 
-      // ===== Apply Lagrangian Constraint Response (Frictionless) =====
-      // Computes Lagrange multiplier for non-penetration constraint
-      // and applies constraint forces along contact normal only.
-      CollisionResponse::applyConstraintResponse(
-        assetA, assetB, *result, combinedE);
-      CollisionResponse::applyPositionStabilization(
-        assetA, assetB, *result);
+      collisions.push_back({i, j, *result, combinedE});
     }
   }
 
-  // ===== Inertial vs Environment Collisions =====
-  // Dynamic objects colliding with static environment
-  for (auto& inertial : inertialAssets_)
+  // Inertial vs Environment
+  for (size_t i = 0; i < numInertial; ++i)
   {
-    for (auto& environment : environmentalAssets_)
+    for (size_t e = 0; e < numEnvironment; ++e)
     {
-      // Collision detection (inertial is A, environment is B)
-      auto result = collisionHandler_.checkCollision(inertial, environment);
+      auto result = collisionHandler_.checkCollision(
+          inertialAssets_[i], environmentalAssets_[e]);
       if (!result)
       {
-        continue;  // No collision
+        continue;
       }
 
-      // Combine restitution (using default for environment)
-      double combinedE = CollisionResponse::combineRestitution(
-        inertial.getCoefficientOfRestitution(),
-        CollisionResponse::kEnvironmentRestitution);
+      double combinedE = ContactConstraintFactory::combineRestitution(
+          inertialAssets_[i].getCoefficientOfRestitution(),
+          environmentalAssets_[e].getCoefficientOfRestitution());
 
-      // ===== Apply Lagrangian Constraint Response (Frictionless) =====
-      CollisionResponse::applyConstraintResponseStatic(
-        inertial, environment, *result, combinedE);
-      CollisionResponse::applyPositionStabilizationStatic(
-        inertial, environment, *result);
+      // Environment body index offset by numInertial
+      collisions.push_back({i, numInertial + e, *result, combinedE});
     }
   }
-  // Ticket: 0027_collision_response_system (refactored to Lagrangian mechanics)
-  // Frictionless constraints only - tangential forces removed
+
+  if (collisions.empty())
+  {
+    return;
+  }
+
+  // ===== Phase 2: Create Contact Constraints =====
+  std::vector<std::unique_ptr<ContactConstraint>> allConstraints;
+
+  for (const auto& pair : collisions)
+  {
+    const InertialState& stateA = (pair.bodyAIndex < numInertial)
+        ? inertialAssets_[pair.bodyAIndex].getInertialState()
+        : environmentalAssets_[pair.bodyAIndex - numInertial].getInertialState();
+
+    const InertialState& stateB = (pair.bodyBIndex < numInertial)
+        ? inertialAssets_[pair.bodyBIndex].getInertialState()
+        : environmentalAssets_[pair.bodyBIndex - numInertial].getInertialState();
+
+    const Coordinate& comA = stateA.position;
+    const Coordinate& comB = stateB.position;
+
+    auto constraints = ContactConstraintFactory::createFromCollision(
+        pair.bodyAIndex, pair.bodyBIndex,
+        pair.result, stateA, stateB,
+        comA, comB, pair.restitution);
+
+    for (auto& c : constraints)
+    {
+      allConstraints.push_back(std::move(c));
+    }
+  }
+
+  if (allConstraints.empty())
+  {
+    return;
+  }
+
+  // ===== Phase 3: Build Solver Input Arrays =====
+  std::vector<std::reference_wrapper<const InertialState>> states;
+  std::vector<double> inverseMasses;
+  std::vector<Eigen::Matrix3d> inverseInertias;
+
+  states.reserve(numBodies);
+  inverseMasses.reserve(numBodies);
+  inverseInertias.reserve(numBodies);
+
+  for (auto& asset : inertialAssets_)
+  {
+    states.push_back(std::cref(asset.getInertialState()));
+    inverseMasses.push_back(asset.getInverseMass());
+    inverseInertias.push_back(asset.getInverseInertiaTensor());
+  }
+
+  for (auto& envAsset : environmentalAssets_)
+  {
+    states.push_back(std::cref(envAsset.getInertialState()));
+    inverseMasses.push_back(envAsset.getInverseMass());            // 0.0
+    inverseInertias.push_back(envAsset.getInverseInertiaTensor()); // Zero matrix
+  }
+
+  // Build non-owning TwoBodyConstraint* vector for solver
+  std::vector<TwoBodyConstraint*> constraintPtrs;
+  constraintPtrs.reserve(allConstraints.size());
+  for (auto& c : allConstraints)
+  {
+    constraintPtrs.push_back(c.get());
+  }
+
+  // ===== Phase 4: Solve PGS =====
+  auto solveResult = contactSolver_.solveWithContacts(
+      constraintPtrs, states, inverseMasses, inverseInertias,
+      numBodies, dt);
+
+  // ===== Phase 5: Apply Constraint Forces to Inertial Bodies =====
+  // Environment bodies (indices >= numInertial) are skipped because they
+  // have infinite mass and cannot be moved.
+  for (size_t k = 0; k < numInertial; ++k)
+  {
+    const auto& forces = solveResult.bodyForces[k];
+
+    // Skip bodies with no constraint force
+    if (forces.linearForce.norm() < 1e-12 &&
+        forces.angularTorque.norm() < 1e-12)
+    {
+      continue;
+    }
+
+    inertialAssets_[k].applyForce(forces.linearForce);
+    inertialAssets_[k].applyTorque(forces.angularTorque);
+  }
+  // Ticket: 0032_contact_constraint_refactor
+  // Constraint forces accumulated here are integrated in updatePhysics()
 }
 
 

@@ -97,6 +97,11 @@ double AssetInertial::getMass() const
   return mass_;
 }
 
+double AssetInertial::getInverseMass() const
+{
+  return 1.0 / mass_;
+}
+
 const Eigen::Matrix3d& AssetInertial::getInertiaTensor() const
 {
   return inertiaTensor_;

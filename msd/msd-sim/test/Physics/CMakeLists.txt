@@ -14,3 +14,4 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
 
 # Include subdirectories with additional tests
 add_subdirectory(Constraints)
+add_subdirectory(RigidBody)

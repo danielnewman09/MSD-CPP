@@ -1,5 +1,7 @@
 // Ticket: 0031_generalized_lagrange_constraints
+// Ticket: 0032_contact_constraint_refactor
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
+// Design: docs/designs/0032_contact_constraint_refactor/design.md
 
 #ifndef MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
 #define MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
@@ -7,14 +9,16 @@
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
 #include <Eigen/Dense>
+#include <functional>
 #include <vector>
 #include <limits>
 
 namespace msd_sim
 {
 
-// Forward declaration
+// Forward declarations
 struct InertialState;
+class TwoBodyConstraint;
 
 /**
  * @brief Computes Lagrange multipliers for arbitrary constraint systems
@@ -101,6 +105,82 @@ public:
                     const Eigen::Matrix3d& inverseInertia,
                     double dt);
 
+  // ===== Multi-Body Contact Constraint Solver (Ticket 0032) =====
+
+  /**
+   * @brief Per-body constraint forces from multi-body solve
+   */
+  struct BodyForces
+  {
+    Coordinate linearForce;     // Net linear constraint force [N]
+    Coordinate angularTorque;   // Net angular constraint torque [N·m]
+
+    BodyForces() = default;
+    BodyForces(const Coordinate& lf, const Coordinate& at)
+      : linearForce{lf}, angularTorque{at}
+    {}
+  };
+
+  /**
+   * @brief Result of multi-body contact constraint solve
+   */
+  struct MultiBodySolveResult
+  {
+    std::vector<BodyForces> bodyForces;  // Per-body constraint forces
+    Eigen::VectorXd lambdas;             // Lagrange multipliers
+    bool converged{false};               // Solver convergence flag
+    int iterations{0};                   // PGS iterations used
+    double residual{std::numeric_limits<double>::quiet_NaN()};
+
+    MultiBodySolveResult() = default;
+  };
+
+  /**
+   * @brief Solve contact constraint system using Projected Gauss-Seidel (PGS)
+   *
+   * Solves a set of two-body contact constraints with lambda >= 0 clamping.
+   * Each contact constraint couples two bodies via a 1×12 Jacobian.
+   *
+   * PGS algorithm: for each iteration, update each lambda_i using
+   * the latest values of other lambdas, then clamp to non-negative.
+   *
+   * CRITICAL implementation notes from prototype debugging:
+   * - Uses ERP formulation for Baumgarte stabilization (not alpha/beta)
+   * - Restitution RHS: b = -(1+e) · J·v_minus (correct for PGS solve)
+   * - Baumgarte RHS: b += (ERP/dt) · penetration_depth
+   *
+   * @param contactConstraints Two-body contact constraints (non-owning)
+   * @param states Inertial states of all bodies
+   * @param inverseMasses Per-body inverse masses [1/kg] (0 for static)
+   * @param inverseInertias Per-body inverse inertia tensors
+   * @param numBodies Total number of bodies
+   * @param dt Timestep [s]
+   * @return MultiBodySolveResult with per-body forces
+   *
+   * @ticket 0032_contact_constraint_refactor
+   */
+  MultiBodySolveResult solveWithContacts(
+      const std::vector<TwoBodyConstraint*>& contactConstraints,
+      const std::vector<std::reference_wrapper<const InertialState>>& states,
+      const std::vector<double>& inverseMasses,
+      const std::vector<Eigen::Matrix3d>& inverseInertias,
+      size_t numBodies,
+      double dt);
+
+  /**
+   * @brief Set maximum PGS iterations
+   * @param maxIter Maximum iterations (default: 10)
+   * @ticket 0032_contact_constraint_refactor
+   */
+  void setMaxIterations(int maxIter) { max_iterations_ = maxIter; }
+
+  /**
+   * @brief Set PGS convergence tolerance
+   * @param tol Convergence tolerance (default: 1e-4)
+   * @ticket 0032_contact_constraint_refactor
+   */
+  void setConvergenceTolerance(double tol) { convergence_tolerance_ = tol; }
+
   // Rule of Five
   ConstraintSolver(const ConstraintSolver&) = default;
   ConstraintSolver& operator=(const ConstraintSolver&) = default;
@@ -154,6 +234,11 @@ private:
       const std::vector<Constraint*>& constraints,
       const InertialState& state,
       double time) const;
+
+  // PGS configuration (Ticket 0032)
+  int max_iterations_{10};
+  double convergence_tolerance_{1e-4};
+  static constexpr double kRegularizationEpsilon = 1e-8;
 };
 
 }  // namespace msd_sim

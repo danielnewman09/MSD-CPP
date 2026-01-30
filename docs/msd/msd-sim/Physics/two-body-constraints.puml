@@ -1,0 +1,241 @@
+@startuml
+skinparam class {
+    BackgroundColor White
+}
+
+title Two-Body Constraint Infrastructure\nClass Diagram
+
+' ========== Two-Body Constraint Infrastructure ==========
+
+class TwoBodyConstraint {
+  + ~TwoBodyConstraint() = default
+
+  ' Two-body interface (pure virtual)
+  + evaluateTwoBody(stateA, stateB, time) const : Eigen::VectorXd {abstract}
+  + jacobianTwoBody(stateA, stateB, time) const : Eigen::MatrixXd {abstract}
+  + isActiveTwoBody(stateA, stateB, time) const : bool {abstract}
+
+  ' Body index accessors
+  + getBodyAIndex() const : size_t
+  + getBodyBIndex() const : size_t
+
+  ' Single-body overrides (throw std::logic_error)
+  + evaluate(state, time) const : Eigen::VectorXd
+  + jacobian(state, time) const : Eigen::MatrixXd
+  + isActive(state, time) const : bool
+
+  # TwoBodyConstraint(bodyAIndex, bodyBIndex)
+  - body_a_index_ : size_t
+  - body_b_index_ : size_t
+}
+
+note right of TwoBodyConstraint
+  Abstract interface for constraints
+  spanning two rigid bodies.
+
+  Jacobian is (dim x 12) for:
+  [v_A, omega_A, v_B, omega_B]
+
+  Single-body evaluate/jacobian
+  throw std::logic_error (must use
+  two-body interface).
+end note
+
+class ContactConstraint {
+  + ContactConstraint(bodyAIndex, bodyBIndex, \n   normal, contactPointA, contactPointB, \n   penetrationDepth, comA, comB, \n   restitution, preImpactRelVelNormal)
+  + ~ContactConstraint() = default
+
+  ' TwoBodyConstraint interface
+  + dimension() const : int  // Returns 1
+  + evaluateTwoBody(stateA, stateB, time) const : Eigen::VectorXd
+  + jacobianTwoBody(stateA, stateB, time) const : Eigen::MatrixXd
+  + isActiveTwoBody(stateA, stateB, time) const : bool
+  + typeName() const : std::string
+
+  ' Baumgarte (contact-specific tuning)
+  + alpha() const : double  // ERP-based
+  + beta() const : double   // 0.0
+
+  ' Accessors
+  + getContactNormal() const : Coordinate
+  + getPenetrationDepth() const : double
+  + getRestitution() const : double
+
+  - contact_normal_ : Coordinate
+  - lever_arm_a_ : Coordinate
+  - lever_arm_b_ : Coordinate
+  - penetration_depth_ : double
+  - restitution_ : double
+  - pre_impact_rel_vel_normal_ : double
+}
+
+note right of ContactConstraint
+  One constraint per contact point.
+  dimension() = 1.
+
+  CollisionResult with contactCount=4
+  produces 4 ContactConstraint objects.
+
+  Constraint function:
+  C(q) = (x_B + r_B - x_A - r_A) . n
+
+  Jacobian (1 x 12):
+  J = [-n^T, -(r_A x n)^T, n^T, (r_B x n)^T]
+
+  Complementarity: lambda >= 0
+
+  Uses ERP (Error Reduction Parameter)
+  formulation: ERP = 0.2 default.
+end note
+
+class ContactConstraintFactory {
+  + {static} createFromCollision(bodyAIndex, bodyBIndex, \n   result, stateA, stateB, comA, comB, \n   restitution) \n   : vector<unique_ptr<ContactConstraint>>
+  + {static} combineRestitution(eA, eB) : double
+  + {static} computeRelativeNormalVelocity(\n   stateA, stateB, leverA, leverB, normal) \n   : double
+  + {static} kRestVelocityThreshold : double = 0.5
+  + {static} kEnvironmentRestitution : double = 0.5
+}
+
+note right of ContactConstraintFactory
+  Stateless utility namespace.
+
+  Creates 1 ContactConstraint
+  per contact point in manifold.
+
+  Computes pre-impact velocities
+  and lever arms from collision
+  geometry and body states.
+end note
+
+' ========== Existing Components ==========
+
+class Constraint {
+  + ~Constraint() = default
+  + dimension() const : int {abstract}
+  + evaluate(state, time) const : Eigen::VectorXd {abstract}
+  + jacobian(state, time) const : Eigen::MatrixXd {abstract}
+  + partialTimeDerivative(state, time) const : Eigen::VectorXd
+  + alpha() const : double
+  + beta() const : double
+  + typeName() const : std::string {abstract}
+}
+
+note left of Constraint
+  Existing interface UNCHANGED.
+  Single-body constraints continue
+  to work via existing code path.
+end note
+
+class UnilateralConstraint {
+  + ~UnilateralConstraint() = default
+  + isActive(state, time) const : bool {abstract}
+}
+
+note left of UnilateralConstraint
+  TwoBodyConstraint extends this
+  interface, overriding isActive()
+  to throw and providing
+  isActiveTwoBody() instead.
+end note
+
+class BilateralConstraint {
+  + ~BilateralConstraint() = default
+}
+
+class UnitQuaternionConstraint {
+  + dimension() : 1
+  + evaluate() : Eigen::VectorXd
+  + jacobian() : Eigen::MatrixXd
+}
+
+class DistanceConstraint {
+  + dimension() : 1
+  + evaluate() : Eigen::VectorXd
+  + jacobian() : Eigen::MatrixXd
+}
+
+class AssetInertial {
+  + getConstraints() : vector<Constraint*>
+  + addConstraint(constraint : unique_ptr<Constraint>)
+  + getInertialState() : InertialState&
+  + getMass() const : double
+  + getInverseInertiaTensor() const : Matrix3d
+  + getCoefficientOfRestitution() const : double
+  + getInverseMass() const : double
+}
+
+note left of AssetInertial
+  Owns bilateral constraints
+  (quaternion, distance, joints).
+
+  Contact constraints owned
+  by WorldModel (transient).
+end note
+
+class AssetEnvironment {
+  + AssetEnvironment(assetId, instanceId, \n   hull, frame)
+  + AssetEnvironment(assetId, instanceId, \n   hull, frame, coefficientOfRestitution)
+
+  ' Unified solver path
+  + getInverseMass() const : double  // 0.0
+  + getInverseInertiaTensor() const : Matrix3d  // Zero
+  + getInertialState() const : InertialState  // Zero velocity
+  + getCoefficientOfRestitution() const : double
+  + setCoefficientOfRestitution(e : double)
+
+  - {static} kZeroInertia : Eigen::Matrix3d
+  - static_state_ : InertialState
+  - coefficient_of_restitution_ : double = 0.5
+}
+
+note right of AssetEnvironment
+  Extended for unified solver path.
+
+  inverseMass = 0  (infinite mass)
+  inverseInertia = Zero (infinite inertia)
+
+  Solver treats environment bodies
+  identically to dynamic bodies;
+  zero inverse mass means zero
+  velocity change from constraints.
+end note
+
+class CollisionResult {
+  + normal : Coordinate
+  + penetrationDepth : double
+  + contacts : array<ContactPoint, 4>
+  + contactCount : size_t
+}
+
+class InertialState {
+  + position : Coordinate
+  + orientation : Eigen::Quaterniond
+  + velocity : Coordinate
+  + angularVelocity : Coordinate
+  + quaternionRate : Eigen::Vector4d
+}
+
+' ========== Inheritance Relationships ==========
+
+Constraint <|-- BilateralConstraint
+Constraint <|-- UnilateralConstraint
+UnilateralConstraint <|-- TwoBodyConstraint
+TwoBodyConstraint <|-- ContactConstraint
+
+BilateralConstraint <|-- UnitQuaternionConstraint
+BilateralConstraint <|-- DistanceConstraint
+
+AssetPhysical <|-- AssetInertial
+AssetPhysical <|-- AssetEnvironment
+
+' ========== Usage Relationships ==========
+
+ContactConstraint ..> CollisionResult : initialized from
+ContactConstraintFactory ..> ContactConstraint : creates
+ContactConstraintFactory ..> CollisionResult : reads manifold
+ContactConstraintFactory ..> InertialState : computes velocity
+
+AssetInertial --> Constraint : owns bilateral constraints
+AssetInertial --> UnitQuaternionConstraint : default constraint
+
+@enduml

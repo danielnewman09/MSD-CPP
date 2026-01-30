@@ -6,6 +6,7 @@
 #include <vector>
 #include "msd-sim/src/Environment/Platform.hpp"
 #include "msd-sim/src/Physics/CollisionHandler.hpp"
+#include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Integration/Integrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/PotentialEnergy.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
@@ -255,9 +256,16 @@ private:
   void updatePhysics(double dt);
 
   /**
-   * @brief Detect and resolve collisions
+   * @brief Detect and resolve collisions using constraint-based approach
+   *
+   * Creates transient contact constraints from collision results, solves them
+   * via Projected Gauss-Seidel (PGS), and applies constraint forces to bodies.
+   *
+   * @param dt Timestep [s] (needed for PGS solver force conversion)
+   *
+   * @ticket 0032_contact_constraint_refactor
    */
-  void updateCollisions();
+  void updateCollisions(double dt);
 
 
   // ========== Data ==========
@@ -287,8 +295,9 @@ private:
   [[deprecated("Use potentialEnergies_ instead")]]
   Coordinate gravity_{0.0, 0.0, -9.81};
 
-  // NEW: Collision detection and response (ticket 0027)
+  // Collision detection (ticket 0027) and constraint-based response (ticket 0032)
   CollisionHandler collisionHandler_{1e-6};
+  ConstraintSolver contactSolver_;  // PGS solver for contact constraints
 
   // NEW: Potential energies and integrator (ticket 0030)
   std::vector<std::unique_ptr<PotentialEnergy>> potentialEnergies_;

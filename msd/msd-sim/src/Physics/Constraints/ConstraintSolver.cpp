@@ -320,15 +320,15 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
       if (bodyB_i == bodyB_j)
         a_ij += (J_i_B * bodyMInv[bodyB_i] * J_j_B.transpose())(0);
 
-      A(i, j) = a_ij;
-      A(j, i) = a_ij;  // Symmetric
+      A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) = a_ij;
+      A(static_cast<Eigen::Index>(j), static_cast<Eigen::Index>(i)) = a_ij;  // Symmetric
     }
   }
 
   // Add regularization to diagonal for numerical stability
-  for (int i = 0; i < C; ++i)
+  for (size_t i = 0; i < C; ++i)
   {
-    A(i, i) += kRegularizationEpsilon;
+    A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(i)) += kRegularizationEpsilon;
   }
 
   // ===== Step 4: Assemble RHS vector b (C×1) =====
@@ -367,12 +367,12 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
       double penetration = contact->getPenetrationDepth();
 
       // RHS: -(1+e) · J·v⁻ + (ERP/dt) · penetration
-      b(i) = -(1.0 + e) * Jv + (erp / dt) * penetration;
+      b(static_cast<Eigen::Index>(i)) = -(1.0 + e) * Jv + (erp / dt) * penetration;
     }
     else
     {
       // Generic two-body constraint (no restitution)
-      b(i) = -Jv;
+      b(static_cast<Eigen::Index>(i)) = -Jv;
     }
   }
 
@@ -425,8 +425,8 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     Eigen::Matrix<double, 1, 6> J_i_B = jacobians[i].block<1, 6>(0, 6);
 
     // Force = J^T · lambda / dt (convert impulse to force)
-    Eigen::Matrix<double, 6, 1> forceA = J_i_A.transpose() * lambda(i) / dt;
-    Eigen::Matrix<double, 6, 1> forceB = J_i_B.transpose() * lambda(i) / dt;
+    Eigen::Matrix<double, 6, 1> forceA = J_i_A.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;
+    Eigen::Matrix<double, 6, 1> forceB = J_i_B.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;
 
     result.bodyForces[bodyA].linearForce += Coordinate{forceA(0), forceA(1), forceA(2)};
     result.bodyForces[bodyA].angularTorque += Coordinate{forceA(3), forceA(4), forceA(5)};

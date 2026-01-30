@@ -112,6 +112,13 @@ public:
   double getMass() const;
 
   /**
+   * @brief Get the inverse mass (convenience method).
+   * @return Inverse mass [1/kg]
+   * @ticket 0032_contact_constraint_refactor
+   */
+  double getInverseMass() const;
+
+  /**
    * @brief Get the inertia tensor about the centroid.
    * @return 3x3 inertia tensor [kg⋅m²]
    */
