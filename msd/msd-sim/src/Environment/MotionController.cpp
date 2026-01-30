@@ -84,8 +84,12 @@ void MotionController::updateTransform(ReferenceFrame& frame,
     angular.setYaw(angular.yaw() - scaledRotSpeed);
   }
 
-  // Update rotation matrix in reference frame
-  frame.setRotation(angular);
+  // Update rotation from Euler angles via quaternion (ZYX convention)
+  Eigen::Quaterniond q =
+      Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
+      Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
+      Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
+  frame.setQuaternion(q);
 }
 
 }  // namespace msd_sim

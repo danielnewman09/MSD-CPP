@@ -11,7 +11,7 @@ GravityPotential::GravityPotential(const Coordinate& gravityVector)
 {
 }
 
-Coordinate GravityPotential::computeForce(const InertialState& state,
+Coordinate GravityPotential::computeForce(const InertialState& /* state */,
                                           double mass) const
 {
   // Uniform gravitational force: F = m * g
@@ -19,8 +19,8 @@ Coordinate GravityPotential::computeForce(const InertialState& state,
   return g_ * mass;
 }
 
-Coordinate GravityPotential::computeTorque(const InertialState& state,
-                                           const Eigen::Matrix3d& inertia) const
+Coordinate GravityPotential::computeTorque(const InertialState& /* state */,
+                                           const Eigen::Matrix3d& /* inertia */) const
 {
   // Uniform gravity produces no torque (orientation-independent)
   // τ = -∂V/∂Q = 0 since V does not depend on orientation Q

@@ -1,0 +1,361 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+title Contact Constraint Refactor (Ticket 0032)\nClass Diagram
+
+' ========== New Components ==========
+
+class TwoBodyConstraint <<new>> {
+  + ~TwoBodyConstraint() = default
+
+  ' Two-body interface (pure virtual)
+  + evaluateTwoBody(stateA, stateB, time) const : Eigen::VectorXd {abstract}
+  + jacobianTwoBody(stateA, stateB, time) const : Eigen::MatrixXd {abstract}
+  + isActiveTwoBody(stateA, stateB, time) const : bool {abstract}
+
+  ' Body index accessors
+  + getBodyAIndex() const : size_t
+  + getBodyBIndex() const : size_t
+
+  ' Single-body overrides (throw std::logic_error)
+  + evaluate(state, time) const : Eigen::VectorXd
+  + jacobian(state, time) const : Eigen::MatrixXd
+  + isActive(state, time) const : bool
+
+  # TwoBodyConstraint(bodyAIndex, bodyBIndex)
+  - body_a_index_ : size_t
+  - body_b_index_ : size_t
+}
+
+note right of TwoBodyConstraint
+  Abstract interface for constraints
+  spanning two rigid bodies.
+
+  Jacobian is (dim x 12) for:
+  [v_A, omega_A, v_B, omega_B]
+
+  Single-body evaluate/jacobian
+  throw std::logic_error (must use
+  two-body interface).
+end note
+
+class ContactConstraint <<new>> {
+  + ContactConstraint(bodyAIndex, bodyBIndex, \n   normal, contactPointA, contactPointB, \n   penetrationDepth, comA, comB, \n   restitution, preImpactRelVelNormal)
+  + ~ContactConstraint() = default
+
+  ' TwoBodyConstraint interface
+  + dimension() const : int  // Returns 1
+  + evaluateTwoBody(stateA, stateB, time) const : Eigen::VectorXd
+  + jacobianTwoBody(stateA, stateB, time) const : Eigen::MatrixXd
+  + isActiveTwoBody(stateA, stateB, time) const : bool
+  + typeName() const : std::string
+
+  ' Baumgarte (contact-specific tuning)
+  + alpha() const : double  // 100.0
+  + beta() const : double   // 20.0
+
+  ' Accessors
+  + getContactNormal() const : Coordinate
+  + getPenetrationDepth() const : double
+  + getRestitution() const : double
+
+  - contact_normal_ : Coordinate
+  - lever_arm_a_ : Coordinate
+  - lever_arm_b_ : Coordinate
+  - penetration_depth_ : double
+  - restitution_ : double
+  - pre_impact_rel_vel_normal_ : double
+}
+
+note right of ContactConstraint
+  One constraint per contact point.
+  dimension() = 1.
+
+  CollisionResult with contactCount=4
+  produces 4 ContactConstraint objects.
+
+  Constraint function:
+  C(q) = (x_B + r_B - x_A - r_A) . n
+
+  Jacobian (1 x 12):
+  J = [-n^T, -(r_A x n)^T, n^T, (r_B x n)^T]
+
+  Complementarity: lambda >= 0
+end note
+
+class ContactConstraintFactory <<new>> {
+  + {static} createFromCollision(bodyAIndex, bodyBIndex, \n   result, stateA, stateB, comA, comB, \n   restitution) \n   : vector<unique_ptr<ContactConstraint>>
+  + {static} combineRestitution(eA, eB) : double
+  + {static} computeRelativeNormalVelocity(\n   stateA, stateB, leverA, leverB, normal) \n   : double
+  + {static} kRestVelocityThreshold : double = 0.5
+  + {static} kEnvironmentRestitution : double = 0.5
+}
+
+note right of ContactConstraintFactory
+  Stateless utility namespace.
+  Replaces CollisionResponse
+  utility functions.
+
+  Creates 1 ContactConstraint
+  per contact point in manifold.
+end note
+
+' ========== Modified Components ==========
+
+class Constraint {
+  + ~Constraint() = default
+  + dimension() const : int {abstract}
+  + evaluate(state, time) const : Eigen::VectorXd {abstract}
+  + jacobian(state, time) const : Eigen::MatrixXd {abstract}
+  + partialTimeDerivative(state, time) const : Eigen::VectorXd
+  + alpha() const : double
+  + beta() const : double
+  + typeName() const : std::string {abstract}
+}
+
+note left of Constraint
+  Existing interface UNCHANGED.
+  No modifications needed.
+  Single-body constraints continue
+  to work via existing code path.
+end note
+
+class UnilateralConstraint {
+  + ~UnilateralConstraint() = default
+  + isActive(state, time) const : bool {abstract}
+}
+
+note left of UnilateralConstraint
+  Existing interface UNCHANGED.
+  TwoBodyConstraint inherits and
+  overrides isActive() to throw,
+  providing isActiveTwoBody() instead.
+end note
+
+class BilateralConstraint {
+  + ~BilateralConstraint() = default
+}
+
+class ConstraintSolver <<modified>> {
+  ' Existing (unchanged)
+  + solve(constraints, state, ...) : SolveResult
+
+  ' NEW: Multi-body + contact solving
+  + solveWithContacts(\n   bilateralConstraints, \n   contactConstraints, \n   states, externalForces, \n   externalTorques, masses, \n   inverseInertias, dt) \n   : MultiBodySolveResult
+
+  ' NEW: PGS configuration
+  + setMaxIterations(n : int)
+  + setConvergenceTolerance(tol : double)
+
+  - solveProjectedGaussSeidel(...) : void
+  - assembleContactJacobian(...) : Eigen::MatrixXd
+  - assembleContactRHS(...) : Eigen::VectorXd
+  - assembleEffectiveMass(...) : Eigen::MatrixXd
+
+  - max_iterations_ : int = 10
+  - convergence_tolerance_ : double = 1e-4
+  - regularization_epsilon_ : double = 1e-8
+}
+
+note right of ConstraintSolver
+  Extended with solveWithContacts().
+
+  Two-phase solve:
+  1. Bilateral per-body (LLT, unchanged)
+  2. Contacts multi-body (PGS)
+
+  PGS algorithm:
+  for iter = 1..maxIter:
+    for each contact i:
+      r = b_i - sum(A_ij * lambda_j)
+      lambda_i = max(0, r / A_ii)
+    if converged: break
+end note
+
+struct BodyForces <<new>> {
+  + linearForce : Coordinate
+  + angularTorque : Coordinate
+}
+
+struct MultiBodySolveResult <<new>> {
+  + bodyForces : vector<BodyForces>
+  + lambdas : Eigen::VectorXd
+  + converged : bool
+  + iterations : int
+  + residual : double
+}
+
+class AssetEnvironment <<modified>> {
+  + AssetEnvironment(assetId, instanceId, \n   hull, frame)
+  + AssetEnvironment(assetId, instanceId, \n   hull, frame, coefficientOfRestitution)
+
+  ' NEW: Unified solver path
+  + getInverseMass() const : double  // 0.0
+  + getInverseInertiaTensor() const : Matrix3d  // Zero
+  + getInertialState() const : InertialState  // Zero velocity
+  + getCoefficientOfRestitution() const : double
+  + setCoefficientOfRestitution(e : double)
+
+  - {static} kZeroInertia : Eigen::Matrix3d
+  - static_state_ : InertialState
+  - coefficient_of_restitution_ : double = 0.5
+}
+
+note right of AssetEnvironment
+  Extended for unified solver path.
+
+  inverseMass = 0  (infinite mass)
+  inverseInertia = Zero (infinite inertia)
+
+  Solver treats environment bodies
+  identically to dynamic bodies;
+  zero inverse mass means zero
+  velocity change from constraints.
+end note
+
+class WorldModel <<modified>> {
+  + update(deltaTime) : void
+
+  ' MODIFIED: Internal pipeline
+  - updatePhysics(dt : double)
+  - detectCollisions() : vector<CollisionPair>
+  - createContactConstraints(collisions) \n   : vector<unique_ptr<ContactConstraint>>
+  - solveConstraints(contacts, dt)
+  - integrateMotion(dt : double)
+}
+
+note right of WorldModel
+  Modified update pipeline:
+
+  1. detectCollisions()
+  2. createContactConstraints()
+  3. solveConstraints(dt)
+     - Phase 1: bilateral (LLT per body)
+     - Phase 2: contacts (PGS multi-body)
+  4. integrateMotion(dt)
+  5. synchronizeFrames()
+  6. clearForces()
+
+  CollisionResponse removed.
+  Contact constraints are transient.
+end note
+
+' ========== Unchanged Components (context) ==========
+
+class AssetInertial {
+  + getConstraints() : vector<Constraint*>
+  + addConstraint(constraint : unique_ptr<Constraint>)
+  + getInertialState() : InertialState&
+  + getMass() const : double
+  + getInverseInertiaTensor() const : Matrix3d
+  + getCoefficientOfRestitution() const : double
+  + getInverseMass() const : double  // NEW: 1/mass_
+}
+
+note left of AssetInertial
+  Owns bilateral constraints
+  (quaternion, distance, joints).
+
+  Contact constraints owned
+  by WorldModel (transient).
+
+  NEW: getInverseMass() added
+  for unified solver interface.
+end note
+
+class CollisionHandler {
+  + checkCollision(assetA, assetB) \n   : optional<CollisionResult>
+}
+
+class CollisionResult {
+  + normal : Coordinate
+  + penetrationDepth : double
+  + contacts : array<ContactPoint, 4>
+  + contactCount : size_t
+}
+
+class SemiImplicitEulerIntegrator {
+  + step(state, force, torque, \n   mass, inverseInertia, \n   constraints, dt)
+}
+
+note left of SemiImplicitEulerIntegrator
+  Unchanged. Still handles
+  single-body bilateral constraints.
+
+  Contact forces from PGS are
+  added to external forces before
+  integrator step() is called.
+end note
+
+class UnitQuaternionConstraint {
+  + dimension() : 1
+  + evaluate() : Eigen::VectorXd
+  + jacobian() : Eigen::MatrixXd
+}
+
+class DistanceConstraint {
+  + dimension() : 1
+  + evaluate() : Eigen::VectorXd
+  + jacobian() : Eigen::MatrixXd
+}
+
+' ========== Removed Component ==========
+
+class CollisionResponse <<removed>> {
+  <s>+ computeLagrangeMultiplier()</s>
+  <s>+ applyConstraintResponse()</s>
+  <s>+ applyPositionStabilization()</s>
+  <s>+ combineRestitution()</s>
+}
+
+note right of CollisionResponse
+  REMOVED after migration.
+  Replaced by ContactConstraint +
+  ContactConstraintFactory +
+  ConstraintSolver::solveWithContacts()
+end note
+
+' ========== Inheritance Relationships ==========
+
+Constraint <|-- BilateralConstraint
+Constraint <|-- UnilateralConstraint
+UnilateralConstraint <|-- TwoBodyConstraint
+TwoBodyConstraint <|-- ContactConstraint
+
+BilateralConstraint <|-- UnitQuaternionConstraint
+BilateralConstraint <|-- DistanceConstraint
+
+AssetPhysical <|-- AssetInertial
+AssetPhysical <|-- AssetEnvironment
+
+' ========== Usage Relationships ==========
+
+ContactConstraint ..> CollisionResult : initialized from
+ContactConstraintFactory ..> ContactConstraint : creates
+ContactConstraintFactory ..> CollisionResult : reads manifold
+ContactConstraintFactory ..> InertialState : computes velocity
+
+ConstraintSolver ..> TwoBodyConstraint : solves via PGS
+ConstraintSolver ..> Constraint : solves via LLT (existing)
+ConstraintSolver --> MultiBodySolveResult : returns
+MultiBodySolveResult --> BodyForces : contains per-body
+
+WorldModel --> CollisionHandler : detects collisions
+WorldModel --> ContactConstraintFactory : creates constraints
+WorldModel --> ConstraintSolver : solves constraints
+WorldModel --> AssetInertial : manages dynamic bodies
+WorldModel --> AssetEnvironment : manages static bodies
+WorldModel --> SemiImplicitEulerIntegrator : integrates motion
+WorldModel ..> CollisionResponse : REMOVED dependency
+
+AssetInertial --> Constraint : owns bilateral constraints
+AssetInertial --> UnitQuaternionConstraint : default constraint
+
+SemiImplicitEulerIntegrator --> ConstraintSolver : uses for bilateral
+
+CollisionHandler --> CollisionResult : returns
+
+@enduml

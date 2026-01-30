@@ -1,10 +1,16 @@
 // Ticket: 0031_generalized_lagrange_constraints
+// Ticket: 0032_contact_constraint_refactor
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
+// Design: docs/designs/0032_contact_constraint_refactor/design.md
 
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
+#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 #include <Eigen/Cholesky>
 #include <Eigen/SVD>
+#include <algorithm>
+#include <cmath>
 
 namespace msd_sim
 {
@@ -120,7 +126,7 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
     double mass,
     const Eigen::Matrix3d& inverseInertia,
     double time,
-    double dt) const
+    double /* dt */) const
 {
   // Compute total constraint dimension
   int totalDim = 0;
@@ -226,6 +232,218 @@ std::pair<Coordinate, Coordinate> ConstraintSolver::extractConstraintForces(
   Coordinate angularTorque{F_c(3), F_c(4), F_c(5)};
 
   return {linearForce, angularTorque};
+}
+
+// ===== Multi-Body Contact Constraint Solver (Ticket 0032) =====
+//
+// Implements Projected Gauss-Seidel (PGS) for contact constraints with λ ≥ 0.
+//
+// CRITICAL notes from prototype debugging:
+// - Baumgarte uses ERP formulation: b += (ERP/dt) · penetration_depth
+// - Restitution RHS: b = -(1+e) · J·v_minus (for PGS system A·λ = b)
+// - DO NOT use -(1+e)·v as target velocity directly (causes energy injection)
+// See: prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
+
+ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<std::reference_wrapper<const InertialState>>& states,
+    const std::vector<double>& inverseMasses,
+    const std::vector<Eigen::Matrix3d>& inverseInertias,
+    size_t numBodies,
+    double dt)
+{
+  MultiBodySolveResult result;
+  result.bodyForces.resize(numBodies, BodyForces{Coordinate{0.0, 0.0, 0.0},
+                                                  Coordinate{0.0, 0.0, 0.0}});
+
+  const size_t C = contactConstraints.size();
+  if (C == 0)
+  {
+    result.converged = true;
+    result.iterations = 0;
+    result.lambdas = Eigen::VectorXd{};
+    result.residual = 0.0;
+    return result;
+  }
+
+  // ===== Step 1: Compute per-contact Jacobians and cache =====
+  // Each contact has a 1×12 Jacobian [J_A(1×6) | J_B(1×6)]
+  std::vector<Eigen::MatrixXd> jacobians(C);
+  for (size_t i = 0; i < C; ++i)
+  {
+    const auto* contact = contactConstraints[i];
+    size_t bodyA = contact->getBodyAIndex();
+    size_t bodyB = contact->getBodyBIndex();
+    jacobians[i] = contact->jacobianTwoBody(
+        states[bodyA].get(), states[bodyB].get(), 0.0);
+  }
+
+  // ===== Step 2: Build per-body inverse mass matrices (6×6) =====
+  // M_k_inv = diag(inverseMass_k · I_3, inverseInertia_k)
+  std::vector<Eigen::Matrix<double, 6, 6>> bodyMInv(numBodies);
+  for (size_t k = 0; k < numBodies; ++k)
+  {
+    bodyMInv[k] = Eigen::Matrix<double, 6, 6>::Zero();
+    bodyMInv[k].block<3, 3>(0, 0) = inverseMasses[k] * Eigen::Matrix3d::Identity();
+    bodyMInv[k].block<3, 3>(3, 3) = inverseInertias[k];
+  }
+
+  // ===== Step 3: Assemble effective mass matrix A (C×C) =====
+  // A_ij = sum over shared bodies k of: J_i_k · M_k_inv · J_j_k^T
+  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(C), static_cast<Eigen::Index>(C));
+  for (size_t i = 0; i < C; ++i)
+  {
+    size_t bodyA_i = contactConstraints[i]->getBodyAIndex();
+    size_t bodyB_i = contactConstraints[i]->getBodyBIndex();
+
+    // J_i is 1×12: [J_i_A(1×6) | J_i_B(1×6)]
+    Eigen::Matrix<double, 1, 6> J_i_A = jacobians[i].block<1, 6>(0, 0);
+    Eigen::Matrix<double, 1, 6> J_i_B = jacobians[i].block<1, 6>(0, 6);
+
+    for (size_t j = i; j < C; ++j)
+    {
+      size_t bodyA_j = contactConstraints[j]->getBodyAIndex();
+      size_t bodyB_j = contactConstraints[j]->getBodyBIndex();
+
+      Eigen::Matrix<double, 1, 6> J_j_A = jacobians[j].block<1, 6>(0, 0);
+      Eigen::Matrix<double, 1, 6> J_j_B = jacobians[j].block<1, 6>(0, 6);
+
+      double a_ij = 0.0;
+
+      // Check all body sharing combinations
+      if (bodyA_i == bodyA_j)
+        a_ij += (J_i_A * bodyMInv[bodyA_i] * J_j_A.transpose())(0);
+      if (bodyA_i == bodyB_j)
+        a_ij += (J_i_A * bodyMInv[bodyA_i] * J_j_B.transpose())(0);
+      if (bodyB_i == bodyA_j)
+        a_ij += (J_i_B * bodyMInv[bodyB_i] * J_j_A.transpose())(0);
+      if (bodyB_i == bodyB_j)
+        a_ij += (J_i_B * bodyMInv[bodyB_i] * J_j_B.transpose())(0);
+
+      A(i, j) = a_ij;
+      A(j, i) = a_ij;  // Symmetric
+    }
+  }
+
+  // Add regularization to diagonal for numerical stability
+  for (int i = 0; i < C; ++i)
+  {
+    A(i, i) += kRegularizationEpsilon;
+  }
+
+  // ===== Step 4: Assemble RHS vector b (C×1) =====
+  // b_i = -(1 + e_i) · (J_i · v_minus) + (ERP_i / dt) · penetration_i
+  //
+  // CRITICAL: The -(1+e) factor is correct for the PGS system A·λ = b.
+  // This differs from the target velocity formulation v_target = -e · v_pre.
+  // See P2 Debug Findings for explanation.
+  Eigen::VectorXd b(static_cast<Eigen::Index>(C));
+  for (size_t i = 0; i < C; ++i)
+  {
+    const auto* contact = dynamic_cast<const ContactConstraint*>(contactConstraints[i]);
+    size_t bodyA = contactConstraints[i]->getBodyAIndex();
+    size_t bodyB = contactConstraints[i]->getBodyBIndex();
+
+    // Compute pre-impact relative velocity along constraint: J_i · v_minus
+    const InertialState& stateA = states[bodyA].get();
+    const InertialState& stateB = states[bodyB].get();
+
+    // Velocity vector v = [v_A, omega_A, v_B, omega_B] (12×1)
+    Eigen::VectorXd v(12);
+    v.segment<3>(0) = Eigen::Vector3d{stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
+    AngularRate omegaA = stateA.getAngularVelocity();
+    v.segment<3>(3) = Eigen::Vector3d{omegaA.x(), omegaA.y(), omegaA.z()};
+    v.segment<3>(6) = Eigen::Vector3d{stateB.velocity.x(), stateB.velocity.y(), stateB.velocity.z()};
+    AngularRate omegaB = stateB.getAngularVelocity();
+    v.segment<3>(9) = Eigen::Vector3d{omegaB.x(), omegaB.y(), omegaB.z()};
+
+    double Jv = (jacobians[i] * v)(0);  // Scalar: relative velocity along constraint
+
+    // Restitution and Baumgarte terms
+    if (contact != nullptr)
+    {
+      double e = contact->getRestitution();
+      double erp = contact->alpha();  // alpha() returns ERP for ContactConstraint
+      double penetration = contact->getPenetrationDepth();
+
+      // RHS: -(1+e) · J·v⁻ + (ERP/dt) · penetration
+      b(i) = -(1.0 + e) * Jv + (erp / dt) * penetration;
+    }
+    else
+    {
+      // Generic two-body constraint (no restitution)
+      b(i) = -Jv;
+    }
+  }
+
+  // ===== Step 5: PGS iteration =====
+  Eigen::VectorXd lambda = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(C));
+  bool converged = false;
+  int iter = 0;
+
+  for (iter = 0; iter < max_iterations_; ++iter)
+  {
+    double maxDelta = 0.0;
+
+    for (size_t i = 0; i < C; ++i)
+    {
+      // Compute sum of off-diagonal contributions (using latest values)
+      double sum = 0.0;
+      for (size_t j = 0; j < C; ++j)
+      {
+        if (j != i)
+        {
+          sum += A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) * lambda(static_cast<Eigen::Index>(j));
+        }
+      }
+
+      // PGS update with non-negativity projection
+      double oldLambda = lambda(static_cast<Eigen::Index>(i));
+      lambda(static_cast<Eigen::Index>(i)) = std::max(0.0, (b(static_cast<Eigen::Index>(i)) - sum) / A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(i)));
+      maxDelta = std::max(maxDelta, std::abs(lambda(static_cast<Eigen::Index>(i)) - oldLambda));
+    }
+
+    if (maxDelta < convergence_tolerance_)
+    {
+      converged = true;
+      break;
+    }
+  }
+
+  // ===== Step 6: Extract per-body forces =====
+  // F_body_k = sum over contacts touching body k: J_i_k^T · lambda_i / dt
+  // Dividing by dt converts impulse to force (since integrator multiplies by dt)
+  for (size_t i = 0; i < C; ++i)
+  {
+    if (lambda(static_cast<Eigen::Index>(i)) <= 0.0)
+      continue;
+
+    size_t bodyA = contactConstraints[i]->getBodyAIndex();
+    size_t bodyB = contactConstraints[i]->getBodyBIndex();
+
+    Eigen::Matrix<double, 1, 6> J_i_A = jacobians[i].block<1, 6>(0, 0);
+    Eigen::Matrix<double, 1, 6> J_i_B = jacobians[i].block<1, 6>(0, 6);
+
+    // Force = J^T · lambda / dt (convert impulse to force)
+    Eigen::Matrix<double, 6, 1> forceA = J_i_A.transpose() * lambda(i) / dt;
+    Eigen::Matrix<double, 6, 1> forceB = J_i_B.transpose() * lambda(i) / dt;
+
+    result.bodyForces[bodyA].linearForce += Coordinate{forceA(0), forceA(1), forceA(2)};
+    result.bodyForces[bodyA].angularTorque += Coordinate{forceA(3), forceA(4), forceA(5)};
+
+    result.bodyForces[bodyB].linearForce += Coordinate{forceB(0), forceB(1), forceB(2)};
+    result.bodyForces[bodyB].angularTorque += Coordinate{forceB(3), forceB(4), forceB(5)};
+  }
+
+  result.lambdas = lambda;
+  result.converged = converged;
+  result.iterations = iter + 1;
+
+  // Compute residual: ||A·λ - b||
+  Eigen::VectorXd residualVec = A * lambda - b;
+  result.residual = residualVec.norm();
+
+  return result;
 }
 
 }  // namespace msd_sim

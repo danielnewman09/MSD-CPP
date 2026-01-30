@@ -349,7 +349,11 @@ TEST(ReferenceFrameTest, SetRotation)
   ReferenceFrame frame;
   AngularCoordinate angular{M_PI / 2, M_PI / 4, M_PI / 6};  // pitch, roll, yaw
 
-  frame.setRotation(angular);
+  Eigen::Quaterniond q =
+      Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
+      Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
+      Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
+  frame.setQuaternion(q);
 
   AngularCoordinate frameAngular = frame.getAngularCoordinate();
   EXPECT_DOUBLE_EQ(frameAngular.pitch(), M_PI / 2);

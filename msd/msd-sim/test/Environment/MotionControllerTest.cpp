@@ -60,7 +60,7 @@ TEST(MotionControllerTest, UpdateTransform_MoveForward_TranslatesInLocalZ)
   MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.moveForward = true;
@@ -84,7 +84,7 @@ TEST(MotionControllerTest,
   MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.moveBackward = true;
@@ -105,7 +105,7 @@ TEST(MotionControllerTest, UpdateTransform_MoveLeft_TranslatesInNegativeLocalX)
   MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.moveLeft = true;
@@ -126,7 +126,7 @@ TEST(MotionControllerTest, UpdateTransform_MoveRight_TranslatesInPositiveLocalX)
   MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.moveRight = true;
@@ -147,7 +147,7 @@ TEST(MotionControllerTest, UpdateTransform_MoveUp_TranslatesInPositiveLocalY)
   MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.moveUp = true;
@@ -168,7 +168,7 @@ TEST(MotionControllerTest, UpdateTransform_MoveDown_TranslatesInNegativeLocalY)
   MotionController controller{0.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.moveDown = true;
@@ -193,7 +193,7 @@ TEST(MotionControllerTest, UpdateTransform_PitchUp_IncreasesEulerPitch)
   MotionController controller{1.0, 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.pitchUp = true;
@@ -215,7 +215,7 @@ TEST(MotionControllerTest, UpdateTransform_PitchDown_DecreasesEulerPitch)
   MotionController controller{1.0, 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.pitchDown = true;
@@ -236,7 +236,7 @@ TEST(MotionControllerTest, UpdateTransform_YawLeft_IncreasesEulerYaw)
   MotionController controller{1.0, 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.yawLeft = true;
@@ -257,7 +257,7 @@ TEST(MotionControllerTest, UpdateTransform_YawRight_DecreasesEulerYaw)
   MotionController controller{1.0, 0.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.yawRight = true;
@@ -283,11 +283,11 @@ TEST(MotionControllerTest,
   MotionController controller{0.0, 10.0};
   ReferenceFrame frame1;
   frame1.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame1.setRotation(AngularCoordinate{});
+  frame1.setQuaternion(Eigen::Quaterniond::Identity());
 
   ReferenceFrame frame2;
   frame2.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame2.setRotation(AngularCoordinate{});
+  frame2.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.moveForward = true;
@@ -333,7 +333,7 @@ TEST(MotionControllerTest, SetMoveSpeed_UpdatesSpeed_AffectsTranslation)
 
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.moveForward = true;
@@ -357,7 +357,7 @@ TEST(MotionControllerTest, SetRotationSpeed_UpdatesSpeed_AffectsRotation)
 
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.pitchUp = true;
@@ -381,7 +381,7 @@ TEST(MotionControllerTest, SetSensitivity_UpdatesSensitivity_ScalesMovement)
 
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.moveForward = true;
@@ -437,7 +437,7 @@ TEST(MotionControllerTest, UpdateTransform_CombinedMovement_AppliesAllCommands)
   MotionController controller{1.0, 1.0};
   ReferenceFrame frame;
   frame.setOrigin(Coordinate{0.0, 0.0, 0.0});
-  frame.setRotation(AngularCoordinate{});
+  frame.setQuaternion(Eigen::Quaterniond::Identity());
 
   InputCommands commands;
   commands.moveForward = true;
@@ -467,7 +467,11 @@ TEST(MotionControllerTest, UpdateTransform_NoCommands_NoChange)
   AngularCoordinate initialAngles{
     10.0 * M_PI / 180.0, 20.0 * M_PI / 180.0, 30.0 * M_PI / 180.0};
   frame.setOrigin(initialOrigin);
-  frame.setRotation(initialAngles);
+  Eigen::Quaterniond q =
+      Eigen::AngleAxisd{initialAngles.yaw(), Eigen::Vector3d::UnitZ()} *
+      Eigen::AngleAxisd{initialAngles.pitch(), Eigen::Vector3d::UnitY()} *
+      Eigen::AngleAxisd{initialAngles.roll(), Eigen::Vector3d::UnitX()};
+  frame.setQuaternion(q);
 
   InputCommands commands;  // All false
 

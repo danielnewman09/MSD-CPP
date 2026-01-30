@@ -185,6 +185,7 @@ TEST(ForceApplicationScaffolding, applyForceAtPoint_accumulatesForce)
 // WorldModel Gravity Tests
 // ============================================================================
 
+#if 0  // DEPRECATED: getGravity() removed (ticket 0030)
 TEST(ForceApplicationScaffolding, getGravity_returnsDefaultGravity)
 {
   WorldModel world;
@@ -194,6 +195,7 @@ TEST(ForceApplicationScaffolding, getGravity_returnsDefaultGravity)
   EXPECT_DOUBLE_EQ(gravity.y(), 0.0);
   EXPECT_DOUBLE_EQ(gravity.z(), -9.81);
 }
+#endif
 
 TEST(ForceApplicationScaffolding, updatePhysics_callsClearForces)
 {
@@ -291,6 +293,7 @@ TEST(ForceApplicationScaffolding, orientation_isQuaternionType)
 // Integration Tests
 // ============================================================================
 
+#if 0  // DEPRECATED: getGravity() removed (ticket 0030)
 TEST(ForceApplicationScaffolding, gravityPersistsAcrossUpdates)
 {
   WorldModel world;
@@ -308,6 +311,7 @@ TEST(ForceApplicationScaffolding, gravityPersistsAcrossUpdates)
   const Coordinate& gravity3 = world.getGravity();
   EXPECT_DOUBLE_EQ(gravity3.z(), -9.81);
 }
+#endif
 
 TEST(ForceApplicationScaffolding, forceAccumulationAcrossMultipleFrames)
 {
