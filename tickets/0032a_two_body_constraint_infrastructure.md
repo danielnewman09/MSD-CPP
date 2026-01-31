@@ -9,12 +9,12 @@
 - [x] Ready for Implementation
 - [x] Implementation Complete — Awaiting Quality Gate
 - [x] Quality Gate Passed — Awaiting Review
-- [ ] Approved — Ready to Merge
+- [x] Approved — Ready to Merge
 - [ ] Documentation Complete — Awaiting Tutorial
 - [ ] Merged / Complete
 
-**Current Phase**: Implementation Review
-**Assignee**: implementation-reviewer
+**Current Phase**: Approved — Ready to Merge (code live on branch `0034-active_set_method`)
+**Assignee**: N/A
 **Created**: 2026-01-29
 **Generate Tutorial**: No
 **Parent Ticket**: [0032_contact_constraint_refactor](0032_contact_constraint_refactor.md)

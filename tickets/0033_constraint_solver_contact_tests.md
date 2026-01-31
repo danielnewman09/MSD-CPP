@@ -2,16 +2,18 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Implementation
-- [ ] Implementation Complete
+- [x] Ready for Implementation
+- [x] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Implementation Complete — Ready for Merge
 **Created**: 2026-01-29
 **Generate Tutorial**: No
-**Related Tickets**: [0032a_two_body_constraint_infrastructure](0032a_two_body_constraint_infrastructure.md), [0031_generalized_lagrange_constraints](0031_generalized_lagrange_constraints.md)
+**Related Tickets**: [0032a_two_body_constraint_infrastructure](0032a_two_body_constraint_infrastructure.md), [0031_generalized_lagrange_constraints](0031_generalized_lagrange_constraints.md), [0034_active_set_method_contact_solver](0034_active_set_method_contact_solver.md)
 
 ---
+
+> **IMPLEMENTATION NOTE**: All 24 tests specified in this ticket have been implemented in `ConstraintSolverContactTest.cpp`. The solver backend was initially PGS (per 0032b) and has since been replaced by the Active Set Method (Ticket 0034). All 24 tests pass under the ASM solver without modification (except `MaxIterationsReached_ReportsNotConverged_0033` which was updated by 0034 to use a scenario that requires multiple active set changes instead of a simple resting contact). Additionally, 12 ASM-specific tests were added in `ConstraintSolverASMTest.cpp` by Ticket 0034.
 
 ## Summary
 
@@ -123,12 +125,12 @@ The current test coverage has a gap between two well-tested layers:
 
 ## Acceptance Criteria
 
-1. [ ] AC1: Test file `ConstraintSolverContactTest.cpp` exists with all specified test cases
-2. [ ] AC2: All new tests pass in Debug build
-3. [ ] AC3: All 381 existing tests continue to pass (no regressions)
-4. [ ] AC4: CMakeLists.txt updated to include new test source
-5. [ ] AC5: Each test has a descriptive name with `_0033` suffix for ticket traceability
-6. [ ] AC6: Tests use `ContactConstraint` objects fed through `solveWithContacts()` (not testing constraint math in isolation)
+1. [x] AC1: Test file `ConstraintSolverContactTest.cpp` exists with all specified test cases
+2. [x] AC2: All new tests pass in Debug build
+3. [x] AC3: All existing tests continue to pass (no regressions) — 417 total tests pass as of 0034 completion
+4. [x] AC4: CMakeLists.txt updated to include new test source
+5. [x] AC5: Each test has a descriptive name with `_0033` suffix for ticket traceability
+6. [x] AC6: Tests use `ContactConstraint` objects fed through `solveWithContacts()` (not testing constraint math in isolation)
 
 ---
 

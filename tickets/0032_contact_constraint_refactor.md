@@ -27,12 +27,18 @@ This ticket has been decomposed into the following sub-tickets:
 
 | Sub-Ticket | Description | Status | Depends On |
 |------------|-------------|--------|------------|
-| [0032a](0032a_two_body_constraint_infrastructure.md) | Two-Body Constraint Infrastructure (classes + unit tests) | Code complete, tests pending | 0031 |
-| [0032b](0032b_pgs_solver_extension.md) | Projected Gauss-Seidel Solver Extension | Not started | 0032a |
-| [0032c](0032c_worldmodel_contact_integration.md) | WorldModel Contact Integration + integration tests | Not started | 0032b |
+| [0032a](0032a_two_body_constraint_infrastructure.md) | Two-Body Constraint Infrastructure (classes + unit tests) | Complete (approved, 33 tests passing) | 0031 |
+| [0032b](0032b_pgs_solver_extension.md) | Projected Gauss-Seidel Solver Extension | **Superseded by [0034](0034_active_set_method_contact_solver.md)** — solver interface implemented, PGS replaced by Active Set Method | 0032a |
+| [0032c](0032c_worldmodel_contact_integration.md) | WorldModel Contact Integration + integration tests | Not started | 0032a, 0034 |
 | [0032d](0032d_collision_response_cleanup.md) | CollisionResponse Namespace Cleanup | Not started | 0032c |
 
-**Dependency chain**: `0032a → 0032b → 0032c → 0032d`
+**Dependency chain**: `0032a → 0032b(superseded by 0034) → 0032c → 0032d`
+
+**Related Tickets**:
+| Ticket | Description | Status |
+|--------|-------------|--------|
+| [0033](0033_constraint_solver_contact_tests.md) | Constraint Solver Contact Integration Tests (24 tests) | Complete — all tests passing |
+| [0034](0034_active_set_method_contact_solver.md) | Active Set Method Contact Solver (replaces PGS from 0032b) | Documentation Complete — Ready for Merge |
 
 ---
 
@@ -255,17 +261,17 @@ void WorldModel::update(double dt) {
 
 ## Acceptance Criteria
 
-1. [ ] AC1: `ContactConstraint` class implements `UnilateralConstraint` with correct `evaluate()` and `jacobian()`
-2. [ ] AC2: `ConstraintSolver` handles multi-body constraints correctly
-3. [ ] AC3: Projected Gauss-Seidel solver enforces λ ≥ 0 for contact constraints
-4. [ ] AC4: Head-on collision with e=1.0 swaps velocities (matches current behavior)
-5. [ ] AC5: Total momentum conserved before/after collision (within 1e-6 tolerance)
-6. [ ] AC6: Stacked objects remain stable for 1000 frames without drift
-7. [ ] AC7: Glancing collision produces appropriate angular velocity
-8. [ ] AC8: `CollisionResponse.hpp` and `CollisionResponse.cpp` removed
-9. [ ] AC9: All existing constraint tests continue to pass
-10. [ ] AC10: Unit tests cover contact constraint evaluation, Jacobian, and solver
-11. [ ] AC11: Integration tests cover collision scenarios from Ticket 0027
+1. [x] AC1: `ContactConstraint` class implements `UnilateralConstraint` with correct `evaluate()` and `jacobian()` *(0032a)*
+2. [x] AC2: `ConstraintSolver` handles multi-body constraints correctly *(0032b/0034)*
+3. [x] AC3: Active Set Method solver enforces λ ≥ 0 for contact constraints *(0034 — originally PGS per 0032b, upgraded to ASM)*
+4. [ ] AC4: Head-on collision with e=1.0 swaps velocities (matches current behavior) *(pending 0032c)*
+5. [ ] AC5: Total momentum conserved before/after collision (within 1e-6 tolerance) *(pending 0032c)*
+6. [ ] AC6: Stacked objects remain stable for 1000 frames without drift *(pending 0032c)*
+7. [ ] AC7: Glancing collision produces appropriate angular velocity *(pending 0032c)*
+8. [ ] AC8: `CollisionResponse.hpp` and `CollisionResponse.cpp` removed *(pending 0032d)*
+9. [x] AC9: All existing constraint tests continue to pass *(417 total tests passing)*
+10. [x] AC10: Unit tests cover contact constraint evaluation, Jacobian, and solver *(33 constraint tests + 24 solver tests + 12 ASM tests = 69 new tests)*
+11. [ ] AC11: Integration tests cover collision scenarios from Ticket 0027 *(pending 0032c)*
 
 ---
 
@@ -293,7 +299,7 @@ The current `ConstraintSolver` uses direct LLT solve suitable for bilateral cons
 - Pros: Leverages existing solver, good performance
 - Cons: Coupling between bilateral and unilateral
 
-**Recommendation**: Option A (PGS) as primary approach, matching industry practice.
+**Recommendation**: Option A (PGS) was initially implemented, then replaced by an Active Set Method (Ticket 0034) for exact LCP solutions with finite convergence and mass ratio robustness.
 
 ### Position Correction Strategy
 

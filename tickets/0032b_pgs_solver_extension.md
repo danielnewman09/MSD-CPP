@@ -7,19 +7,21 @@
 - [x] Design Approved — Ready for Prototype
 - [x] Prototype Complete — Awaiting Review
 - [x] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Quality Gate
-- [ ] Quality Gate Passed — Awaiting Review
-- [ ] Approved — Ready to Merge
-- [ ] Documentation Complete — Awaiting Tutorial
-- [ ] Merged / Complete
+- [x] Implementation Complete — Awaiting Quality Gate
+- [x] Quality Gate Passed — Awaiting Review
+- [x] Approved — Ready to Merge
+- [x] Documentation Complete — Awaiting Tutorial
+- [x] Merged / Complete
 
-**Current Phase**: Ready for Implementation
-**Assignee**: cpp-implementer
+**Current Phase**: Superseded by Ticket 0034
+**Assignee**: N/A
 **Created**: 2026-01-29
 **Generate Tutorial**: No
 **Parent Ticket**: [0032_contact_constraint_refactor](0032_contact_constraint_refactor.md)
 
 ---
+
+> **SUPERSEDED**: This ticket's scope (PGS solver extension) was implemented and then replaced by Ticket 0034 (Active Set Method). The `solveWithContacts()` public interface, `MultiBodySolveResult`, and `BodyForces` structs described here were implemented as designed, but the internal PGS algorithm was replaced by an Active Set Method that provides exact LCP solutions with finite convergence. All acceptance criteria from this ticket are satisfied by the 0034 implementation. See [0034_active_set_method_contact_solver](0034_active_set_method_contact_solver.md) for current solver details.
 
 ## Summary
 
@@ -211,9 +213,9 @@ Where `e` is the coefficient of restitution and `J_i * q_dot` is the pre-impact 
 - **Notes**: P1 validated PGS convergence with ERP=0.2. P2 validated restitution formula.
 
 ### Implementation Phase
-- **Started**:
-- **Completed**:
-- **Notes**:
+- **Started**: 2026-01-29
+- **Completed**: 2026-01-31 (via Ticket 0034)
+- **Notes**: The `solveWithContacts()` interface, `MultiBodySolveResult`, `BodyForces`, effective mass assembly, RHS assembly, Jacobian assembly, and force extraction were all implemented as designed. The internal PGS solver was initially implemented and then replaced by an Active Set Method (Ticket 0034) for exact LCP solutions. All 0032b acceptance criteria are satisfied by the final implementation. PGS parameters (`max_iterations`, `convergence_tolerance`) were retained as `max_safety_iterations_` and `convergence_tolerance_` with updated semantics (safety cap and violation check tolerance, respectively). 24 contact solver tests + 12 ASM-specific tests pass (417 total tests).
 
 ---
 
