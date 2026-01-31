@@ -261,7 +261,7 @@ ctest --preset debug
 | [`witness-points.puml`](../../docs/msd/msd-sim/Physics/witness-points.puml) | Witness point tracking for accurate torque calculation | `docs/msd/msd-sim/Physics/` |
 | [`force-application.puml`](../../docs/msd/msd-sim/Physics/force-application.puml) | Force application system with semi-implicit Euler integration | `docs/msd/msd-sim/Physics/` |
 | [`mirtich-inertia-tensor.puml`](../../docs/msd/msd-sim/Physics/mirtich-inertia-tensor.puml) | Mirtich algorithm for inertia tensor calculation | `docs/msd/msd-sim/Physics/` |
-| [`collision-response.puml`](../../docs/msd/msd-sim/Physics/collision-response.puml) | Collision response system with impulse-based physics | `docs/msd/msd-sim/Physics/` |
+| [`collision-response.puml`](../../docs/msd/msd-sim/Physics/collision-response.puml) | Historical diagram documenting deprecated CollisionResponse namespace (removed 2026-01-31) and its constraint-based replacement | `docs/msd/msd-sim/Physics/` |
 | [`0030_lagrangian_quaternion_physics.puml`](../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml) | Lagrangian quaternion physics with potential energy and constraints | `docs/designs/0030_lagrangian_quaternion_physics/` |
 | [`generalized-constraints.puml`](../../docs/msd/msd-sim/Physics/generalized-constraints.puml) | Generalized Lagrange multiplier constraint system with extensible constraint library | `docs/msd/msd-sim/Physics/` |
 | [`two-body-constraints.puml`](../../docs/msd/msd-sim/Physics/two-body-constraints.puml) | Two-body constraint infrastructure with ContactConstraint for collision response | `docs/msd/msd-sim/Physics/` |
@@ -485,35 +485,36 @@ Replaced Euler angle-based orientation with quaternion representation to elimina
 
 ---
 
-### Collision Response System — 2026-01-24
-**Ticket**: [0027_collision_response_system](../../tickets/0027_collision_response_system.md)
-**Diagram**: [`collision-response.puml`](../../docs/msd/msd-sim/Physics/collision-response.puml)
-**Type**: Feature Enhancement
+### CollisionResponse Cleanup — 2026-01-31
+**Ticket**: [0032d_collision_response_cleanup](../../tickets/0032d_collision_response_cleanup.md)
+**Parent Ticket**: [0032_contact_constraint_refactor](../../tickets/0032_contact_constraint_refactor.md)
+**Type**: Code Cleanup (Removal)
 
-Implemented impulse-based collision response for rigid body dynamics. When two AssetInertial objects collide (detected by CollisionHandler), the system computes collision impulses based on coefficients of restitution, applies both linear and angular impulses, and separates overlapping objects via position correction.
+Removed the standalone `CollisionResponse` namespace (files and tests) after ticket 0032c migrated `WorldModel` to the constraint-based collision response pipeline. This cleanup eliminates the parallel force-calculation system that motivated the parent refactor and removes potential confusion about which collision path is active.
 
-**Key components**:
-- **CollisionResponse namespace** — Stateless utility functions for impulse calculation and position correction
-- **AssetInertial modification** — Added `coefficientOfRestitution_` property with validation ([0, 1] range)
-- **WorldModel integration** — Implemented full collision response in `updateCollisions()` method
-- **Impulse formulas** — Uses standard rigid body collision response: `j = -(1 + e) * v_rel · n / (1/m_A + 1/m_B + angular_terms)`
+**Removed components**:
+- **CollisionResponse namespace** — Replaced by ContactConstraint + ContactConstraintFactory
+- **Impulse calculation utilities** — Replaced by ContactConstraint::evaluateTwoBody() + ConstraintSolver
+- **Position correction utilities** — Replaced by Baumgarte stabilization in ContactConstraint
 
-**Architecture**:
-- `CollisionResponse::combineRestitution()` — Combines restitution coefficients using geometric mean `sqrt(e_A * e_B)`
-- `CollisionResponse::computeImpulseMagnitude()` — Computes scalar impulse including angular effects via lever arms
-- `CollisionResponse::applyPositionCorrection()` — Separates objects with slop tolerance (0.01m) to prevent jitter
-- `WorldModel::updateCollisions()` — O(n²) pairwise collision detection and response, called before physics integration
-- Impulses applied to both linear and angular velocities using witness points from EPA for accurate torque calculation
+**Files deleted** (584 LOC removed):
+- `src/Physics/CollisionResponse.hpp` — Replaced by ContactConstraint + ContactConstraintFactory
+- `src/Physics/CollisionResponse.cpp` — Replaced by ContactConstraint::evaluateTwoBody() + ConstraintSolver
+- `test/Physics/CollisionResponseTest.cpp` — Test coverage migrated to ContactConstraintTest + integration tests
 
-**Performance**: Sequential collision resolution in single pass, sufficient for typical scenarios (< 5 simultaneous collisions per object). Broadphase optimization intentionally deferred.
+**Replacement system**: Collision response is now handled entirely through the constraint framework:
+- `ContactConstraint` — Non-penetration constraint with Baumgarte stabilization and restitution handling
+- `ContactConstraintFactory::createFromCollision()` — Creates constraints from CollisionResult manifolds
+- `ConstraintSolver::solveWithContacts()` — Computes contact impulses via Active Set Method LCP solver
+- `WorldModel::updateCollisions()` — Orchestrates contact constraint creation and solving
 
-**Key files**:
-- `src/Physics/CollisionResponse.hpp`, `CollisionResponse.cpp` — Stateless collision response utilities
-- `src/Physics/RigidBody/AssetInertial.hpp`, `AssetInertial.cpp` — Added restitution property and accessors
-- `src/Environment/WorldModel.hpp`, `WorldModel.cpp` — Integrated collision response in update loop
-- `test/Physics/CollisionResponseTest.cpp` — 11 unit tests for impulse calculation and position correction
-- `test/Physics/AssetInertialTest.cpp` — 7 unit tests for restitution property
-- `test/Environment/WorldModelCollisionTest.cpp` — 7 integration tests for collision behavior
+**Historical note**: The original `CollisionResponse` namespace was introduced in ticket 0027 as an impulse-based collision response system. It served as the collision response mechanism from 2026-01-24 to 2026-01-31, when it was superseded by the unified constraint framework in ticket 0032.
+
+**Key files modified**:
+- `msd-sim/src/Physics/CMakeLists.txt` — Removed CollisionResponse.cpp from build sources
+- `msd-sim/test/Physics/CMakeLists.txt` — Removed CollisionResponseTest.cpp from test sources
+
+**Diagram**: The [`collision-response.puml`](../../docs/msd/msd-sim/Physics/collision-response.puml) diagram has been updated to document the historical system and its replacement.
 
 ---
 

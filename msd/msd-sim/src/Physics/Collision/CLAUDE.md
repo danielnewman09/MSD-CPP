@@ -5,7 +5,7 @@
 
 ## Overview
 
-The Collision subsystem provides comprehensive collision detection and response for rigid body dynamics. It implements the GJK (Gilbert-Johnson-Keerthi) algorithm for efficient boolean collision detection, EPA (Expanding Polytope Algorithm) for contact information extraction, and impulse-based collision response with Lagrangian constraint formulation.
+The Collision subsystem provides comprehensive collision detection and response for rigid body dynamics. It implements the GJK (Gilbert-Johnson-Keerthi) algorithm for efficient boolean collision detection, EPA (Expanding Polytope Algorithm) for contact information extraction, and constraint-based collision response through the ContactConstraint framework.
 
 **Location**: Mixed into `msd-sim/src/Physics/` (no separate subdirectory)
 **Design Document**: [`../COLLISION_DETECTION_DESIGN.md`](../COLLISION_DETECTION_DESIGN.md)
@@ -21,9 +21,9 @@ Phase 1: Broad Phase (AABB culling)
 Phase 2: Narrow Phase (GJK collision detection)
     └── Boolean intersection test using Minkowski difference
 
-Phase 3: Contact Resolution (EPA + Collision Response)
+Phase 3: Contact Resolution (EPA + ContactConstraint)
     ├── EPA: Extract penetration depth, normal, contact manifold
-    └── Response: Apply impulse-based physics with Lagrangian constraints
+    └── Response: Create ContactConstraint and solve via ConstraintSolver
 ```
 
 ### Performance Characteristics
@@ -342,156 +342,79 @@ if (result) {
 
 ---
 
-### CollisionResponse
+### CollisionResponse [DEPRECATED - REMOVED 2026-01-31]
 
-**Location**: `../CollisionResponse.hpp`, `../CollisionResponse.cpp`
-**Introduced**: [Ticket: 0027_collision_response_system](../../../../../tickets/0027_collision_response_system.md)
+**Location**: `../CollisionResponse.hpp`, `../CollisionResponse.cpp` — **REMOVED**
+**Introduced**: [Ticket: 0027_collision_response_system](../../../../../tickets/0027_collision_response_system.md) (2026-01-24)
+**Removed**: [Ticket: 0032d_collision_response_cleanup](../../../../../tickets/0032d_collision_response_cleanup.md) (2026-01-31)
+**Replaced by**: ContactConstraint + ContactConstraintFactory + ConstraintSolver (see [Constraints/CLAUDE.md](../Constraints/CLAUDE.md))
 
-#### Purpose
-Stateless utility namespace providing Lagrangian constraint-based collision response. Implements frictionless collision response using Lagrange multipliers with Baumgarte stabilization for position correction.
+#### Historical Purpose
+The `CollisionResponse` namespace was a stateless utility namespace that provided impulse-based collision response. It was replaced by the constraint-based system which unifies collision response with the Lagrangian constraint framework.
 
-#### Lagrangian Formulation
+#### Migration to Constraint-Based System
 
-For a frictionless contact, the non-penetration constraint is:
-```
-C(q) = (x_B - x_A) · n ≥ 0
-```
+The standalone impulse-based functions were replaced as follows:
 
-At the velocity level:
-```
-Ċ = v_rel · n ≥ 0
-```
+| Old CollisionResponse Function | Replacement |
+|--------------------------------|-------------|
+| `computeImpulseMagnitude()` | `ContactConstraint::evaluateTwoBody()` + `ConstraintSolver::solveWithContacts()` |
+| `applyPositionCorrection()` | `ContactConstraint` Baumgarte stabilization (ERP=0.2) |
+| `combineRestitution()` | `ContactConstraintFactory::combineRestitution()` (same geometric mean formula) |
 
-The constraint Jacobian is:
-```
-J = [n^T, (r × n)^T] for each body
-```
+#### Replacement System Architecture
 
-The Lagrange multiplier λ (constraint force magnitude) is found by solving:
-```
-(J * M^-1 * J^T) * λ = -J * v
-```
+**Current System** (Constraint-Based Collision Response):
 
-For frictionless contacts, the constraint force acts only in the normal direction:
-```
-F_constraint = λ * n
-```
+See the Constraints module documentation for complete details:
+- **ContactConstraint**: [`../Constraints/CLAUDE.md`](../Constraints/CLAUDE.md) — Two-body non-penetration constraint
+- **ContactConstraintFactory**: Creates ContactConstraint instances from CollisionResult
+- **ConstraintSolver**: Solves contact LCP via Active Set Method for exact impulse computation
 
-#### Key Functions
+#### Current Response Workflow (Post-0032c)
 
 ```cpp
-namespace CollisionResponse {
-  // Constants
-  constexpr double kSlop = 0.01;              // 1cm slop tolerance [m]
-  constexpr double kCorrectionFactor = 0.8;   // Position correction factor
-  constexpr double kRestVelocityThreshold = 0.0001;  // Rest velocity [m/s]
-  constexpr double kEnvironmentRestitution = 0.5;    // Static object elasticity
+// 1. Detect collision via GJK/EPA
+auto result = collisionHandler.checkCollision(assetA, assetB);
 
-  // Dynamic-Dynamic Collision
-  double computeLagrangeMultiplier(const AssetInertial& assetA,
-                                   const AssetInertial& assetB,
-                                   const CollisionResult& result,
-                                   double restitution);
+if (result) {
+  // 2. Create ContactConstraint per contact point
+  auto constraint = ContactConstraintFactory::createFromCollision(*result, assetA, assetB);
 
-  void applyConstraintResponse(AssetInertial& assetA,
-                               AssetInertial& assetB,
-                               const CollisionResult& result,
-                               double restitution);
+  // 3. Solve contact LCP via ConstraintSolver
+  auto solveResult = constraintSolver.solveWithContacts(
+      {constraint.get()},      // Contact constraints
+      {&assetA, &assetB}       // Bodies
+  );
 
-  void applyPositionStabilization(AssetInertial& assetA,
-                                  AssetInertial& assetB,
-                                  const CollisionResult& result);
-
-  // Dynamic-Static Collision
-  double computeLagrangeMultiplierStatic(const AssetInertial& dynamic,
-                                         const AssetEnvironment& staticObj,
-                                         const CollisionResult& result,
-                                         double restitution);
-
-  void applyConstraintResponseStatic(AssetInertial& dynamic,
-                                     const AssetEnvironment& staticObj,
-                                     const CollisionResult& result,
-                                     double restitution);
-
-  void applyPositionStabilizationStatic(AssetInertial& dynamic,
-                                        const AssetEnvironment& staticObj,
-                                        const CollisionResult& result);
-
-  // Utility
-  double combineRestitution(double eA, double eB);
+  // 4. Apply constraint impulses to both bodies
+  // (Done internally by ConstraintSolver)
 }
 ```
 
-#### Response Algorithm
+For complete documentation of the current collision response system, see:
+- **ContactConstraint**: [`../Constraints/CLAUDE.md`](../Constraints/CLAUDE.md)
+- **Two-Body Constraints**: [`two-body-constraints.puml`](../../../../../docs/msd/msd-sim/Physics/two-body-constraints.puml)
+- **Ticket 0032c**: [WorldModel Contact Integration](../../../../../tickets/0032c_worldmodel_contact_integration.md)
 
-1. **Compute Lagrange Multiplier** (constraint force magnitude):
-   ```
-   λ = (1 + e) * (v_rel · n) / (J * M^-1 * J^T)
-   ```
+---
 
-   Where the denominator expands to:
-   ```
-   (1/m_A + 1/m_B) + (I_A^-1 * (r_A × n)) · (r_A × n)
-                   + (I_B^-1 * (r_B × n)) · (r_B × n)
-   ```
+### Historical CollisionResponse Implementation (2026-01-24 to 2026-01-31)
 
-2. **Apply Constraint Response** (velocity impulse):
-   ```
-   Δv_linear = ±λ * n / m
-   Δω = I^-1 * (r × (±λ * n))
-   ```
+The deprecated `CollisionResponse` namespace (removed in ticket 0032d) provided stateless utility functions for impulse-based collision response. It was replaced by the constraint framework to unify all physics constraints (quaternion normalization, joints, contacts) through a single solver infrastructure.
 
-3. **Apply Position Stabilization** (Baumgarte):
-   ```
-   correction = max(penetrationDepth - kSlop, 0.0) * kCorrectionFactor
-   separationVector = normal * correction
-   ```
+**Historical key functions** (removed):
+- `computeImpulseMagnitude()` — Computed scalar impulse including angular effects
+- `applyPositionCorrection()` — Separated objects via Baumgarte stabilization
+- `combineRestitution()` — Combined restitution coefficients (migrated to ContactConstraintFactory)
 
-#### Multi-Contact Manifold Handling
+**Why it was removed**:
+1. Parallel impulse calculation duplicated constraint solver logic
+2. Inconsistent with Lagrangian mechanics formulation used elsewhere
+3. Could not extend to friction constraints or multi-contact stability
+4. Made collision response a special case rather than a general constraint
 
-For manifolds with multiple contact points (contactCount > 1), the response is applied **per-contact**:
-
-```cpp
-for (size_t i = 0; i < result.contactCount; ++i) {
-  const ContactPoint& cp = result.contacts[i];
-
-  // Compute per-contact Lagrange multiplier
-  double lambda = computeLagrangeMultiplierForContact(cp, ...);
-
-  // Apply impulse at this contact point
-  applyImpulseAtContact(assetA, assetB, cp, lambda);
-}
-```
-
-This distributes the collision force over the entire contact area, improving stability for face-face collisions.
-
-#### Coefficient of Restitution
-
-Combined using geometric mean:
-```cpp
-double combineRestitution(double eA, double eB) {
-  return std::sqrt(eA * eB);
-}
-```
-
-Properties:
-- If either object is fully inelastic (e=0), collision is inelastic
-- If both are fully elastic (e=1), collision is fully elastic
-- Symmetric: e(A,B) = e(B,A)
-
-#### Baumgarte Stabilization
-
-Position correction prevents drift from numerical integration:
-
-```
-correction = max(penetrationDepth - kSlop, 0.0) * kCorrectionFactor
-```
-
-- **kSlop**: Prevents jitter from floating-point precision (objects penetrating < 1cm are not corrected)
-- **kCorrectionFactor**: Fraction of penetration to correct per frame (0.8 = 80%)
-
-#### Thread Safety
-**Stateless functions** — Safe to call from multiple threads.
+See [`collision-response.puml`](../../../../../docs/msd/msd-sim/Physics/collision-response.puml) for the historical architecture diagram.
 
 ---
 
@@ -519,10 +442,13 @@ void WorldModel::updatePhysics(std::chrono::milliseconds dt) {
 }
 ```
 
-### Collision Detection Loop
+### Collision Detection Loop (Current Constraint-Based System)
 
 ```cpp
 void WorldModel::updateCollisions() {
+  std::vector<std::unique_ptr<ContactConstraint>> contactConstraints;
+  std::vector<std::pair<size_t, size_t>> bodyIndexPairs;
+
   // O(n²) pairwise collision detection
   for (size_t i = 0; i < inertialAssets_.size(); ++i) {
     for (size_t j = i + 1; j < inertialAssets_.size(); ++j) {
@@ -530,23 +456,33 @@ void WorldModel::updateCollisions() {
           inertialAssets_[i], inertialAssets_[j]);
 
       if (result) {
-        // Combine restitution coefficients
-        double e = CollisionResponse::combineRestitution(
-            inertialAssets_[i].getCoefficientOfRestitution(),
-            inertialAssets_[j].getCoefficientOfRestitution());
-
-        // Apply velocity impulse
-        CollisionResponse::applyConstraintResponse(
-            inertialAssets_[i], inertialAssets_[j], *result, e);
-
-        // Apply position correction
-        CollisionResponse::applyPositionStabilization(
-            inertialAssets_[i], inertialAssets_[j], *result);
+        // Create ContactConstraint per contact point
+        for (size_t k = 0; k < result->contactCount; ++k) {
+          auto constraint = ContactConstraintFactory::createFromCollision(
+              *result, k, i, j,
+              inertialAssets_[i], inertialAssets_[j]);
+          contactConstraints.push_back(std::move(constraint));
+          bodyIndexPairs.push_back({i, j});
+        }
       }
     }
   }
+
+  // Solve all contact constraints simultaneously via LCP solver
+  if (!contactConstraints.empty()) {
+    constraintSolver_.solveWithContacts(
+        contactConstraints,
+        bodyIndexPairs,
+        inertialAssets_);
+  }
 }
 ```
+
+**Key improvements over deprecated system**:
+- Multi-contact stability: All contacts solved simultaneously via LCP
+- Unified constraint framework: Contacts use same solver as quaternion constraints
+- Extensible: Can add friction constraints without architectural changes
+- Exact solution: Active Set Method provides exact LCP solution (no iteration tuning)
 
 ---
 
@@ -715,9 +651,13 @@ Key standards applied:
 test/Physics/
 ├── CollisionHandlerTest.cpp     # GJK/EPA integration tests
 ├── EPATest.cpp                   # EPA algorithm tests (219 tests)
-├── CollisionResponseTest.cpp     # Impulse calculation and position correction
-└── GJKTest.cpp                   # GJK algorithm tests
+├── GJKTest.cpp                   # GJK algorithm tests
+└── Constraints/
+    ├── ContactConstraintTest.cpp     # ContactConstraint evaluation and Jacobian tests
+    └── ConstraintSolverContactTest.cpp  # Contact LCP solver tests
 ```
+
+**Note**: `CollisionResponseTest.cpp` was removed in ticket 0032d (2026-01-31). Test coverage migrated to `ContactConstraintTest.cpp` and integration tests in `WorldModelContactIntegrationTest.cpp`.
 
 ### Running Tests
 ```bash

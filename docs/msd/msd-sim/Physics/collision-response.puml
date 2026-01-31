@@ -1,25 +1,67 @@
 @startuml
 
-' === Collision Response System ===
-' Impulse-based physics response for rigid body collisions
-' Ticket: 0027_collision_response_system
+' === HISTORICAL: Collision Response System ===
+' This diagram documents the deprecated impulse-based collision response
+' system that was REMOVED in ticket 0032d (2026-01-31).
+'
+' Original ticket: 0027_collision_response_system (2026-01-24)
+' Removal ticket: 0032d_collision_response_cleanup (2026-01-31)
+' Parent refactor: 0032_contact_constraint_refactor
+'
+' REPLACEMENT: Collision response is now handled by the constraint framework.
+' See: two-body-constraints.puml for ContactConstraint and ContactConstraintFactory
+' See: generalized-constraints.puml for ConstraintSolver
 
-package "CollisionResponse" {
-  class CollisionResponse {
+package "CollisionResponse [DEPRECATED - REMOVED 2026-01-31]" <<Cloud>> {
+  class CollisionResponse <<removed>> {
     ' Stateless utility namespace for collision response calculations
     {static} + computeImpulseMagnitude(...)
     {static} + applyPositionCorrection(...)
     {static} + combineRestitution(...)
   }
 
-  note right of CollisionResponse
-    Static utility namespace
-    No state, pure functions
-    All calculations in world space
+  note right of CollisionResponse #FFCCCC
+    REMOVED in ticket 0032d
+
+    Replaced by:
+    - ContactConstraint (non-penetration constraint)
+    - ContactConstraintFactory (creates constraints from collisions)
+    - ConstraintSolver::solveWithContacts() (LCP solver)
+
+    See: two-body-constraints.puml
   end note
 }
 
-' === Integration with AssetInertial ===
+' === Current System (Post-Removal) ===
+
+package "Constraint-Based Collision Response [CURRENT]" {
+  class ContactConstraint {
+    + dimension(): size_t
+    + evaluateTwoBody(...): Eigen::VectorXd
+    + jacobianTwoBody(...): Eigen::MatrixXd
+  }
+
+  class ContactConstraintFactory {
+    {static} + createFromCollision(...): unique_ptr<ContactConstraint>
+    {static} + combineRestitution(...): double
+  }
+
+  class ConstraintSolver {
+    + solveWithContacts(...): MultiBodySolveResult
+  }
+
+  note bottom of ContactConstraint
+    Non-penetration constraint:
+    C(q) = (x_B - x_A) · n ≥ 0
+
+    Includes:
+    - Baumgarte stabilization (ERP=0.2)
+    - Restitution handling (v_target = -e·v_pre)
+    - Unilateral constraint (contact forces ≥ 0)
+  end note
+}
+
+' === Integration with AssetInertial (unchanged) ===
 
 class AssetInertial {
   ' Mass properties
@@ -31,13 +73,10 @@ class AssetInertial {
   ..
   ' Mass property accessors
   + getMass(): double
+  + getInverseMass(): double
   + getInertiaTensor(): const Eigen::Matrix3d&
   + getInverseInertiaTensor(): const Eigen::Matrix3d&
   + getInertialState(): InertialState&
-  ..
-  ' Force application
-  + applyForce(force: CoordinateRate)
-  + applyTorque(torque: CoordinateRate)
   ..
   ' Collision properties
   + getCoefficientOfRestitution(): double
@@ -49,6 +88,7 @@ class WorldModel {
   - inertialAssets_: std::vector<AssetInertial>
   - gravity_: Coordinate
   - collisionHandler_: CollisionHandler
+  - constraintSolver_: ConstraintSolver
   ..
   ' Update loop
   + update(deltaTime: milliseconds)
@@ -72,50 +112,40 @@ struct CollisionResult {
   + contactPointB: Coordinate
 }
 
-class InertialState {
-  + orientation: AngularCoordinate
-  + velocity: Coordinate
-  + angularVelocity: AngularRate
-}
-
-class ReferenceFrame {
-  + getOrigin(): Coordinate&
-  + setOrigin(origin: Coordinate)
-  + setRotation(angular: AngularCoordinate)
-  + getRotation(): const Matrix3d&
-}
-
-' === Relationships ===
+' === Relationships (Current System) ===
 
 WorldModel --> CollisionHandler : uses
 WorldModel --> AssetInertial : manages
-WorldModel ..> CollisionResponse : uses (impulse calculation)
+WorldModel --> ConstraintSolver : owns
+WorldModel ..> ContactConstraintFactory : uses
 
 CollisionHandler ..> CollisionResult : returns
-CollisionResponse ..> CollisionResult : consumes
-CollisionResponse ..> AssetInertial : modifies state
+ContactConstraintFactory ..> CollisionResult : consumes
+ContactConstraintFactory ..> ContactConstraint : creates
+ConstraintSolver ..> ContactConstraint : solves
 
-AssetInertial --> InertialState : owns
-AssetInertial --> ReferenceFrame : inherits
-
-' === Workflow Annotations ===
+' === Workflow Annotations (Current System) ===
 
 note bottom of WorldModel
-  updateCollisions() workflow:
+  updateCollisions() workflow [CURRENT]:
   1. Iterate all inertial asset pairs (O(n²))
   2. Check collision via CollisionHandler
   3. If collision:
-     a. Compute impulse magnitude (CollisionResponse)
-     b. Apply impulse to both objects (linear + angular)
-     c. Apply position correction (separate objects)
+     a. Create ContactConstraint via ContactConstraintFactory
+     b. Solve contact LCP via ConstraintSolver::solveWithContacts()
+     c. Apply constraint impulses to both objects
+
+  Migration: Ticket 0032c (2026-01-31)
+  Cleanup: Ticket 0032d (2026-01-31)
 end note
 
-note top of CollisionResponse
-  Key formulas:
-  - Combined restitution: e = sqrt(e_A * e_B)
-  - Relative velocity: v_rel = v_A - v_B + (ω_A × r_A) - (ω_B × r_B)
-  - Impulse magnitude: j = -(1 + e) * v_rel · n / (1/m_A + 1/m_B + ...)
-  - Angular impulse: Δω = I⁻¹ * (r × (j * n))
+note bottom of ContactConstraintFactory
+  Replacement for CollisionResponse utilities:
+  - combineRestitution(): sqrt(e_A * e_B) [same formula]
+  - createFromCollision(): One ContactConstraint per contact point
+
+  Impulse calculation now handled by ConstraintSolver
+  via Active Set Method LCP solution.
 end note
 
 @enduml

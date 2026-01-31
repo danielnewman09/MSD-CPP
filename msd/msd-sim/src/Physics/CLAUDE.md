@@ -25,7 +25,7 @@ PhysicsComponent (Object integration)
 Collision System (see Collision/CLAUDE.md)
     ├── GJK (Collision detection algorithm)
     ├── EPA (Contact information extraction)
-    └── CollisionResponse (Impulse-based response)
+    └── ContactConstraint (Constraint-based response)
 ```
 
 ### Core Components
@@ -33,7 +33,7 @@ Collision System (see Collision/CLAUDE.md)
 | Component | Location | Purpose | Documentation |
 |-----------|----------|---------|---------------|
 | **RigidBody System** | **`RigidBody/`** | **Rigid body representation, convex hulls, inertia tensors, quaternion orientation** | **[RigidBody/CLAUDE.md](RigidBody/CLAUDE.md)** |
-| **Collision System** | **`Collision/`** | **GJK/EPA collision detection and impulse-based response** | **[Collision/CLAUDE.md](Collision/CLAUDE.md)** |
+| **Collision System** | **`Collision/`** | **GJK/EPA collision detection and constraint-based response** | **[Collision/CLAUDE.md](Collision/CLAUDE.md)** |
 | **Integration System** | **`Integration/`** | **Numerical integration framework** | **[Integration/CLAUDE.md](Integration/CLAUDE.md)** |
 | **PotentialEnergy System** | **`PotentialEnergy/`** | **Environmental potential energy fields for Lagrangian mechanics** | **[PotentialEnergy/CLAUDE.md](PotentialEnergy/CLAUDE.md)** |
 | **Constraint System** | **`Constraints/`** | **Lagrange multiplier constraint framework** | **[Constraints/CLAUDE.md](Constraints/CLAUDE.md)** |
@@ -96,11 +96,13 @@ The collision system provides GJK/EPA-based collision detection and Lagrangian c
 - **GJK**: Gilbert-Johnson-Keerthi collision detection
 - **EPA**: Expanding Polytope Algorithm for contact information
 - **CollisionResult**: Contact manifold with up to 4 contact pairs
-- **CollisionResponse**: Lagrangian constraint-based impulse response
+- **ContactConstraint**: Two-body non-penetration constraint with Baumgarte stabilization and restitution
+- **ContactConstraintFactory**: Creates ContactConstraint instances from CollisionResult manifolds
 
 #### Quick Example
 ```cpp
 #include "msd-sim/src/Physics/CollisionHandler.hpp"
+#include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 
 CollisionHandler collisionHandler{1e-6};
 auto result = collisionHandler.checkCollision(assetA, assetB);
@@ -110,8 +112,9 @@ if (result) {
   std::cout << "Penetration: " << result->penetrationDepth << " m\n";
   std::cout << "Contacts: " << result->contactCount << "\n";
 
-  // Apply response (see Collision/CLAUDE.md for details)
-  CollisionResponse::applyConstraintResponse(assetA, assetB, *result, restitution);
+  // Create and solve contact constraint (see Collision/CLAUDE.md for details)
+  auto constraint = ContactConstraintFactory::createFromCollision(*result, assetA, assetB);
+  constraintSolver.solveWithContacts({constraint.get()}, {&assetA, &assetB});
 }
 ```
 

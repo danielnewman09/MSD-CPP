@@ -7,7 +7,6 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/InertialCalculationsTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/EPATest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/CollisionHandlerTest.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/CollisionResponseTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/AssetInertialTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Integration/QuaternionPhysicsTest.cpp
 )
