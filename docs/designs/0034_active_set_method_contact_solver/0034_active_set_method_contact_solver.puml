@@ -1,0 +1,210 @@
+@startuml 0034_active_set_method_contact_solver
+
+title Active Set Method Contact Solver (Ticket 0034)
+
+skinparam class {
+    BackgroundColor<<modified>> LightYellow
+}
+
+skinparam activity {
+    BackgroundColor<<new>> LightGreen
+}
+
+' ============================================================================
+' Class Diagram: ConstraintSolver modifications
+' ============================================================================
+
+package "msd_sim::Constraints" {
+
+    class ConstraintSolver <<modified>> {
+        .. Public Interface (UNCHANGED) ..
+        +solve(...) : SolveResult
+        +solveWithContacts(...) : MultiBodySolveResult
+        +setMaxIterations(maxIter : int) : void
+        +setConvergenceTolerance(tol : double) : void
+        .. Public Structs (UNCHANGED) ..
+        +{static} SolveResult
+        +{static} MultiBodySolveResult
+        +{static} BodyForces
+        __ Private (MODIFIED) __
+        -solveActiveSet(A, b, numContacts) : ActiveSetResult
+        -max_safety_iterations_ : int = 100
+        -convergence_tolerance_ : double = 1e-6
+        __ Private (REMOVED) __
+        -<s>solvePGS(A, b) : PGSResult</s>
+        -<s>max_iterations_ : int = 10</s>
+        __ Private (UNCHANGED) __
+        -assembleContactJacobians(...) : vector<MatrixXd>
+        -assembleContactEffectiveMass(...) : MatrixXd
+        -assembleContactRHS(...) : VectorXd
+        -extractContactBodyForces(...) : vector<BodyForces>
+        -{static} kRegularizationEpsilon : double = 1e-8
+    }
+
+    class "ActiveSetResult\n<<new>>" as ActiveSetResult {
+        +lambda : VectorXd
+        +converged : bool = false
+        +iterations : int = 0
+        +active_set_size : int = 0
+    }
+
+    class "<s>PGSResult</s>\n<<removed>>" as PGSResult #LightPink {
+        +lambda : VectorXd
+        +converged : bool = false
+        +iterations : int = 0
+    }
+
+    ConstraintSolver *-- ActiveSetResult : contains (private)
+    ConstraintSolver ..> PGSResult : replaces
+}
+
+' ============================================================================
+' Unchanged components shown for context
+' ============================================================================
+
+package "msd_sim::Constraints (Unchanged)" #WhiteSmoke {
+
+    abstract class TwoBodyConstraint {
+        +evaluateTwoBody(...) : VectorXd
+        +jacobianTwoBody(...) : MatrixXd
+        +getBodyAIndex() : size_t
+        +getBodyBIndex() : size_t
+    }
+
+    class ContactConstraint {
+        +dimension() : int
+        +getContactNormal() : Coordinate
+        +getPenetrationDepth() : double
+        +getRestitution() : double
+    }
+
+    TwoBodyConstraint <|-- ContactConstraint
+}
+
+package "msd_sim::Environment (Unchanged)" #WhiteSmoke {
+    class WorldModel {
+        -solveConstraints(contacts, dt) : void
+    }
+}
+
+' ============================================================================
+' Relationships
+' ============================================================================
+
+WorldModel --> ConstraintSolver : calls solveWithContacts()\n(unchanged interface)
+ConstraintSolver --> ContactConstraint : reads via\nassembleContact*() helpers\n(unchanged)
+
+note right of ConstraintSolver
+    **Scope of change**:
+    Only the solver kernel is replaced.
+    - solvePGS() -> solveActiveSet()
+    - PGSResult -> ActiveSetResult
+    - max_iterations_ -> max_safety_iterations_
+    All assembly and extraction methods unchanged.
+    Public interface unchanged.
+end note
+
+@enduml
+
+' ============================================================================
+' Activity Diagram: Active Set Algorithm Flow
+' ============================================================================
+
+@startuml 0034_active_set_algorithm_flow
+
+title Active Set Method Algorithm Flow
+
+start
+
+:Initialize working set W = {0, 1, ..., C-1}\n(all contacts assumed active);
+
+:Compute effective limit:\nmax_iter = min(2*C, max_safety_iterations_);
+
+repeat :iteration loop;
+
+    if (W is empty?) then (yes)
+        :lambda = zeros(C);
+    else (no)
+        :Extract subproblem:\nA_W = A[W, W]\nb_W = b[W];
+        :Solve via LLT:\nlambda_W = LLT(A_W).solve(b_W);
+        if (LLT failed?) then (yes)
+            :Return converged=false\nwith current lambda;
+            stop
+        else (no)
+        endif
+        :Assign: lambda[W] = lambda_W\nlambda[~W] = 0;
+    endif
+
+    partition "Step 2: Primal Feasibility" {
+        :Find min lambda[i] for i in W\n(Bland's rule: smallest index for ties);
+        if (min lambda < 0?) then (yes)
+            :Remove min_index from W;
+            :continue;
+        else (no)
+        endif
+    }
+
+    partition "Step 3: Dual Feasibility" {
+        :Compute residual:\nw = A * lambda - b;
+        :Find most violated inactive:\nmin w[i] for i not in W\n(Bland's rule: smallest index for ties);
+        if (any w[i] < -tolerance?) then (yes)
+            :Add most_violated_index to W;
+        else (no)
+            #LightGreen:All KKT conditions satisfied!\nReturn converged=true,\niterations, |W|;
+            stop
+        endif
+    }
+
+repeat while (iter < max_iter?)
+
+:Safety cap reached\nReturn converged=false\nwith current lambda;
+
+stop
+
+@enduml
+
+' ============================================================================
+' Sequence Diagram: solveWithContacts() call flow
+' ============================================================================
+
+@startuml 0034_solve_sequence
+
+title solveWithContacts() Internal Call Flow (Before/After)
+
+participant WorldModel
+participant ConstraintSolver
+participant "assembleContact*\n(unchanged)" as Assembly
+participant "solvePGS\n(REMOVED)" as PGS #LightPink
+participant "solveActiveSet\n(NEW)" as ASM #LightGreen
+participant "extractContactBodyForces\n(unchanged)" as Extract
+
+WorldModel -> ConstraintSolver : solveWithContacts(contacts, states, ...)
+
+ConstraintSolver -> Assembly : assembleContactJacobians()
+Assembly --> ConstraintSolver : jacobians
+
+ConstraintSolver -> Assembly : assembleContactEffectiveMass()
+Assembly --> ConstraintSolver : A (CxC matrix)
+
+ConstraintSolver -> Assembly : assembleContactRHS()
+Assembly --> ConstraintSolver : b (Cx1 vector)
+
+note over PGS, ASM
+    **The only change**:
+    PGS replaced by ASM
+end note
+
+alt BEFORE (Ticket 0032b)
+    ConstraintSolver -> PGS : solvePGS(A, b)
+    PGS --> ConstraintSolver : PGSResult{lambda, converged, iterations}
+else AFTER (Ticket 0034)
+    ConstraintSolver -> ASM : solveActiveSet(A, b, numContacts)
+    ASM --> ConstraintSolver : ActiveSetResult{lambda, converged, iterations, active_set_size}
+end
+
+ConstraintSolver -> Extract : extractContactBodyForces(jacobians, lambda, ...)
+Extract --> ConstraintSolver : bodyForces
+
+ConstraintSolver --> WorldModel : MultiBodySolveResult (unchanged struct)
+
+@enduml

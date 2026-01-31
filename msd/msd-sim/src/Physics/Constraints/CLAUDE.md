@@ -229,7 +229,7 @@ public:
 ```
 
 #### Implementation Status
-**Interface defined, solver not yet implemented**. Current `ConstraintSolver` only handles bilateral constraints. Unilateral solver (projected Gauss-Seidel) deferred to future ticket.
+**Partially implemented**. `ConstraintSolver::solveWithContacts()` implements Active Set Method for two-body contact constraints (ticket 0034). Single-body unilateral constraints and general two-body joints deferred to future tickets.
 
 #### Thread Safety
 Same as `Constraint` base class.
@@ -242,15 +242,35 @@ Same as `Constraint` base class.
 **Type**: Utility class
 
 #### Purpose
-Computes Lagrange multipliers for arbitrary constraint systems using direct linear solve (LLT decomposition). Suitable for small constraint counts (n < 100, typical: 1-10 per object).
+Computes Lagrange multipliers for arbitrary constraint systems using two solver methods:
+- **Bilateral constraints** (single-body): Direct LLT solve (O(n³), suitable for n < 100)
+- **Contact constraints** (two-body): Active Set Method for exact LCP solution (finite iterations, typically ≤ C)
 
-#### Algorithm Overview
+#### Algorithm Overview (Bilateral Constraints)
 1. **Assemble constraint Jacobian** J by stacking all constraint Jacobians
 2. **Compute mass matrix inverse** M⁻¹ (block diagonal: [m⁻¹·I₃, I⁻¹])
 3. **Form constraint matrix**: A = J·M⁻¹·Jᵀ
 4. **Build RHS**: b = -J·M⁻¹·F_ext - J̇·q̇ - α·C - β·Ċ
 5. **Solve A·λ = b** using Eigen LLT decomposition
 6. **Extract forces**: F_constraint = Jᵀ·λ
+
+#### Algorithm Overview (Contact Constraints - Active Set Method)
+1. **Assemble contact system**: A = J·M⁻¹·Jᵀ (C×C effective mass matrix), b = RHS with restitution and Baumgarte terms
+2. **Initialize working set** W = {0, 1, ..., C-1} (all contacts assumed active)
+3. **Iteration loop** (max: min(2*C, max_safety_iterations_)):
+   - **Solve active subproblem**: A_W·λ_W = b_W via LLT decomposition
+   - **Check primal feasibility**: If any λ[i] < 0 for i in W, remove most negative from W (Bland's rule)
+   - **Check dual feasibility**: Compute w = A·λ - b; if any w[i] < -tolerance for i not in W, add most violated to W (Bland's rule)
+   - **Convergence check**: If all λ ≥ 0 and w ≥ -tolerance, all KKT conditions satisfied → return exact solution
+4. **Extract forces**: F_constraint = Jᵀ·λ for each contact
+
+**Active Set Method Benefits**:
+- **Exact solution**: Converges to exact LCP solution satisfying all KKT conditions (λ ≥ 0, Aλ-b ≥ 0, λ^T(Aλ-b) ≈ 0)
+- **Mass ratio robustness**: Handles mass ratios up to 1e6:1 (LLT handles condition numbers ~1e12)
+- **Deterministic**: Solution independent of constraint ordering (no Gauss-Seidel iteration artifacts)
+- **No iteration tuning**: Converges naturally when KKT satisfied (safety cap is defensive, not convergence control)
+
+**Replaced**: Projected Gauss-Seidel (PGS) solver (ticket 0032b) — PGS produced approximate solutions with sensitivity to iteration count, constraint ordering, and high mass ratios
 
 #### Key Interfaces
 ```cpp
@@ -264,10 +284,22 @@ public:
     double conditionNumber{NaN};           // Matrix conditioning
   };
 
+  struct MultiBodySolveResult {
+    std::vector<BodyForces> bodyForces;    // Per-body forces and torques
+    bool converged{false};                 // Solver convergence flag
+    int iterations{0};                     // Active set changes performed (ASM) or iterations (PGS)
+    double residual{NaN};                  // Dual residual norm (complementarity measure)
+  };
+
+  struct BodyForces {
+    Coordinate linearForce;                // Linear constraint force [N]
+    Coordinate angularForce;               // Angular constraint torque [N·m]
+  };
+
   ConstraintSolver() = default;
 
   /**
-   * @brief Solve constraint system for Lagrange multipliers
+   * @brief Solve single-body bilateral constraint system for Lagrange multipliers
    * @return SolveResult with forces and convergence status
    */
   SolveResult solve(
@@ -278,6 +310,30 @@ public:
       double mass,
       const Eigen::Matrix3d& inverseInertia,
       double dt);
+
+  /**
+   * @brief Solve two-body contact constraint system using Active Set Method
+   * Computes exact LCP solution for contact constraints with complementarity conditions.
+   * @return MultiBodySolveResult with per-body forces and convergence info
+   */
+  MultiBodySolveResult solveWithContacts(
+      const std::vector<std::unique_ptr<TwoBodyConstraint>>& contactConstraints,
+      const std::vector<InertialState>& states,
+      const std::vector<double>& masses,
+      const std::vector<Eigen::Matrix3d>& inverseInertias,
+      double dt);
+
+  /**
+   * @brief Set maximum safety iteration cap for Active Set Method
+   * Effective limit per solve is min(2*C, maxIter). Default: 100
+   */
+  void setMaxIterations(int maxIter);
+
+  /**
+   * @brief Set constraint violation tolerance for Active Set Method
+   * Inactive constraints with violation below this threshold are considered satisfied. Default: 1e-6
+   */
+  void setConvergenceTolerance(double tol);
 
   // Rule of Five with = default
 };
@@ -627,12 +683,12 @@ AssetInertial automatically creates a `UnitQuaternionConstraint` in its construc
 
 ### Current Limitations
 
-1. **Single-object constraints only**: Current constraints operate on single object state (X, Q)
-   - Multi-object constraints (joints, contacts) deferred to future ticket
-2. **Bilateral solver only**: `ConstraintSolver` handles only equality constraints
-   - Unilateral solver (complementarity) deferred to future ticket
-3. **Direct solve only**: LLT decomposition suitable for small constraint counts
-   - Iterative solvers (projected Gauss-Seidel) deferred for large-scale systems
+1. **Two-body constraints for contacts only**: Multi-body constraints currently limited to contact constraints (non-penetration)
+   - Multi-body joints (hinges, ball-socket) deferred to future ticket
+2. **Bilateral solver for single-object constraints**: `ConstraintSolver::solve()` handles only single-object equality constraints (UnitQuaternionConstraint, DistanceConstraint)
+   - Active Set Method (`solveWithContacts()`) handles two-body unilateral contact constraints
+3. **Direct solve for bilateral constraints**: LLT decomposition suitable for small constraint counts (n < 100)
+   - Iterative solvers for large bilateral systems deferred to future ticket
 
 ### Future Extensions
 

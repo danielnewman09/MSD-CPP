@@ -197,8 +197,8 @@ The Constraints sub-module provides an extensible constraint framework using Lag
 
 **Key components**:
 - **Constraint hierarchy**: Abstract `Constraint` interface with `BilateralConstraint` and `UnilateralConstraint` specializations
-- **ConstraintSolver**: Computes Lagrange multipliers using direct LLT solve (O(n³), suitable for n < 100)
-- **Concrete implementations**: `UnitQuaternionConstraint` (unit quaternion normalization), `DistanceConstraint` (fixed distance from origin)
+- **ConstraintSolver**: Computes Lagrange multipliers for bilateral constraints using direct LLT solve (O(n³), suitable for n < 100); computes contact constraint forces using Active Set Method for exact LCP solution
+- **Concrete implementations**: `UnitQuaternionConstraint` (unit quaternion normalization), `DistanceConstraint` (fixed distance from origin), `ContactConstraint` (two-body non-penetration with restitution)
 - **Deprecated**: `QuaternionConstraint` (ticket 0030) — use `UnitQuaternionConstraint` instead
 
 #### Integration

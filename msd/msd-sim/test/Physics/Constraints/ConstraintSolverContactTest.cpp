@@ -178,42 +178,56 @@ TEST(ConstraintSolverContactTest, MultipleContacts_Converges_0033)
   EXPECT_EQ(4, result.lambdas.size());
   EXPECT_GT(result.iterations, 0);
   EXPECT_EQ(2, result.bodyForces.size());
+  EXPECT_NEAR(0., result.bodyForces[0].angularTorque.norm(), 1e-9);
+  EXPECT_NEAR(0., result.bodyForces[1].angularTorque.norm(), 1e-9);
 }
 
 TEST(ConstraintSolverContactTest, MaxIterationsReached_ReportsNotConverged_0033)
 {
-  // Test: Set max_iterations=1 on a multi-contact scenario that needs more
-  // iterations
+  // Test: Set max_safety_iterations=1 on a scenario requiring multiple active
+  // set changes. With ASM, a mixed compressive/separating contact configuration
+  // needs at least 2 iterations: iteration 1 solves the full active set and
+  // finds a negative lambda (separating contact), iteration 2 removes it and
+  // re-solves. Safety cap of 1 prevents completing the second iteration.
+  //
+  // Ticket: 0034_active_set_method_contact_solver
   ConstraintSolver solver;
-  solver.setMaxIterations(1);  // Force early exit
+  solver.setMaxIterations(1);  // Force safety cap to 1
 
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
-  InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
+  // Body A at rest, body B separating rapidly along Z
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 0.0});
+  InertialState stateB =
+    createDefaultState(Coordinate{0, 0, 1.0}, Coordinate{0, 0, 5.0});
 
-  Coordinate normal{0, 0, 1};
+  Coordinate normalZ{0, 0, 1};
   Coordinate comA{0, 0, 0};
-  Coordinate comB{0, 0, 0};
+  Coordinate comB{0, 0, 1.0};
 
-  // Multiple contacts that need coupling to resolve
+  // Contact 1: Bodies separating along Z with large separating velocity
+  // This produces negative RHS (b < 0), so the LLT solve on the full active
+  // set yields negative lambda, requiring removal from the active set.
   auto contact1 = std::make_unique<ContactConstraint>(0,
                                                       1,
-                                                      normal,
+                                                      normalZ,
+                                                      Coordinate{0, 0, 0.5},
+                                                      Coordinate{0, 0, 0.6},
+                                                      0.0,
+                                                      comA,
+                                                      comB,
+                                                      0.0,
+                                                      -5.0);
+
+  // Contact 2: Penetrating contact with Baumgarte bias (compressive)
+  auto contact2 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normalZ,
                                                       Coordinate{0.2, 0, 0.5},
                                                       Coordinate{0.2, 0, 0.4},
                                                       0.1,
                                                       comA,
                                                       comB,
-                                                      0.5,
-                                                      0.0);
-  auto contact2 = std::make_unique<ContactConstraint>(0,
-                                                      1,
-                                                      normal,
-                                                      Coordinate{-0.2, 0, 0.5},
-                                                      Coordinate{-0.2, 0, 0.4},
-                                                      0.1,
-                                                      comA,
-                                                      comB,
-                                                      0.5,
+                                                      0.0,
                                                       0.0);
 
   std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
@@ -226,13 +240,11 @@ TEST(ConstraintSolverContactTest, MaxIterationsReached_ReportsNotConverged_0033)
   auto result = solver.solveWithContacts(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
-  EXPECT_FALSE(result.converged);  // Should not converge with only 1 iteration
-  // The iteration counter returns iter+1, so with maxIter=1 we get 1 iteration
-  // but report 2 (This is a quirk of the implementation: result.iterations =
-  // iter + 1;)
-  EXPECT_GE(result.iterations, 1);  // At least 1 iteration
-  EXPECT_LE(result.iterations,
-            2);  // But not more than maxIter + reporting offset
+  // With safety cap = min(2*2, 1) = 1, ASM can only do 1 iteration.
+  // The first iteration finds a negative lambda and removes it from the active
+  // set, but cannot proceed to verify KKT for the reduced set.
+  EXPECT_FALSE(result.converged);
+  EXPECT_GE(result.iterations, 1);
 }
 
 // ============================================================================
@@ -323,6 +335,8 @@ TEST(ConstraintSolverContactTest, ApproachingBodies_LambdaPositive_0033)
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(1, result.lambdas.size());
   EXPECT_GT(result.lambdas(0), 0.0);  // Positive lambda (repulsive)
+  EXPECT_NEAR(0., result.bodyForces[0].angularTorque.norm(), 1e-9);
+  EXPECT_NEAR(0., result.bodyForces[1].angularTorque.norm(), 1e-9);
 }
 
 TEST(ConstraintSolverContactTest, RestingContact_LambdaNonNegative_0033)
@@ -358,6 +372,8 @@ TEST(ConstraintSolverContactTest, RestingContact_LambdaNonNegative_0033)
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(1, result.lambdas.size());
   EXPECT_GE(result.lambdas(0), 0.0);  // Lambda non-negative
+  EXPECT_NEAR(0., result.bodyForces[0].angularTorque.norm(), 1e-9);
+  EXPECT_NEAR(0., result.bodyForces[1].angularTorque.norm(), 1e-9);
 }
 
 // ============================================================================

@@ -265,10 +265,69 @@ ctest --preset debug
 | [`0030_lagrangian_quaternion_physics.puml`](../../docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml) | Lagrangian quaternion physics with potential energy and constraints | `docs/designs/0030_lagrangian_quaternion_physics/` |
 | [`generalized-constraints.puml`](../../docs/msd/msd-sim/Physics/generalized-constraints.puml) | Generalized Lagrange multiplier constraint system with extensible constraint library | `docs/msd/msd-sim/Physics/` |
 | [`two-body-constraints.puml`](../../docs/msd/msd-sim/Physics/two-body-constraints.puml) | Two-body constraint infrastructure with ContactConstraint for collision response | `docs/msd/msd-sim/Physics/` |
+| [`0034_active_set_method_contact_solver.puml`](../../docs/designs/0034_active_set_method_contact_solver/0034_active_set_method_contact_solver.puml) | Active Set Method contact solver replacing PGS with exact LCP solution | `docs/designs/0034_active_set_method_contact_solver/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Active Set Method Contact Solver — 2026-01-31
+**Ticket**: [0034_active_set_method_contact_solver](../../tickets/0034_active_set_method_contact_solver.md)
+**Diagram**: [`0034_active_set_method_contact_solver.puml`](../../docs/designs/0034_active_set_method_contact_solver/0034_active_set_method_contact_solver.puml)
+**Type**: Internal Replacement (Breaking Change to Solver Implementation)
+
+Replaced the Projected Gauss-Seidel (PGS) iterative solver in `ConstraintSolver::solveWithContacts()` with an Active Set Method (ASM) for solving the contact constraint Linear Complementarity Problem (LCP). The ASM partitions contacts into active (compressive) and inactive (separating) sets, solving an equality-constrained subproblem at each step via direct LLT decomposition, and iterates by adding/removing constraints until all KKT conditions are satisfied. This provides finite convergence to the exact solution, eliminating PGS's sensitivity to iteration count, constraint ordering, and high mass ratios.
+
+**Key components**:
+- **ConstraintSolver modifications** — Replaced `solvePGS()` with `solveActiveSet()`, replaced `PGSResult` with `ActiveSetResult`, renamed `max_iterations_` to `max_safety_iterations_` (default: 100), updated `convergence_tolerance_` default from 1e-4 to 1e-6
+- **ActiveSetResult struct** — New result type with `lambda`, `converged`, `iterations`, and `active_set_size` fields
+- **Active Set algorithm** — Computes exact LCP solution using primal-dual feasibility checks and Bland's anti-cycling rule
+- **Safety iteration cap** — Per-solve effective limit is `min(2*numContacts, max_safety_iterations_)` to prevent infinite loops in degenerate cases
+
+**Algorithm**:
+- Initializes with all contacts in active set (W = {0, 1, ..., C-1})
+- Each iteration: Solves A_W·λ_W = b_W via LLT, checks primal feasibility (λ ≥ 0), checks dual feasibility (w = Aλ-b ≥ 0)
+- Removes negative lambdas from active set (constraint wants to pull, not push)
+- Adds most violated inactive constraint to active set (w < -tolerance)
+- Converges when all KKT conditions satisfied: λ ≥ 0, Aλ-b ≥ 0, λ^T(Aλ-b) ≈ 0
+
+**Benefits over PGS**:
+- Exact solution: Converges to exact LCP solution in finite iterations (typically ≤ C iterations for non-degenerate systems)
+- Mass ratio robustness: Handles mass ratios up to 1e6:1 without convergence failure (LLT handles condition numbers up to ~1e12)
+- Deterministic: Solution independent of constraint processing order (no order dependence)
+- No iteration tuning: Algorithm terminates naturally when KKT conditions satisfied (safety cap is defensive, not convergence control)
+- Theoretical foundation: Well-understood convergence proofs (Nocedal & Wright, Numerical Optimization, Chapter 16)
+
+**Performance**:
+- Per-iteration cost: O(|W|^3) for LLT solve on active subset (higher than PGS's O(C^2))
+- Total iterations: Variable, typically ≤ C (vs PGS's fixed 10)
+- Typical contact counts (1-10): ASM provides exact solutions at comparable or better wall-clock time than PGS
+- Large contact counts (> 20): Cubic per-iteration cost dominates (project does not target such scenarios)
+
+**Public interface changes** (backward compatible with caveats):
+- `solveWithContacts()` signature unchanged — returns same `MultiBodySolveResult` struct
+- `setMaxIterations()` semantic change: Now sets safety cap (default 100) rather than iteration budget (was 10)
+- `setConvergenceTolerance()` semantic change: Now sets violation threshold (default 1e-6) rather than PGS convergence check (was 1e-4)
+- `MultiBodySolveResult::iterations` now counts active set changes (was PGS iterations)
+- `MultiBodySolveResult::residual` semantic change: Now dual residual norm (complementarity measure) rather than PGS convergence metric
+
+**Breaking changes**:
+- Internal method `solvePGS()` removed (was private)
+- Internal struct `PGSResult` removed (was private)
+- Test impact: One existing test (`MaxIterationsReached_ReportsNotConverged_0033`) required scenario modification because ASM converges faster than PGS for trivial cases
+
+**Key files**:
+- `src/Physics/Constraints/ConstraintSolver.hpp`, `ConstraintSolver.cpp` — Replaced PGS with ASM solver kernel
+- `test/Physics/Constraints/ConstraintSolverASMTest.cpp` — 12 new unit tests for ASM-specific behavior
+- `test/Physics/Constraints/ConstraintSolverContactTest.cpp` — Modified 1 of 24 existing tests for ASM convergence behavior
+
+**Thread safety**: `solveActiveSet()` is a const method with only local state (thread-safe for different inputs).
+
+**Memory management**: No heap allocations beyond Eigen dynamic matrices (same as PGS). All subproblem matrices locally scoped and freed after solve.
+
+**Error handling**: Returns `converged = false` for singular/ill-conditioned matrices or when safety cap reached. Regularization epsilon (1e-8) prevents singularity in practice.
+
+---
 
 ### Two-Body Constraint Infrastructure — 2026-01-29
 **Ticket**: [0032a_two_body_constraint_infrastructure](../../tickets/0032a_two_body_constraint_infrastructure.md)

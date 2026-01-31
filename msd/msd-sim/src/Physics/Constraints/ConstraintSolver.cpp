@@ -234,13 +234,14 @@ std::pair<Coordinate, Coordinate> ConstraintSolver::extractConstraintForces(
   return {linearForce, angularTorque};
 }
 
-// ===== Multi-Body Contact Constraint Solver (Ticket 0032) =====
+// ===== Multi-Body Contact Constraint Solver (Ticket 0032, 0034) =====
 //
-// Implements Projected Gauss-Seidel (PGS) for contact constraints with λ ≥ 0.
+// Implements Active Set Method (ASM) for contact constraints with λ ≥ 0.
+// Replaced PGS (Ticket 0032b) with ASM (Ticket 0034) for exact convergence.
 //
 // CRITICAL notes from prototype debugging:
 // - Baumgarte uses ERP formulation: b += (ERP/dt) · penetration_depth
-// - Restitution RHS: b = -(1+e) · J·v_minus (for PGS system A·λ = b)
+// - Restitution RHS: b = -(1+e) · J·v_minus (for system A·λ = b)
 // - DO NOT use -(1+e)·v as target velocity directly (causes energy injection)
 // See: prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
 
@@ -275,8 +276,9 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
   // Step 4: Assemble RHS vector
   auto b = assembleContactRHS(contactConstraints, jacobians, states, dt);
 
-  // Step 5: PGS solve with λ ≥ 0 clamping
-  auto [lambda, converged, iterations] = solvePGS(A, b);
+  // Step 5: Active Set Method solve with λ ≥ 0 enforcement
+  const int numContacts = static_cast<int>(contactConstraints.size());
+  auto [lambda, converged, iterations, activeSetSize] = solveActiveSet(A, b, numContacts);
 
   // Step 6: Extract per-body forces
   result.bodyForces = extractContactBodyForces(contactConstraints, jacobians,
@@ -434,44 +436,135 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
   return b;
 }
 
-ConstraintSolver::PGSResult ConstraintSolver::solvePGS(
-    const Eigen::MatrixXd& A, const Eigen::VectorXd& b) const
+// Ticket: 0034_active_set_method_contact_solver
+// Design: docs/designs/0034_active_set_method_contact_solver/design.md
+ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
+    const Eigen::MatrixXd& A, const Eigen::VectorXd& b, int numContacts) const
 {
-  const auto C = static_cast<size_t>(b.size());
-  Eigen::VectorXd lambda = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(C));
-  bool converged = false;
-  int iter = 0;
+  const int C = numContacts;
+  Eigen::VectorXd lambda = Eigen::VectorXd::Zero(C);
 
-  for (iter = 0; iter < max_iterations_; ++iter)
+  if (C == 0)
   {
-    double maxDelta = 0.0;
+    return ActiveSetResult{lambda, true, 0, 0};
+  }
 
-    for (size_t i = 0; i < C; ++i)
+  // Initialize working set: all contacts active (optimal for resting contacts)
+  std::vector<int> activeIndices;
+  activeIndices.reserve(static_cast<size_t>(C));
+  for (int i = 0; i < C; ++i)
+  {
+    activeIndices.push_back(i);
+  }
+
+  const int effectiveMaxIter = std::min(2 * C, max_safety_iterations_);
+
+  for (int iter = 1; iter <= effectiveMaxIter; ++iter)
+  {
+    const int activeSize = static_cast<int>(activeIndices.size());
+
+    // Step 1: Solve equality subproblem for active set
+    if (activeSize == 0)
     {
-      // Compute sum of off-diagonal contributions (using latest values)
-      double sum = 0.0;
-      for (size_t j = 0; j < C; ++j)
+      // All contacts inactive — lambda is already zero
+      lambda.setZero();
+    }
+    else
+    {
+      // Extract active submatrix and subvector
+      Eigen::MatrixXd A_W(activeSize, activeSize);
+      Eigen::VectorXd b_W(activeSize);
+
+      for (int i = 0; i < activeSize; ++i)
       {
-        if (j != i)
+        b_W(i) = b(activeIndices[static_cast<size_t>(i)]);
+        for (int j = 0; j < activeSize; ++j)
         {
-          sum += A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) * lambda(static_cast<Eigen::Index>(j));
+          A_W(i, j) = A(activeIndices[static_cast<size_t>(i)],
+                        activeIndices[static_cast<size_t>(j)]);
         }
       }
 
-      // PGS update with non-negativity projection
-      double oldLambda = lambda(static_cast<Eigen::Index>(i));
-      lambda(static_cast<Eigen::Index>(i)) = std::max(0.0, (b(static_cast<Eigen::Index>(i)) - sum) / A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(i)));
-      maxDelta = std::max(maxDelta, std::abs(lambda(static_cast<Eigen::Index>(i)) - oldLambda));
+      // Direct LLT solve
+      Eigen::LLT<Eigen::MatrixXd> llt{A_W};
+      if (llt.info() != Eigen::Success)
+      {
+        // Subproblem is singular despite regularization (extremely rare)
+        return ActiveSetResult{lambda, false, iter, activeSize};
+      }
+
+      Eigen::VectorXd lambda_W = llt.solve(b_W);
+
+      // Assign solution back to full lambda vector
+      lambda.setZero();
+      for (int i = 0; i < activeSize; ++i)
+      {
+        lambda(activeIndices[static_cast<size_t>(i)]) = lambda_W(i);
+      }
     }
 
-    if (maxDelta < convergence_tolerance_)
+    // Step 2: Check primal feasibility (lambda >= 0 for active set)
+    double minLambda = std::numeric_limits<double>::infinity();
+    int minIndex = -1;
+    for (int i = 0; i < activeSize; ++i)
     {
-      converged = true;
-      break;
+      int idx = activeIndices[static_cast<size_t>(i)];
+      double val = lambda(idx);
+      if (val < minLambda || (val == minLambda && idx < minIndex))
+      {
+        minLambda = val;
+        minIndex = idx;
+      }
     }
+
+    if (minLambda < 0.0)
+    {
+      // Remove most negative lambda from active set (Bland's rule for ties)
+      activeIndices.erase(
+          std::remove(activeIndices.begin(), activeIndices.end(), minIndex),
+          activeIndices.end());
+      continue;
+    }
+
+    // Step 3: Check dual feasibility (w >= 0 for inactive set)
+    Eigen::VectorXd w = A * lambda - b;
+
+    double maxViolation = 0.0;
+    int maxViolationIndex = -1;
+    for (int i = 0; i < C; ++i)
+    {
+      // Skip active contacts
+      bool isActive = std::find(activeIndices.begin(), activeIndices.end(), i) != activeIndices.end();
+      if (isActive)
+      {
+        continue;
+      }
+
+      if (w(i) < -convergence_tolerance_)
+      {
+        if (maxViolationIndex == -1 ||
+            w(i) < maxViolation ||
+            (w(i) == maxViolation && i < maxViolationIndex))
+        {
+          maxViolation = w(i);
+          maxViolationIndex = i;
+        }
+      }
+    }
+
+    if (maxViolationIndex == -1)
+    {
+      // All KKT conditions satisfied — exact solution found
+      return ActiveSetResult{lambda, true, iter, activeSize};
+    }
+
+    // Step 4: Add most violated constraint to active set (sorted insertion)
+    auto insertPos = std::lower_bound(activeIndices.begin(), activeIndices.end(), maxViolationIndex);
+    activeIndices.insert(insertPos, maxViolationIndex);
   }
 
-  return PGSResult{lambda, converged, iter + 1};
+  // Safety cap reached
+  return ActiveSetResult{lambda, false, effectiveMaxIter, static_cast<int>(activeIndices.size())};
 }
 
 std::vector<ConstraintSolver::BodyForces> ConstraintSolver::extractContactBodyForces(

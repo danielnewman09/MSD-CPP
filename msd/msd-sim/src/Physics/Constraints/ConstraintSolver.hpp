@@ -129,24 +129,25 @@ public:
     std::vector<BodyForces> bodyForces;  // Per-body constraint forces
     Eigen::VectorXd lambdas;             // Lagrange multipliers
     bool converged{false};               // Solver convergence flag
-    int iterations{0};                   // PGS iterations used
+    int iterations{0};                   // Active set changes performed
     double residual{std::numeric_limits<double>::quiet_NaN()};
 
     MultiBodySolveResult() = default;
   };
 
   /**
-   * @brief Solve contact constraint system using Projected Gauss-Seidel (PGS)
+   * @brief Solve contact constraint system using Active Set Method (ASM)
    *
-   * Solves a set of two-body contact constraints with lambda >= 0 clamping.
+   * Solves a set of two-body contact constraints with lambda >= 0 enforcement.
    * Each contact constraint couples two bodies via a 1×12 Jacobian.
    *
-   * PGS algorithm: for each iteration, update each lambda_i using
-   * the latest values of other lambdas, then clamp to non-negative.
+   * ASM algorithm: partitions contacts into active (compressive) and inactive
+   * (separating) sets, solving an equality subproblem at each iteration via
+   * LLT decomposition until all KKT conditions are satisfied.
    *
    * CRITICAL implementation notes from prototype debugging:
    * - Uses ERP formulation for Baumgarte stabilization (not alpha/beta)
-   * - Restitution RHS: b = -(1+e) · J·v_minus (correct for PGS solve)
+   * - Restitution RHS: b = -(1+e) · J·v_minus (correct for system A·λ = b)
    * - Baumgarte RHS: b += (ERP/dt) · penetration_depth
    *
    * @param contactConstraints Two-body contact constraints (non-owning)
@@ -158,6 +159,7 @@ public:
    * @return MultiBodySolveResult with per-body forces
    *
    * @ticket 0032_contact_constraint_refactor
+   * @ticket 0034_active_set_method_contact_solver
    */
   MultiBodySolveResult solveWithContacts(
       const std::vector<TwoBodyConstraint*>& contactConstraints,
@@ -168,16 +170,27 @@ public:
       double dt);
 
   /**
-   * @brief Set maximum PGS iterations
-   * @param maxIter Maximum iterations (default: 10)
-   * @ticket 0032_contact_constraint_refactor
+   * @brief Set maximum safety iteration cap for Active Set Method
+   *
+   * The effective iteration limit per solve is min(2*C, maxIter) where
+   * C is the number of contacts. This safety cap prevents infinite loops
+   * for degenerate inputs. For typical use, the default (100) should not
+   * need adjustment.
+   *
+   * @param maxIter Maximum safety iterations (default: 100)
+   * @ticket 0034_active_set_method_contact_solver
    */
-  void setMaxIterations(int maxIter) { max_iterations_ = maxIter; }
+  void setMaxIterations(int maxIter) { max_safety_iterations_ = maxIter; }
 
   /**
-   * @brief Set PGS convergence tolerance
-   * @param tol Convergence tolerance (default: 1e-4)
-   * @ticket 0032_contact_constraint_refactor
+   * @brief Set constraint violation tolerance for Active Set Method
+   *
+   * Inactive constraints with violation magnitude below this tolerance
+   * are considered satisfied. Tighter tolerance improves accuracy but
+   * may cause extra iterations for nearly-active constraints.
+   *
+   * @param tol Violation tolerance (default: 1e-6)
+   * @ticket 0034_active_set_method_contact_solver
    */
   void setConvergenceTolerance(double tol) { convergence_tolerance_ = tol; }
 
@@ -235,16 +248,22 @@ private:
       const InertialState& state,
       double time) const;
 
-  // ===== Contact solver helpers (Ticket 0032) =====
+  // ===== Contact solver helpers (Ticket 0032, 0034) =====
 
   /**
-   * @brief Result of Projected Gauss-Seidel iteration
+   * @brief Result of Active Set Method solve
+   *
+   * Contains the solution lambda vector, convergence status, iteration count
+   * (number of active set changes), and the size of the final active set.
+   *
+   * @ticket 0034_active_set_method_contact_solver
    */
-  struct PGSResult
+  struct ActiveSetResult
   {
-    Eigen::VectorXd lambda;
-    bool converged{false};
-    int iterations{0};
+    Eigen::VectorXd lambda;         // Lagrange multipliers (all >= 0)
+    bool converged{false};          // True if all KKT conditions satisfied
+    int iterations{0};              // Number of active set changes performed
+    int active_set_size{0};         // Number of contacts in final active set (0 = empty active set)
   };
 
   /**
@@ -288,11 +307,36 @@ private:
       double dt) const;
 
   /**
-   * @brief Perform Projected Gauss-Seidel iteration with λ ≥ 0 clamping
+   * @brief Solve contact LCP using Active Set Method
    *
-   * @return PGSResult with lambda vector and convergence info
+   * Partitions contacts into active (compressive) and inactive (separating)
+   * sets, solving an equality subproblem at each iteration via LLT decomposition
+   * until all KKT conditions are satisfied.
+   *
+   * Algorithm:
+   * 1. Initialize working set W = {0, 1, ..., C-1} (all contacts active)
+   * 2. Solve equality subproblem: A_W * lambda_W = b_W via LLT
+   * 3. If any lambda_W[i] < 0: remove most negative from W (Bland's rule for ties)
+   * 4. If all lambda_W >= 0: check inactive constraints for violation
+   * 5. If violated inactive constraint found: add most violated to W (Bland's rule)
+   * 6. If no violations: KKT conditions satisfied, return exact solution
+   *
+   * Convergence: Finite, typically <= C iterations for non-degenerate systems.
+   * Safety cap: min(2*C, max_safety_iterations_) to prevent cycling.
+   *
+   * @param A Effective mass matrix (C x C), symmetric positive semi-definite
+   * @param b RHS vector (C x 1) with restitution and Baumgarte terms
+   * @param numContacts Number of contacts (used for safety iteration cap = 2*C).
+   *        Note: numContacts == b.size() by construction (one constraint row per contact).
+   *        Passed explicitly rather than derived from b.size() to document intent and
+   *        decouple the safety cap computation from the Eigen vector internals.
+   * @return ActiveSetResult with lambda vector, convergence info, and active set size
+   *
+   * @ticket 0034_active_set_method_contact_solver
    */
-  PGSResult solvePGS(const Eigen::MatrixXd& A, const Eigen::VectorXd& b) const;
+  ActiveSetResult solveActiveSet(const Eigen::MatrixXd& A,
+                                 const Eigen::VectorXd& b,
+                                 int numContacts) const;
 
   /**
    * @brief Extract per-body forces from solved lambda values
@@ -308,9 +352,9 @@ private:
       size_t numBodies,
       double dt) const;
 
-  // PGS configuration (Ticket 0032)
-  int max_iterations_{10};
-  double convergence_tolerance_{1e-4};
+  // Active Set Method configuration (Ticket 0034)
+  int max_safety_iterations_{100};     // Safety cap; effective limit = min(2*C, max_safety_iterations_)
+  double convergence_tolerance_{1e-6}; // Inactive constraint violation threshold
   static constexpr double kRegularizationEpsilon = 1e-8;
 };
 
