@@ -256,8 +256,7 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
   result.bodyForces.resize(numBodies, BodyForces{Coordinate{0.0, 0.0, 0.0},
                                                   Coordinate{0.0, 0.0, 0.0}});
 
-  const size_t C = contactConstraints.size();
-  if (C == 0)
+  if (contactConstraints.empty())
   {
     result.converged = true;
     result.iterations = 0;
@@ -266,9 +265,43 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     return result;
   }
 
-  // ===== Step 1: Compute per-contact Jacobians and cache =====
-  // Each contact has a 1×12 Jacobian [J_A(1×6) | J_B(1×6)]
+  // Step 1: Compute per-contact Jacobians
+  auto jacobians = assembleContactJacobians(contactConstraints, states);
+
+  // Step 2+3: Build effective mass matrix A = J·M⁻¹·Jᵀ
+  auto A = assembleContactEffectiveMass(contactConstraints, jacobians,
+                                         inverseMasses, inverseInertias, numBodies);
+
+  // Step 4: Assemble RHS vector
+  auto b = assembleContactRHS(contactConstraints, jacobians, states, dt);
+
+  // Step 5: PGS solve with λ ≥ 0 clamping
+  auto [lambda, converged, iterations] = solvePGS(A, b);
+
+  // Step 6: Extract per-body forces
+  result.bodyForces = extractContactBodyForces(contactConstraints, jacobians,
+                                                lambda, numBodies, dt);
+
+  result.lambdas = lambda;
+  result.converged = converged;
+  result.iterations = iterations;
+
+  // Compute residual: ||A·λ - b||
+  Eigen::VectorXd residualVec = A * lambda - b;
+  result.residual = residualVec.norm();
+
+  return result;
+}
+
+// ===== Contact solver helper implementations =====
+
+std::vector<Eigen::MatrixXd> ConstraintSolver::assembleContactJacobians(
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<std::reference_wrapper<const InertialState>>& states) const
+{
+  const size_t C = contactConstraints.size();
   std::vector<Eigen::MatrixXd> jacobians(C);
+
   for (size_t i = 0; i < C; ++i)
   {
     const auto* contact = contactConstraints[i];
@@ -278,7 +311,19 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
         states[bodyA].get(), states[bodyB].get(), 0.0);
   }
 
-  // ===== Step 2: Build per-body inverse mass matrices (6×6) =====
+  return jacobians;
+}
+
+Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Eigen::MatrixXd>& jacobians,
+    const std::vector<double>& inverseMasses,
+    const std::vector<Eigen::Matrix3d>& inverseInertias,
+    size_t numBodies) const
+{
+  const size_t C = contactConstraints.size();
+
+  // Build per-body inverse mass matrices (6×6)
   // M_k_inv = diag(inverseMass_k · I_3, inverseInertia_k)
   std::vector<Eigen::Matrix<double, 6, 6>> bodyMInv(numBodies);
   for (size_t k = 0; k < numBodies; ++k)
@@ -288,7 +333,7 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     bodyMInv[k].block<3, 3>(3, 3) = inverseInertias[k];
   }
 
-  // ===== Step 3: Assemble effective mass matrix A (C×C) =====
+  // Assemble effective mass matrix A (C×C)
   // A_ij = sum over shared bodies k of: J_i_k · M_k_inv · J_j_k^T
   Eigen::MatrixXd A = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(C), static_cast<Eigen::Index>(C));
   for (size_t i = 0; i < C; ++i)
@@ -331,7 +376,17 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(i)) += kRegularizationEpsilon;
   }
 
-  // ===== Step 4: Assemble RHS vector b (C×1) =====
+  return A;
+}
+
+Eigen::VectorXd ConstraintSolver::assembleContactRHS(
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Eigen::MatrixXd>& jacobians,
+    const std::vector<std::reference_wrapper<const InertialState>>& states,
+    double dt) const
+{
+  const size_t C = contactConstraints.size();
+
   // b_i = -(1 + e_i) · (J_i · v_minus) + (ERP_i / dt) · penetration_i
   //
   // CRITICAL: The -(1+e) factor is correct for the PGS system A·λ = b.
@@ -376,7 +431,13 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     }
   }
 
-  // ===== Step 5: PGS iteration =====
+  return b;
+}
+
+ConstraintSolver::PGSResult ConstraintSolver::solvePGS(
+    const Eigen::MatrixXd& A, const Eigen::VectorXd& b) const
+{
+  const auto C = static_cast<size_t>(b.size());
   Eigen::VectorXd lambda = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(C));
   bool converged = false;
   int iter = 0;
@@ -410,7 +471,20 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     }
   }
 
-  // ===== Step 6: Extract per-body forces =====
+  return PGSResult{lambda, converged, iter + 1};
+}
+
+std::vector<ConstraintSolver::BodyForces> ConstraintSolver::extractContactBodyForces(
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Eigen::MatrixXd>& jacobians,
+    const Eigen::VectorXd& lambda,
+    size_t numBodies,
+    double dt) const
+{
+  const size_t C = contactConstraints.size();
+  std::vector<BodyForces> bodyForces(numBodies, BodyForces{Coordinate{0.0, 0.0, 0.0},
+                                                            Coordinate{0.0, 0.0, 0.0}});
+
   // F_body_k = sum over contacts touching body k: J_i_k^T · lambda_i / dt
   // Dividing by dt converts impulse to force (since integrator multiplies by dt)
   for (size_t i = 0; i < C; ++i)
@@ -428,22 +502,14 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     Eigen::Matrix<double, 6, 1> forceA = J_i_A.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;
     Eigen::Matrix<double, 6, 1> forceB = J_i_B.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;
 
-    result.bodyForces[bodyA].linearForce += Coordinate{forceA(0), forceA(1), forceA(2)};
-    result.bodyForces[bodyA].angularTorque += Coordinate{forceA(3), forceA(4), forceA(5)};
+    bodyForces[bodyA].linearForce += Coordinate{forceA(0), forceA(1), forceA(2)};
+    bodyForces[bodyA].angularTorque += Coordinate{forceA(3), forceA(4), forceA(5)};
 
-    result.bodyForces[bodyB].linearForce += Coordinate{forceB(0), forceB(1), forceB(2)};
-    result.bodyForces[bodyB].angularTorque += Coordinate{forceB(3), forceB(4), forceB(5)};
+    bodyForces[bodyB].linearForce += Coordinate{forceB(0), forceB(1), forceB(2)};
+    bodyForces[bodyB].angularTorque += Coordinate{forceB(3), forceB(4), forceB(5)};
   }
 
-  result.lambdas = lambda;
-  result.converged = converged;
-  result.iterations = iter + 1;
-
-  // Compute residual: ||A·λ - b||
-  Eigen::VectorXd residualVec = A * lambda - b;
-  result.residual = residualVec.norm();
-
-  return result;
+  return bodyForces;
 }
 
 }  // namespace msd_sim

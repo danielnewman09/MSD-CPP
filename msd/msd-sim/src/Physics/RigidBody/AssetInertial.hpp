@@ -125,10 +125,23 @@ public:
   const Eigen::Matrix3d& getInertiaTensor() const;
 
   /**
-   * @brief Get the inverse inertia tensor about the centroid.
+   * @brief Get the inverse inertia tensor about the centroid (body frame).
    * @return 3x3 inverse inertia tensor [1/(kg⋅m²)]
    */
   const Eigen::Matrix3d& getInverseInertiaTensor() const;
+
+  /**
+   * @brief Get the inverse inertia tensor in world frame.
+   *
+   * Computes I⁻¹_world = R · I⁻¹_body · Rᵀ using the current orientation
+   * quaternion. Use this when multiplying with world-frame quantities
+   * (torques, angular velocities in world coordinates).
+   *
+   * @return 3x3 inverse inertia tensor in world frame [1/(kg⋅m²)]
+   *
+   * @ticket 0032_contact_constraint_refactor
+   */
+  Eigen::Matrix3d getInverseInertiaTensorWorld() const;
 
   // ========== NEW: Force Application API (ticket 0023a) ==========
 

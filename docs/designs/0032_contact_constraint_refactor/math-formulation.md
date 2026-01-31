@@ -176,6 +176,8 @@ $$
 
 Off-diagonal entries $A_{ij}$ couple contact points through the shared mass matrix of bodies A and B (see Section 10.3 for the explicit coupling formula). The system $\mathbf{A}\boldsymbol{\lambda} = \mathbf{b}$ with $\boldsymbol{\lambda} \geq 0$ is solved by the Projected Gauss-Seidel algorithm (Section 7).
 
+**Why contacts couple through the mass matrix**: The off-diagonal entries exist because the contact points share the same rigid bodies. Applying a constraint force at contact point $j$ accelerates the entire rigid body (both translationally and rotationally), which changes the constraint violation at every other contact point on that body. The entry $A_{ij} = \mathbf{J}_i \mathbf{M}^{-1} \mathbf{J}_j^\top$ quantifies exactly this cross-effect: how much force at contact $j$ affects contact $i$, mediated by the body's inverse mass matrix. If the contacts were on unconnected bodies, $\mathbf{M}^{-1}$ would be block-diagonal with no shared blocks, the off-diagonals $A_{ij}$ would vanish, and each contact could be solved independently. See Section 4.5 for a detailed intuitive derivation.
+
 **Relationship to existing code**: The current `CollisionResult` manifold stores up to 4 `ContactPoint` entries. The centroid approach (averaging contacts into a single representative point) reduces $k$ constraints to 1, which is a valid approximation. However, using individual contact points as separate constraint rows provides better stability for resting contacts (e.g., an object resting on a flat surface with 4 support points) because the solver can independently balance forces at each contact location.
 
 ---
@@ -448,7 +450,44 @@ $$
 A = \left( \frac{1}{m_A} + \frac{1}{m_B} \right) + (\mathbf{r}_A \times \mathbf{n})^\top \mathbf{I}_A^{-1} (\mathbf{r}_A \times \mathbf{n}) + (\mathbf{r}_B \times \mathbf{n})^\top \mathbf{I}_B^{-1} (\mathbf{r}_B \times \mathbf{n})
 $$
 
-### 4.5 Relationship to Existing Implementation
+### 4.5 Effective Mass Intuition
+
+The derivation above arrives at $\mathbf{A} = \mathbf{J} \mathbf{M}^{-1} \mathbf{J}^\top$ through algebraic manipulation. This subsection provides physical intuition for what the effective mass matrix represents and why multiple contacts require it.
+
+#### Single constraint: resistance to correction
+
+For a single contact, the pipeline from constraint force to constraint-space acceleration is:
+
+1. The constraint exerts a generalized force on the bodies: $\mathbf{F}_c = \mathbf{J}^\top \lambda$
+2. The bodies accelerate in response: $\ddot{\mathbf{q}} = \mathbf{M}^{-1} \mathbf{J}^\top \lambda$
+3. That acceleration changes the constraint violation rate: $\ddot{C} = \mathbf{J} \ddot{\mathbf{q}} = \mathbf{J} \mathbf{M}^{-1} \mathbf{J}^\top \lambda$
+
+The scalar $A = \mathbf{J} \mathbf{M}^{-1} \mathbf{J}^\top$ is the constraint-space "effective mass" -- it measures how much constraint-space acceleration results from one unit of constraint force. A heavy body has large $\mathbf{M}$, so $\mathbf{M}^{-1}$ is small, meaning more force $\lambda$ is needed to achieve the same correction. This is the ordinary meaning of mass (resistance to acceleration), projected into the constraint's degree of freedom.
+
+Solving for $\lambda$ is then straightforward: $\lambda = A^{-1} b$, where $b$ is the desired constraint-space acceleration (encoding Baumgarte stabilization, restitution, etc.).
+
+#### Multiple constraints: why coupling arises
+
+Now consider two contact points on the same rigid body -- for example, a box resting on a table with contacts at its left and right edges.
+
+Applying force at the left contact ($\lambda_1$) accelerates the entire rigid body, both translationally and rotationally. This acceleration also changes what is happening at the right contact. No force was applied at contact 2, yet contact 2's violation rate changed, because the body is rigid and shared between both contacts.
+
+This cross-effect is captured by the off-diagonal entries of $\mathbf{A}$:
+
+- $A_{11} = \mathbf{J}_1 \mathbf{M}^{-1} \mathbf{J}_1^\top$: how much force at contact 1 affects contact 1 (self-mass)
+- $A_{12} = \mathbf{J}_1 \mathbf{M}^{-1} \mathbf{J}_2^\top$: how much force at contact 2 affects contact 1 (coupling)
+
+The chain for the coupling term is: force at contact 2 ($\mathbf{J}_2^\top \lambda_2$) $\to$ body acceleration ($\mathbf{M}^{-1} \mathbf{J}_2^\top \lambda_2$) $\to$ effect on contact 1 ($\mathbf{J}_1 \mathbf{M}^{-1} \mathbf{J}_2^\top \lambda_2$). The shared inverse mass matrix $\mathbf{M}^{-1}$ is the bridge connecting the two contacts through the body's dynamics.
+
+If the contacts were on **unconnected bodies**, $\mathbf{M}^{-1}$ would be block-diagonal with no shared blocks between the two contacts. The product $\mathbf{J}_1 \mathbf{M}^{-1} \mathbf{J}_2^\top$ would evaluate to zero, the off-diagonals would vanish, and $\mathbf{A}$ would be diagonal -- each contact could be solved independently. The coupling exists precisely because rigid bodies transmit forces to all their contact points simultaneously.
+
+#### Physical example: box on a table
+
+A box sitting flat on a table with 4 contact points illustrates this concretely. All 4 normals point upward, but the lever arms differ (each corner has a different $\mathbf{r}$). Pushing up at one corner tilts the box, which lifts the opposite corner (reducing that contact's violation -- a helpful coupling) but pushes adjacent corners downward (increasing their violations -- a harmful coupling). The off-diagonal entries of $\mathbf{A}$ encode exactly these relationships, and the solver (Section 7) finds the balanced distribution of forces across all 4 contacts that keeps the box flat and stationary.
+
+Solving each contact independently (ignoring off-diagonals) would over- or under-correct because fixing one contact partially fixes or worsens the others. The full matrix system $\mathbf{A} \boldsymbol{\lambda} = \mathbf{b}$ with $\boldsymbol{\lambda} \geq 0$ accounts for all cross-effects simultaneously.
+
+### 4.6 Relationship to Existing Implementation
 
 The current `CollisionResponse::computeLagrangeMultiplier()` computes:
 

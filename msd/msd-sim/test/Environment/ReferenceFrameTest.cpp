@@ -346,8 +346,9 @@ TEST(ReferenceFrameTest, SetOrigin)
 
 TEST(ReferenceFrameTest, SetRotation)
 {
+  // Normal case (away from gimbal lock): individual Euler angles round-trip exactly
   ReferenceFrame frame;
-  AngularCoordinate angular{M_PI / 2, M_PI / 4, M_PI / 6};  // pitch, roll, yaw
+  AngularCoordinate angular{M_PI / 6, M_PI / 4, M_PI / 3};  // pitch, roll, yaw
 
   Eigen::Quaterniond q =
       Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
@@ -356,9 +357,34 @@ TEST(ReferenceFrameTest, SetRotation)
   frame.setQuaternion(q);
 
   AngularCoordinate frameAngular = frame.getAngularCoordinate();
-  EXPECT_DOUBLE_EQ(frameAngular.pitch(), M_PI / 2);
+  EXPECT_DOUBLE_EQ(frameAngular.pitch(), M_PI / 6);
   EXPECT_DOUBLE_EQ(frameAngular.roll(), M_PI / 4);
-  EXPECT_DOUBLE_EQ(frameAngular.yaw(), M_PI / 6);
+  EXPECT_DOUBLE_EQ(frameAngular.yaw(), M_PI / 3);
+}
+
+TEST(ReferenceFrameTest, SetRotationGimbalLock)
+{
+  // Gimbal lock case (pitch = π/2): roll and yaw are coupled, so individual
+  // angles cannot round-trip. Verify the resulting rotation matrix is correct.
+  ReferenceFrame frame;
+  AngularCoordinate angular{M_PI / 2, M_PI / 4, M_PI / 6};  // pitch, roll, yaw
+
+  Eigen::Quaterniond q =
+      Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
+      Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
+      Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
+  Eigen::Matrix3d expectedRotation = q.toRotationMatrix();
+
+  frame.setQuaternion(q);
+
+  // Pitch is still recoverable at gimbal lock
+  AngularCoordinate frameAngular = frame.getAngularCoordinate();
+  EXPECT_DOUBLE_EQ(frameAngular.pitch(), M_PI / 2);
+
+  // Roll and yaw individually are ambiguous, but the rotation matrix
+  // reconstructed from the extracted angles must match the original
+  const Eigen::Matrix3d& actualRotation = frame.getRotation();
+  EXPECT_TRUE(actualRotation.isApprox(expectedRotation, 1e-10));
 }
 
 // ============================================================================

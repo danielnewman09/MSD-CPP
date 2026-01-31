@@ -124,6 +124,12 @@ const Eigen::Matrix3d& AssetInertial::getInverseInertiaTensor() const
   return inverseInertiaTensor_;
 }
 
+Eigen::Matrix3d AssetInertial::getInverseInertiaTensorWorld() const
+{
+  Eigen::Matrix3d R = dynamicState_.orientation.toRotationMatrix();
+  return R * inverseInertiaTensor_ * R.transpose();
+}
+
 // ========== Force Application API (ticket 0023a) ==========
 
 void AssetInertial::applyForce(const CoordinateRate& force)

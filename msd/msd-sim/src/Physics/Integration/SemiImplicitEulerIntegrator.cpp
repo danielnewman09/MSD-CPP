@@ -8,35 +8,37 @@
 namespace msd_sim
 {
 
-SemiImplicitEulerIntegrator::SemiImplicitEulerIntegrator()
-  : solver_{}
+SemiImplicitEulerIntegrator::SemiImplicitEulerIntegrator() : solver_{}
 {
 }
 
-SemiImplicitEulerIntegrator::SemiImplicitEulerIntegrator(ConstraintSolver solver)
+SemiImplicitEulerIntegrator::SemiImplicitEulerIntegrator(
+  ConstraintSolver solver)
   : solver_{solver}
 {
 }
 
-void SemiImplicitEulerIntegrator::step(InertialState& state,
-                                        const Coordinate& force,
-                                        const Coordinate& torque,
-                                        double mass,
-                                        const Eigen::Matrix3d& inverseInertia,
-                                        const std::vector<Constraint*>& constraints,
-                                        double dt)
+void SemiImplicitEulerIntegrator::step(
+  InertialState& state,
+  const Coordinate& force,
+  const Coordinate& torque,
+  double mass,
+  const Eigen::Matrix3d& inverseInertiaWorld,
+  const std::vector<Constraint*>& constraints,
+  double dt)
 {
   // ===== Compute Unconstrained Accelerations =====
 
   Coordinate linearAccelFree = force / mass;
-  AngularRate angularAccelFree = inverseInertia * torque;
+  AngularRate angularAccelFree = inverseInertiaWorld * torque;
 
   // ===== Solve Constraint System =====
 
   ConstraintSolver::SolveResult result = solver_.solve(
-      constraints, state, force, torque, mass, inverseInertia, dt);
+    constraints, state, force, torque, mass, inverseInertiaWorld, dt);
 
-  // If solver didn't converge, proceed without constraint forces (graceful degradation)
+  // If solver didn't converge, proceed without constraint forces (graceful
+  // degradation)
   Coordinate constraintLinearForce{0.0, 0.0, 0.0};
   Coordinate constraintAngularTorque{0.0, 0.0, 0.0};
   if (result.converged)
@@ -47,8 +49,10 @@ void SemiImplicitEulerIntegrator::step(InertialState& state,
 
   // ===== Apply Constraint Forces =====
 
-  Coordinate linearAccelTotal = linearAccelFree + (constraintLinearForce / mass);
-  AngularRate angularAccelTotal = angularAccelFree + (inverseInertia * constraintAngularTorque);
+  Coordinate linearAccelTotal =
+    linearAccelFree + (constraintLinearForce / mass);
+  AngularRate angularAccelTotal =
+    angularAccelFree + (inverseInertiaWorld * constraintAngularTorque);
 
   state.acceleration = linearAccelTotal;
   state.angularAcceleration = angularAccelTotal;

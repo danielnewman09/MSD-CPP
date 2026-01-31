@@ -128,16 +128,15 @@ AngularCoordinate ReferenceFrame::extractEulerAngles(
   {
     // Gimbal lock: pitch is ±π/2
     // In this case, roll and yaw become coupled - we can only determine their
-    // sum/difference Set roll to 0 and absorb everything into yaw
+    // sum/difference. Set roll to 0 and absorb everything into yaw.
+    //
+    // At pitch = +π/2: R(0,1) = sin(roll - yaw), R(1,1) = cos(roll - yaw)
+    //   atan2(R(0,1), R(1,1)) = roll - yaw → with roll=0, yaw = -atan2(...)
+    // At pitch = -π/2: R(0,1) = -sin(roll + yaw), R(1,1) = cos(roll + yaw)
+    //   atan2(R(0,1), R(1,1)) = -(roll + yaw) → with roll=0, yaw = -atan2(...)
     pitch = (sinPitch > 0) ? M_PI / 2.0 : -M_PI / 2.0;
     roll = 0.0;
-    // When pitch = π/2: yaw = atan2(R(0,1), R(1,1))
-    // When pitch = -π/2: yaw = -atan2(R(0,1), R(1,1))
-    yaw = std::atan2(rotation(0, 1), rotation(1, 1));
-    if (sinPitch < 0)
-    {
-      yaw = -yaw;
-    }
+    yaw = -std::atan2(rotation(0, 1), rotation(1, 1));
   }
   else
   {

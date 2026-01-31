@@ -235,6 +235,79 @@ private:
       const InertialState& state,
       double time) const;
 
+  // ===== Contact solver helpers (Ticket 0032) =====
+
+  /**
+   * @brief Result of Projected Gauss-Seidel iteration
+   */
+  struct PGSResult
+  {
+    Eigen::VectorXd lambda;
+    bool converged{false};
+    int iterations{0};
+  };
+
+  /**
+   * @brief Compute per-contact 1×12 Jacobians
+   *
+   * Each contact produces a Jacobian [J_A(1×6) | J_B(1×6)] in the velocity-level
+   * formulation [v_A, ω_A, v_B, ω_B].
+   *
+   * @return Vector of per-contact Jacobian matrices (C entries, each 1×12)
+   */
+  std::vector<Eigen::MatrixXd> assembleContactJacobians(
+      const std::vector<TwoBodyConstraint*>& contactConstraints,
+      const std::vector<std::reference_wrapper<const InertialState>>& states) const;
+
+  /**
+   * @brief Build effective mass matrix A = J·M⁻¹·Jᵀ with regularization
+   *
+   * Constructs per-body 6×6 inverse mass matrices internally and assembles
+   * the symmetric effective mass matrix. Adds kRegularizationEpsilon to diagonal.
+   *
+   * @return Effective mass matrix (C × C)
+   */
+  Eigen::MatrixXd assembleContactEffectiveMass(
+      const std::vector<TwoBodyConstraint*>& contactConstraints,
+      const std::vector<Eigen::MatrixXd>& jacobians,
+      const std::vector<double>& inverseMasses,
+      const std::vector<Eigen::Matrix3d>& inverseInertias,
+      size_t numBodies) const;
+
+  /**
+   * @brief Assemble RHS vector with restitution and Baumgarte terms
+   *
+   * b_i = -(1 + e_i) · (J_i · v⁻) + (ERP_i / dt) · penetration_i
+   *
+   * @return RHS vector (C × 1)
+   */
+  Eigen::VectorXd assembleContactRHS(
+      const std::vector<TwoBodyConstraint*>& contactConstraints,
+      const std::vector<Eigen::MatrixXd>& jacobians,
+      const std::vector<std::reference_wrapper<const InertialState>>& states,
+      double dt) const;
+
+  /**
+   * @brief Perform Projected Gauss-Seidel iteration with λ ≥ 0 clamping
+   *
+   * @return PGSResult with lambda vector and convergence info
+   */
+  PGSResult solvePGS(const Eigen::MatrixXd& A, const Eigen::VectorXd& b) const;
+
+  /**
+   * @brief Extract per-body forces from solved lambda values
+   *
+   * Computes F_body_k = Σ J_i_k^T · λ_i / dt for each body k touched by contacts.
+   *
+   * @return Per-body constraint forces (numBodies entries)
+   */
+  std::vector<BodyForces> extractContactBodyForces(
+      const std::vector<TwoBodyConstraint*>& contactConstraints,
+      const std::vector<Eigen::MatrixXd>& jacobians,
+      const Eigen::VectorXd& lambda,
+      size_t numBodies,
+      double dt) const;
+
   // PGS configuration (Ticket 0032)
   int max_iterations_{10};
   double convergence_tolerance_{1e-4};

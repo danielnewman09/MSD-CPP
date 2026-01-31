@@ -137,18 +137,19 @@ void WorldModel::updatePhysics(double dt)
     std::vector<Constraint*> constraints = asset.getConstraints();
 
     // ===== Step 3: Delegate Integration to Integrator =====
-    // Integrator handles: velocity update, position update, constraint enforcement
-    integrator_->step(
-      state,
-      netForce,
-      netTorque,
-      mass,
-      asset.getInverseInertiaTensor(),
-      constraints,
-      dt);
+    // Integrator handles: velocity update, position update, constraint
+    // enforcement
+    integrator_->step(state,
+                      netForce,
+                      netTorque,
+                      mass,
+                      asset.getInverseInertiaTensorWorld(),
+                      constraints,
+                      dt);
 
     // ===== Step 4: Synchronize ReferenceFrame =====
-    // ReferenceFrame must match InertialState for collision detection and rendering
+    // ReferenceFrame must match InertialState for collision detection and
+    // rendering
     ReferenceFrame& frame = asset.getReferenceFrame();
     frame.setOrigin(state.position);
     frame.setQuaternion(state.orientation);
@@ -166,7 +167,8 @@ void WorldModel::updateCollisions(double dt)
   //
   // Solver body indexing:
   //   [0 .. numInertial-1]                   = inertial bodies
-  //   [numInertial .. numInertial+numEnv-1]   = environment bodies (infinite mass)
+  //   [numInertial .. numInertial+numEnv-1]   = environment bodies (infinite
+  //   mass)
   //
   // Ticket: 0032_contact_constraint_refactor
 
@@ -197,16 +199,16 @@ void WorldModel::updateCollisions(double dt)
   {
     for (size_t j = i + 1; j < numInertial; ++j)
     {
-      auto result = collisionHandler_.checkCollision(
-          inertialAssets_[i], inertialAssets_[j]);
+      auto result = collisionHandler_.checkCollision(inertialAssets_[i],
+                                                     inertialAssets_[j]);
       if (!result)
       {
         continue;
       }
 
       double combinedE = ContactConstraintFactory::combineRestitution(
-          inertialAssets_[i].getCoefficientOfRestitution(),
-          inertialAssets_[j].getCoefficientOfRestitution());
+        inertialAssets_[i].getCoefficientOfRestitution(),
+        inertialAssets_[j].getCoefficientOfRestitution());
 
       collisions.push_back({i, j, *result, combinedE});
     }
@@ -217,16 +219,16 @@ void WorldModel::updateCollisions(double dt)
   {
     for (size_t e = 0; e < numEnvironment; ++e)
     {
-      auto result = collisionHandler_.checkCollision(
-          inertialAssets_[i], environmentalAssets_[e]);
+      auto result = collisionHandler_.checkCollision(inertialAssets_[i],
+                                                     environmentalAssets_[e]);
       if (!result)
       {
         continue;
       }
 
       double combinedE = ContactConstraintFactory::combineRestitution(
-          inertialAssets_[i].getCoefficientOfRestitution(),
-          environmentalAssets_[e].getCoefficientOfRestitution());
+        inertialAssets_[i].getCoefficientOfRestitution(),
+        environmentalAssets_[e].getCoefficientOfRestitution());
 
       // Environment body index offset by numInertial
       collisions.push_back({i, numInertial + e, *result, combinedE});
@@ -243,21 +245,30 @@ void WorldModel::updateCollisions(double dt)
 
   for (const auto& pair : collisions)
   {
-    const InertialState& stateA = (pair.bodyAIndex < numInertial)
+    const InertialState& stateA =
+      (pair.bodyAIndex < numInertial)
         ? inertialAssets_[pair.bodyAIndex].getInertialState()
-        : environmentalAssets_[pair.bodyAIndex - numInertial].getInertialState();
+        : environmentalAssets_[pair.bodyAIndex - numInertial]
+            .getInertialState();
 
-    const InertialState& stateB = (pair.bodyBIndex < numInertial)
+    const InertialState& stateB =
+      (pair.bodyBIndex < numInertial)
         ? inertialAssets_[pair.bodyBIndex].getInertialState()
-        : environmentalAssets_[pair.bodyBIndex - numInertial].getInertialState();
+        : environmentalAssets_[pair.bodyBIndex - numInertial]
+            .getInertialState();
 
     const Coordinate& comA = stateA.position;
     const Coordinate& comB = stateB.position;
 
-    auto constraints = ContactConstraintFactory::createFromCollision(
-        pair.bodyAIndex, pair.bodyBIndex,
-        pair.result, stateA, stateB,
-        comA, comB, pair.restitution);
+    auto constraints =
+      ContactConstraintFactory::createFromCollision(pair.bodyAIndex,
+                                                    pair.bodyBIndex,
+                                                    pair.result,
+                                                    stateA,
+                                                    stateB,
+                                                    comA,
+                                                    comB,
+                                                    pair.restitution);
 
     for (auto& c : constraints)
     {
@@ -283,14 +294,15 @@ void WorldModel::updateCollisions(double dt)
   {
     states.push_back(std::cref(asset.getInertialState()));
     inverseMasses.push_back(asset.getInverseMass());
-    inverseInertias.push_back(asset.getInverseInertiaTensor());
+    inverseInertias.push_back(asset.getInverseInertiaTensorWorld());
   }
 
   for (auto& envAsset : environmentalAssets_)
   {
     states.push_back(std::cref(envAsset.getInertialState()));
-    inverseMasses.push_back(envAsset.getInverseMass());            // 0.0
-    inverseInertias.push_back(envAsset.getInverseInertiaTensor()); // Zero matrix
+    inverseMasses.push_back(envAsset.getInverseMass());  // 0.0
+    inverseInertias.push_back(
+      envAsset.getInverseInertiaTensor());  // Zero matrix
   }
 
   // Build non-owning TwoBodyConstraint* vector for solver
@@ -303,8 +315,7 @@ void WorldModel::updateCollisions(double dt)
 
   // ===== Phase 4: Solve PGS =====
   auto solveResult = contactSolver_.solveWithContacts(
-      constraintPtrs, states, inverseMasses, inverseInertias,
-      numBodies, dt);
+    constraintPtrs, states, inverseMasses, inverseInertias, numBodies, dt);
 
   // ===== Phase 5: Apply Constraint Forces to Inertial Bodies =====
   // Environment bodies (indices >= numInertial) are skipped because they
