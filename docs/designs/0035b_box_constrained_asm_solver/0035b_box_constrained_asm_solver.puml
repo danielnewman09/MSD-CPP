@@ -1,0 +1,213 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<external>> LightBlue
+}
+
+' External library: ECOS
+package "ECOS Library (External)" <<external>> {
+  class pwork <<external>> {
+    +x : pfloat*
+    +info : idxint
+    +stgs : settings*
+  }
+
+  note right of pwork
+    ECOS workspace (opaque C struct)
+    Created by ECOS_setup()
+    Freed by ECOS_cleanup()
+  end note
+
+  interface "ECOS C API" as ECOS_API <<external>> {
+    +ECOS_setup(...) : pwork*
+    +ECOS_solve(workspace) : idxint
+    +ECOS_cleanup(workspace, keepvars)
+  }
+}
+
+' Modified component: ConstraintSolver with ECOS support
+class ConstraintSolver <<modified>> {
+  ' Existing Active Set Method for unilateral constraints
+  +solveWithContacts(contactConstraints, states, ...) : MultiBodySolveResult
+
+  ' Extended to handle ECOS friction solver
+  --ECOS friction support--
+  +setECOSTolerance(abs_tol, rel_tol) : void
+  +setECOSMaxIterations(max_iters) : void
+  +getECOSTolerance() : std::pair<double, double>
+  +getECOSMaxIterations() : int
+
+  -solveWithECOS(A, b, coneSpec, numContacts) : ActiveSetResult
+  -buildECOSProblem(A, b, coneSpec, numContacts) : ECOSData
+  -buildFrictionConeSpec(contactConstraints, numContacts) : FrictionConeSpec
+
+  -ecos_abs_tol_ : double
+  -ecos_rel_tol_ : double
+  -ecos_max_iters_ : int
+}
+
+note right of ConstraintSolver
+  Core modification: Add ECOS SOCP solver path
+  for exact Coulomb friction cone.
+
+  Dispatch:
+  - No friction → existing ASM (zero regression)
+  - With friction → solveWithECOS()
+
+  ECOS uses interior-point method with
+  5-15 iterations typical, superlinear convergence.
+end note
+
+' New RAII wrapper for ECOS workspace
+class ECOSData <<new>> {
+  +workspace : pwork*
+  +num_variables : idxint
+  +num_cones : idxint
+
+  +G_data : std::vector<pfloat>
+  +G_row_indices : std::vector<idxint>
+  +G_col_ptrs : std::vector<idxint>
+
+  +h : std::vector<pfloat>
+  +c : std::vector<pfloat>
+  +cone_sizes : std::vector<idxint>
+
+  +ECOSData(numContacts)
+  +~ECOSData()
+  +setup() : void
+  +cleanup() : void
+
+  ' Disable copy, enable move
+  +ECOSData(ECOSData&&) noexcept
+  +operator=(ECOSData&&) noexcept
+}
+
+note right of ECOSData
+  RAII wrapper for ECOS workspace.
+  Ensures ECOS_cleanup() called on destruction.
+
+  Stores sparse CSC matrices for ECOS:
+  - G: Cone constraint matrix (3C × 3C)
+  - h: RHS for cone constraints
+  - c: Linear objective (zero for LCP)
+  - cone_sizes: [3, 3, ..., 3] (C cones)
+end note
+
+' New sparse matrix conversion utility
+class ECOSSparseMatrix <<new>> {
+  +data : std::vector<pfloat>
+  +row_indices : std::vector<idxint>
+  +col_ptrs : std::vector<idxint>
+  +nrows : idxint
+  +ncols : idxint
+  +nnz : idxint
+
+  +{static} fromDense(mat, threshold) : ECOSSparseMatrix
+  +{static} fromSparse(mat) : ECOSSparseMatrix
+}
+
+note right of ECOSSparseMatrix
+  Convert Eigen matrices to ECOS CSC format.
+
+  ECOS requires:
+  - Compressed Sparse Column (CSC)
+  - idxint row indices
+  - pfloat data values
+
+  fromDense: Threshold for sparsity (default 1e-12)
+  fromSparse: Direct conversion from Eigen sparse
+end note
+
+' New friction cone specification
+class FrictionConeSpec <<new>> {
+  +numContacts : int
+  +frictionCoefficients : std::vector<double>
+  +normalIndices : std::vector<int>
+
+  +FrictionConeSpec(numContacts)
+  +setFriction(contactIndex, mu, normalIndex) : void
+  +getConeSizes() : std::vector<idxint>
+}
+
+note right of FrictionConeSpec
+  Specify friction cone constraints for ECOS.
+
+  Each contact i has:
+  - mu_i: Friction coefficient
+  - normalIndex: Index of normal constraint (3i)
+
+  getConeSizes() returns [3, 3, ..., 3]
+  for C second-order cones (dimension 3 each).
+end note
+
+' Modified result struct to include ECOS-specific fields
+class ActiveSetResult <<modified>> {
+  +lambda : Eigen::VectorXd
+  +converged : bool
+  +iterations : int
+  +active_set_size : int
+
+  --New ECOS fields--
+  +solver_type : std::string
+  +ecos_exit_flag : int
+  +primal_residual : double
+  +dual_residual : double
+  +gap : double
+}
+
+note right of ActiveSetResult
+  Extended to support ECOS results.
+
+  solver_type: "ASM" or "ECOS"
+
+  ECOS-specific diagnostics:
+  - ecos_exit_flag: ECOS_OPTIMAL, ECOS_MAXIT, etc.
+  - primal_residual: Constraint violation norm
+  - dual_residual: Dual feasibility norm
+  - gap: Duality gap (optimality measure)
+end note
+
+' FrictionConstraint from ticket 0035a (already exists)
+class FrictionConstraint <<modified>> {
+  ' Already exists from ticket 0035a
+  +getFrictionCoefficient() : double
+  +getNormalConstraintIndex() : size_t
+}
+
+note right of FrictionConstraint
+  Ticket 0035a provides FrictionConstraint.
+  This ticket reads mu and normal index
+  to build ECOS cone specifications.
+end note
+
+' Relationships
+ConstraintSolver --> ECOSData : creates
+ConstraintSolver --> ECOSSparseMatrix : uses
+ConstraintSolver --> FrictionConeSpec : builds
+ConstraintSolver --> ActiveSetResult : returns
+ConstraintSolver --> FrictionConstraint : reads mu
+
+ECOSData --> ECOS_API : calls
+ECOSData --> pwork : owns
+
+FrictionConeSpec ..> FrictionConstraint : extracts mu from
+
+ActiveSetResult ..> ConstraintSolver : returned by
+
+note bottom of ConstraintSolver
+  **Backward compatibility:**
+  - solveWithContacts() signature unchanged
+  - No friction → ASM path (zero regression)
+  - With friction → ECOS path (exact cone)
+
+  **ECOS workflow:**
+  1. Detect FrictionConstraint instances
+  2. Build FrictionConeSpec (extract mu, normal indices)
+  3. Build ECOSData (convert A, b to ECOS format)
+  4. Call ECOS_setup() + ECOS_solve()
+  5. Extract lambda from workspace->x
+  6. Cleanup with ECOS_cleanup()
+end note
+
+@enduml

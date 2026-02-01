@@ -1,25 +1,40 @@
-# Ticket 0035b: Box-Constrained ASM Solver Extension
+# Ticket 0035b: ECOS-Based Friction Cone Solver
 
 ## Status
 - [x] Draft
 - [ ] Ready for Math Formulation
 - [ ] Math Formulation Complete — Awaiting Review
 - [ ] Math Review Approved — Ready for Design
-- [ ] Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Prototype
-- [ ] Prototype Complete — Awaiting Review
-- [ ] Ready for Implementation
+- [x] Ready for Design
+- [x] Design Complete — Awaiting Review
+- [x] Design Approved — Ready for Prototype
+- [x] Prototype Complete — Awaiting Review
+- [x] Ready for Implementation
 - [ ] Implementation Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Documentation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Implementation In Progress (Phase 1 Complete)
 **Assignee**: N/A
 **Created**: 2026-01-31
 **Generate Tutorial**: No
 **Parent Ticket**: [0035_friction_constraints](0035_friction_constraints.md)
+
+---
+
+## Sub-Tickets (Implementation Phases)
+
+| Ticket | Phase | Description | Status |
+|--------|-------|-------------|--------|
+| [0035b1](0035b1_ecos_utilities.md) | Phase 1 | ECOS Utilities (ECOSSparseMatrix, FrictionConeSpec) | **Complete** |
+| [0035b2](0035b2_ecos_data_wrapper.md) | Phase 2a | ECOSData RAII Wrapper | Ready for Implementation |
+| [0035b3](0035b3_ecos_problem_construction.md) | Phase 2b | ECOS Problem Construction (G, h, c matrices) | Ready for Implementation |
+| [0035b4](0035b4_ecos_solve_integration.md) | Phase 3 | ECOS Solve Integration (solveWithECOS, dispatch) | Ready for Implementation |
+| [0035b5](0035b5_ecos_validation_tests.md) | Phase 4 | Validation Tests (stick/slip, multi-contact, regression) | Ready for Implementation |
+
+**Dependency chain**: 0035b1 → 0035b2 → 0035b3 → 0035b4 → 0035b5
 
 ---
 
@@ -175,8 +190,103 @@ The 3×3 block structure per contact (1 normal + 2 tangential) should be kept co
 - **Created**: 2026-01-31
 - **Notes**: Core algorithmic subtask. Split from parent ticket 0035. This is the highest-risk component — all solver changes isolated here. Math formulation for M3, M4, M5 already complete.
 
+### Ready for Design Phase
+- **Advanced**: 2026-01-31
+- **Notes**: Math design phase skipped - mathematical foundation already complete in parent ticket 0035 (M3, M4, M5 documents). Proceeding directly to architectural design for box-constrained ASM solver extension.
+
+### Design Phase
+- **Started**: 2026-01-31
+- **Completed**: 2026-01-31
+- **Artifacts**:
+  - `docs/designs/0035b_box_constrained_asm_solver/design.md` — Architectural design document (box-LCP approach)
+  - `docs/designs/0035b_box_constrained_asm_solver/0035b_box_constrained_asm_solver.puml` — PlantUML class diagram
+- **Notes**:
+  - Core modification: Extend ConstraintSolver::solveActiveSet() to handle box-constrained variables with three-state tracking (AT_LOWER, AT_UPPER, FREE)
+  - New components: BoxBounds struct for bound storage, BoundState enum for state tracking
+  - Outer iteration loop required for variable friction bounds (depend on solved normal forces)
+  - Backward compatible: Zero-regression path when no friction constraints present
+  - Open questions: Initial bound estimates, outer iteration tolerance, fallback behavior
+  - Prototype required: Measure outer iteration count in practice, validate performance overhead, test high mass ratio convergence
+  - Test impact: 14 new unit tests, 4 integration tests, zero expected regressions (all 79 existing tests pass)
+
+### Design Review — SOCP Solver Selection (2026-01-31)
+- **Status**: COMPLETED — ECOS selected, design revised
+- **Human request**: Evaluate feasibility of using Splitting Conic Solver library to solve exact Coulomb cone constraint (SOCP formulation) rather than box approximation
+- **Investigation completed**:
+  - SCS library analysis (Conan dependency, CMake, MIT license — feasible)
+  - ECOS library analysis (Conan, GPLv3 acceptable for educational project)
+  - Performance comparison: Both likely competitive for small C, exact cone vs 29% box error
+  - API complexity: Both require ~300 lines glue code (sparse CSC conversion, cone formulation)
+- **Artifacts**:
+  - `docs/designs/0035b_box_constrained_asm_solver/scs-feasibility-study.md` — SOCP feasibility study
+- **Human decision**: ECOS selected (GPLv3 acceptable for educational project)
+- **Design revision completed**:
+  - Replaced box-LCP ASM with ECOS SOCP formulation
+  - Interior-point method (5-15 iterations) replaces ASM outer/inner loop
+  - Exact Coulomb cone (0% error) replaces box approximation (29% error)
+  - New components: ECOSData, ECOSSparseMatrix, FrictionConeSpec
+  - Backward compatibility preserved: ASM path for normal-only contacts
+
+### Design Approval Phase (2026-01-31)
+- **Reviewed by**: Human
+- **Status**: APPROVED
+- **Feedback**: "looks good, continue processing this ticket"
+- **Notes**: ECOS-based SOCP design approved. Ready to proceed to prototype phase to validate:
+  1. ECOS convergence iteration count in practice
+  2. Performance overhead vs ASM
+  3. ECOS formulation correctness (validate against M8 numerical examples)
+
+### Prototype Phase (2026-01-31)
+- **Started**: 2026-01-31
+- **Completed**: 2026-01-31
+- **Approach**: Implementation-first with incremental validation (standalone prototyping deemed redundant)
+- **Artifacts**:
+  - `docs/designs/0035b_box_constrained_asm_solver/prototype-results.md` — Prototype assessment and implementation ticket
+- **Key findings**:
+  - ECOS is mature external library with well-defined API (feasibility already validated)
+  - ECOS infrastructure already in place (Conan package, dependency, CMake integration)
+  - Prototype questions require full integration (= implementation itself)
+  - Better validation path: Implement incrementally with unit tests (TDD approach)
+- **Validation strategy**:
+  - P1 (Formulation correctness): Unit tests for CSC conversion, cone spec, buildECOSProblem
+  - P2 (Convergence): Measure iteration count during integration tests (deferred to implementation)
+  - P3 (Performance): Zero regression tests + optional benchmarking (deferred to implementation)
+- **Result**: VALIDATED — proceed to implementation with TDD validation approach
+
+### Prototype Review and Approval (2026-01-31)
+- **Reviewed by**: Human
+- **Status**: APPROVED
+- **Feedback**: Prototype results approved, continue advancing ticket
+- **Notes**: Implementation-first approach with TDD validation approved. 4-phase implementation plan documented in prototype-results.md (7-11 days estimated effort).
+- **Next phase**: Implementation
+
 ---
 
 ## Human Feedback
 
-{Add feedback here at any point. Agents will read this section.}
+### ✓ Addressed Feedback
+
+**FB-1: SOCP Solver Feasibility Investigation** (2026-01-31)
+> I would like to evaluate the feasibility of using the Splitting Conic Solver library to directly solve the non-convex optimization problem rather than using an approximation.
+
+**Resolution**: Feasibility study completed comparing SCS, ECOS, and box-LCP. ECOS selected — see FB-2.
+
+### Active Feedback
+
+**FB-2: ECOS Selected as Solver** (2026-01-31)
+> Let's use ECOS. This project is an educational one and licensing is not expected to be an issue.
+
+**Status**: COMPLETED — Design revised for ECOS approach
+**Infrastructure completed**:
+- Created Conan package: `conan/ecos/conanfile.py` (builds from source via git clone, v2.0.10)
+- Added `ecos/2.0.10` to project requirements in `conanfile.py`
+- Added `find_package(ecos)` and `ecos::ecos` link target to `msd-sim/CMakeLists.txt`
+**Design revision completed**:
+- Replaced box-LCP ASM design with ECOS SOCP formulation
+- New components: ECOSData (RAII wrapper), ECOSSparseMatrix (CSC conversion), FrictionConeSpec (cone specification)
+- ECOS uses interior-point method (5-15 iterations typical) instead of ASM outer/inner loop
+- Exact Coulomb cone (0% error) instead of box approximation (29% error)
+- Design artifacts updated:
+  - `docs/designs/0035b_box_constrained_asm_solver/design.md` — Revised to describe ECOS integration
+  - `docs/designs/0035b_box_constrained_asm_solver/0035b_box_constrained_asm_solver.puml` — Updated diagram showing ECOS components
+**Ready for**: Design review and prototype phase
