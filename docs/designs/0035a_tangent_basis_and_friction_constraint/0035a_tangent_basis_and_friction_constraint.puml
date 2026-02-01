@@ -1,0 +1,118 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "Collision" {
+  ' New tangent basis utility
+  class TangentBasis <<new>> {
+    <<utility>>
+    +computeTangentBasis(normal: Coordinate): TangentFrame
+  }
+
+  class TangentFrame <<new>> {
+    +t1: Coordinate
+    +t2: Coordinate
+    +TangentFrame(t1: Coordinate, t2: Coordinate)
+  }
+
+  note right of TangentBasis
+    **Purpose**: Deterministic orthonormal basis construction
+    **Algorithm**: Duff et al. (2017) - selects most orthogonal coordinate axis
+    **Properties**:
+    - Orthonormal: ||t1|| = ||t2|| = 1, t1·t2 = 0, ti·n = 0
+    - Deterministic: same n → same {t1, t2}
+    - Continuous: small Δn → small Δ{t1, t2}
+    - Robust: handles coordinate-aligned normals
+
+    **Math**: See M1-tangent-basis.md
+  end note
+}
+
+package "Constraints" {
+  ' Existing constraint hierarchy
+  abstract class UnilateralConstraint {
+    +dimension(): int
+    +evaluate(stateA, stateB, time): VectorXd
+    +jacobian(stateA, stateB, time): MatrixXd
+    +isActive(stateA, stateB, time): bool
+    +alpha(): double
+    +beta(): double
+  }
+
+  abstract class TwoBodyConstraint {
+    -body_a_index_: size_t
+    -body_b_index_: size_t
+    +evaluateTwoBody(...): VectorXd
+    +jacobianTwoBody(...): MatrixXd
+    +isActiveTwoBody(...): bool
+    +getBodyAIndex(): size_t
+    +getBodyBIndex(): size_t
+  }
+
+  class ContactConstraint {
+    -contact_normal_: Coordinate
+    -lever_arm_a_: Coordinate
+    -lever_arm_b_: Coordinate
+    -penetration_depth_: double
+    -restitution_: double
+    -pre_impact_rel_vel_normal_: double
+    -erp_: double
+    +dimension(): int {returns 1}
+    +evaluateTwoBody(...): VectorXd
+    +jacobianTwoBody(...): MatrixXd
+  }
+
+  ' New friction constraint
+  class FrictionConstraint <<new>> {
+    -contact_normal_: Coordinate
+    -tangent1_: Coordinate
+    -tangent2_: Coordinate
+    -lever_arm_a_: Coordinate
+    -lever_arm_b_: Coordinate
+    -friction_coefficient_: double
+    -normal_lambda_: double
+    +FrictionConstraint(bodyAIndex, bodyBIndex, normal, contactPointA, contactPointB, comA, comB, mu)
+    +dimension(): int {returns 2}
+    +evaluateTwoBody(stateA, stateB, time): VectorXd
+    +jacobianTwoBody(stateA, stateB, time): MatrixXd
+    +isActiveTwoBody(stateA, stateB, time): bool
+    +setNormalLambda(lambda: double): void
+    +getFrictionBounds(): std::pair<double, double>
+    +getTangent1(): Coordinate
+    +getTangent2(): Coordinate
+  }
+
+  note right of FrictionConstraint
+    **Purpose**: Two tangential constraint rows per contact
+    **Dimension**: 2 (one row per tangent direction)
+    **Jacobian structure** (each row):
+      J_ti = [ti^T, (rA×ti)^T, -ti^T, -(rB×ti)^T] ∈ R^(1×12)
+
+    **Friction bounds**: [-μ/√2 · λn, +μ/√2 · λn]
+    - λn: normal contact force (from ContactConstraint)
+    - μ: friction coefficient
+    - √2 factor: distributes Coulomb cone into two orthogonal directions
+
+    **Math**: See M2-friction-jacobian.md
+    **Not yet solved**: constraint created and evaluated but not passed to solver
+  end note
+}
+
+' Relationships
+UnilateralConstraint <|-- TwoBodyConstraint
+TwoBodyConstraint <|-- ContactConstraint
+TwoBodyConstraint <|-- FrictionConstraint
+
+FrictionConstraint ..> TangentBasis : uses
+FrictionConstraint o-- TangentFrame : stores
+
+note bottom of TangentFrame
+  **Stored in FrictionConstraint**:
+  - Computed once at construction via TangentBasis::computeTangentBasis()
+  - Used for Jacobian computation each frame
+  - Immutable after construction (contact geometry fixed)
+end note
+
+@enduml

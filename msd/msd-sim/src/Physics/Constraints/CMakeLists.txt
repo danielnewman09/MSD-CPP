@@ -7,4 +7,5 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     TwoBodyConstraint.cpp
     ContactConstraint.cpp
     ContactConstraintFactory.cpp
+    FrictionConstraint.cpp
 )
