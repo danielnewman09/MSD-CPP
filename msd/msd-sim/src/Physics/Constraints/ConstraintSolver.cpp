@@ -1,12 +1,17 @@
 // Ticket: 0031_generalized_lagrange_constraints
 // Ticket: 0032_contact_constraint_refactor
+// Ticket: 0035b4_ecos_solve_integration
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
+// Design: docs/designs/0035b_box_constrained_asm_solver/design.md
 
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/ECOS/ECOSProblemBuilder.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
+#include <ecos/ecos.h>
 #include <Eigen/Cholesky>
 #include <Eigen/SVD>
 #include <algorithm>
@@ -266,6 +271,18 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     return result;
   }
 
+  // Ticket 0035b4: Detect friction constraints via dynamic_cast
+  // If any FrictionConstraint is present, route to ECOS SOCP solver
+  bool hasFriction = false;
+  for (const auto* constraint : contactConstraints)
+  {
+    if (dynamic_cast<const FrictionConstraint*>(constraint) != nullptr)
+    {
+      hasFriction = true;
+      break;
+    }
+  }
+
   // Step 1: Compute per-contact Jacobians
   auto jacobians = assembleContactJacobians(contactConstraints, states);
 
@@ -276,20 +293,48 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
   // Step 4: Assemble RHS vector
   auto b = assembleContactRHS(contactConstraints, jacobians, states, dt);
 
-  // Step 5: Active Set Method solve with λ ≥ 0 enforcement
-  const int numContacts = static_cast<int>(contactConstraints.size());
-  auto [lambda, converged, iterations, activeSetSize] = solveActiveSet(A, b, numContacts);
+  // Step 5: Solve — dispatch based on friction presence (Ticket 0035b4)
+  const int numConstraintRows = static_cast<int>(contactConstraints.size());
+  ActiveSetResult asmResult;
+
+  if (hasFriction)
+  {
+    // Count actual contacts (each contact = 1 normal + 1 friction with dim=2,
+    // so constraint count = C normals + C frictions = 2C constraints, but
+    // the Jacobian rows are: C*1 (normals) + C*2 (frictions) = 3C rows)
+    // However, contactConstraints is a flat list of TwoBodyConstraint*.
+    // We need to count the number of ContactConstraint (normals) to get C.
+    int numContacts = 0;
+    for (const auto* constraint : contactConstraints)
+    {
+      if (dynamic_cast<const ContactConstraint*>(constraint) != nullptr)
+      {
+        ++numContacts;
+      }
+    }
+
+    // Build friction cone specification from constraint list
+    FrictionConeSpec coneSpec = buildFrictionConeSpec(contactConstraints, numContacts);
+
+    // Route to ECOS SOCP solver
+    asmResult = solveWithECOS(A, b, coneSpec, numContacts);
+  }
+  else
+  {
+    // No friction — use existing Active Set Method (zero-regression path)
+    asmResult = solveActiveSet(A, b, numConstraintRows);
+  }
 
   // Step 6: Extract per-body forces
   result.bodyForces = extractContactBodyForces(contactConstraints, jacobians,
-                                                lambda, numBodies, dt);
+                                                asmResult.lambda, numBodies, dt);
 
-  result.lambdas = lambda;
-  result.converged = converged;
-  result.iterations = iterations;
+  result.lambdas = asmResult.lambda;
+  result.converged = asmResult.converged;
+  result.iterations = asmResult.iterations;
 
   // Compute residual: ||A·λ - b||
-  Eigen::VectorXd residualVec = A * lambda - b;
+  Eigen::VectorXd residualVec = A * asmResult.lambda - b;
   result.residual = residualVec.norm();
 
   return result;
@@ -603,6 +648,100 @@ std::vector<ConstraintSolver::BodyForces> ConstraintSolver::extractContactBodyFo
   }
 
   return bodyForces;
+}
+
+// ===== ECOS Solver Integration (Ticket 0035b4) =====
+//
+// Implements friction cone constraints via ECOS SOCP solver.
+// The contact LCP with friction is reformulated as:
+//   min c^T·x  s.t.  A_eq·x = b_eq,  G·x + s = h,  s ∈ K_SOC
+// where K_SOC is a product of second-order cones (one 3D cone per contact).
+
+FrictionConeSpec ConstraintSolver::buildFrictionConeSpec(
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    int numContacts) const
+{
+  FrictionConeSpec coneSpec{numContacts};
+
+  // Constraint ordering convention:
+  // For each contact i, the constraints are interleaved as:
+  //   ContactConstraint (normal, dim=1) at some index
+  //   FrictionConstraint (tangential, dim=2) at some index
+  //
+  // In the 3C-dimensional lambda vector, the ordering is:
+  //   [λ_n0, λ_t1_0, λ_t2_0, λ_n1, λ_t1_1, λ_t2_1, ...]
+  //
+  // We scan for FrictionConstraint instances and extract μ values.
+  // The normal constraint index for contact i is 3*i.
+  int contactIdx = 0;
+  for (const auto* constraint : contactConstraints)
+  {
+    const auto* friction = dynamic_cast<const FrictionConstraint*>(constraint);
+    if (friction != nullptr)
+    {
+      coneSpec.setFriction(contactIdx, friction->getFrictionCoefficient(),
+                            3 * contactIdx);
+      ++contactIdx;
+    }
+  }
+
+  return coneSpec;
+}
+
+ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithECOS(
+    const Eigen::MatrixXd& A,
+    const Eigen::VectorXd& b,
+    const FrictionConeSpec& coneSpec,
+    int numContacts) const
+{
+  const int n = 3 * numContacts;  // Decision variables
+
+  // Build ECOS problem data (G matrix, h, c, cone sizes, A_eq, b_eq)
+  ECOSData ecosData = ECOSProblemBuilder::build(A, b, coneSpec);
+
+  // Setup ECOS workspace
+  ecosData.setup();
+
+  // Configure ECOS solver settings (Ticket 0035b4)
+  pwork* workspace = ecosData.workspace_.get();
+  workspace->stgs->maxit = static_cast<idxint>(ecos_max_iters_);
+  workspace->stgs->abstol = ecos_abs_tol_;
+  workspace->stgs->reltol = ecos_rel_tol_;
+  workspace->stgs->feastol = ecos_abs_tol_;
+
+  // Suppress ECOS stdout output
+  workspace->stgs->verbose = 0;
+
+  // Solve
+  idxint exitFlag = ECOS_solve(workspace);
+
+  // Extract solution
+  Eigen::VectorXd lambda = Eigen::Map<Eigen::VectorXd>(workspace->x, n);
+
+  // Determine convergence from exit code
+  bool converged = (exitFlag == ECOS_OPTIMAL);
+
+  // Extract diagnostics
+  int iterations = static_cast<int>(workspace->info->iter);
+  double primalRes = workspace->info->pres;
+  double dualRes = workspace->info->dres;
+  double gapVal = workspace->info->gap;
+
+  // Build result with ECOS-specific fields
+  ActiveSetResult result;
+  result.lambda = lambda;
+  result.converged = converged;
+  result.iterations = iterations;
+  result.active_set_size = 0;  // Not applicable for ECOS
+  result.solver_type = "ECOS";
+  result.ecos_exit_flag = static_cast<int>(exitFlag);
+  result.primal_residual = primalRes;
+  result.dual_residual = dualRes;
+  result.gap = gapVal;
+
+  // ECOSData destructor handles ECOS_cleanup via unique_ptr
+
+  return result;
 }
 
 }  // namespace msd_sim

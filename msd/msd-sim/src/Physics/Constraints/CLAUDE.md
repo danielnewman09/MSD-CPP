@@ -249,9 +249,10 @@ Same as `Constraint` base class.
 **Type**: Utility class
 
 #### Purpose
-Computes Lagrange multipliers for arbitrary constraint systems using two solver methods:
+Computes Lagrange multipliers for arbitrary constraint systems using three solver methods:
 - **Bilateral constraints** (single-body): Direct LLT solve (O(n³), suitable for n < 100)
-- **Contact constraints** (two-body): Active Set Method for exact LCP solution (finite iterations, typically ≤ C)
+- **Contact constraints without friction** (two-body): Active Set Method for exact LCP solution (finite iterations, typically ≤ C)
+- **Contact constraints with friction** (two-body): ECOS SOCP solver for exact friction cone solution (typically ≤ 30 iterations)
 
 #### Algorithm Overview (Bilateral Constraints)
 1. **Assemble constraint Jacobian** J by stacking all constraint Jacobians
@@ -279,6 +280,25 @@ Computes Lagrange multipliers for arbitrary constraint systems using two solver 
 
 **Replaced**: Projected Gauss-Seidel (PGS) solver (ticket 0032b) — PGS produced approximate solutions with sensitivity to iteration count, constraint ordering, and high mass ratios
 
+#### Algorithm Overview (Contact Constraints with Friction - ECOS SOCP Solver)
+1. **Detect friction**: Scan contactConstraints for FrictionConstraint instances via dynamic_cast
+2. **Build friction cone spec**: Extract friction coefficient μ and normal index per contact
+3. **Construct SOCP problem**: Use ECOSProblemBuilder to convert A, b, coneSpec to ECOS standard form
+4. **Setup ECOS workspace**: Call ECOSData::setup() with tolerance and max iteration settings
+5. **Solve**: Call ECOS_solve() (interior-point method, typically converges in < 30 iterations)
+6. **Extract solution**: Map workspace->x to λ vector
+7. **Check convergence**: Validate ECOS exit code (ECOS_OPTIMAL → converged=true)
+8. **Extract diagnostics**: Populate primal/dual residuals, duality gap, iteration count
+9. **Extract forces**: F_constraint = Jᵀ·λ for each contact
+
+**ECOS SOCP Solver Benefits** (ticket 0035b4):
+- **Exact friction cone**: Satisfies ||λ_t|| ≤ μ·λ_n exactly (vs 29% error for box approximation)
+- **Fast convergence**: Interior-point method with superlinear convergence (5-15 iterations typical)
+- **Numerically stable**: Pre-allocated memory, equilibration for conditioning
+- **Configurable**: Adjustable tolerance (ecos_abs_tol_, ecos_rel_tol_) and max iterations (ecos_max_iters_)
+
+**For ECOS integration details, see** [ECOS/CLAUDE.md](ECOS/CLAUDE.md)
+
 #### Key Interfaces
 ```cpp
 class ConstraintSolver {
@@ -289,6 +309,20 @@ public:
     Coordinate angularConstraintForce;     // Net angular torque [N·m]
     bool converged{false};                 // Solver convergence flag
     double conditionNumber{NaN};           // Matrix conditioning
+  };
+
+  struct ActiveSetResult {
+    Eigen::VectorXd lambdas;               // Lagrange multipliers
+    bool converged{false};                 // Solver convergence flag
+    int iterations{0};                     // Active set changes (ASM) or solver iterations (ECOS)
+    double residual{NaN};                  // Dual residual norm (complementarity measure)
+
+    // ECOS-specific fields (ticket 0035b4)
+    std::string solver_type{"ASM"};        // "ASM" or "ECOS"
+    int ecos_exit_flag{0};                 // ECOS exit code (0 = ECOS_OPTIMAL)
+    double primal_residual{NaN};           // ECOS primal residual
+    double dual_residual{NaN};             // ECOS dual residual
+    double gap{NaN};                       // ECOS duality gap
   };
 
   struct MultiBodySolveResult {
@@ -319,8 +353,8 @@ public:
       double dt);
 
   /**
-   * @brief Solve two-body contact constraint system using Active Set Method
-   * Computes exact LCP solution for contact constraints with complementarity conditions.
+   * @brief Solve two-body contact constraint system using Active Set Method or ECOS
+   * Automatically dispatches to ECOS solver if friction constraints detected, otherwise uses ASM.
    * @return MultiBodySolveResult with per-body forces and convergence info
    */
   MultiBodySolveResult solveWithContacts(
@@ -329,6 +363,20 @@ public:
       const std::vector<double>& masses,
       const std::vector<Eigen::Matrix3d>& inverseInertias,
       double dt);
+
+  /**
+   * @brief Solve friction LCP using ECOS SOCP solver (ticket 0035b4)
+   * @param A Effective mass matrix (3C x 3C)
+   * @param b RHS vector (3C x 1)
+   * @param coneSpec Friction cone specification
+   * @param numContacts Number of contacts
+   * @return ActiveSetResult with lambda and ECOS diagnostics
+   */
+  ActiveSetResult solveWithECOS(
+      const Eigen::MatrixXd& A,
+      const Eigen::VectorXd& b,
+      const FrictionConeSpec& coneSpec,
+      int numContacts) const;
 
   /**
    * @brief Set maximum safety iteration cap for Active Set Method
@@ -342,11 +390,39 @@ public:
    */
   void setConvergenceTolerance(double tol);
 
+  /**
+   * @brief Set ECOS solver absolute and relative tolerance (ticket 0035b4)
+   * @param absTol Absolute tolerance for ECOS convergence. Default: 1e-6
+   * @param relTol Relative tolerance for ECOS convergence. Default: 1e-6
+   */
+  void setECOSTolerance(double absTol, double relTol);
+
+  /**
+   * @brief Set ECOS solver maximum iterations (ticket 0035b4)
+   * @param maxIter Maximum iterations for ECOS. Default: 100
+   */
+  void setECOSMaxIterations(int maxIter);
+
+  /**
+   * @brief Get ECOS absolute tolerance
+   */
+  double getECOSAbsoluteTolerance() const;
+
+  /**
+   * @brief Get ECOS relative tolerance
+   */
+  double getECOSRelativeTolerance() const;
+
+  /**
+   * @brief Get ECOS maximum iterations
+   */
+  int getECOSMaxIterations() const;
+
   // Rule of Five with = default
 };
 ```
 
-#### Usage Example
+#### Usage Example (Single-Body Bilateral Constraints)
 ```cpp
 // Called internally by SemiImplicitEulerIntegrator::step()
 ConstraintSolver solver;
@@ -367,6 +443,32 @@ if (result.converged) {
 } else {
   // Handle singular constraint matrix (rare)
   // Condition number available in result.conditionNumber
+}
+```
+
+#### Usage Example (Contact Constraints with Automatic Friction Detection)
+```cpp
+// Configure solver (optional)
+ConstraintSolver solver;
+solver.setECOSTolerance(1e-6, 1e-6);  // ECOS absolute and relative tolerance
+solver.setECOSMaxIterations(100);     // ECOS max iterations
+
+// Solve contact constraints (automatic dispatch to ASM or ECOS)
+auto result = solver.solveWithContacts(
+    contactConstraints,  // May include FrictionConstraint instances
+    states,
+    masses,
+    inverseInertias,
+    dt);
+
+if (result.converged) {
+  // Apply constraint forces to each body
+  for (size_t i = 0; i < result.bodyForces.size(); ++i) {
+    // Use result.bodyForces[i].linearForce and angularForce
+  }
+} else {
+  // Handle non-convergence (rare with ECOS)
+  // Check result.iterations and result.residual for diagnostics
 }
 ```
 

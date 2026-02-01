@@ -14,3 +14,4 @@ profile_results/
 *.DS_Store
 **/build_diag/**
 .debug-sessions/*
+test_geometry.db

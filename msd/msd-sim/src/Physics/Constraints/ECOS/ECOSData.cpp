@@ -15,12 +15,15 @@ void ECOSWorkspaceDeleter::operator()(pwork* w) const noexcept
   }
 }
 
-ECOSData::ECOSData(idxint numVariables, idxint numCones)
+ECOSData::ECOSData(idxint numVariables, idxint numCones, idxint numEquality)
   : num_variables_{numVariables},
     num_cones_{numCones},
+    num_equality_{numEquality},
     G_{},
+    A_eq_{},
     h_{},
     c_{},
+    b_eq_{},
     cone_sizes_{},
     workspace_{nullptr}
 {
@@ -28,14 +31,21 @@ ECOSData::ECOSData(idxint numVariables, idxint numCones)
   h_.reserve(static_cast<size_t>(numVariables));
   c_.reserve(static_cast<size_t>(numVariables));
   cone_sizes_.reserve(static_cast<size_t>(numCones));
+  if (numEquality > 0)
+  {
+    b_eq_.reserve(static_cast<size_t>(numEquality));
+  }
 }
 
 ECOSData::ECOSData(ECOSData&& other) noexcept
   : num_variables_{other.num_variables_},
     num_cones_{other.num_cones_},
+    num_equality_{other.num_equality_},
     G_{std::move(other.G_)},
+    A_eq_{std::move(other.A_eq_)},
     h_{std::move(other.h_)},
     c_{std::move(other.c_)},
+    b_eq_{std::move(other.b_eq_)},
     cone_sizes_{std::move(other.cone_sizes_)},
     workspace_{std::move(other.workspace_)}
 {
@@ -53,9 +63,12 @@ ECOSData& ECOSData::operator=(ECOSData&& other) noexcept
     // Now safe to move data arrays
     num_variables_ = other.num_variables_;
     num_cones_ = other.num_cones_;
+    num_equality_ = other.num_equality_;
     G_ = std::move(other.G_);
+    A_eq_ = std::move(other.A_eq_);
     h_ = std::move(other.h_);
     c_ = std::move(other.c_);
+    b_eq_ = std::move(other.b_eq_);
     cone_sizes_ = std::move(other.cone_sizes_);
     workspace_ = std::move(other.workspace_);
   }
@@ -101,11 +114,36 @@ void ECOSData::setup()
       std::to_string(cone_sizes_.size()) + ")");
   }
 
+  // Validate equality constraint data if present (Ticket 0035b4)
+  if (num_equality_ > 0)
+  {
+    if (A_eq_.nnz == 0)
+    {
+      throw std::runtime_error(
+        "ECOSData::setup: A_eq matrix is empty but num_equality_ = " +
+        std::to_string(num_equality_));
+    }
+    if (static_cast<idxint>(b_eq_.size()) != num_equality_)
+    {
+      throw std::runtime_error(
+        "ECOSData::setup: b_eq size mismatch (expected " +
+        std::to_string(num_equality_) + ", got " +
+        std::to_string(b_eq_.size()) + ")");
+    }
+  }
+
+  // Determine equality constraint pointers
+  // If num_equality_ > 0, pass A_eq and b_eq; otherwise pass nullptr
+  pfloat* Apr = (num_equality_ > 0) ? A_eq_.data.data() : nullptr;
+  idxint* Ajc = (num_equality_ > 0) ? A_eq_.col_ptrs.data() : nullptr;
+  idxint* Air = (num_equality_ > 0) ? A_eq_.row_indices.data() : nullptr;
+  pfloat* beq = (num_equality_ > 0) ? b_eq_.data() : nullptr;
+
   // Call ECOS_setup() with owned data arrays
   pwork* raw =
     ECOS_setup(num_variables_,  // n (number of variables)
                num_variables_,  // m (number of inequality constraints)
-               0,  // p (number of equality constraints, 0 for friction)
+               num_equality_,   // p (number of equality constraints)
                0,  // l (dimension of positive orthant, 0 for SOC-only)
                num_cones_,             // ncones (number of second-order cones)
                cone_sizes_.data(),     // q (array of cone dimensions)
@@ -113,12 +151,12 @@ void ECOSData::setup()
                G_.data.data(),         // Gpr (CSC sparse matrix data)
                G_.col_ptrs.data(),     // Gjc (CSC column pointers)
                G_.row_indices.data(),  // Gir (CSC row indices)
-               nullptr,                // Apr (no equality constraints)
-               nullptr,                // Ajc (no equality constraints)
-               nullptr,                // Air (no equality constraints)
+               Apr,                    // Apr (equality constraint matrix)
+               Ajc,                    // Ajc (equality column pointers)
+               Air,                    // Air (equality row indices)
                c_.data(),              // c (linear objective)
                h_.data(),              // h (RHS for cone constraints)
-               nullptr                 // b (RHS for equality constraints, NULL)
+               beq                     // b (RHS for equality constraints)
     );
 
   if (raw == nullptr)

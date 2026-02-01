@@ -47,7 +47,8 @@ ECOSData ECOSProblemBuilder::build(
   }
 
   // Create ECOSData with problem dimensions
-  ECOSData data{expectedDim, numContacts};
+  // Ticket 0035b4: include equality constraints (A·λ = b)
+  ECOSData data{expectedDim, numContacts, expectedDim};
 
   // Build cone constraint matrix G (block-diagonal)
   data.G_ = buildGMatrix(numContacts, coneSpec);
@@ -55,16 +56,22 @@ ECOSData ECOSProblemBuilder::build(
   // Build cone RHS vector h (all zeros for standard friction cone)
   data.h_.assign(static_cast<size_t>(expectedDim), 0.0);
 
-  // Build linear objective c (all zeros for LCP formulation)
+  // Build linear objective c (all zeros for feasibility problem)
   data.c_.assign(static_cast<size_t>(expectedDim), 0.0);
 
   // Build cone size array (all cones are dimension 3)
   data.cone_sizes_ = coneSpec.getConeSizes();
 
-  // Note: Equality constraints A*λ = b are handled through the ECOS formulation
-  // The effective mass matrix A and RHS vector b will be integrated into the
-  // full ECOS problem during the solve phase (ticket 0035b4).
-  // For now, we build only the cone constraint matrices (G, h, c, cone_sizes).
+  // Build equality constraint matrix A_eq from effective mass matrix (Ticket 0035b4)
+  // A_eq·λ = b_eq encodes the LCP equality A·λ = b
+  data.A_eq_ = ECOSSparseMatrix::fromDense(A);
+
+  // Build equality constraint RHS from b vector
+  data.b_eq_.resize(static_cast<size_t>(expectedDim));
+  for (idxint i = 0; i < expectedDim; ++i)
+  {
+    data.b_eq_[static_cast<size_t>(i)] = static_cast<pfloat>(b(i));
+  }
 
   return data;
 }

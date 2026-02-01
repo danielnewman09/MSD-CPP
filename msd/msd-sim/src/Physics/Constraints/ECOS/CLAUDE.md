@@ -503,26 +503,30 @@ ECOSData users should check the exit code returned by `ECOS_solve()`:
 
 ## Integration with ConstraintSolver
 
-**Current integration status** (as of ticket 0035b3): ECOSProblemBuilder provides the SOCP problem construction needed for the box-constrained Active Set Method solver to solve contact LCP with friction using ECOS.
+**Integration status** (completed in ticket 0035b4): ECOS solver is fully integrated into ConstraintSolver for solving friction contact constraints using Second-Order Cone Programming (SOCP).
 
-**Workflow** (integration in ticket 0035b4):
-1. ConstraintSolver assembles contact constraint matrix A and RHS b
-2. Builds FrictionConeSpec from FrictionConstraint instances
-3. Uses ECOSProblemBuilder::build() to construct SOCP problem data
-4. Calls ECOSData::setup() to create ECOS workspace
-5. Calls ECOS_solve() to obtain contact forces λ
-6. Extracts solution and applies constraint forces
+**Workflow** (complete):
+1. ConstraintSolver::solveWithContacts() detects friction constraints via dynamic_cast<FrictionConstraint*>
+2. If friction detected, builds FrictionConeSpec from FrictionConstraint instances
+3. Calls solveWithECOS() which:
+   - Uses ECOSProblemBuilder::build() to construct SOCP problem data
+   - Calls ECOSData::setup() to create ECOS workspace
+   - Configures ECOS solver settings (tolerance, max iterations)
+   - Calls ECOS_solve() to obtain contact forces λ
+   - Extracts solution and diagnostics
+   - Returns ActiveSetResult with ECOS-specific fields populated
+4. If no friction detected, uses existing Active Set Method solver (zero regression)
 
-**Current capabilities**:
+**Capabilities**:
 - ECOSSparseMatrix: Eigen to ECOS CSC format conversion ✓ (ticket 0035b1)
 - FrictionConeSpec: Friction cone specification ✓ (ticket 0035b1)
 - ECOSData: RAII workspace management ✓ (ticket 0035b2)
 - ECOSProblemBuilder: Contact constraints to ECOS problem ✓ (ticket 0035b3)
+- ConstraintSolver::solveWithECOS(): ECOS solve integration ✓ (ticket 0035b4)
+- Friction constraint detection and dispatch ✓ (ticket 0035b4)
+- ECOS exit code handling and result extraction ✓ (ticket 0035b4)
 
-**Remaining work** (ticket 0035b4):
-- ConstraintSolver::solveWithECOS() method
-- Friction constraint detection and dispatch logic
-- ECOS exit code handling and result extraction
+**For ConstraintSolver integration details, see** [`../CLAUDE.md`](../CLAUDE.md)
 
 ---
 

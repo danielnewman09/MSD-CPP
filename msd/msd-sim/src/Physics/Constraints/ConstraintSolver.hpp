@@ -1,15 +1,20 @@
 // Ticket: 0031_generalized_lagrange_constraints
 // Ticket: 0032_contact_constraint_refactor
+// Ticket: 0035b4_ecos_solve_integration
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
+// Design: docs/designs/0035b_box_constrained_asm_solver/design.md
 
 #ifndef MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
 #define MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
 
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include "msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
 #include <Eigen/Dense>
 #include <functional>
+#include <string>
+#include <utility>
 #include <vector>
 #include <limits>
 
@@ -194,6 +199,98 @@ public:
    */
   void setConvergenceTolerance(double tol) { convergence_tolerance_ = tol; }
 
+  // ===== ECOS Solver Configuration (Ticket 0035b4) =====
+
+  /**
+   * @brief Set ECOS solver tolerance for convergence
+   *
+   * ECOS uses separate absolute and relative tolerances. Default: 1e-6 for both.
+   *
+   * @param abs_tol Absolute tolerance (primal/dual residuals)
+   * @param rel_tol Relative tolerance (gap)
+   * @ticket 0035b4_ecos_solve_integration
+   */
+  void setECOSTolerance(double abs_tol, double rel_tol)
+  {
+    ecos_abs_tol_ = abs_tol;
+    ecos_rel_tol_ = rel_tol;
+  }
+
+  /**
+   * @brief Set maximum ECOS iterations
+   *
+   * Safety cap to prevent unbounded solve time. Default: 100.
+   * Typical convergence: 5-15 iterations.
+   *
+   * @param max_iters Maximum iterations
+   * @ticket 0035b4_ecos_solve_integration
+   */
+  void setECOSMaxIterations(int max_iters) { ecos_max_iters_ = max_iters; }
+
+  /**
+   * @brief Get ECOS tolerance settings
+   * @return Pair of (absolute tolerance, relative tolerance)
+   */
+  std::pair<double, double> getECOSTolerance() const
+  {
+    return {ecos_abs_tol_, ecos_rel_tol_};
+  }
+
+  /**
+   * @brief Get maximum ECOS iterations
+   * @return Maximum iterations
+   */
+  int getECOSMaxIterations() const { return ecos_max_iters_; }
+
+  // ===== Low-Level Solver Results (Ticket 0034, 0035b4) =====
+
+  /**
+   * @brief Result of constraint solve (ASM or ECOS)
+   *
+   * Contains the solution lambda vector, convergence status, iteration count,
+   * and solver-specific diagnostics. Used by both Active Set Method and ECOS
+   * SOCP solver paths.
+   *
+   * @ticket 0034_active_set_method_contact_solver
+   * @ticket 0035b4_ecos_solve_integration
+   */
+  struct ActiveSetResult
+  {
+    Eigen::VectorXd lambda;         // Lagrange multipliers (all >= 0)
+    bool converged{false};          // True if all KKT conditions satisfied
+    int iterations{0};              // ASM iterations OR ECOS iterations
+    int active_set_size{0};         // ASM: active set size, ECOS: unused (set to 0)
+
+    // ECOS-specific diagnostic fields (Ticket 0035b4)
+    std::string solver_type{"ASM"};  // "ASM" or "ECOS"
+    int ecos_exit_flag{0};           // ECOS exit code (ECOS_OPTIMAL, ECOS_MAXIT, etc.)
+    double primal_residual{std::numeric_limits<double>::quiet_NaN()};  // ECOS primal feasibility
+    double dual_residual{std::numeric_limits<double>::quiet_NaN()};    // ECOS dual feasibility
+    double gap{std::numeric_limits<double>::quiet_NaN()};              // ECOS duality gap
+  };
+
+  /**
+   * @brief Solve friction LCP using ECOS SOCP solver
+   *
+   * Formulates the contact constraint system with friction as a second-order
+   * cone program (SOCP) and solves using the ECOS interior-point method.
+   * Each contact produces a 3D friction cone constraint:
+   *   ||[λ_t1, λ_t2]|| <= μ * λ_n
+   *
+   * @param A Effective mass matrix (3C x 3C), symmetric positive semi-definite
+   * @param b RHS vector (3C x 1) with restitution and Baumgarte terms
+   * @param coneSpec Friction cone specification (μ per contact, normal indices)
+   * @param numContacts Number of contacts (C)
+   * @return ActiveSetResult with lambda, convergence info, ECOS diagnostics
+   *
+   * @ticket 0035b4_ecos_solve_integration
+   */
+  ActiveSetResult solveWithECOS(
+      const Eigen::MatrixXd& A,
+      const Eigen::VectorXd& b,
+      const FrictionConeSpec& coneSpec,
+      int numContacts) const;
+
   // Rule of Five
   ConstraintSolver(const ConstraintSolver&) = default;
   ConstraintSolver& operator=(const ConstraintSolver&) = default;
@@ -249,22 +346,6 @@ private:
       double time) const;
 
   // ===== Contact solver helpers (Ticket 0032, 0034) =====
-
-  /**
-   * @brief Result of Active Set Method solve
-   *
-   * Contains the solution lambda vector, convergence status, iteration count
-   * (number of active set changes), and the size of the final active set.
-   *
-   * @ticket 0034_active_set_method_contact_solver
-   */
-  struct ActiveSetResult
-  {
-    Eigen::VectorXd lambda;         // Lagrange multipliers (all >= 0)
-    bool converged{false};          // True if all KKT conditions satisfied
-    int iterations{0};              // Number of active set changes performed
-    int active_set_size{0};         // Number of contacts in final active set (0 = empty active set)
-  };
 
   /**
    * @brief Compute per-contact 1×12 Jacobians
@@ -352,10 +433,37 @@ private:
       size_t numBodies,
       double dt) const;
 
+  // ===== ECOS solver helpers (Ticket 0035b4) =====
+
+  /**
+   * @brief Extract friction cone specification from contact constraints
+   *
+   * Scans contact constraint list for FrictionConstraint instances, extracts
+   * friction coefficient μ and normal constraint index per contact. Builds
+   * FrictionConeSpec for ECOS.
+   *
+   * The constraint ordering convention is: for each contact i, the normal
+   * constraint is at index 3i, tangent1 at 3i+1, tangent2 at 3i+2.
+   *
+   * @param contactConstraints All contact constraints (normal + friction interleaved)
+   * @param numContacts Number of contacts (C, where constraints has 3C rows total)
+   * @return FrictionConeSpec with μ values and normal indices
+   *
+   * @ticket 0035b4_ecos_solve_integration
+   */
+  FrictionConeSpec buildFrictionConeSpec(
+      const std::vector<TwoBodyConstraint*>& contactConstraints,
+      int numContacts) const;
+
   // Active Set Method configuration (Ticket 0034)
   int max_safety_iterations_{100};     // Safety cap; effective limit = min(2*C, max_safety_iterations_)
   double convergence_tolerance_{1e-6}; // Inactive constraint violation threshold
   static constexpr double kRegularizationEpsilon = 1e-8;
+
+  // ECOS solver configuration (Ticket 0035b4)
+  double ecos_abs_tol_{1e-6};   // Absolute tolerance (primal/dual residuals)
+  double ecos_rel_tol_{1e-6};   // Relative tolerance (gap)
+  int ecos_max_iters_{100};     // Maximum iterations (safety cap)
 };
 
 }  // namespace msd_sim

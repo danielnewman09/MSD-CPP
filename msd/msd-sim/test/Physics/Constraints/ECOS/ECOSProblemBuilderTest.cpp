@@ -80,9 +80,9 @@ TEST(ECOSProblemBuilderTest, MultiContactGMatrix)
   EXPECT_NEAR(data.G_.data[5], -1.0, 1e-10);
 
   // Verify block-diagonal structure (each contact independent)
-  for (int i = 0; i < 6; ++i)
+  for (size_t i = 0; i < 6; ++i)
   {
-    EXPECT_EQ(data.G_.row_indices[i], i);  // Diagonal structure
+    EXPECT_EQ(data.G_.row_indices[i], static_cast<idxint>(i));  // Diagonal structure
   }
 }
 
@@ -275,10 +275,11 @@ TEST(ECOSProblemBuilderTest, BlockDiagonalStructure)
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Zero(9, 9);
   for (idxint col = 0; col < data.G_.ncols; ++col)
   {
-    for (idxint idx = data.G_.col_ptrs[col]; idx < data.G_.col_ptrs[col + 1]; ++idx)
+    for (idxint idx = data.G_.col_ptrs[static_cast<size_t>(col)];
+         idx < data.G_.col_ptrs[static_cast<size_t>(col + 1)]; ++idx)
     {
-      idxint row = data.G_.row_indices[idx];
-      G_dense(row, col) = data.G_.data[idx];
+      idxint row = data.G_.row_indices[static_cast<size_t>(idx)];
+      G_dense(row, col) = data.G_.data[static_cast<size_t>(idx)];
     }
   }
 
@@ -324,19 +325,20 @@ TEST(ECOSProblemBuilderTest, CSCFormatValidation)
   // CSC format invariants
   EXPECT_EQ(data.G_.col_ptrs.size(), static_cast<size_t>(data.G_.ncols + 1));
   EXPECT_EQ(data.G_.col_ptrs[0], 0);
-  EXPECT_EQ(data.G_.col_ptrs[data.G_.ncols], data.G_.nnz);
+  EXPECT_EQ(data.G_.col_ptrs[static_cast<size_t>(data.G_.ncols)], data.G_.nnz);
 
   // Each column should have exactly 1 non-zero (diagonal matrix)
   for (idxint col = 0; col < data.G_.ncols; ++col)
   {
-    const idxint nnz_in_col = data.G_.col_ptrs[col + 1] - data.G_.col_ptrs[col];
+    const idxint nnz_in_col = data.G_.col_ptrs[static_cast<size_t>(col + 1)]
+                              - data.G_.col_ptrs[static_cast<size_t>(col)];
     EXPECT_EQ(nnz_in_col, 1);
   }
 
   // Row indices should match column indices (diagonal)
   for (idxint col = 0; col < data.G_.ncols; ++col)
   {
-    const idxint idx = data.G_.col_ptrs[col];
-    EXPECT_EQ(data.G_.row_indices[idx], col);
+    const idxint idx = data.G_.col_ptrs[static_cast<size_t>(col)];
+    EXPECT_EQ(data.G_.row_indices[static_cast<size_t>(idx)], col);
   }
 }
