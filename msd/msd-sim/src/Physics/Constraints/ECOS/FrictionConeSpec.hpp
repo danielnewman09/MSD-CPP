@@ -82,6 +82,20 @@ struct FrictionConeSpec
    */
   std::vector<idxint> getConeSizes() const;
 
+  /**
+   * @brief Get number of contacts
+   * @return Number of contacts in specification
+   */
+  int getNumContacts() const { return numContacts; }
+
+  /**
+   * @brief Get friction coefficient for specific contact
+   * @param contactIndex Index of contact in [0, numContacts)
+   * @return Friction coefficient μ for that contact
+   * @throws std::invalid_argument if contactIndex out of range
+   */
+  double getFrictionCoefficient(int contactIndex) const;
+
   // Rule of Zero (compiler-generated copy/move/destructor)
   FrictionConeSpec(const FrictionConeSpec&) = default;
   FrictionConeSpec& operator=(const FrictionConeSpec&) = default;

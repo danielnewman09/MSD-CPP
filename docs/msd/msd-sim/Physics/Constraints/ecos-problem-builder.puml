@@ -1,0 +1,192 @@
+@startuml ECOSProblemBuilder - Contact Constraint to ECOS SOCP Conversion
+
+!define STRUCT_BG #E8F5E9
+!define EXTERNAL_BG #FFF9C4
+!define UTILITY_BG #E3F2FD
+
+' ECOSProblemBuilder (utility class)
+class ECOSProblemBuilder <<utility>> UTILITY_BG {
+  + {static} build(A : Eigen::MatrixXd, b : Eigen::VectorXd, \n  coneSpec : FrictionConeSpec) : ECOSData
+  - {static} buildGMatrix(numContacts : idxint, \n  coneSpec : FrictionConeSpec) : ECOSSparseMatrix
+}
+
+note right of ECOSProblemBuilder
+  **Purpose:** Convert contact constraint
+  system with friction to ECOS SOCP form.
+
+  **Input:** A·λ = b, ||λ_t_i|| ≤ μ_i·λ_n_i
+  **Output:** min c^T·x s.t. G·x + s = h, s ∈ K
+
+  **Ticket:** 0035b3_ecos_problem_construction
+end note
+
+' FrictionConeSpec (data structure)
+class FrictionConeSpec <<struct>> STRUCT_BG {
+  - numContacts_ : int
+  - frictionCoefficients_ : std::vector<double>
+  - normalIndices_ : std::vector<int>
+
+  + FrictionConeSpec(numContacts : int)
+  + setFriction(contactIndex : int, mu : double, \n  normalConstraintIndex : int) : void
+  + getNumContacts() const : int
+  + getFrictionCoefficient(contactIndex : int) const : double
+  + getConeSizes() const : std::vector<idxint>
+}
+
+note right of FrictionConeSpec
+  **Purpose:** Specify friction cone
+  constraints for ECOS SOCP.
+
+  Each contact i has:
+  - μ_i: Friction coefficient
+  - normalIndex: Normal constraint index (3i)
+
+  getConeSizes() returns [3, 3, ..., 3]
+  for C second-order cones (dimension 3).
+end note
+
+' ECOSData (RAII wrapper)
+class ECOSData <<struct>> STRUCT_BG {
+  + num_variables_ : idxint
+  + num_cones_ : idxint
+  + G_ : ECOSSparseMatrix
+  + h_ : std::vector<pfloat>
+  + c_ : std::vector<pfloat>
+  + cone_sizes_ : std::vector<idxint>
+  + workspace_ : ECOSWorkspacePtr
+
+  + ECOSData(numVariables : idxint, numCones : idxint)
+  + setup() : void
+  + cleanup() : void
+}
+
+note right of ECOSData
+  **Purpose:** RAII wrapper for ECOS
+  workspace lifecycle.
+
+  Owns all ECOS problem data:
+  - G: Cone constraint matrix (3C × 3C)
+  - h: RHS for cone constraints
+  - c: Linear objective
+  - cone_sizes: [3, 3, ..., 3]
+
+  **Ticket:** 0035b2_ecos_data_wrapper
+end note
+
+' ECOSSparseMatrix (CSC converter)
+class ECOSSparseMatrix <<struct>> STRUCT_BG {
+  + data : std::vector<pfloat>
+  + row_indices : std::vector<idxint>
+  + col_ptrs : std::vector<idxint>
+  + nrows : idxint
+  + ncols : idxint
+  + nnz : idxint
+
+  + {static} fromDense(mat : Eigen::MatrixXd) : ECOSSparseMatrix
+  + {static} fromSparse(mat : Eigen::SparseMatrix) : ECOSSparseMatrix
+}
+
+note right of ECOSSparseMatrix
+  **Purpose:** Convert Eigen matrices
+  to ECOS CSC format.
+
+  CSC (Compressed Sparse Column):
+  - col_ptrs[j] = start index for column j
+  - row_indices[k] = row of data[k]
+  - data[k] = matrix value
+
+  **Ticket:** 0035b1_ecos_utilities
+end note
+
+' Eigen matrices (external)
+package "Eigen Library" EXTERNAL_BG {
+  class "Eigen::MatrixXd" as EigenMatrix <<external>> {
+    + rows() : int
+    + cols() : int
+  }
+
+  class "Eigen::VectorXd" as EigenVector <<external>> {
+    + size() : int
+  }
+}
+
+' Relationships
+ECOSProblemBuilder ..> FrictionConeSpec : reads μ_i >
+ECOSProblemBuilder ..> EigenMatrix : converts A >
+ECOSProblemBuilder ..> EigenVector : converts b >
+ECOSProblemBuilder .down.> ECOSData : creates >
+ECOSProblemBuilder .down.> ECOSSparseMatrix : uses >
+
+ECOSData *-- ECOSSparseMatrix : owns G_ >
+ECOSData ..> FrictionConeSpec : reads cone sizes >
+
+ECOSSparseMatrix ..> EigenMatrix : converts from >
+
+' Workflow diagram
+note bottom of ECOSProblemBuilder
+  **build() Workflow:**
+
+  1. Validate dimensions:
+     - A must be 3C × 3C (square)
+     - b must be 3C
+     - coneSpec.numContacts = C
+
+  2. Create ECOSData(3*C, C)
+
+  3. Build G matrix (block-diagonal):
+     - For contact i at [3i, 3i+1, 3i+2]:
+       - Row 3i:   G[3i,3i] = -μ_i
+       - Row 3i+1: G[3i+1,3i+1] = -1
+       - Row 3i+2: G[3i+2,3i+2] = -1
+     - Convert to ECOSSparseMatrix CSC format
+
+  4. Build h vector (all zeros, size 3C)
+
+  5. Build c vector (all zeros, size 3C)
+
+  6. Build cone_sizes ([3, 3, ..., 3], C entries)
+
+  7. Return populated ECOSData
+end note
+
+' G matrix structure note
+note left of ECOSSparseMatrix
+  **G Matrix Structure (3C × 3C):**
+
+  Block-diagonal with 3×3 blocks:
+  ┌                           ┐
+  │ -μ₁   0    0              │
+  │  0   -1    0              │
+  │  0    0   -1              │
+  │              -μ₂   0    0 │
+  │               0   -1    0 │
+  │               0    0   -1 │
+  │                      ...  │
+  └                           ┘
+
+  **Why -μ and -1?**
+  G·λ + s = h with h=0 gives:
+    s₀ = -(-μ·λₙ) = μ·λₙ
+    s₁ = -(-λₜ₁) = λₜ₁
+    s₂ = -(-λₜ₂) = λₜ₂
+
+  So cone ||[s₁,s₂]|| ≤ s₀ becomes
+  ||[λₜ₁,λₜ₂]|| ≤ μ·λₙ (friction cone!)
+end note
+
+' Mathematical formulation note
+note top of FrictionConeSpec
+  **Mathematical Formulation:**
+
+  Per contact i, friction cone constraint:
+    ||[λₜ₁⁽ⁱ⁾, λₜ₂⁽ⁱ⁾]|| ≤ μᵢ·λₙ⁽ⁱ⁾
+
+  In ECOS notation (s₀ = μ·λₙ, s₁ = λₜ₁, s₂ = λₜ₂):
+    ||[s₁, s₂]|| ≤ s₀  (3D second-order cone)
+
+  Standard ECOS form:
+    min c^T·x  s.t.  G·x + s = h,  s ∈ K
+  where K = Q³ × Q³ × ... × Q³ (C cones)
+end note
+
+@enduml

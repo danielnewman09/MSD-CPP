@@ -3,13 +3,13 @@
 ## Status
 - [x] Draft
 - [x] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Quality Gate
-- [ ] Quality Gate Passed — Awaiting Review
-- [ ] Approved — Ready to Merge
-- [ ] Documentation Complete
-- [ ] Merged / Complete
+- [x] Implementation Complete — Awaiting Quality Gate
+- [x] Quality Gate Passed — Awaiting Review
+- [x] Approved — Ready to Merge
+- [x] Documentation Complete
+- [x] Merged / Complete
 
-**Current Phase**: Ready for Implementation
+**Current Phase**: Merged / Complete
 **Assignee**: N/A
 **Created**: 2026-01-31
 **Generate Tutorial**: No
@@ -203,3 +203,89 @@ static FrictionConeSpec buildFrictionConeSpec(
 | G matrix formulation incorrect | High | Hand-compute G for single contact, validate in unit test |
 | Sign convention error in cone constraint | High | Reference ECOS examples and Drake's friction backend |
 | CSC index errors in G | Medium | Reuse validated ECOSSparseMatrix from 0035b1 |
+
+---
+
+## Workflow Log
+
+### Implementation Phase (Iteration 1)
+- **Started**: 2026-02-01
+- **Completed**: 2026-02-01
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Constraints/ECOS/ECOSProblemBuilder.hpp` — Problem construction header with static build() method
+  - `msd/msd-sim/src/Physics/Constraints/ECOS/ECOSProblemBuilder.cpp` — G matrix construction and ECOS problem formulation
+  - `msd/msd-sim/test/Physics/Constraints/ECOS/ECOSProblemBuilderTest.cpp` — 14 unit tests covering all acceptance criteria
+  - `msd/msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp` — Added getNumContacts() and getFrictionCoefficient() getter methods
+  - `msd/msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.cpp` — Implemented getFrictionCoefficient() with bounds checking
+  - `msd/msd-sim/src/Physics/Constraints/ECOS/CMakeLists.txt` — Added ECOSProblemBuilder.cpp to build
+  - `msd/msd-sim/test/Physics/Constraints/ECOS/CMakeLists.txt` — Added ECOSProblemBuilderTest.cpp to test build
+- **Notes**:
+  - Implemented block-diagonal G matrix construction with -μ_i and -1 entries per contact
+  - All h and c vectors correctly set to zero for standard friction cone and LCP formulation
+  - Comprehensive input validation with descriptive error messages
+  - All 14 new tests pass, all 487 total msd-sim tests pass (zero regressions)
+  - G matrix correctly encodes friction cone constraints: ||[λ_t1, λ_t2]|| ≤ μ_i·λ_n_i
+  - CSC format validated with hand-computed single-contact and multi-contact test cases
+  - Extended FrictionConeSpec with getter methods needed by problem builder
+  - Equality constraint integration deferred to ticket 0035b4 (ECOS solve integration)
+
+### Quality Gate Phase (Iteration 1)
+- **Started**: 2026-02-01 11:29
+- **Completed**: 2026-02-01 11:29
+- **Status**: FAILED
+- **Artifacts**:
+  - `docs/designs/0035b3_ecos_problem_construction/quality-gate-report.md` — Quality gate failure report
+- **Issues Found**:
+  - **Build Failure**: 7 sign-conversion and integer precision warnings in ECOSProblemBuilder.cpp
+  - Sign conversion warnings (4): Lines 56, 59, 93, 94, 95 - casting ECOS idxint to STL size_t
+  - Integer precision loss (2): Lines 53, 105 - casting idxint to int
+  - Explicit casts required at ECOS/STL type boundaries
+- **Next Steps**:
+  - Return to implementation phase to fix type conversion warnings
+  - Add explicit static_cast statements for all ECOS idxint to size_t conversions
+  - Re-run quality gate after fixes applied
+
+### Implementation Fix (Iteration 2)
+- **Started**: 2026-02-01
+- **Completed**: 2026-02-01
+- **Fixes applied**:
+  - Changed `buildGMatrix` signature from `int` to `idxint` for `numContacts` parameter (header + cpp)
+  - Added `static_cast<size_t>()` for `.assign()` calls on h_ and c_ vectors (lines 56, 59)
+  - Added `static_cast<size_t>()` for `.reserve()` calls on G matrix vectors (lines 93-95)
+  - Changed `contactIdx` and `componentIdx` from `int` to `idxint` (lines 105-106)
+  - Added `static_cast<int>()` at `getFrictionCoefficient()` call site (line 114)
+
+### Quality Gate Phase (Iteration 2)
+- **Started**: 2026-02-01
+- **Completed**: 2026-02-01
+- **Status**: PASSED
+- **Results**:
+  - **Gate 1 (Build)**: Release build compiles cleanly with -Werror, zero warnings
+  - **Gate 2 (Tests)**: All 14 ECOSProblemBuilder tests pass, all 487 msd-sim tests pass
+  - **Gate 3 (Regressions)**: Zero regressions
+- **Next Steps**: Ready for implementation review
+
+### Implementation Review Phase
+- **Started**: 2026-02-01
+- **Completed**: 2026-02-01
+- **Status**: APPROVED
+- **Notes**: Implementation approved by human reviewer. All acceptance criteria met, quality gate passed, ready for documentation update.
+
+### Documentation Update Phase
+- **Started**: 2026-02-01
+- **Completed**: 2026-02-01
+- **Artifacts**:
+  - `docs/msd/msd-sim/Physics/Constraints/ecos-problem-builder.puml` — ECOSProblemBuilder component diagram showing G matrix construction
+  - `msd/msd-sim/src/Physics/Constraints/ECOS/CLAUDE.md` — Updated with ECOSProblemBuilder and FrictionConeSpec documentation
+  - `docs/designs/0035b3_ecos_problem_construction/doc-sync-summary.md` — Documentation sync summary
+- **Notes**:
+  - Documentation was proactively updated during implementation
+  - ECOS/CLAUDE.md already contained complete ECOSProblemBuilder documentation (lines 343-481)
+  - New PlantUML diagram created for G matrix construction algorithm
+  - FrictionConeSpec extended with getter methods, documentation updated
+  - All diagram links verified, formatting consistent
+  - No tutorial generation requested (Generate Tutorial: No)
+
+### Workflow Complete
+- **Completed**: 2026-02-01
+- **Summary**: ECOSProblemBuilder successfully implemented, tested, and documented. All 14 unit tests pass, all 487 msd-sim tests pass (zero regressions). Component ready for integration in ticket 0035b4 (ECOS solve integration).

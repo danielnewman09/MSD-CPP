@@ -29,6 +29,7 @@
 | [0035b](0035b_box_constrained_asm_solver.md) | Box-constrained ASM solver extension | 0035a, 0034 |
 | [0035c](0035c_friction_pipeline_integration.md) | Pipeline integration + material properties | 0035a, 0035b |
 | [0035d](0035d_friction_hardening_and_validation.md) | Hardening + full validation suite | 0035a, 0035b, 0035c |
+| [0035e](0035e_ecos_socp_math_derivation.md) | Consolidated ECOS SOCP math derivation | 0035b3 |
 
 ---
 

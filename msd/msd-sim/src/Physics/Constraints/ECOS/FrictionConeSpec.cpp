@@ -65,4 +65,22 @@ std::vector<idxint> FrictionConeSpec::getConeSizes() const
   return coneSizes;
 }
 
+double FrictionConeSpec::getFrictionCoefficient(int contactIndex) const
+{
+  if (contactIndex < 0 || contactIndex >= numContacts)
+  {
+    throw std::invalid_argument(
+        "FrictionConeSpec::getFrictionCoefficient: contactIndex out of range [0, " +
+        std::to_string(numContacts) + ") (got " + std::to_string(contactIndex) + ")");
+  }
+
+  if (static_cast<int>(frictionCoefficients.size()) <= contactIndex)
+  {
+    // Not yet set, return 0.0 as default
+    return 0.0;
+  }
+
+  return frictionCoefficients[static_cast<size_t>(contactIndex)];
+}
+
 }  // namespace msd_sim

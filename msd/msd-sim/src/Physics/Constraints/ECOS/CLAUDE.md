@@ -39,7 +39,9 @@ ConstraintSolver (Box-constrained ASM solver, future)
 | Component | Location | Purpose | Type |
 |-----------|----------|---------|------|
 | ECOSSparseMatrix | `ECOSSparseMatrix.hpp` | Eigen to ECOS CSC format conversion | Utility struct |
+| FrictionConeSpec | `FrictionConeSpec.hpp` | Friction cone specification for SOCP | Data struct |
 | ECOSData | `ECOSData.hpp` | RAII wrapper for ECOS workspace lifecycle | RAII struct |
+| ECOSProblemBuilder | `ECOSProblemBuilder.hpp` | Contact constraint to ECOS problem construction | Utility class |
 | ECOSWorkspaceDeleter | `ECOSData.hpp` | Custom deleter calling ECOS_cleanup() | Deleter struct |
 
 ---
@@ -124,6 +126,61 @@ Throws `std::invalid_argument` for invalid matrix dimensions.
 
 #### Memory Management
 - Owns CSC data in `std::vector` containers
+- Rule of Zero: compiler-generated copy/move semantics
+- Safe to pass by value or move
+
+---
+
+### FrictionConeSpec
+
+**Location**: `FrictionConeSpec.hpp`, `FrictionConeSpec.cpp`
+**Type**: Data structure
+**Introduced**: [Ticket: 0035b1_ecos_utilities](../../../../../../../../tickets/0035b1_ecos_utilities.md)
+
+#### Purpose
+Specifies friction cone constraints for ECOS Second-Order Cone Programming (SOCP). Encapsulates friction coefficients (μ) and contact indices needed to formulate friction cone constraints: `||λ_t|| ≤ μ·λ_n`.
+
+#### Key Interfaces
+```cpp
+class FrictionConeSpec {
+public:
+  explicit FrictionConeSpec(int numContacts);
+
+  void setFriction(int contactIndex, double mu, int normalConstraintIndex);
+
+  // Getters
+  int getNumContacts() const;
+  double getFrictionCoefficient(int contactIndex) const;  // With bounds checking
+  std::vector<idxint> getConeSizes() const;  // Returns [3, 3, ..., 3] for C contacts
+
+  // Rule of Zero (compiler-generated copy/move)
+};
+```
+
+#### Usage Example
+```cpp
+#include "msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp"
+
+// Create specification for 2 contacts
+FrictionConeSpec coneSpec{2};
+
+// Set friction coefficient and normal index for each contact
+coneSpec.setFriction(0, 0.5, 0);  // Contact 0: μ=0.5, normal at index 0
+coneSpec.setFriction(1, 0.8, 3);  // Contact 1: μ=0.8, normal at index 3
+
+// Get ECOS cone sizes
+std::vector<idxint> coneSizes = coneSpec.getConeSizes();  // [3, 3]
+```
+
+#### Thread Safety
+**Thread-safe after construction** — Read-only access after `setFriction()` calls complete.
+
+#### Error Handling
+- `setFriction()` throws `std::out_of_range` for invalid contact index
+- `getFrictionCoefficient()` throws `std::out_of_range` for invalid contact index
+
+#### Memory Management
+- Owns friction coefficient and normal index vectors
 - Rule of Zero: compiler-generated copy/move semantics
 - Safe to pass by value or move
 
@@ -284,6 +341,145 @@ The ECOS C API has three phases:
 
 ---
 
+### ECOSProblemBuilder
+
+**Location**: `ECOSProblemBuilder.hpp`, `ECOSProblemBuilder.cpp`
+**Type**: Utility class with static methods
+**Introduced**: [Ticket: 0035b3_ecos_problem_construction](../../../../../../../../tickets/0035b3_ecos_problem_construction.md)
+**Diagram**: [`ecos-problem-builder.puml`](../../../../../../../../docs/msd/msd-sim/Physics/Constraints/ecos-problem-builder.puml)
+
+#### Purpose
+Converts contact constraint systems with friction into ECOS standard form for Second-Order Cone Programming (SOCP). Transforms the friction Linear Complementarity Problem (LCP):
+```
+A·λ = b, subject to ||λ_t_i|| ≤ μ_i·λ_n_i for all contacts i
+```
+into ECOS conic form:
+```
+min c^T·x  s.t.  G·x + s = h,  s ∈ K
+```
+where K is a product of second-order cones (one 3D cone per contact).
+
+#### Key Interfaces
+```cpp
+class ECOSProblemBuilder {
+public:
+  /**
+   * @brief Build ECOS problem from contact constraint data
+   *
+   * Constructs ECOS problem data (G matrix, h vector, c vector, cone sizes)
+   * from contact constraint system (A, b, friction coefficients).
+   *
+   * @param A Effective mass matrix (3C × 3C), symmetric positive semi-definite
+   * @param b RHS vector (3C × 1) with restitution and Baumgarte terms
+   * @param coneSpec Friction cone specification (μ per contact, normal indices)
+   * @return ECOSData populated and ready for setup()
+   *
+   * @throws std::invalid_argument if dimensions mismatch or numContacts <= 0
+   */
+  static ECOSData build(
+      const Eigen::MatrixXd& A,
+      const Eigen::VectorXd& b,
+      const FrictionConeSpec& coneSpec);
+
+private:
+  /**
+   * @brief Build block-diagonal G matrix for friction cone constraints
+   *
+   * Constructs cone constraint matrix G (3C × 3C) encoding friction cones.
+   * For contact i at indices [3i, 3i+1, 3i+2]:
+   *   Row 3i:   -μ_i at column 3i   (normal scaling)
+   *   Row 3i+1: -1   at column 3i+1 (tangent 1)
+   *   Row 3i+2: -1   at column 3i+2 (tangent 2)
+   *
+   * This gives G·λ + s = h (with h=0), so:
+   *   s_0 = μ_i·λ_n, s_1 = λ_t1, s_2 = λ_t2
+   * And the cone constraint ||[s_1, s_2]|| ≤ s_0 becomes ||[λ_t1, λ_t2]|| ≤ μ_i·λ_n
+   */
+  static ECOSSparseMatrix buildGMatrix(
+      idxint numContacts,
+      const FrictionConeSpec& coneSpec);
+};
+```
+
+#### Mathematical Formulation
+
+**Per contact i, the friction cone constraint is:**
+```
+||[λ_t1^(i), λ_t2^(i)]|| ≤ μ_i·λ_n^(i)
+```
+
+**In ECOS notation** (s_0 = μ·λ_n, s_1 = λ_t1, s_2 = λ_t2):
+```
+||[s_1, s_2]|| ≤ s_0  (3-dimensional second-order cone)
+```
+
+**Matrix G construction** (block-diagonal, 3C × 3C):
+- For contact i at indices [3i, 3i+1, 3i+2]:
+  - Row 3i: `-μ_i` at column 3i (normal), so `s_0 = h_0 - (-μ_i·λ_n) = μ_i·λ_n`
+  - Row 3i+1: `-1` at column 3i+1 (tangent 1), so `s_1 = h_1 - (-λ_t1) = λ_t1`
+  - Row 3i+2: `-1` at column 3i+2 (tangent 2), so `s_2 = h_2 - (-λ_t2) = λ_t2`
+
+**Vector assignments:**
+- h vector = 0 (standard friction cone with no offset)
+- c vector = 0 (LCP formulation, not minimizing linear objective)
+- cone_sizes = [3, 3, ..., 3] (C entries, one 3D cone per contact)
+
+**Equality constraints** (added in ticket 0035b4):
+- The LCP equality `A·λ = b` will be passed as ECOS equality constraints
+- A_eq = A (effective mass matrix), b_eq = b (RHS vector)
+
+#### Usage Example
+```cpp
+#include "msd-sim/src/Physics/Constraints/ECOS/ECOSProblemBuilder.hpp"
+
+// Given: Effective mass matrix A, RHS vector b, friction spec
+Eigen::MatrixXd A = /* 3C × 3C effective mass matrix */;
+Eigen::VectorXd b = /* 3C RHS vector */;
+FrictionConeSpec coneSpec{numContacts};
+// ... populate coneSpec with friction coefficients ...
+
+// Build ECOS problem
+ECOSData data = ECOSProblemBuilder::build(A, b, coneSpec);
+
+// Setup ECOS workspace
+data.setup();
+
+// Configure solver
+data.workspace_.get()->stgs->maxit = 100;
+data.workspace_.get()->stgs->abstol = 1e-6;
+
+// Solve
+idxint exit_flag = ECOS_solve(data.workspace_.get());
+
+// Extract solution
+if (exit_flag == ECOS_OPTIMAL) {
+  Eigen::VectorXd lambda = Eigen::Map<Eigen::VectorXd>(
+      data.workspace_.get()->x, data.num_variables_);
+  // Use lambda (contact forces)...
+}
+```
+
+#### Thread Safety
+**Thread-safe** — Static methods with no shared state.
+
+#### Error Handling
+Throws `std::invalid_argument` if:
+- A is not square
+- A dimensions do not match b size
+- A dimensions do not match 3*coneSpec.numContacts
+- coneSpec.numContacts <= 0
+
+#### Memory Management
+- Returns ECOSData by value (move semantics)
+- Caller owns returned ECOSData
+- Internally uses ECOSSparseMatrix for G matrix construction
+
+#### Performance
+- O(C) for block-diagonal G matrix construction (C = number of contacts)
+- Minimal memory allocations (single ECOSData construction)
+
+---
+
 ## ECOS Exit Codes
 
 ECOSData users should check the exit code returned by `ECOS_solve()`:
@@ -307,15 +503,26 @@ ECOSData users should check the exit code returned by `ECOS_solve()`:
 
 ## Integration with ConstraintSolver
 
-**Future integration** (ticket 0035b3): The box-constrained Active Set Method solver will use ECOSData to formulate and solve the contact LCP with friction as a Second-Order Cone Program (SOCP).
+**Current integration status** (as of ticket 0035b3): ECOSProblemBuilder provides the SOCP problem construction needed for the box-constrained Active Set Method solver to solve contact LCP with friction using ECOS.
 
-**Planned workflow**:
+**Workflow** (integration in ticket 0035b4):
 1. ConstraintSolver assembles contact constraint matrix A and RHS b
-2. Formulates SOCP: minimize c^T·λ subject to G·λ + h ∈ K (conic constraint)
-3. Populates ECOSData with SOCP problem data
+2. Builds FrictionConeSpec from FrictionConstraint instances
+3. Uses ECOSProblemBuilder::build() to construct SOCP problem data
 4. Calls ECOSData::setup() to create ECOS workspace
 5. Calls ECOS_solve() to obtain contact forces λ
 6. Extracts solution and applies constraint forces
+
+**Current capabilities**:
+- ECOSSparseMatrix: Eigen to ECOS CSC format conversion ✓ (ticket 0035b1)
+- FrictionConeSpec: Friction cone specification ✓ (ticket 0035b1)
+- ECOSData: RAII workspace management ✓ (ticket 0035b2)
+- ECOSProblemBuilder: Contact constraints to ECOS problem ✓ (ticket 0035b3)
+
+**Remaining work** (ticket 0035b4):
+- ConstraintSolver::solveWithECOS() method
+- Friction constraint detection and dispatch logic
+- ECOS exit code handling and result extraction
 
 ---
 
@@ -345,8 +552,10 @@ ECOSData users should check the exit code returned by `ECOS_solve()`:
 ### Test Organization
 ```
 test/Physics/Constraints/ECOS/
-├── ECOSSparseMatrixTest.cpp  # 15 tests covering CSC conversion
-└── ECOSDataTest.cpp           # 21 tests covering RAII lifecycle
+├── ECOSSparseMatrixTest.cpp     # 15 tests covering CSC conversion
+├── FrictionConeSpecTest.cpp     # 8 tests covering friction cone spec
+├── ECOSDataTest.cpp             # 21 tests covering RAII lifecycle
+└── ECOSProblemBuilderTest.cpp   # 14 tests covering problem construction
 ```
 
 ### Test Coverage
@@ -358,6 +567,13 @@ test/Physics/Constraints/ECOS/
 - Empty matrix handling
 - CSC format validation
 
+**FrictionConeSpec**: 8 tests
+- Constructor initialization
+- setFriction() with valid inputs
+- getFrictionCoefficient() with bounds checking
+- getConeSizes() correctness
+- Out-of-range error handling
+
 **ECOSData**: 21 tests
 - Constructor initialization
 - Setup with valid data
@@ -367,6 +583,18 @@ test/Physics/Constraints/ECOS/
 - Idempotent cleanup
 - Precondition validation (empty G, size mismatches, double setup)
 - Multiple cones, sparse matrices
+
+**ECOSProblemBuilder**: 14 tests
+- Single contact G matrix construction (hand-validated CSC format)
+- Multi-contact G matrix construction (block-diagonal structure)
+- G matrix dimensions validation (3C × 3C)
+- h vector correctness (all zeros)
+- c vector correctness (all zeros)
+- cone_sizes correctness ([3, 3, ..., 3])
+- Different friction coefficients per contact
+- Zero friction coefficient handling
+- Dimension mismatch error handling (A non-square, A/b mismatch, A/coneSpec mismatch)
+- Zero contacts error handling
 
 ### Running Tests
 ```bash
@@ -400,13 +628,13 @@ See the [root CLAUDE.md](../../../../../../../../CLAUDE.md#coding-standards) for
 - **Cleanup function**: `void ECOS_cleanup(pwork* w, idxint keepvars)`
 
 ### Design Documents
-- **ECOSSparseMatrix design**: [0035b1_ecos_utilities](../../../../../../../../docs/designs/0035b1_ecos_utilities/design.md)
 - **ECOSData design**: [0035b2_ecos_data_wrapper](../../../../../../../../docs/designs/0035b2_ecos_data_wrapper/design.md)
 - **Parent design**: [0035b_box_constrained_asm_solver](../../../../../../../../docs/designs/0035b_box_constrained_asm_solver/design.md)
 
 ### Tickets
-- [0035b1_ecos_utilities](../../../../../../../../tickets/0035b1_ecos_utilities.md) — ECOSSparseMatrix
+- [0035b1_ecos_utilities](../../../../../../../../tickets/0035b1_ecos_utilities.md) — ECOSSparseMatrix, FrictionConeSpec
 - [0035b2_ecos_data_wrapper](../../../../../../../../tickets/0035b2_ecos_data_wrapper.md) — ECOSData
+- [0035b3_ecos_problem_construction](../../../../../../../../tickets/0035b3_ecos_problem_construction.md) — ECOSProblemBuilder
 - [0035b_box_constrained_asm_solver](../../../../../../../../tickets/0035b_box_constrained_asm_solver.md) — Parent feature
 
 ---
