@@ -47,6 +47,13 @@ AssetInertial (Owns constraints)
 | UnitQuaternionConstraint | `UnitQuaternionConstraint.hpp` | Unit quaternion normalization | Concrete implementation |
 | DistanceConstraint | `DistanceConstraint.hpp` | Fixed distance from origin | Concrete implementation |
 | QuaternionConstraint | `QuaternionConstraint.hpp` | **DEPRECATED** - Use UnitQuaternionConstraint | Legacy class |
+| **ECOS Module** | **`ECOS/`** | **ECOS solver integration utilities** | **Sub-module** |
+
+### Sub-Modules
+
+| Sub-Module | Location | Purpose | Documentation |
+|------------|----------|---------|---------------|
+| ECOS | `ECOS/` | ECOS solver integration utilities | [ECOS/CLAUDE.md](ECOS/CLAUDE.md) |
 
 ---
 

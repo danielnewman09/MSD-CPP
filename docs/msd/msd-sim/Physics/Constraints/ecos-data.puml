@@ -1,0 +1,151 @@
+@startuml ECOSData RAII Wrapper
+
+!define STRUCT_BG #E8F5E9
+!define EXTERNAL_BG #FFF9C4
+!define METHOD_BG #E3F2FD
+
+' ECOSWorkspaceDeleter (custom deleter)
+class ECOSWorkspaceDeleter <<struct>> STRUCT_BG {
+  + operator()(w : pwork*) const noexcept : void
+}
+
+' Type alias
+note top of ECOSWorkspaceDeleter
+  **Type Alias:**
+  using ECOSWorkspacePtr =
+    std::unique_ptr<pwork,
+      ECOSWorkspaceDeleter>;
+end note
+
+' ECOSData struct (main component)
+class ECOSData <<struct>> STRUCT_BG {
+  ' Data members (declared FIRST — destroyed last)
+  + num_variables : idxint = 0
+  + num_cones : idxint = 0
+  + G : ECOSSparseMatrix
+  + h : std::vector<pfloat>
+  + c : std::vector<pfloat>
+  + cone_sizes : std::vector<idxint>
+
+  ' Workspace (declared LAST — destroyed first)
+  + workspace : ECOSWorkspacePtr {nullptr}
+
+  ' Construction/Destruction
+  + ECOSData(numVariables : idxint, numCones : idxint)
+  + ~ECOSData() = default
+
+  ' Move-only (custom — see Equilibration Constraint)
+  + ECOSData(ECOSData&&) noexcept
+  + operator=(ECOSData&&) noexcept
+  - ECOSData(const ECOSData&) = delete
+  - operator=(const ECOSData&) = delete
+
+  ' Lifecycle methods
+  + setup() : void
+  + cleanup() : void
+  + isSetup() const : bool
+}
+
+' ECOSSparseMatrix (from 0035b1)
+class ECOSSparseMatrix <<struct>> STRUCT_BG {
+  + data : std::vector<pfloat>
+  + row_indices : std::vector<idxint>
+  + col_ptrs : std::vector<idxint>
+  + nrows : idxint
+  + ncols : idxint
+  + nnz : idxint
+
+  + {static} fromDense(mat : Eigen::MatrixXd) : ECOSSparseMatrix
+  + {static} fromSparse(mat : Eigen::SparseMatrix) : ECOSSparseMatrix
+}
+
+' ECOS C API (external library)
+package "ECOS C API" EXTERNAL_BG {
+  class pwork <<opaque>> {
+    + x : pfloat*
+    + s : pfloat*
+    + z : pfloat*
+    + stgs : settings*
+    + info : stats*
+  }
+
+  class "ECOS Functions" as ECOS_API <<C API>> {
+    + {static} ECOS_setup(...) : pwork*
+    + {static} ECOS_solve(w : pwork*) : idxint
+    + {static} ECOS_cleanup(w : pwork*, keepvars : idxint) : void
+  }
+}
+
+' Relationships
+ECOSData *-- ECOSSparseMatrix : owns G matrix >
+ECOSData *-- "1" ECOSWorkspaceDeleter : uses as deleter >
+ECOSData o-- "0..1" pwork : owns via unique_ptr >
+
+ECOSWorkspaceDeleter .down.> ECOS_API : calls ECOS_cleanup()
+ECOSData .down.> ECOS_API : calls ECOS_setup() in setup()
+ECOS_API .down.> pwork : creates/destroys
+
+' Lifecycle notes
+note right of ECOSData::setup
+  Calls ECOS_setup() with:
+  - G.data.data() (sparse matrix)
+  - h.data() (RHS vector)
+  - c.data() (objective vector)
+  - cone_sizes.data() (cone dims)
+
+  Wraps result:
+    workspace.reset(raw_pwork)
+end note
+
+note right of ECOSData::cleanup
+  Delegates to unique_ptr:
+    workspace.reset()
+  - Triggers ECOSWorkspaceDeleter
+  - Which calls ECOS_cleanup(w, 0)
+  - Idempotent (no-op if null)
+end note
+
+note right of ECOSData
+  **RAII via std::unique_ptr:**
+  1. ~ECOSData() = default
+     → workspace destroyed first (declared last)
+     → data arrays still alive for ECOS_cleanup
+  2. Move ctor = custom
+     → moves data then workspace (safe)
+  3. Move assign = custom
+     → cleanup() first, then move all members
+  4. Copy = delete
+     → unique_ptr is non-copyable
+  5. Owns all ECOS input data
+end note
+
+' Equilibration constraint note
+note left of ECOSData
+  **ECOS Equilibration Constraint:**
+  ECOS_cleanup() calls unset_equilibration()
+  which writes to G, h, c data arrays.
+
+  **workspace must be declared LAST**
+  so it is destroyed FIRST, while data
+  arrays are still alive.
+
+  **Move assignment must call cleanup()**
+  before overwriting data arrays to avoid
+  use-after-free.
+end note
+
+' Typical usage sequence
+note bottom of ECOSData
+  **Typical Usage:**
+  1. ECOSData data{3*C, C};
+  2. data.G = ECOSSparseMatrix::fromDense(G_matrix);
+  3. data.h = std::vector<pfloat>{...};
+  4. data.c = std::vector<pfloat>(3*C, 0.0);
+  5. data.cone_sizes = std::vector<idxint>(C, 3);
+  6. data.setup();  // unique_ptr takes ownership
+  7. ECOS_solve(data.workspace.get());
+  8. // Extract solution from data.workspace->x
+  9. // Cleanup automatic via unique_ptr destructor
+end note
+
+@enduml
