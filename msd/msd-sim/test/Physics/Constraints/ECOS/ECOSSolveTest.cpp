@@ -399,10 +399,13 @@ TEST(ECOSSolveTest, ActiveSetResultDefaultsToASM)
 
 // ============================================================================
 // ECOSData equality constraint support: verify A_eq and b_eq populated
+// Ticket 0035d1: Auxiliary-variable formulation uses Lᵀλ - y = 0 (3C equalities)
 // ============================================================================
 TEST(ECOSSolveTest, ECOSProblemBuilderPopulatesEqualityConstraints)
 {
   const int numContacts = 1;
+  const int lambdaDim = 3 * numContacts;
+  const int numVars = 6 * numContacts + 1;  // [λ; y; t]
 
   Eigen::MatrixXd A = Eigen::MatrixXd::Identity(3, 3);
   A(0, 1) = 0.1;
@@ -416,17 +419,16 @@ TEST(ECOSSolveTest, ECOSProblemBuilderPopulatesEqualityConstraints)
 
   ECOSData data = ECOSProblemBuilder::build(A, b, coneSpec);
 
-  // Verify equality constraint data is populated
-  EXPECT_EQ(data.num_equality_, 3);
+  // Verify equality constraint dimensions: 3C rows × (6C+1) cols
+  EXPECT_EQ(data.num_equality_, lambdaDim);
   EXPECT_GT(data.A_eq_.nnz, 0);
-  EXPECT_EQ(data.b_eq_.size(), 3u);
+  EXPECT_EQ(data.A_eq_.nrows, lambdaDim);
+  EXPECT_EQ(data.A_eq_.ncols, numVars);
 
-  // Verify b_eq matches input b
-  EXPECT_NEAR(data.b_eq_[0], 5.0, 1e-10);
-  EXPECT_NEAR(data.b_eq_[1], 1.0, 1e-10);
-  EXPECT_NEAR(data.b_eq_[2], 0.5, 1e-10);
-
-  // Verify A_eq dimensions
-  EXPECT_EQ(data.A_eq_.nrows, 3);
-  EXPECT_EQ(data.A_eq_.ncols, 3);
+  // Verify b_eq is all zeros (Lᵀλ - y = 0)
+  EXPECT_EQ(data.b_eq_.size(), static_cast<size_t>(lambdaDim));
+  for (int i = 0; i < lambdaDim; ++i)
+  {
+    EXPECT_NEAR(data.b_eq_[static_cast<size_t>(i)], 0.0, 1e-10);
+  }
 }

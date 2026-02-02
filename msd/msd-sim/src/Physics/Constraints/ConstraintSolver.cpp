@@ -14,6 +14,7 @@
 #include <ecos/ecos.h>
 #include <Eigen/Cholesky>
 #include <Eigen/SVD>
+#include <spdlog/spdlog.h>
 #include <algorithm>
 #include <cmath>
 
@@ -313,11 +314,31 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
       }
     }
 
+    // Ticket: 0035d9_two_phase_pipeline_fix
+    spdlog::debug("[0035d9] solveWithContacts: Friction detected, routing to ECOS");
+    spdlog::debug("[0035d9] solveWithContacts: numContacts={}, effective mass A size={}x{}, RHS b size={}",
+                  numContacts, A.rows(), A.cols(), b.size());
+    spdlog::debug("[0035d9] solveWithContacts: A norm={:.6e}, b norm={:.6e}",
+                  A.norm(), b.norm());
+    if (b.size() > 0 && b.size() <= 10) {
+      spdlog::debug("[0035d9] solveWithContacts: b values: {}",
+                    fmt::join(b.data(), b.data() + b.size(), ", "));
+    }
+
     // Build friction cone specification from constraint list
     FrictionConeSpec coneSpec = buildFrictionConeSpec(contactConstraints, numContacts);
 
     // Route to ECOS SOCP solver
     asmResult = solveWithECOS(A, b, coneSpec, numContacts);
+
+    // Ticket: 0035d9_two_phase_pipeline_fix
+    spdlog::debug("[0035d9] solveWithContacts: ECOS returned lambda size={}, norm={:.6e}",
+                  asmResult.lambda.size(), asmResult.lambda.norm());
+    if (asmResult.lambda.size() > 0 && asmResult.lambda.size() <= 10) {
+      spdlog::debug("[0035d9] solveWithContacts: ECOS lambda values: {}",
+                    fmt::join(asmResult.lambda.data(),
+                             asmResult.lambda.data() + asmResult.lambda.size(), ", "));
+    }
   }
   else
   {
@@ -370,6 +391,14 @@ Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
 {
   const size_t C = contactConstraints.size();
 
+  // Compute total row count: sum of all constraint dimensions
+  // Ticket 0035c1: ContactConstraint has dim=1, FrictionConstraint has dim=2
+  size_t totalRows = 0;
+  for (const auto* constraint : contactConstraints)
+  {
+    totalRows += static_cast<size_t>(constraint->dimension());
+  }
+
   // Build per-body inverse mass matrices (6×6)
   // M_k_inv = diag(inverseMass_k · I_3, inverseInertia_k)
   std::vector<Eigen::Matrix<double, 6, 6>> bodyMInv(numBodies);
@@ -380,45 +409,62 @@ Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
     bodyMInv[k].block<3, 3>(3, 3) = inverseInertias[k];
   }
 
-  // Assemble effective mass matrix A (C×C)
+  // Assemble effective mass matrix A (totalRows×totalRows)
   // A_ij = sum over shared bodies k of: J_i_k · M_k_inv · J_j_k^T
-  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(C), static_cast<Eigen::Index>(C));
+  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(totalRows),
+                                            static_cast<Eigen::Index>(totalRows));
+
+  size_t rowOffset_i = 0;
   for (size_t i = 0; i < C; ++i)
   {
+    const int dim_i = contactConstraints[i]->dimension();
     size_t bodyA_i = contactConstraints[i]->getBodyAIndex();
     size_t bodyB_i = contactConstraints[i]->getBodyBIndex();
 
-    // J_i is 1×12: [J_i_A(1×6) | J_i_B(1×6)]
-    Eigen::Matrix<double, 1, 6> J_i_A = jacobians[i].block<1, 6>(0, 0);
-    Eigen::Matrix<double, 1, 6> J_i_B = jacobians[i].block<1, 6>(0, 6);
+    // J_i is dim_i×12: [J_i_A(dim_i×6) | J_i_B(dim_i×6)]
+    Eigen::MatrixXd J_i_A = jacobians[i].block(0, 0, dim_i, 6);
+    Eigen::MatrixXd J_i_B = jacobians[i].block(0, 6, dim_i, 6);
 
+    size_t rowOffset_j = rowOffset_i;
     for (size_t j = i; j < C; ++j)
     {
+      const int dim_j = contactConstraints[j]->dimension();
       size_t bodyA_j = contactConstraints[j]->getBodyAIndex();
       size_t bodyB_j = contactConstraints[j]->getBodyBIndex();
 
-      Eigen::Matrix<double, 1, 6> J_j_A = jacobians[j].block<1, 6>(0, 0);
-      Eigen::Matrix<double, 1, 6> J_j_B = jacobians[j].block<1, 6>(0, 6);
+      Eigen::MatrixXd J_j_A = jacobians[j].block(0, 0, dim_j, 6);
+      Eigen::MatrixXd J_j_B = jacobians[j].block(0, 6, dim_j, 6);
 
-      double a_ij = 0.0;
+      // A_ij block is dim_i × dim_j (not 1×1)
+      Eigen::MatrixXd A_ij = Eigen::MatrixXd::Zero(dim_i, dim_j);
 
       // Check all body sharing combinations
       if (bodyA_i == bodyA_j)
-        a_ij += (J_i_A * bodyMInv[bodyA_i] * J_j_A.transpose())(0);
+        A_ij += J_i_A * bodyMInv[bodyA_i] * J_j_A.transpose();
       if (bodyA_i == bodyB_j)
-        a_ij += (J_i_A * bodyMInv[bodyA_i] * J_j_B.transpose())(0);
+        A_ij += J_i_A * bodyMInv[bodyA_i] * J_j_B.transpose();
       if (bodyB_i == bodyA_j)
-        a_ij += (J_i_B * bodyMInv[bodyB_i] * J_j_A.transpose())(0);
+        A_ij += J_i_B * bodyMInv[bodyB_i] * J_j_A.transpose();
       if (bodyB_i == bodyB_j)
-        a_ij += (J_i_B * bodyMInv[bodyB_i] * J_j_B.transpose())(0);
+        A_ij += J_i_B * bodyMInv[bodyB_i] * J_j_B.transpose();
 
-      A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) = a_ij;
-      A(static_cast<Eigen::Index>(j), static_cast<Eigen::Index>(i)) = a_ij;  // Symmetric
+      A.block(static_cast<Eigen::Index>(rowOffset_i),
+              static_cast<Eigen::Index>(rowOffset_j),
+              dim_i, dim_j) = A_ij;
+
+      // Symmetric (transpose the block)
+      A.block(static_cast<Eigen::Index>(rowOffset_j),
+              static_cast<Eigen::Index>(rowOffset_i),
+              dim_j, dim_i) = A_ij.transpose();
+
+      rowOffset_j += static_cast<size_t>(dim_j);
     }
+
+    rowOffset_i += static_cast<size_t>(dim_i);
   }
 
   // Add regularization to diagonal for numerical stability
-  for (size_t i = 0; i < C; ++i)
+  for (size_t i = 0; i < totalRows; ++i)
   {
     A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(i)) += kRegularizationEpsilon;
   }
@@ -434,14 +480,25 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
 {
   const size_t C = contactConstraints.size();
 
+  // Compute total row count: sum of all constraint dimensions
+  // Ticket 0035c1: ContactConstraint has dim=1, FrictionConstraint has dim=2
+  size_t totalRows = 0;
+  for (const auto* constraint : contactConstraints)
+  {
+    totalRows += static_cast<size_t>(constraint->dimension());
+  }
+
   // b_i = -(1 + e_i) · (J_i · v_minus) + (ERP_i / dt) · penetration_i
   //
-  // CRITICAL: The -(1+e) factor is correct for the PGS system A·λ = b.
+  // CRITICAL: The -(1+e) factor is correct for the system A·λ = b.
   // This differs from the target velocity formulation v_target = -e · v_pre.
   // See P2 Debug Findings for explanation.
-  Eigen::VectorXd b(static_cast<Eigen::Index>(C));
+  Eigen::VectorXd b(static_cast<Eigen::Index>(totalRows));
+
+  size_t rowOffset = 0;
   for (size_t i = 0; i < C; ++i)
   {
+    const int dim_i = contactConstraints[i]->dimension();
     const auto* contact = dynamic_cast<const ContactConstraint*>(contactConstraints[i]);
     size_t bodyA = contactConstraints[i]->getBodyAIndex();
     size_t bodyB = contactConstraints[i]->getBodyBIndex();
@@ -459,7 +516,8 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
     AngularRate omegaB = stateB.getAngularVelocity();
     v.segment<3>(9) = Eigen::Vector3d{omegaB.x(), omegaB.y(), omegaB.z()};
 
-    double Jv = (jacobians[i] * v)(0);  // Scalar: relative velocity along constraint
+    // Jv is dim_i×1 vector (1-dimensional for ContactConstraint, 2-dimensional for FrictionConstraint)
+    Eigen::VectorXd Jv = jacobians[i] * v;
 
     // Restitution and Baumgarte terms
     if (contact != nullptr)
@@ -469,13 +527,20 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
       double penetration = contact->getPenetrationDepth();
 
       // RHS: -(1+e) · J·v⁻ + (ERP/dt) · penetration
-      b(static_cast<Eigen::Index>(i)) = -(1.0 + e) * Jv + (erp / dt) * penetration;
+      // For ContactConstraint (dim=1), this is a scalar
+      b(static_cast<Eigen::Index>(rowOffset)) = -(1.0 + e) * Jv(0) + (erp / dt) * penetration;
     }
     else
     {
-      // Generic two-body constraint (no restitution)
-      b(static_cast<Eigen::Index>(i)) = -Jv;
+      // Generic two-body constraint (no restitution) - e.g., FrictionConstraint
+      // For multi-dimensional constraints, each row gets -Jv[row]
+      for (int row = 0; row < dim_i; ++row)
+      {
+        b(static_cast<Eigen::Index>(rowOffset + static_cast<size_t>(row))) = -Jv(row);
+      }
     }
+
+    rowOffset += static_cast<size_t>(dim_i);
   }
 
   return b;
@@ -534,8 +599,17 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
       Eigen::LLT<Eigen::MatrixXd> llt{A_W};
       if (llt.info() != Eigen::Success)
       {
-        // Subproblem is singular despite regularization (extremely rare)
-        return ActiveSetResult{lambda, false, iter, activeSize};
+        // Matrix is not positive definite — apply regularization fallback
+        // Ticket: 0035d_friction_hardening_and_validation
+        applyRegularizationFallback(A_W);
+
+        // Retry LLT decomposition on regularized matrix
+        llt.compute(A_W);
+        if (llt.info() != Eigen::Success)
+        {
+          // Still singular after regularization (extremely rare)
+          return ActiveSetResult{lambda, false, iter, activeSize};
+        }
       }
 
       Eigen::VectorXd lambda_W = llt.solve(b_W);
@@ -625,29 +699,116 @@ std::vector<ConstraintSolver::BodyForces> ConstraintSolver::extractContactBodyFo
 
   // F_body_k = sum over contacts touching body k: J_i_k^T · lambda_i / dt
   // Dividing by dt converts impulse to force (since integrator multiplies by dt)
+  size_t rowOffset = 0;
   for (size_t i = 0; i < C; ++i)
   {
-    if (lambda(static_cast<Eigen::Index>(i)) <= 0.0)
-      continue;
-
+    const int dim_i = contactConstraints[i]->dimension();
     size_t bodyA = contactConstraints[i]->getBodyAIndex();
     size_t bodyB = contactConstraints[i]->getBodyBIndex();
 
-    Eigen::Matrix<double, 1, 6> J_i_A = jacobians[i].block<1, 6>(0, 0);
-    Eigen::Matrix<double, 1, 6> J_i_B = jacobians[i].block<1, 6>(0, 6);
+    // Extract lambda segment for this constraint (dim_i × 1)
+    Eigen::VectorXd lambda_i = lambda.segment(static_cast<Eigen::Index>(rowOffset), dim_i);
+
+    // Skip normal (ContactConstraint, dim=1) if lambda <= 0 (separating contact).
+    // Friction constraints (dim=2) have signed lambdas — negative values indicate
+    // force direction, not separation. Only skip friction if both components are ~zero.
+    // Ticket 0035d2: Previously skipped if ALL components were non-positive, which
+    // incorrectly filtered friction forces with negative tangential components.
+    if (dim_i == 1)
+    {
+      // Normal constraint: skip if separating (lambda <= 0)
+      if (lambda_i(0) <= 0.0)
+      {
+        rowOffset += static_cast<size_t>(dim_i);
+        continue;
+      }
+    }
+    else
+    {
+      // Friction constraint (dim >= 2): skip only if all components are ~zero
+      if (lambda_i.squaredNorm() < 1e-30)
+      {
+        rowOffset += static_cast<size_t>(dim_i);
+        continue;
+      }
+    }
+
+    // J_i is dim_i×12: [J_i_A(dim_i×6) | J_i_B(dim_i×6)]
+    Eigen::MatrixXd J_i_A = jacobians[i].block(0, 0, dim_i, 6);
+    Eigen::MatrixXd J_i_B = jacobians[i].block(0, 6, dim_i, 6);
 
     // Force = J^T · lambda / dt (convert impulse to force)
-    Eigen::Matrix<double, 6, 1> forceA = J_i_A.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;
-    Eigen::Matrix<double, 6, 1> forceB = J_i_B.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;
+    // J_i_A^T is 6×dim_i, lambda_i is dim_i×1, result is 6×1
+    Eigen::Matrix<double, 6, 1> forceA = J_i_A.transpose() * lambda_i / dt;
+    Eigen::Matrix<double, 6, 1> forceB = J_i_B.transpose() * lambda_i / dt;
 
     bodyForces[bodyA].linearForce += Coordinate{forceA(0), forceA(1), forceA(2)};
     bodyForces[bodyA].angularTorque += Coordinate{forceA(3), forceA(4), forceA(5)};
 
     bodyForces[bodyB].linearForce += Coordinate{forceB(0), forceB(1), forceB(2)};
     bodyForces[bodyB].angularTorque += Coordinate{forceB(3), forceB(4), forceB(5)};
+
+    rowOffset += static_cast<size_t>(dim_i);
   }
 
   return bodyForces;
+}
+
+// Ticket: 0035d5_two_phase_friction_solve
+std::vector<ConstraintSolver::BodyForces> ConstraintSolver::extractFrictionOnlyBodyForces(
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<std::reference_wrapper<const InertialState>>& states,
+    const Eigen::VectorXd& lambda,
+    size_t numBodies,
+    double dt) const
+{
+  // Ticket: 0035d9_two_phase_pipeline_fix
+  spdlog::debug("[0035d9] extractFrictionOnlyBodyForces: input lambda size={}, norm={:.6e}",
+                lambda.size(), lambda.norm());
+
+  // Step 1: Assemble Jacobians
+  std::vector<Eigen::MatrixXd> jacobians = assembleContactJacobians(contactConstraints, states);
+
+  // Step 2: Clone lambda vector
+  Eigen::VectorXd modifiedLambda = lambda;
+
+  // Step 3: Zero out entries corresponding to ContactConstraint instances
+  size_t rowOffset = 0;
+  int zeroedCount = 0;
+  for (size_t i = 0; i < contactConstraints.size(); ++i)
+  {
+    const int dim_i = contactConstraints[i]->dimension();
+    const auto* contact = dynamic_cast<const ContactConstraint*>(contactConstraints[i]);
+
+    if (contact != nullptr)
+    {
+      // Ticket: 0035d9_two_phase_pipeline_fix
+      double originalValue = modifiedLambda(static_cast<Eigen::Index>(rowOffset));
+      spdlog::debug("[0035d9] extractFrictionOnlyBodyForces: Zeroing ContactConstraint[{}] at row {}, original lambda={:.6e}",
+                    i, rowOffset, originalValue);
+
+      // Zero out this ContactConstraint's lambda entries
+      for (int row = 0; row < dim_i; ++row)
+      {
+        modifiedLambda(static_cast<Eigen::Index>(rowOffset + static_cast<size_t>(row))) = 0.0;
+      }
+      zeroedCount++;
+    }
+
+    rowOffset += static_cast<size_t>(dim_i);
+  }
+
+  // Ticket: 0035d9_two_phase_pipeline_fix
+  spdlog::debug("[0035d9] extractFrictionOnlyBodyForces: Zeroed {} ContactConstraints, modified lambda norm={:.6e}",
+                zeroedCount, modifiedLambda.norm());
+  if (modifiedLambda.size() > 0 && modifiedLambda.size() <= 10) {
+    spdlog::debug("[0035d9] extractFrictionOnlyBodyForces: modified lambda values: {}",
+                  fmt::join(modifiedLambda.data(),
+                           modifiedLambda.data() + modifiedLambda.size(), ", "));
+  }
+
+  // Step 4: Extract body forces with modified lambda (only friction contributes)
+  return extractContactBodyForces(contactConstraints, jacobians, modifiedLambda, numBodies, dt);
 }
 
 // ===== ECOS Solver Integration (Ticket 0035b4) =====
@@ -663,24 +824,33 @@ FrictionConeSpec ConstraintSolver::buildFrictionConeSpec(
 {
   FrictionConeSpec coneSpec{numContacts};
 
-  // Constraint ordering convention:
-  // For each contact i, the constraints are interleaved as:
-  //   ContactConstraint (normal, dim=1) at some index
-  //   FrictionConstraint (tangential, dim=2) at some index
-  //
-  // In the 3C-dimensional lambda vector, the ordering is:
-  //   [λ_n0, λ_t1_0, λ_t2_0, λ_n1, λ_t1_1, λ_t2_1, ...]
-  //
-  // We scan for FrictionConstraint instances and extract μ values.
-  // The normal constraint index for contact i is 3*i.
+  // Ticket 0035d3: Use actual row offsets instead of assuming 3*contactIdx
+  // First pass: Record row offset for each ContactConstraint
+  std::vector<int> normalRowOffsets;
+  normalRowOffsets.reserve(static_cast<size_t>(numContacts));
+
+  int rowOffset = 0;
+  for (const auto* constraint : contactConstraints)
+  {
+    const auto* contact = dynamic_cast<const ContactConstraint*>(constraint);
+    if (contact != nullptr)
+    {
+      normalRowOffsets.push_back(rowOffset);
+    }
+    rowOffset += constraint->dimension();
+  }
+
+  // Second pass: Match each FrictionConstraint to its normal by position
   int contactIdx = 0;
   for (const auto* constraint : contactConstraints)
   {
     const auto* friction = dynamic_cast<const FrictionConstraint*>(constraint);
     if (friction != nullptr)
     {
+      // i-th friction constraint corresponds to i-th normal constraint
+      int normalIdx = normalRowOffsets[static_cast<size_t>(contactIdx)];
       coneSpec.setFriction(contactIdx, friction->getFrictionCoefficient(),
-                            3 * contactIdx);
+                            normalIdx);
       ++contactIdx;
     }
   }
@@ -692,11 +862,13 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithECOS(
     const Eigen::MatrixXd& A,
     const Eigen::VectorXd& b,
     const FrictionConeSpec& coneSpec,
-    int numContacts) const
+    int /* numContacts */) const
 {
-  const int n = 3 * numContacts;  // Decision variables
+  // Ticket 0035d3: Compute n from actual A matrix dimension
+  const int n = static_cast<int>(A.rows());
 
-  // Build ECOS problem data (G matrix, h, c, cone sizes, A_eq, b_eq)
+  // Build ECOS problem data with auxiliary-variable SOCP reformulation (Ticket 0035d1)
+  // Problem has 6C+1 variables [λ; y; t], 3C equality constraints (Lᵀλ - y = 0)
   ECOSData ecosData = ECOSProblemBuilder::build(A, b, coneSpec);
 
   // Setup ECOS workspace
@@ -715,7 +887,8 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithECOS(
   // Solve
   idxint exitFlag = ECOS_solve(workspace);
 
-  // Extract solution
+  // Extract λ from extended solution [λ; y; t] — discard auxiliary y and epigraph t
+  // Ticket 0035d1: Solution vector has dimension 6C+1, extract first 3C (λ only)
   Eigen::VectorXd lambda = Eigen::Map<Eigen::VectorXd>(workspace->x, n);
 
   // Determine convergence from exit code
@@ -742,6 +915,23 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithECOS(
   // ECOSData destructor handles ECOS_cleanup via unique_ptr
 
   return result;
+}
+
+// ===== Regularization Fallback (Ticket 0035d) =====
+
+bool ConstraintSolver::applyRegularizationFallback(Eigen::MatrixXd& A) const
+{
+  // Apply diagonal regularization: A_reg = A + epsilon * I
+  // This improves matrix conditioning for ill-conditioned systems.
+  // Triggered when LLT decomposition fails (non-positive-definite matrix).
+
+  const Eigen::Index n = A.rows();
+  for (Eigen::Index i = 0; i < n; ++i)
+  {
+    A(i, i) += regularization_epsilon_;
+  }
+
+  return true;  // Regularization applied
 }
 
 }  // namespace msd_sim

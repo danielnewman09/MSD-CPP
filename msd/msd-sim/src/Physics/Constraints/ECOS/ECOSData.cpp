@@ -15,8 +15,10 @@ void ECOSWorkspaceDeleter::operator()(pwork* w) const noexcept
   }
 }
 
-ECOSData::ECOSData(idxint numVariables, idxint numCones, idxint numEquality)
+ECOSData::ECOSData(idxint numVariables, idxint numInequality, idxint numCones,
+                   idxint numEquality)
   : num_variables_{numVariables},
+    num_inequality_{numInequality},
     num_cones_{numCones},
     num_equality_{numEquality},
     G_{},
@@ -28,7 +30,7 @@ ECOSData::ECOSData(idxint numVariables, idxint numCones, idxint numEquality)
     workspace_{nullptr}
 {
   // Reserve storage for vectors to avoid reallocation
-  h_.reserve(static_cast<size_t>(numVariables));
+  h_.reserve(static_cast<size_t>(numInequality));
   c_.reserve(static_cast<size_t>(numVariables));
   cone_sizes_.reserve(static_cast<size_t>(numCones));
   if (numEquality > 0)
@@ -39,6 +41,7 @@ ECOSData::ECOSData(idxint numVariables, idxint numCones, idxint numEquality)
 
 ECOSData::ECOSData(ECOSData&& other) noexcept
   : num_variables_{other.num_variables_},
+    num_inequality_{other.num_inequality_},
     num_cones_{other.num_cones_},
     num_equality_{other.num_equality_},
     G_{std::move(other.G_)},
@@ -62,6 +65,7 @@ ECOSData& ECOSData::operator=(ECOSData&& other) noexcept
 
     // Now safe to move data arrays
     num_variables_ = other.num_variables_;
+    num_inequality_ = other.num_inequality_;
     num_cones_ = other.num_cones_;
     num_equality_ = other.num_equality_;
     G_ = std::move(other.G_);
@@ -92,10 +96,10 @@ void ECOSData::setup()
     throw std::runtime_error("ECOSData::setup: G matrix is empty (nnz == 0)");
   }
 
-  if (static_cast<idxint>(h_.size()) != num_variables_)
+  if (static_cast<idxint>(h_.size()) != num_inequality_)
   {
     throw std::runtime_error("ECOSData::setup: h size mismatch (expected " +
-                             std::to_string(num_variables_) + ", got " +
+                             std::to_string(num_inequality_) + ", got " +
                              std::to_string(h_.size()) + ")");
   }
 
@@ -142,7 +146,7 @@ void ECOSData::setup()
   // Call ECOS_setup() with owned data arrays
   pwork* raw =
     ECOS_setup(num_variables_,  // n (number of variables)
-               num_variables_,  // m (number of inequality constraints)
+               num_inequality_,  // m (number of inequality constraint rows)
                num_equality_,   // p (number of equality constraints)
                0,  // l (dimension of positive orthant, 0 for SOC-only)
                num_cones_,             // ncones (number of second-order cones)

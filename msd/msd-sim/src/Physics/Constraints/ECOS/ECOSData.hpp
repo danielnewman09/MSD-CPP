@@ -58,9 +58,10 @@ using ECOSWorkspacePtr = std::unique_ptr<pwork, ECOSWorkspaceDeleter>;
 struct ECOSData
 {
   // Problem dimensions
-  idxint num_variables_{0};       // Decision variables (3C)
-  idxint num_cones_{0};           // Number of second-order cones (C)
-  idxint num_equality_{0};        // Number of equality constraints (Ticket 0035b4)
+  idxint num_variables_{0};       // Decision variables (3C+1 after epigraph reformulation)
+  idxint num_inequality_{0};      // Number of inequality constraint rows (G matrix rows)
+  idxint num_cones_{0};           // Number of second-order cones (C+1 after epigraph)
+  idxint num_equality_{0};        // Number of equality constraints (0 after ticket 0035d1)
 
   // Owned sparse matrix storage (CSC format for G)
   ECOSSparseMatrix G_{};
@@ -90,11 +91,15 @@ struct ECOSData
    * Initializes dimensions and reserves storage for vectors. Does NOT call
    * ECOS_setup() — use setup() after populating G, h, c, cone_sizes.
    *
-   * @param numVariables Number of decision variables (typically 3*numContacts)
-   * @param numCones Number of second-order cones (typically numContacts)
+   * @param numVariables Number of decision variables (3C+1 after epigraph)
+   * @param numInequality Number of inequality constraint rows (G matrix rows)
+   * @param numCones Number of second-order cones (C+1 after epigraph)
    * @param numEquality Number of equality constraints (default 0)
+   *
+   * @ticket 0035d1_ecos_socp_reformulation (added numInequality parameter)
    */
-  explicit ECOSData(idxint numVariables, idxint numCones, idxint numEquality = 0);
+  explicit ECOSData(idxint numVariables, idxint numInequality, idxint numCones,
+                    idxint numEquality = 0);
 
   /**
    * @brief Destructor (default)

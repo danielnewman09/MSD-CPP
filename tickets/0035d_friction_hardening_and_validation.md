@@ -2,16 +2,16 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Design
-- [ ] Design Complete — Awaiting Review
-- [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Quality Gate
+- [x] Ready for Design
+- [x] Design Complete — Awaiting Review
+- [x] Ready for Implementation
+- [x] Implementation Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Documentation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Implementation Complete — Awaiting Quality Gate
 **Assignee**: N/A
 **Created**: 2026-01-31
 **Generate Tutorial**: Yes
@@ -172,6 +172,59 @@ Maps M8 examples to test cases and acceptance criteria:
 ### Draft Phase
 - **Created**: 2026-01-31
 - **Notes**: Terminal subtask for hardening and validation. Math formulation for M6, M7, M8 already complete. This subtask skips the math formulation and design phases — it's primarily implementation and testing of cross-cutting concerns identified in the math analysis.
+
+### Status Advancement (Draft → Ready for Design)
+- **Updated**: 2026-02-01
+- **Notes**: Ticket does not require Math Design phase (no "Requires Math Design: Yes" flag). Math formulation complete in parent ticket 0035. Advanced to Ready for Design phase. Architectural design is next step to structure the hardening features (energy monitoring, velocity threshold, regularization) and validation test suite.
+
+### Design Phase
+- **Started**: 2026-02-01
+- **Completed**: 2026-02-01
+- **Artifacts**:
+  - `docs/designs/0035d_friction_hardening_and_validation/design.md` — Comprehensive design document
+  - `docs/designs/0035d_friction_hardening_and_validation/0035d_friction_hardening_and_validation.puml` — PlantUML architecture diagram
+- **Notes**: Design is primarily test-focused with minimal production code changes (80 LOC modified, 1560 LOC new test infrastructure). Three main components: (1) Energy monitoring infrastructure for M6 validation, (2) Velocity threshold post-processing for M7 stick-slip jitter mitigation, (3) Regularization fallback for M7 degenerate cases. All 6 M8 numerical examples mapped to automated test cases with traceability matrix. Performance benchmarks compare friction vs normal-only solver. Design ready for review.
+
+### Design Review Phase (Initial Assessment)
+- **Reviewed**: 2026-02-01
+- **Reviewer**: Design Review Agent
+- **Status**: REVISION_REQUESTED (Iteration 0 of 1)
+- **Issues Found**: 2 architectural fit issues
+  - **I1**: CollisionResponse component does not exist in codebase (removed in ticket 0032d). Replace with WorldModel which handles collision integration.
+  - **I2**: PlantUML diagram shows non-existent CollisionResponse class. Update to show WorldModel as modified component.
+- **Items Passing**: Test infrastructure design, ConstraintSolver modifications, test coverage, performance benchmarking, C++ design quality, naming conventions, memory management, error handling all approved.
+- **Notes**: Minor architectural issue. Design correctly identifies where velocity threshold post-processing should occur (collision response integration layer), but references the wrong component name. Velocity threshold should be in WorldModel::updateCollisions(), not a non-existent CollisionResponse class. Awaiting architect revision to correct component references.
+
+### Architect Revision Phase
+- **Revised**: 2026-02-01
+- **Architect**: cpp-architect agent (autonomous revision)
+- **Changes Made**:
+  - Fixed PlantUML diagram: Replaced `CollisionResponse <<modified>>` with `WorldModel <<modified>>` in "msd-sim::Environment" package
+  - Updated diagram relationships: Changed to `WorldModel ..> ConstraintSolver : uses`
+  - Verified design document already correctly referenced WorldModel in Modified Components section
+- **Artifacts Updated**:
+  - `docs/designs/0035d_friction_hardening_and_validation/0035d_friction_hardening_and_validation.puml` — Corrected component references
+  - `docs/designs/0035d_friction_hardening_and_validation/design.md` — Appended architect revision notes
+- **Notes**: Issues I1 and I2 resolved. PlantUML diagram now consistent with design document text. Ready for final design review.
+
+### Design Review Phase (Final Assessment)
+- **Reviewed**: 2026-02-01
+- **Reviewer**: Design Review Agent
+- **Status**: APPROVED (Iteration 1 of 1)
+- **Verification**: All issues from initial assessment resolved. PlantUML diagram corrected, WorldModel properly shown as modified component in msd-sim::Environment package.
+- **Criteria**: All architectural fit, C++ design quality, feasibility, and testability criteria pass.
+- **Risks**: 3 low-likelihood/low-impact risks identified, all with clear mitigation strategies. No prototypes required.
+- **Notes**: Design approved. Comprehensive test coverage for M6, M7, M8 validation. Ready for human review and advancement to Ready for Implementation phase.
+
+### Human Approval Phase
+- **Approved**: 2026-02-01
+- **Approver**: Human operator
+- **Status**: Design approved for implementation
+- **Notes**: No open questions, no prototype required (math formulation M6, M7, M8 complete in parent ticket). Advanced to Ready for Implementation.
+
+### Status Advancement (Design → Ready for Implementation)
+- **Advanced**: 2026-02-01
+- **Notes**: Design approved by autonomous review cycle and human. No prototyping phase needed. Proceeding directly to implementation of test infrastructure (1560 LOC) and production hardening features (80 LOC).
 
 ---
 

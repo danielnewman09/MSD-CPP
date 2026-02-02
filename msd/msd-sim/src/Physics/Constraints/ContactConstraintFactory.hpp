@@ -5,6 +5,7 @@
 #define MSD_SIM_PHYSICS_CONTACT_CONSTRAINT_FACTORY_HPP
 
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
 #include "msd-sim/src/Physics/CollisionResult.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 #include "msd-sim/src/Environment/Coordinate.hpp"
@@ -117,6 +118,103 @@ double computeRelativeNormalVelocity(
     const Coordinate& leverArmA,
     const Coordinate& leverArmB,
     const Coordinate& normal);
+
+// ========== Friction Support (ticket 0035c) ==========
+
+/**
+ * @brief Combine two friction coefficients using geometric mean
+ *
+ * Formula: μ_combined = sqrt(μA * μB)
+ *
+ * This matches the restitution combination pattern (geometric mean) for consistency.
+ * Geometric mean has desirable property: if either material is frictionless (μ=0),
+ * combined friction is zero (matches physical intuition).
+ *
+ * @param muA Friction coefficient for body A [0, ∞)
+ * @param muB Friction coefficient for body B [0, ∞)
+ * @return Combined friction coefficient [0, ∞)
+ *
+ * @ticket 0035c_friction_pipeline_integration
+ */
+double combineFrictionCoefficient(double muA, double muB);
+
+// ========== Centroid Reduction (ticket 0035d4) ==========
+
+/**
+ * @brief Create single friction constraint at contact manifold centroid
+ *
+ * Reduces N-contact manifold to a single equivalent friction constraint at the
+ * geometric center, producing a well-conditioned 3×3 system instead of 3N×3N.
+ * For face-face collisions with 4 contact points, this eliminates geometric
+ * redundancy and prevents near-singular effective mass matrices.
+ *
+ * Centroid computation:
+ *   centroidA = (1/N) * Σ contacts[i].pointA
+ *   centroidB = (1/N) * Σ contacts[i].pointB
+ *
+ * @param bodyAIndex Index of body A in the solver body list
+ * @param bodyBIndex Index of body B in the solver body list
+ * @param result Collision result with contact manifold
+ * @param comA Center of mass of body A (world space) [m]
+ * @param comB Center of mass of body B (world space) [m]
+ * @param frictionCoefficientA Friction coefficient for body A [0, ∞)
+ * @param frictionCoefficientB Friction coefficient for body B [0, ∞)
+ * @return Single friction constraint at centroid, or nullptr if μ=0 or contactCount=0
+ *
+ * @throws std::invalid_argument if frictionCoefficientA or frictionCoefficientB < 0
+ * @throws Propagates exceptions from FrictionConstraint constructor (invalid parameters)
+ *
+ * @ticket 0035d4_centroid_friction_factory
+ */
+std::unique_ptr<FrictionConstraint> createCentroidFrictionConstraint(
+    size_t bodyAIndex,
+    size_t bodyBIndex,
+    const CollisionResult& result,
+    const Coordinate& comA,
+    const Coordinate& comB,
+    double frictionCoefficientA,
+    double frictionCoefficientB);
+
+/**
+ * @brief Create single contact constraint at contact manifold centroid
+ *
+ * Reduces N-contact manifold to a single equivalent normal constraint at the
+ * geometric center, producing a 1×1 system instead of N×N. For face-face
+ * collisions with 4 contact points, this eliminates geometric redundancy
+ * and prevents near-singular effective mass matrices.
+ *
+ * Centroid computation:
+ *   centroidA = (1/N) * Σ contacts[i].pointA
+ *   centroidB = (1/N) * Σ contacts[i].pointB
+ *
+ * Lever arms computed from centroid:
+ *   leverArmA = centroidA - comA
+ *   leverArmB = centroidB - comB
+ *
+ * Relative normal velocity computed at centroid for restitution handling.
+ * Rest velocity threshold applied as in createFromCollision().
+ *
+ * @param bodyAIndex Index of body A in the solver body list
+ * @param bodyBIndex Index of body B in the solver body list
+ * @param result Collision result with contact manifold
+ * @param stateA Inertial state of body A
+ * @param stateB Inertial state of body B
+ * @param comA Center of mass of body A (world space) [m]
+ * @param comB Center of mass of body B (world space) [m]
+ * @param restitution Combined coefficient of restitution [0, 1]
+ * @return Single contact constraint at centroid, or nullptr if contactCount=0
+ *
+ * @ticket 0035d4_centroid_friction_factory
+ */
+std::unique_ptr<ContactConstraint> createCentroidContactConstraint(
+    size_t bodyAIndex,
+    size_t bodyBIndex,
+    const CollisionResult& result,
+    const InertialState& stateA,
+    const InertialState& stateB,
+    const Coordinate& comA,
+    const Coordinate& comB,
+    double restitution);
 
 }  // namespace ContactConstraintFactory
 

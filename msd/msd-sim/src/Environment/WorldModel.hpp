@@ -197,13 +197,6 @@ public:
    */
   void setIntegrator(std::unique_ptr<Integrator> integrator);
 
-  /**
-   * @brief Get the world gravity vector (deprecated).
-   * @return Gravity acceleration vector [m/s²]
-   * @deprecated Use PotentialEnergy interface instead
-   */
-  [[deprecated("Use PotentialEnergy interface instead")]]
-  const Coordinate& getGravity() const;
 
   // ========== Platform Management (Legacy) ==========
 
@@ -259,9 +252,10 @@ private:
    * @brief Detect and resolve collisions using constraint-based approach
    *
    * Creates transient contact constraints from collision results, solves them
-   * via Projected Gauss-Seidel (PGS), and applies constraint forces to bodies.
+   * via Active Set Method (ASM) / ECOS, and applies constraint forces to
+   * bodies.
    *
-   * @param dt Timestep [s] (needed for PGS solver force conversion)
+   * @param dt Timestep [s] (needed for solver force conversion)
    *
    * @ticket 0032_contact_constraint_refactor
    */
@@ -291,17 +285,19 @@ private:
   uint32_t inertialAssetIdCounter_{0};
   uint32_t environmentAssetIdCounter_{0};
 
-  // NEW: Gravity (deprecated, ticket 0023a, replaced by potentialEnergies_ in ticket 0030)
-  [[deprecated("Use potentialEnergies_ instead")]]
-  Coordinate gravity_{0.0, 0.0, -9.81};
-
-  // Collision detection (ticket 0027) and constraint-based response (ticket 0032)
+  // Collision detection (ticket 0027) and constraint-based response (ticket
+  // 0032)
   CollisionHandler collisionHandler_{1e-6};
-  ConstraintSolver contactSolver_;  // PGS solver for contact constraints
+  ConstraintSolver contactSolver_;  // Contact constraint solver (ASM/ECOS)
 
   // NEW: Potential energies and integrator (ticket 0030)
   std::vector<std::unique_ptr<PotentialEnergy>> potentialEnergies_;
   std::unique_ptr<Integrator> integrator_;
+
+  // Velocity threshold for stick-slip jitter mitigation (ticket 0035d)
+  double velocity_rest_threshold_{0.01};  // m/s, from M7
+
+  double angularVelocityRestThreshold{0.1};
 };
 
 }  // namespace msd_sim

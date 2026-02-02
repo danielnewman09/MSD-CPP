@@ -16,8 +16,7 @@
       "compilerPath": "/usr/bin/clang++",
       "cStandard": "c17",
       "cppStandard": "c++20",
-      "intelliSenseMode": "macos-clang-arm64",
-      "configurationProvider": "ms-vscode.cmake-tools"
+      "intelliSenseMode": "macos-clang-arm64"
     },
     {
       "name": "Linux",

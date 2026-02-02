@@ -206,7 +206,7 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
   // Create random transform
   // msd_sim::Coordinate randomPos{posDist(gen), posDist(gen), posDist(gen)};
 
-  msd_sim::Coordinate randomPos{0., 0., 0.};
+  msd_sim::Coordinate randomPos{0., 0., -9.0};
 
   // msd_sim::AngularCoordinate randomOrientation{
   //   angleDist(gen),  // pitch (radians)
@@ -223,6 +223,12 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
 
   auto& object =
     engine_.spawnInertialObject(geometryType, randomPos, randomOrientation);
+  auto& nonconstobject =
+    engine_.getWorldModel().getObject(object.getInstanceId());
+  auto& inertialState = nonconstobject.getInertialState();
+  // inertialState.setAngularVelocity(msd_sim::AngularRate{0.0, 0., 1.0});
+  inertialState.velocity = msd_sim::Coordinate{.5, 0., -10.};
+
   gpuManager_->addObject(object, r, g, b);
 
   SDL_Log("Spawned %s at (%.2f, %.2f, %.2f) with orientation (%.2f, %.2f, "

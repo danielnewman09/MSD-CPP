@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <iostream>
 #include <stdexcept>
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 

@@ -33,7 +33,11 @@ legend right
 endlegend
 
 ' -----------------------------------------------------------------------------
-' Package/Namespace Organization
+' Package Organization
+' IMPORTANT: Always use `package` for grouping — NEVER use `namespace`.
+' PlantUML `namespace` prepends the package name to class identifiers,
+' breaking relationship references and stereotypes in class diagrams.
+' For C++ namespaces/static utility classes, use `class Foo { <<utility>> }`.
 ' -----------------------------------------------------------------------------
 package "project::feature" {
     

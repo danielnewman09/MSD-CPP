@@ -81,6 +81,23 @@ public:
                    const ReferenceFrame& frame,
                    double coefficientOfRestitution);
 
+  /**
+   * @brief Constructor with custom restitution and friction
+   *
+   * @param assetId Asset type ID
+   * @param instanceId Unique instance ID
+   * @param hull Collision hull reference
+   * @param frame Reference frame (position and orientation)
+   * @param coefficientOfRestitution Coefficient of restitution [0, 1]
+   * @param frictionCoefficient Friction coefficient [0, ∞)
+   */
+  AssetEnvironment(uint32_t assetId,
+                   uint32_t instanceId,
+                   ConvexHull& hull,
+                   const ReferenceFrame& frame,
+                   double coefficientOfRestitution,
+                   double frictionCoefficient);
+
   ~AssetEnvironment() = default;
 
   // ===== Mass properties for unified solver path (Ticket 0032) =====
@@ -118,6 +135,15 @@ public:
    */
   void setCoefficientOfRestitution(double e);
 
+  // ===== Friction for collision response =====
+
+  /**
+   * @brief Get friction coefficient
+   * @return Friction coefficient [0, ∞)
+   * @ticket 0035c_friction_pipeline_integration
+   */
+  double getFrictionCoefficient() const { return friction_coefficient_; }
+
   // Rule of Five
   AssetEnvironment(const AssetEnvironment&) = delete;
   AssetEnvironment& operator=(const AssetEnvironment&) = delete;
@@ -128,6 +154,7 @@ private:
   static const Eigen::Matrix3d kZeroInertia;
   InertialState static_state_;  // Zero velocity, position from frame
   double coefficient_of_restitution_{0.5};
+  double friction_coefficient_{0.5};  // Default: moderate friction (ticket 0035c)
 };
 
 }  // namespace msd_sim

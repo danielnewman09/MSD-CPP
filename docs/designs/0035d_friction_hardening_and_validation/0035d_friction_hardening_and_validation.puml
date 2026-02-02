@@ -1,0 +1,161 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+title 0035d: Friction Hardening and Validation Architecture
+
+' ===== Energy Monitoring Components (Test Infrastructure) =====
+
+package "Test Infrastructure" {
+    class FrictionEnergyTest <<new>> {
+        <<test fixture>>
+        +TEST_CASE: EnergyMonotonicDecreaseForSliding()
+        +TEST_CASE: EnergyConservationForStatic()
+        +TEST_CASE: EnergyNeverIncreases()
+        --
+        -computeKineticEnergy(states): double
+        -validateEnergyDecrease(E_before, E_after, dt): void
+    }
+
+    class FrictionValidationTest <<new>> {
+        <<test fixture>>
+        +TEST_CASE: StaticFrictionInclinedPlane()
+        +TEST_CASE: KineticFrictionInclinedPlane()
+        +TEST_CASE: SlidingDeceleration()
+        +TEST_CASE: GlancingCollisionSpin()
+        +TEST_CASE: FrictionConeSaturation()
+        +TEST_CASE: TwoBodyNewtonsThirdLaw()
+        --
+        -setupInclinedPlane(angle, mu): Scenario
+        -setupSlidingBlock(v0, mu): Scenario
+        -validateForceBalance(expected, actual): void
+    }
+
+    class FrictionStabilityTest <<new>> {
+        <<test fixture>>
+        +TEST_CASE: RegularizationHandlesExtremeMassRatio()
+        +TEST_CASE: VelocityThresholdPreventsJitter()
+        +TEST_CASE: StickSlipTransitionSmoothness()
+        --
+        -createDegenerateCase(): ContactConfiguration
+        -measureVelocityJitter(states): double
+    }
+}
+
+' ===== Benchmark Components =====
+
+package "Benchmark Infrastructure" {
+    class FrictionBenchmark <<new>> {
+        <<benchmark fixture>>
+        +BENCHMARK: SolveNormalOnly10Contacts()
+        +BENCHMARK: SolveFriction10Contacts()
+        +BENCHMARK: SolveFriction20Contacts()
+        --
+        -setupContactScenario(numContacts, withFriction): void
+        -measureSolveTime(): int64_t
+    }
+}
+
+' ===== Solver Hardening (Modified Components) =====
+
+package "msd-sim::Physics::Constraints" {
+    class ConstraintSolver <<modified>> {
+        +solveWithContacts(constraints, states, ...): MultiBodySolveResult
+        --
+        <<new methods>>
+        +setRegularizationEpsilon(epsilon: double): void
+        +getRegularizationEpsilon(): double
+        --
+        -applyRegularizationFallback(A: MatrixXd): bool
+        -regularization_epsilon_: double = 1e-10
+    }
+
+    note right of ConstraintSolver::applyRegularizationFallback
+        Triggered when LLT decomposition fails
+        A_reg = A + epsilon * I
+        Logs warning when applied
+    end note
+}
+
+package "msd-sim::Environment" {
+    class WorldModel <<modified>> {
+        +updateCollisions(): void
+        --
+        <<new methods>>
+        -applyVelocityThreshold(states, threshold): void
+        -velocity_rest_threshold_: double = 0.01
+    }
+
+    note right of WorldModel::applyVelocityThreshold
+        Post-processing after LCP solve
+        If ||v_t|| < v_rest: clamp v_t = 0
+        Prevents stick-slip jitter
+    end note
+}
+
+' ===== Energy Computation Utilities =====
+
+package "Test Utilities" {
+    class EnergyMonitor <<new>> {
+        <<utility>>
+        +{static} computeLinearKE(states, masses): double
+        +{static} computeAngularKE(states, inertias): double
+        +{static} computeTotalKE(states, masses, inertias): double
+        +{static} validateNonIncreasing(E_before, E_after, tolerance): bool
+    }
+
+    note right of EnergyMonitor
+        Pure utility class for test assertions
+        No runtime overhead (test-only code)
+        Tolerance: epsilon = 1e-6 J per timestep
+    end note
+}
+
+' ===== Validation Scenario Builders =====
+
+package "Test Scenario Builders" {
+    class M8ScenarioBuilder <<new>> {
+        <<utility>>
+        +{static} createStaticFrictionIncline(theta, mu): Scenario
+        +{static} createKineticFrictionIncline(theta, mu): Scenario
+        +{static} createSlidingDeceleration(v0, mu): Scenario
+        +{static} createGlancingCollision(angle, mu): Scenario
+        +{static} createConeSaturation(F_range, mu): Scenario
+        +{static} createTwoBodyFriction(F_applied, mu): Scenario
+    }
+
+    note right of M8ScenarioBuilder
+        Builds test scenarios from M8 examples
+        Each scenario includes:
+        - Initial conditions
+        - Expected final state
+        - Tolerance specifications
+    end note
+}
+
+' ===== Relationships =====
+
+FrictionEnergyTest ..> EnergyMonitor : uses
+FrictionValidationTest ..> M8ScenarioBuilder : uses
+FrictionStabilityTest ..> ConstraintSolver : tests
+
+FrictionBenchmark ..> ConstraintSolver : benchmarks
+
+WorldModel ..> ConstraintSolver : uses
+
+' ===== Component Legend =====
+
+legend right
+    |<back:lightgreen>      | New Components |
+    |<back:lightyellow>     | Modified Components |
+    |                       | |
+    | **Energy Monitoring** | M6 validation infrastructure |
+    | **Velocity Threshold**| M7 Case 4 jitter mitigation |
+    | **Regularization**    | M7 degenerate case handling |
+    | **M8 Validation**     | All 6 numerical examples |
+    | **Performance**       | Friction vs normal-only benchmarks |
+endlegend
+
+@enduml

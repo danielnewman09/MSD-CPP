@@ -79,6 +79,16 @@ class ExistingDependency {
     +usedMethod(): Result
 }
 
+' Use `package` for logical grouping — NEVER use `namespace`
+' (PlantUML `namespace` prepends the package name to class identifiers,
+'  breaking relationship references and stereotypes in class diagrams)
+package "module::subpackage" {
+    class UtilityClass {
+        <<utility>>
+        +staticMethod(): Result
+    }
+}
+
 ' Show relationships with labeled arrows
 NewComponent --> ExistingDependency : uses
 ExistingClass --> NewComponent : creates

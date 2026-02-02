@@ -242,6 +242,29 @@ public:
    */
   int getECOSMaxIterations() const { return ecos_max_iters_; }
 
+  // ===== Regularization Configuration (Ticket 0035d) =====
+
+  /**
+   * @brief Set regularization epsilon for ill-conditioned matrices
+   *
+   * Applied as A_reg = A + epsilon * I when LLT decomposition fails.
+   * Default: 1e-10 (from M7 numerical stability analysis).
+   *
+   * @param epsilon Regularization parameter (must be > 0)
+   * @ticket 0035d_friction_hardening_and_validation
+   */
+  void setRegularizationEpsilon(double epsilon) {
+    regularization_epsilon_ = epsilon;
+  }
+
+  /**
+   * @brief Get regularization epsilon
+   * @return Current regularization parameter
+   */
+  double getRegularizationEpsilon() const {
+    return regularization_epsilon_;
+  }
+
   // ===== Low-Level Solver Results (Ticket 0034, 0035b4) =====
 
   /**
@@ -290,6 +313,34 @@ public:
       const Eigen::VectorXd& b,
       const FrictionConeSpec& coneSpec,
       int numContacts) const;
+
+  /**
+   * @brief Extract friction-only body forces (zeroes normal constraint contributions)
+   *
+   * Extracts body forces from a solved lambda vector, but zeroes out any ContactConstraint
+   * lambdas before extraction. This ensures only FrictionConstraint forces contribute
+   * to the output, enabling combination with separate normal force solutions.
+   *
+   * Used in two-phase friction solving:
+   * - Phase A (ASM): Solves N normal constraints per collision pair
+   * - Phase B (ECOS): Solves 1 centroid normal + 1 centroid friction per pair
+   * - This method extracts only friction forces from Phase B for combination with Phase A
+   *
+   * @param contactConstraints Two-body constraints (ContactConstraint + FrictionConstraint)
+   * @param states Inertial states of all bodies
+   * @param lambda Solved Lagrange multipliers (from ECOS solve)
+   * @param numBodies Total number of bodies
+   * @param dt Timestep [s]
+   * @return Per-body forces with ContactConstraint contributions zeroed
+   *
+   * @ticket 0035d5_two_phase_friction_solve
+   */
+  std::vector<BodyForces> extractFrictionOnlyBodyForces(
+      const std::vector<TwoBodyConstraint*>& contactConstraints,
+      const std::vector<std::reference_wrapper<const InertialState>>& states,
+      const Eigen::VectorXd& lambda,
+      size_t numBodies,
+      double dt) const;
 
   // Rule of Five
   ConstraintSolver(const ConstraintSolver&) = default;
@@ -455,6 +506,21 @@ private:
       const std::vector<TwoBodyConstraint*>& contactConstraints,
       int numContacts) const;
 
+  // ===== Regularization helpers (Ticket 0035d) =====
+
+  /**
+   * @brief Apply regularization to ill-conditioned matrix
+   *
+   * A_reg = A + epsilon * I
+   * Triggered when LLT decomposition fails (non-positive-definite).
+   *
+   * @param A Effective mass matrix (modified in-place)
+   * @return true if regularization applied, false otherwise
+   *
+   * @ticket 0035d_friction_hardening_and_validation
+   */
+  bool applyRegularizationFallback(Eigen::MatrixXd& A) const;
+
   // Active Set Method configuration (Ticket 0034)
   int max_safety_iterations_{100};     // Safety cap; effective limit = min(2*C, max_safety_iterations_)
   double convergence_tolerance_{1e-6}; // Inactive constraint violation threshold
@@ -464,6 +530,9 @@ private:
   double ecos_abs_tol_{1e-6};   // Absolute tolerance (primal/dual residuals)
   double ecos_rel_tol_{1e-6};   // Relative tolerance (gap)
   int ecos_max_iters_{100};     // Maximum iterations (safety cap)
+
+  // Regularization configuration (Ticket 0035d)
+  double regularization_epsilon_{1e-10};  // Default from M7
 };
 
 }  // namespace msd_sim

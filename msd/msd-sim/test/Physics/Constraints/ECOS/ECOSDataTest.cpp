@@ -10,7 +10,7 @@ using namespace msd_sim;
 // AC1: ECOSData constructor initializes dimensions and reserves vector storage
 TEST(ECOSData, ConstructorInitializesDimensions)
 {
-  ECOSData data{9, 3};
+  ECOSData data{9, 9, 3};
 
   EXPECT_EQ(data.num_variables_, 9);
   EXPECT_EQ(data.num_cones_, 3);
@@ -18,7 +18,7 @@ TEST(ECOSData, ConstructorInitializesDimensions)
 
 TEST(ECOSData, ConstructorReservesVectorStorage)
 {
-  ECOSData data{9, 3};
+  ECOSData data{9, 9, 3};
 
   EXPECT_GE(data.h_.capacity(), 9);
   EXPECT_GE(data.c_.capacity(), 9);
@@ -27,7 +27,7 @@ TEST(ECOSData, ConstructorReservesVectorStorage)
 
 TEST(ECOSData, ConstructorLeavesWorkspaceNull)
 {
-  ECOSData data{9, 3};
+  ECOSData data{9, 9, 3};
 
   EXPECT_EQ(data.workspace_.get(), nullptr);
   EXPECT_FALSE(data.isSetup());
@@ -36,7 +36,7 @@ TEST(ECOSData, ConstructorLeavesWorkspaceNull)
 // AC2: setup() successfully calls ECOS_setup() with valid data
 TEST(ECOSData, SetupSucceedsWithValidData)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   // Populate G matrix (3x3 identity)
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
@@ -59,7 +59,7 @@ TEST(ECOSData, SetupSucceedsWithValidData)
 
 TEST(ECOSData, SetupThrowsWhenGMatrixEmpty)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   // Do not populate G (nnz == 0)
   data.h_ = std::vector<pfloat>{1.0, 1.0, 1.0};
@@ -72,7 +72,7 @@ TEST(ECOSData, SetupThrowsWhenGMatrixEmpty)
 
 TEST(ECOSData, SetupThrowsWhenHSizeMismatch)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
   data.G_ = ECOSSparseMatrix::fromDense(G_dense);
@@ -88,7 +88,7 @@ TEST(ECOSData, SetupThrowsWhenHSizeMismatch)
 
 TEST(ECOSData, SetupThrowsWhenCSizeMismatch)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
   data.G_ = ECOSSparseMatrix::fromDense(G_dense);
@@ -104,7 +104,7 @@ TEST(ECOSData, SetupThrowsWhenCSizeMismatch)
 
 TEST(ECOSData, SetupThrowsWhenConeSizesMismatch)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
   data.G_ = ECOSSparseMatrix::fromDense(G_dense);
@@ -124,7 +124,7 @@ TEST(ECOSData, DestructorCleansUpWorkspace)
   pwork* raw_ptr = nullptr;
 
   {
-    ECOSData data{3, 1};
+    ECOSData data{3, 3, 1};
 
     Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
     data.G_ = ECOSSparseMatrix::fromDense(G_dense);
@@ -150,7 +150,7 @@ TEST(ECOSData, DestructorCleansUpWorkspace)
 // AC4: Move constructor transfers workspace ownership correctly
 TEST(ECOSData, MoveConstructorTransfersOwnership)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
   data.G_ = ECOSSparseMatrix::fromDense(G_dense);
@@ -176,7 +176,7 @@ TEST(ECOSData, MoveConstructorTransfersOwnership)
 
 TEST(ECOSData, MoveConstructorTransfersDimensions)
 {
-  ECOSData data{9, 3};
+  ECOSData data{9, 9, 3};
 
   ECOSData moved{std::move(data)};
 
@@ -186,7 +186,7 @@ TEST(ECOSData, MoveConstructorTransfersDimensions)
 
 TEST(ECOSData, MoveConstructorTransfersVectors)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
   data.G_ = ECOSSparseMatrix::fromDense(G_dense);
@@ -214,7 +214,7 @@ TEST(ECOSData, MoveConstructorTransfersVectors)
 TEST(ECOSData, MoveAssignmentCleansUpExistingWorkspace)
 {
   // Create first ECOSData with workspace
-  ECOSData data1{3, 1};
+  ECOSData data1{3, 3, 1};
   Eigen::MatrixXd G_dense1 = Eigen::MatrixXd::Identity(3, 3);
   data1.G_ = ECOSSparseMatrix::fromDense(G_dense1);
   data1.h_ = std::vector<pfloat>{1.0, 1.0, 1.0};
@@ -226,7 +226,7 @@ TEST(ECOSData, MoveAssignmentCleansUpExistingWorkspace)
   ASSERT_NE(data1_ptr, nullptr);
 
   // Create second ECOSData with workspace
-  ECOSData data2{3, 1};
+  ECOSData data2{3, 3, 1};
   Eigen::MatrixXd G_dense2 = Eigen::MatrixXd::Identity(3, 3);
   data2.G_ = ECOSSparseMatrix::fromDense(G_dense2);
   data2.h_ = std::vector<pfloat>{2.0, 2.0, 2.0};
@@ -254,8 +254,8 @@ TEST(ECOSData, MoveAssignmentCleansUpExistingWorkspace)
 
 TEST(ECOSData, MoveAssignmentTransfersDimensions)
 {
-  ECOSData data1{3, 1};
-  ECOSData data2{9, 3};
+  ECOSData data1{3, 3, 1};
+  ECOSData data2{9, 9, 3};
 
   data1 = std::move(data2);
 
@@ -266,7 +266,7 @@ TEST(ECOSData, MoveAssignmentTransfersDimensions)
 // AC6: cleanup() is safe to call when workspace is null (idempotent)
 TEST(ECOSData, CleanupIsIdempotentWhenNull)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   ASSERT_FALSE(data.isSetup());
 
@@ -277,7 +277,7 @@ TEST(ECOSData, CleanupIsIdempotentWhenNull)
 
 TEST(ECOSData, CleanupNullifiesWorkspace)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
   data.G_ = ECOSSparseMatrix::fromDense(G_dense);
@@ -296,7 +296,7 @@ TEST(ECOSData, CleanupNullifiesWorkspace)
 
 TEST(ECOSData, CleanupIsIdempotentAfterCleanup)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
   data.G_ = ECOSSparseMatrix::fromDense(G_dense);
@@ -317,7 +317,7 @@ TEST(ECOSData, CleanupIsIdempotentAfterCleanup)
 // This is enforced at compile time, no runtime test needed
 // Uncommenting the following line should produce a compiler error:
 // TEST(ECOSData, CopyConstructorDeleted) {
-//   ECOSData data{3, 1};
+//   ECOSData data{3, 3, 1};
 //   ECOSData copy{data};  // Compile error: copy constructor deleted
 // }
 
@@ -328,7 +328,7 @@ TEST(ECOSData, CleanupIsIdempotentAfterCleanup)
 
 TEST(ECOSData, SetupWithMultipleCones)
 {
-  ECOSData data{9, 3};
+  ECOSData data{9, 9, 3};
 
   // 9x9 identity matrix
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(9, 9);
@@ -343,7 +343,7 @@ TEST(ECOSData, SetupWithMultipleCones)
 
 TEST(ECOSData, WorkspaceAccessViaGet)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
   data.G_ = ECOSSparseMatrix::fromDense(G_dense);
@@ -362,7 +362,7 @@ TEST(ECOSData, WorkspaceAccessViaGet)
 
 TEST(ECOSData, WorkspaceAccessViaArrow)
 {
-  ECOSData data{3, 1};
+  ECOSData data{3, 3, 1};
 
   Eigen::MatrixXd G_dense = Eigen::MatrixXd::Identity(3, 3);
   data.G_ = ECOSSparseMatrix::fromDense(G_dense);
@@ -378,7 +378,7 @@ TEST(ECOSData, WorkspaceAccessViaArrow)
 
 TEST(ECOSData, SetupWithSparseMatrix)
 {
-  ECOSData data{6, 2};
+  ECOSData data{6, 6, 2};
 
   // Create sparse matrix with specific pattern
   Eigen::MatrixXd G_dense(6, 6);

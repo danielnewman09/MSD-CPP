@@ -4,7 +4,6 @@
 // Design: docs/designs/0005_camera_controller_sim/design.md
 
 #include <exception>
-#include <iostream>
 
 #include "msd-sim/src/Agent/InputControlAgent.hpp"
 #include "msd-sim/src/Engine.hpp"

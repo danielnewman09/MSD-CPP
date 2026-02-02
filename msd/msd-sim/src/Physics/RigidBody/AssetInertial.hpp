@@ -84,6 +84,31 @@ public:
                 const ReferenceFrame& frame,
                 double coefficientOfRestitution);
 
+  /**
+   * @brief Extended constructor with friction coefficient and restitution.
+   *
+   * @param assetId Asset type identifier
+   * @param instanceId Unique instance identifier
+   * @param hull Reference to collision hull
+   * @param mass Mass in kilograms [kg]
+   * @param frame Initial reference frame (position and orientation)
+   * @param coefficientOfRestitution Elasticity [0, 1] (0=inelastic, 1=elastic)
+   * @param frictionCoefficient Friction coefficient [0, ∞)
+   *
+   * @throws std::invalid_argument if mass <= 0
+   * @throws std::invalid_argument if coefficientOfRestitution ∉ [0, 1]
+   * @throws std::invalid_argument if frictionCoefficient < 0
+   *
+   * @ticket 0035c_friction_pipeline_integration
+   */
+  AssetInertial(uint32_t assetId,
+                uint32_t instanceId,
+                ConvexHull& hull,
+                double mass,
+                const ReferenceFrame& frame,
+                double coefficientOfRestitution,
+                double frictionCoefficient);
+
   // Rule of Five: Move-only type due to std::unique_ptr<Constraint> ownership
   // Note: Move assignment deleted because base class has reference member
   // Ticket: 0031_generalized_lagrange_constraints
@@ -220,6 +245,32 @@ public:
    */
   void setCoefficientOfRestitution(double e);
 
+  // ========== NEW: Friction Coefficient (ticket 0035c) ==========
+
+  /**
+   * @brief Get the friction coefficient.
+   *
+   * Determines friction for tangential contact forces:
+   * - 0.0: Frictionless (no tangential resistance)
+   * - 0.5: Moderate friction (default)
+   * - Higher values: Increased friction
+   *
+   * @return Friction coefficient [0, ∞)
+   *
+   * @ticket 0035c_friction_pipeline_integration
+   */
+  double getFrictionCoefficient() const;
+
+  /**
+   * @brief Set the friction coefficient.
+   *
+   * @param mu Friction coefficient [0, ∞)
+   * @throws std::invalid_argument if mu < 0.0
+   *
+   * @ticket 0035c_friction_pipeline_integration
+   */
+  void setFrictionCoefficient(double mu);
+
   // ========== NEW: Impulse Application API (ticket 0027) ==========
 
   /**
@@ -334,6 +385,9 @@ private:
 
   // NEW: Coefficient of restitution (ticket 0027)
   double coefficientOfRestitution_{0.5};  // Default: moderate elasticity
+
+  // NEW: Friction coefficient (ticket 0035c)
+  double frictionCoefficient_{0.5};  // Default: moderate friction
 
   // NEW: Constraint management (ticket 0031)
   std::vector<std::unique_ptr<Constraint>> constraints_;

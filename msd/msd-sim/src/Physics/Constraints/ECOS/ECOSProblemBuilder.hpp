@@ -1,5 +1,7 @@
 // Ticket: 0035b3_ecos_problem_construction
+// Ticket: 0035d1_ecos_socp_reformulation
 // Design: docs/designs/0035b_box_constrained_asm_solver/design.md
+// Design: docs/designs/0035d1_ecos_socp_reformulation/design.md
 
 #ifndef MSD_SIM_PHYSICS_CONSTRAINTS_ECOS_ECOS_PROBLEM_BUILDER_HPP
 #define MSD_SIM_PHYSICS_CONSTRAINTS_ECOS_ECOS_PROBLEM_BUILDER_HPP
@@ -13,24 +15,47 @@ namespace msd_sim
 {
 
 /**
+ * @brief Precomputed data for epigraph cone constraint
+ *
+ * Internal struct used by ECOSProblemBuilder to cache expensive
+ * computations (Cholesky solve, matrix scaling) needed for epigraph
+ * cone construction.
+ *
+ * @ticket 0035d1_ecos_socp_reformulation
+ */
+struct EpigraphConeData
+{
+  Eigen::MatrixXd L_times_2;   // 2·L (3C × 3C)
+  Eigen::VectorXd d_times_2;   // 2·d where d = L⁻¹b (3C × 1), computed via forward substitution
+  idxint epigraph_cone_size;   // Always 3C+2
+
+  EpigraphConeData() = default;
+};
+
+/**
  * @brief Utility class for constructing ECOS problem data from contact constraints
  *
  * ECOSProblemBuilder converts a contact constraint system with friction into
- * ECOS standard form for second-order cone programming (SOCP). The contact problem:
+ * ECOS standard form for second-order cone programming (SOCP). The contact problem
+ * is reformulated as a Quadratic Program (QP) with conic constraints, lifted into
+ * SOCP form using epigraph reformulation because ECOS is a conic solver, not a QP solver.
  *
- *   A·λ = b, subject to ||λ_t_i|| ≤ μ_i·λ_n_i for all contacts i
+ * **Correct formulation (Ticket 0035d1 — auxiliary-variable SOCP)**:
+ *   Variables: x = [λ (3C); y (3C); t (1)] — total 6C+1
+ *   min t
+ *   s.t.  Lᵀλ - y = 0                               (3C equality constraints)
+ *         ||(2(y - d), t-1)|| ≤ t+1                  (epigraph cone, d = L⁻¹b)
+ *         ||[λ_t1_i, λ_t2_i]|| ≤ μ_i·λ_n_i          (friction cones)
  *
- * is reformulated as:
- *
- *   min c^T·x  s.t.  G·x + s = h,  s ∈ K
- *
- * where K is a product of second-order cones (one 3D cone per contact).
+ * where A = L·Lᵀ (Cholesky), d = L⁻¹b (forward substitution), y are auxiliary
+ * variables linking to λ, and t is the epigraph variable.
  *
  * **Key responsibilities**:
- * - Convert effective mass matrix A to ECOS sparse CSC format
- * - Build cone constraint matrix G that maps λ to cone slack variables
- * - Build cone RHS vector h (zeros for standard friction cone)
- * - Set up linear objective c (zeros for LCP formulation)
+ * - Compute Cholesky factorization of effective mass matrix A
+ * - Build equality constraints Lᵀλ - y = 0 (auxiliary-variable link)
+ * - Build epigraph cone constraint for QP objective lifting (operates on y)
+ * - Build extended G matrix with epigraph + friction cones
+ * - Build extended h, c vectors
  * - Return populated ECOSData ready for ECOS_setup()
  *
  * **Mathematical formulation**:
@@ -40,18 +65,16 @@ namespace msd_sim
  * In ECOS notation (s_0 = μ·λ_n, s_1 = λ_t1, s_2 = λ_t2):
  *   ||[s_1, s_2]|| ≤ s_0  (3-dimensional second-order cone)
  *
- * Matrix G construction (block-diagonal, 3C × 3C):
- * For contact i at indices [3i, 3i+1, 3i+2]:
- *   Row 3i:   -μ_i at column 3i   (normal),    so s_0 = h_0 - (-μ_i·λ_n) = μ_i·λ_n
- *   Row 3i+1: -1   at column 3i+1 (tangent 1), so s_1 = h_1 - (-λ_t1)   = λ_t1
- *   Row 3i+2: -1   at column 3i+2 (tangent 2), so s_2 = h_2 - (-λ_t2)   = λ_t2
- *
- * h vector = 0 (standard friction cone with no offset)
- *
- * Equality constraints encode A·λ = b (LCP equality).
+ * **Extended variable vector**: x = [λ; y; t] (dimension 6C+1)
+ * **Extended G matrix**: (6C+2) × (6C+1) — epigraph cone + friction cones
+ * **Equality constraints**: A_eq (3C × (6C+1)) encodes Lᵀλ - y = 0
+ * **Cone structure**: [3C+2, 3, 3, ..., 3] — one epigraph cone + C friction cones
  *
  * @see docs/designs/0035b_box_constrained_asm_solver/design.md — "ECOS Problem Construction"
+ * @see docs/designs/0035d1_ecos_socp_reformulation/design.md — "ECOS SOCP Reformulation"
+ * @see docs/designs/0035d1_ecos_socp_reformulation/math-formulation.md — "Mathematical Derivation"
  * @ticket 0035b3_ecos_problem_construction
+ * @ticket 0035d1_ecos_socp_reformulation
  */
 class ECOSProblemBuilder
 {
@@ -63,19 +86,27 @@ public:
    * from contact constraint system (A, b, friction coefficients). The returned
    * ECOSData is populated and ready for ECOSData::setup().
    *
+   * **Ticket 0035d1**: Uses epigraph reformulation to convert QP with friction cones
+   * to SOCP. The equality constraint A·λ = b is removed (it was over-constraining).
+   * Instead, the QP objective (1/2)λᵀAλ - bᵀλ is lifted into SOCP form using an
+   * epigraph variable t.
+   *
    * **Preconditions**:
    * - A must be square (3C × 3C where C = number of contacts)
    * - b must have dimension 3C
    * - coneSpec must specify C cones (one per contact)
-   * - A must be symmetric positive semi-definite (effective mass matrix)
+   * - A must be symmetric positive definite (effective mass matrix)
    *
    * **Postconditions**:
-   * - G matrix is block-diagonal (3C × 3C)
-   * - h vector is zero (3C elements)
-   * - c vector is zero (3C elements)
-   * - cone_sizes is [3, 3, ..., 3] (C entries)
+   * - G matrix is (6C+2) × (6C+1) with epigraph + friction cones
+   * - h vector has dimension 6C+2 with epigraph RHS [1; -2d; -1; 0; ...] where d = L⁻¹b
+   * - c vector has dimension 6C+1 with [0; ...; 0; 1] (minimize t)
+   * - cone_sizes is [3C+2, 3, 3, ..., 3] (epigraph cone + C friction cones)
+   * - A_eq is 3C × (6C+1) encoding Lᵀλ - y = 0
+   * - b_eq is 3C zeros
+   * - num_equality = 3C
    *
-   * @param A Effective mass matrix (3C × 3C), symmetric positive semi-definite
+   * @param A Effective mass matrix (3C × 3C), symmetric positive definite
    * @param b RHS vector (3C × 1) with restitution and Baumgarte terms
    * @param coneSpec Friction cone specification (μ per contact, normal indices)
    * @return ECOSData populated and ready for setup()
@@ -85,6 +116,9 @@ public:
    *   - A dimensions do not match b size
    *   - A dimensions do not match 3*coneSpec.numContacts
    *   - coneSpec.numContacts <= 0
+   * @throws std::runtime_error if Cholesky factorization fails after regularization
+   *
+   * @ticket 0035d1_ecos_socp_reformulation
    */
   static ECOSData build(
       const Eigen::MatrixXd& A,
@@ -93,36 +127,102 @@ public:
 
 private:
   /**
-   * @brief Build block-diagonal G matrix for friction cone constraints
+   * @brief Compute Cholesky factorization of effective mass matrix
    *
-   * Constructs the cone constraint matrix G (3C × 3C) that maps decision
-   * variables λ to cone slack variables s. For standard friction cones,
-   * G has a specific block-diagonal structure with -μ_i and -1 entries.
+   * Computes L such that A = L·Lᵀ (lower triangular). If factorization fails
+   * due to ill-conditioning (condition number > 1e8), applies regularization:
+   * A_reg = A + ε·I with ε = 1e-8 and retries.
    *
-   * **Block structure** (per contact i):
-   * G_{3i, 3i}     = -μ_i  (normal scaling)
-   * G_{3i+1, 3i+1} = -1    (tangent 1 passthrough)
-   * G_{3i+2, 3i+2} = -1    (tangent 2 passthrough)
-   * All other entries zero.
+   * Reuses existing regularization logic from ConstraintSolver.cpp lines 441-452
+   * (applyRegularizationFallback method pattern).
    *
-   * **Rationale**: G·λ + s = h with h = 0 gives:
-   *   s_0 = -(-μ_i·λ_n) = μ_i·λ_n
-   *   s_1 = -(-λ_t1)    = λ_t1
-   *   s_2 = -(-λ_t2)    = λ_t2
-   * So the cone constraint ||[s_1, s_2]|| ≤ s_0 becomes ||[λ_t1, λ_t2]|| ≤ μ_i·λ_n.
+   * @param A Effective mass matrix (3C × 3C), symmetric positive definite
+   * @return L Cholesky factor (3C × 3C lower triangular)
+   * @throws std::runtime_error if factorization fails after regularization
+   *
+   * @ticket 0035d1_ecos_socp_reformulation
+   */
+  static Eigen::MatrixXd computeCholeskyFactor(const Eigen::MatrixXd& A);
+
+  /**
+   * @brief Precompute epigraph cone constraint terms
+   *
+   * Computes precomputed terms for the epigraph SOC constraint:
+   *   ||(2(y - d), t-1)|| ≤ t+1   where d = L⁻¹b
+   *
+   * Returns:
+   * - L_times_2: Matrix 2·L for equality constraint construction
+   * - d_times_2: Vector 2·d = 2·L⁻¹b for h vector constant (forward substitution)
+   * - epigraph_cone_size: Always 3C+2 (dimension of epigraph cone)
+   *
+   * @param L Cholesky factor (3C × 3C)
+   * @param b RHS vector (3C × 1)
+   * @param numContacts Number of contacts (C)
+   * @return EpigraphConeData with precomputed terms
+   *
+   * @ticket 0035d1_ecos_socp_reformulation
+   */
+  static EpigraphConeData buildEpigraphCone(
+      const Eigen::MatrixXd& L,
+      const Eigen::VectorXd& b,
+      int numContacts);
+
+  /**
+   * @brief Build extended G matrix with epigraph and friction cones
+   *
+   * Constructs G matrix (6C+2 rows × (6C+1) cols) in CSC format:
+   * - Rows 0 to 3C+1: Epigraph cone constraint (operates on y and t variables)
+   * - Rows 3C+2 to 6C+1: Friction cone constraints (operates on λ variables)
+   *
+   * Block structure:
+   *   G = [ G_epi  ]    (3C+2) × (6C+1)  epigraph on [y; t]
+   *       [ G_fric ]    (3C)   × (6C+1)  friction on λ, zero on [y; t]
+   *
+   * @param epigraphData Precomputed epigraph cone terms
+   * @param coneSpec Friction cone specification (μ values)
+   * @param numContacts Number of contacts (C)
+   * @return ECOSSparseMatrix in CSC format
+   *
+   * @ticket 0035d1_ecos_socp_reformulation
+   */
+  static ECOSSparseMatrix buildExtendedGMatrix(
+      const EpigraphConeData& epigraphData,
+      const FrictionConeSpec& coneSpec,
+      int numContacts);
+
+  /**
+   * @brief Build extended h vector (cone RHS)
+   *
+   * Constructs h vector (6C+2 elements):
+   * - Rows 0 to 3C+1: Epigraph RHS [1; -2d; -1] where d = L⁻¹b
+   * - Rows 3C+2 to 6C+1: Friction RHS [0, 0, 0, ...] (unchanged)
+   *
+   * @param epigraphData Precomputed epigraph cone terms
+   * @param numContacts Number of contacts (C)
+   * @return std::vector<pfloat> of size 6C+2
+   *
+   * @ticket 0035d1_ecos_socp_reformulation
+   */
+  static std::vector<pfloat> buildExtendedHVector(
+      const EpigraphConeData& epigraphData,
+      int numContacts);
+
+  /**
+   * @brief Build extended c vector (objective)
+   *
+   * Constructs c vector (6C+1 elements):
+   * - Elements 0 to 3C-1: Zero (no cost on λ)
+   * - Elements 3C to 6C-1: Zero (no cost on y)
+   * - Element 6C: 1.0 (minimize epigraph variable t)
    *
    * @param numContacts Number of contacts (C)
-   * @param coneSpec Friction cone specification with μ values
-   * @return ECOSSparseMatrix representing block-diagonal G matrix
+   * @return std::vector<pfloat> of size 6C+1
+   *
+   * @ticket 0035d1_ecos_socp_reformulation
    */
-  static ECOSSparseMatrix buildGMatrix(
-      idxint numContacts,
-      const FrictionConeSpec& coneSpec);
+  static std::vector<pfloat> buildExtendedCVector(int numContacts);
 
 };
-
-// Note: Equality constraint matrix A_eq will be added in ticket 0035b4 when
-// integrating the full ECOS problem formulation with the solver.
 
 }  // namespace msd_sim
 

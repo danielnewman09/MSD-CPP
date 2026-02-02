@@ -57,6 +57,7 @@
         "cwd": "${workspaceFolder}"
     },
     "cmake.options.statusBarVisibility": "visible",
+    "C_Cpp.default.configurationProvider": "",
     "files.associations": {
         "cctype": "cpp",
         "clocale": "cpp",
