@@ -4,7 +4,7 @@
     "cmake.cmakePath": "/opt/homebrew/bin/cmake",
     "testMate.cpp.test.advancedExecutables": [
         {
-            "pattern": "{build,Build,BUILD,out,Out,OUT}/**/*{test,Test,TEST}*",
+            "pattern": "{build,Build,BUILD,out,Out,OUT}/Debug/**/msd_sim_test",
             "cwd": "${absDirpath}",
             "env": {
                 "ExampleENV1": "You can use variables here too, like ${relPath}",
@@ -14,9 +14,21 @@
                 "before": [
                     "CMake Build"
                 ]
+            },
+            "testGrouping": {
+                "groupByExecutable": {
+                    "label": "MSD-Sim",
+                    "groupByLabel": {
+                        "label": "${sourceRelPath[3]}",
+                        "groupByLabel": {
+                            "label": "${sourceRelPath[4]}",
+                        }
+                    }
+                }
             }
-        }
+        },
     ],
+    "testMate.cpp.log.logpanel": true,
     "testMate.cpp.debug.configTemplate": {
         "type": "cppdbg",
         "MIMode": "lldb",
