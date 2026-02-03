@@ -3,7 +3,7 @@
 
 #include <array>
 
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 
 namespace msd_sim
 {

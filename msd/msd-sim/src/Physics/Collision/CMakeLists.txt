@@ -1,0 +1,15 @@
+
+target_sources(${MSD_SIM_NAME} PRIVATE
+    GJK.cpp
+    EPA.cpp
+    CollisionHandler.cpp
+)
+
+set(
+    PHYSICS_HEADER_FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/GJK.hpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/EPA.hpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/CollisionHandler.hpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/CollisionResult.hpp
+    PARENT_SCOPE
+)

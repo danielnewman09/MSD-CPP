@@ -7,7 +7,7 @@
 #include <limits>
 #include <vector>
 
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialCalculations.hpp"
 

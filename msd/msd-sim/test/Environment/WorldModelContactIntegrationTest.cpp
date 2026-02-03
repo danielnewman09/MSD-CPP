@@ -5,7 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
@@ -24,10 +24,14 @@ namespace
 std::vector<Coordinate> createCubePoints(double size)
 {
   double half = size / 2.0;
-  return {Coordinate{-half, -half, -half}, Coordinate{half, -half, -half},
-          Coordinate{half, half, -half},   Coordinate{-half, half, -half},
-          Coordinate{-half, -half, half},  Coordinate{half, -half, half},
-          Coordinate{half, half, half},    Coordinate{-half, half, half}};
+  return {Coordinate{-half, -half, -half},
+          Coordinate{half, -half, -half},
+          Coordinate{half, half, -half},
+          Coordinate{-half, half, -half},
+          Coordinate{-half, -half, half},
+          Coordinate{half, -half, half},
+          Coordinate{half, half, half},
+          Coordinate{-half, half, half}};
 }
 
 }  // anonymous namespace
@@ -37,7 +41,8 @@ std::vector<Coordinate> createCubePoints(double size)
 // ============================================================================
 
 /**
- * AC1 (Parent AC4): Head-on elastic collision swaps velocities for equal mass bodies
+ * AC1 (Parent AC4): Head-on elastic collision swaps velocities for equal mass
+ * bodies
  *
  * Note: This test verifies that velocities reverse direction with approximately
  * correct magnitude. Due to Baumgarte stabilization, penetration depth, and
@@ -89,11 +94,12 @@ TEST(WorldModelContactIntegrationTest, HeadOnElasticCollision_SwapsVelocities)
   EXPECT_LT(vAxFinal, 0.0) << "Object A velocity should reverse to negative";
   EXPECT_GT(vBxFinal, 0.0) << "Object B velocity should reverse to positive";
 
-  // Verify approximate magnitude preservation (within 50% tolerance due to penetration effects)
+  // Verify approximate magnitude preservation (within 50% tolerance due to
+  // penetration effects)
   EXPECT_NEAR(std::abs(vAxFinal), std::abs(vBxInitial), 1.0)
-      << "Object A final speed should be close to Object B initial speed";
+    << "Object A final speed should be close to Object B initial speed";
   EXPECT_NEAR(std::abs(vBxFinal), std::abs(vAxInitial), 1.0)
-      << "Object B final speed should be close to Object A initial speed";
+    << "Object B final speed should be close to Object A initial speed";
 }
 
 /**
@@ -126,34 +132,36 @@ TEST(WorldModelContactIntegrationTest, Collision_ConservesMomentum)
   world.getObject(idA).getInertialState().velocity = Coordinate{3.0, 0.0, 0.0};
   world.getObject(idB).getInertialState().velocity = Coordinate{-1.0, 0.0, 0.0};
 
-  // Compute initial momentum (p = m * v, both masses = 10.0 kg from WorldModel default)
+  // Compute initial momentum (p = m * v, both masses = 10.0 kg from WorldModel
+  // default)
   double massA = world.getObject(idA).getMass();
   double massB = world.getObject(idB).getMass();
 
   Coordinate initialMomentum =
-      world.getObject(idA).getInertialState().velocity * massA +
-      world.getObject(idB).getInertialState().velocity * massB;
+    world.getObject(idA).getInertialState().velocity * massA +
+    world.getObject(idB).getInertialState().velocity * massB;
 
   // Single update
   world.update(std::chrono::milliseconds{16});
 
   // Compute final momentum
   Coordinate finalMomentum =
-      world.getObject(idA).getInertialState().velocity * massA +
-      world.getObject(idB).getInertialState().velocity * massB;
+    world.getObject(idA).getInertialState().velocity * massA +
+    world.getObject(idB).getInertialState().velocity * massB;
 
   // X and Y momentum must be conserved (collision impulse internal)
   EXPECT_NEAR(initialMomentum.x(), finalMomentum.x(), 1e-6)
-      << "X-momentum not conserved";
+    << "X-momentum not conserved";
   EXPECT_NEAR(initialMomentum.y(), finalMomentum.y(), 1e-6)
-      << "Y-momentum not conserved";
+    << "Y-momentum not conserved";
 
   // Z momentum changes due to gravity (external force)
   // Don't check z-component
 }
 
 /**
- * AC3 (Parent AC6): Stacked objects remain stable for 1000 frames, drift < 0.01m
+ * AC3 (Parent AC6): Stacked objects remain stable for 1000 frames, drift <
+ * 0.01m
  *
  * @ticket 0032c_worldmodel_contact_integration
  */
@@ -170,13 +178,15 @@ TEST(WorldModelContactIntegrationTest, RestingContact_StableFor1000Frames)
   ReferenceFrame frameBox{Coordinate{0.0, 0.0, 1.0}};
 
   world.spawnEnvironmentObject(0, hullFloor, frameFloor);  // Static floor
-  world.spawnObject(1, hullBox, frameBox);  // Dynamic box
+  world.spawnObject(1, hullBox, frameBox);                 // Dynamic box
 
   uint32_t boxId = 1;
 
   // Box at rest
-  world.getObject(boxId).getInertialState().velocity = Coordinate{0.0, 0.0, 0.0};
-  world.getObject(boxId).setCoefficientOfRestitution(0.0);  // Inelastic to avoid bouncing
+  world.getObject(boxId).getInertialState().velocity =
+    Coordinate{0.0, 0.0, 0.0};
+  world.getObject(boxId).setCoefficientOfRestitution(
+    0.0);  // Inelastic to avoid bouncing
 
   double initialZ = world.getObject(boxId).getInertialState().position.z();
 
@@ -190,7 +200,8 @@ TEST(WorldModelContactIntegrationTest, RestingContact_StableFor1000Frames)
   double drift = std::abs(finalZ - initialZ);
 
   // Box should not drift more than 1cm
-  EXPECT_LT(drift, 0.01) << "Resting contact drifted " << drift << " m (exceeds 0.01m limit)";
+  EXPECT_LT(drift, 0.01) << "Resting contact drifted " << drift
+                         << " m (exceeds 0.01m limit)";
 }
 
 /**
@@ -211,7 +222,8 @@ TEST(WorldModelContactIntegrationTest, RestingContact_StableFor1000Frames)
  *
  * @ticket 0032c_worldmodel_contact_integration
  */
-TEST(WorldModelContactIntegrationTest, GlancingCollision_ProducesAngularVelocity)
+TEST(WorldModelContactIntegrationTest,
+     GlancingCollision_ProducesAngularVelocity)
 {
   WorldModel world;
 
@@ -222,7 +234,8 @@ TEST(WorldModelContactIntegrationTest, GlancingCollision_ProducesAngularVelocity
   // Place boxes overlapping for immediate collision
   // Box B offset in Y to create off-center contact point
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 5.0}};
-  ReferenceFrame frameB{Coordinate{0.9, 0.2, 5.0}};  // Overlap in X, offset in Y
+  ReferenceFrame frameB{
+    Coordinate{0.9, 0.2, 5.0}};  // Overlap in X, offset in Y
 
   world.spawnObject(0, hullA, frameA);
   world.spawnObject(1, hullB, frameB);
@@ -247,17 +260,21 @@ TEST(WorldModelContactIntegrationTest, GlancingCollision_ProducesAngularVelocity
   double finalVxB = world.getObject(idB).getInertialState().velocity.x();
 
   // Collision should have transferred momentum
-  bool collisionOccurred = (std::abs(finalVxA - initialVxA) > 0.1) || (std::abs(finalVxB) > 0.1);
-  EXPECT_TRUE(collisionOccurred) << "Glancing collision should affect linear velocities. "
-                                  << "finalVxA=" << finalVxA << ", finalVxB=" << finalVxB;
+  bool collisionOccurred =
+    (std::abs(finalVxA - initialVxA) > 0.1) || (std::abs(finalVxB) > 0.1);
+  EXPECT_TRUE(collisionOccurred)
+    << "Glancing collision should affect linear velocities. "
+    << "finalVxA=" << finalVxA << ", finalVxB=" << finalVxB;
 
   // NOTE: Angular velocity test skipped due to missing friction constraints.
   // When friction is implemented, uncomment this:
   //
-  // double finalOmegaA = world.getObject(idA).getInertialState().getAngularVelocity().norm();
-  // double finalOmegaB = world.getObject(idB).getInertialState().getAngularVelocity().norm();
-  // double maxOmega = std::max(finalOmegaA, finalOmegaB);
-  // EXPECT_GT(maxOmega, 0.01) << "Glancing collision with friction should produce angular velocity";
+  // double finalOmegaA =
+  // world.getObject(idA).getInertialState().getAngularVelocity().norm(); double
+  // finalOmegaB =
+  // world.getObject(idB).getInertialState().getAngularVelocity().norm(); double
+  // maxOmega = std::max(finalOmegaA, finalOmegaB); EXPECT_GT(maxOmega, 0.01) <<
+  // "Glancing collision with friction should produce angular velocity";
 }
 
 /**
@@ -283,9 +300,11 @@ TEST(WorldModelContactIntegrationTest, DynamicStaticCollision_StaticUnmoved)
 
   // Dynamic moving toward static with high velocity
   world.getObject(dynamicId).setCoefficientOfRestitution(1.0);
-  world.getObject(dynamicId).getInertialState().velocity = Coordinate{10.0, 0.0, 0.0};
+  world.getObject(dynamicId).getInertialState().velocity =
+    Coordinate{10.0, 0.0, 0.0};
 
-  Coordinate staticPosInitial = world.getEnvironmentalObjects()[0].getReferenceFrame().getOrigin();
+  Coordinate staticPosInitial =
+    world.getEnvironmentalObjects()[0].getReferenceFrame().getOrigin();
 
   // Multiple updates for strong collision
   for (int i = 0; i < 5; ++i)
@@ -293,8 +312,10 @@ TEST(WorldModelContactIntegrationTest, DynamicStaticCollision_StaticUnmoved)
     world.update(std::chrono::milliseconds{16});
   }
 
-  Coordinate staticPosFinal = world.getEnvironmentalObjects()[0].getReferenceFrame().getOrigin();
-  double dynamicVxFinal = world.getObject(dynamicId).getInertialState().velocity.x();
+  Coordinate staticPosFinal =
+    world.getEnvironmentalObjects()[0].getReferenceFrame().getOrigin();
+  double dynamicVxFinal =
+    world.getObject(dynamicId).getInertialState().velocity.x();
 
   // Static object should not move at all
   EXPECT_DOUBLE_EQ(staticPosInitial.x(), staticPosFinal.x());
@@ -302,7 +323,8 @@ TEST(WorldModelContactIntegrationTest, DynamicStaticCollision_StaticUnmoved)
   EXPECT_DOUBLE_EQ(staticPosInitial.z(), staticPosFinal.z());
 
   // Dynamic object should bounce back (velocity reverses)
-  EXPECT_LT(dynamicVxFinal, 0.0) << "Dynamic object should bounce back from static wall";
+  EXPECT_LT(dynamicVxFinal, 0.0)
+    << "Dynamic object should bounce back from static wall";
 }
 
 /**
@@ -310,7 +332,8 @@ TEST(WorldModelContactIntegrationTest, DynamicStaticCollision_StaticUnmoved)
  *
  * @ticket 0032c_worldmodel_contact_integration
  */
-TEST(WorldModelContactIntegrationTest, MultipleSimultaneousContacts_ResolvedCorrectly)
+TEST(WorldModelContactIntegrationTest,
+     MultipleSimultaneousContacts_ResolvedCorrectly)
 {
   WorldModel world;
 
@@ -320,9 +343,9 @@ TEST(WorldModelContactIntegrationTest, MultipleSimultaneousContacts_ResolvedCorr
   ConvexHull hullWall{points};
 
   // Box in corner: touching floor (z=0) and wall (x=0)
-  ReferenceFrame frameBox{Coordinate{0.0, 0.0, 0.5}};  // Resting on floor
+  ReferenceFrame frameBox{Coordinate{0.0, 0.0, 0.5}};     // Resting on floor
   ReferenceFrame frameFloor{Coordinate{0.0, 0.0, -0.5}};  // Floor below
-  ReferenceFrame frameWall{Coordinate{-0.5, 0.0, 0.5}};  // Wall to left
+  ReferenceFrame frameWall{Coordinate{-0.5, 0.0, 0.5}};   // Wall to left
 
   world.spawnObject(0, hullBox, frameBox);
   world.spawnEnvironmentObject(1, hullFloor, frameFloor);
@@ -331,7 +354,8 @@ TEST(WorldModelContactIntegrationTest, MultipleSimultaneousContacts_ResolvedCorr
   uint32_t boxId = 1;
 
   // Box has velocity toward corner (down and left)
-  world.getObject(boxId).getInertialState().velocity = Coordinate{-1.0, 0.0, -1.0};
+  world.getObject(boxId).getInertialState().velocity =
+    Coordinate{-1.0, 0.0, -1.0};
   world.getObject(boxId).setCoefficientOfRestitution(0.5);
 
   Coordinate initialPos = world.getObject(boxId).getInertialState().position;
@@ -366,7 +390,8 @@ TEST(WorldModelContactIntegrationTest, ZeroPenetration_NoExplosion)
 
   // Place cubes exactly touching (no penetration, no separation)
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 5.0}};
-  ReferenceFrame frameB{Coordinate{1.0, 0.0, 5.0}};  // Exactly 1m apart (cube size = 1m)
+  ReferenceFrame frameB{
+    Coordinate{1.0, 0.0, 5.0}};  // Exactly 1m apart (cube size = 1m)
 
   world.spawnObject(0, hullA, frameA);
   world.spawnObject(1, hullB, frameB);
@@ -408,7 +433,8 @@ TEST(WorldModelContactIntegrationTest, ZeroPenetration_NoExplosion)
  * AC9: CollisionResponse no longer referenced from WorldModel.cpp
  * (verified by grep - only comment references remain)
  *
- * This is not a test itself, but a code quality requirement verified by inspection.
+ * This is not a test itself, but a code quality requirement verified by
+ * inspection.
  *
  * @ticket 0032c_worldmodel_contact_integration
  */

@@ -1,16 +1,17 @@
 // Ticket: 0023a_force_application_scaffolding
 // Design: docs/designs/0023a_force_application_scaffolding/design.md
-// Updated: 0024_angular_coordinate - Replaced EulerAngles with AngularCoordinate/AngularRate
+// Updated: 0024_angular_coordinate - Replaced EulerAngles with
+// AngularCoordinate/AngularRate
 
 #include <gtest/gtest.h>
 #include <cmath>
 
+#include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/Environment/ReferenceFrame.hpp"
+#include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
-#include "msd-sim/src/Environment/WorldModel.hpp"
-#include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Environment/AngularCoordinate.hpp"
-#include "msd-sim/src/Environment/AngularRate.hpp"
 
 using namespace msd_sim;
 
@@ -20,9 +21,7 @@ namespace
 // Helper to create a simple tetrahedron convex hull
 ConvexHull createTetrahedron()
 {
-  std::vector<Coordinate> points = {
-    {0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 1}
-  };
+  std::vector<Coordinate> points = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
   return ConvexHull{points};
 }
 
@@ -242,7 +241,8 @@ TEST(ForceApplicationScaffolding, angularVelocity_isAngularRateType)
   // Set angular velocity via setter (converts to quaternion rate internally)
   state.setAngularVelocity(AngularRate{1.0, 2.0, 3.0});
 
-  // Verify it's accessible via getter and returns AngularRate with pitch/roll/yaw accessors
+  // Verify it's accessible via getter and returns AngularRate with
+  // pitch/roll/yaw accessors
   AngularRate omega = state.getAngularVelocity();
   EXPECT_NEAR(omega.pitch(), 1.0, 1e-10);
   EXPECT_NEAR(omega.roll(), 2.0, 1e-10);
@@ -278,15 +278,16 @@ TEST(ForceApplicationScaffolding, orientation_isQuaternionType)
   EXPECT_NEAR(state.orientation.z(), 0.0, 1e-10);
 
   // Set to 90° rotation about Z-axis
-  state.orientation = Eigen::Quaterniond{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
+  state.orientation =
+    Eigen::Quaterniond{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
   EXPECT_NEAR(state.orientation.norm(), 1.0, 1e-10);
 
-  // Deprecated getEulerAngles() is available for backward compatibility
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+// Deprecated getEulerAngles() is available for backward compatibility
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
   AngularCoordinate euler = state.getEulerAngles();
   EXPECT_NEAR(euler.yaw(), M_PI / 2, 1e-9);
-  #pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 }
 
 // ============================================================================
@@ -606,19 +607,21 @@ TEST(PhysicsIntegration, updatePhysics_angularIntegration)
 
   // Check angular acceleration
   // Tolerance increased for generalized constraint solver (Ticket 0031)
-  // The ConstraintSolver applies Baumgarte stabilization forces that slightly modify dynamics
+  // The ConstraintSolver applies Baumgarte stabilization forces that slightly
+  // modify dynamics
   EXPECT_NEAR(state.angularAcceleration.yaw(), expectedAngularAccel.z(), 2.0);
 
   // Check angular velocity
   // Tolerance increased due to constraint stabilization forces (Ticket 0031)
   EXPECT_NEAR(state.getAngularVelocity().yaw(), expectedAngularVel.z(), 0.05);
 
-  // Check orientation change (use deprecated getEulerAngles() for backward compatibility test)
-  // Tolerance increased due to constraint forces from generalized constraint system (Ticket 0031)
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+// Check orientation change (use deprecated getEulerAngles() for backward
+// compatibility test) Tolerance increased due to constraint forces from
+// generalized constraint system (Ticket 0031)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
   EXPECT_NEAR(state.getEulerAngles().yaw(), expectedOrientation.z(), 0.001);
-  #pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 }
 
 // ============================================================================
@@ -637,7 +640,7 @@ TEST(ProjectileMotion, freeFall_underGravity)
   AssetInertial& mutableAsset = world.getObject(instanceId);
 
   // Drop from 10m height, simulate for ~1 second
-  int steps = 60;     // ~1 second at 60 FPS
+  int steps = 60;  // ~1 second at 60 FPS
   auto simTime = std::chrono::milliseconds{0};
 
   for (int i = 0; i < steps; ++i)
@@ -659,7 +662,7 @@ TEST(ProjectileMotion, freeFall_underGravity)
   EXPECT_NEAR(state.velocity.z(), -9.81, 0.5);
   EXPECT_LT(state.position.z(), 10.0);  // Should have fallen
   // Semi-implicit Euler overshoots slightly, so allow negative position
-  EXPECT_GT(state.position.z(), -6.0);   // Reasonable bound
+  EXPECT_GT(state.position.z(), -6.0);  // Reasonable bound
 }
 
 // DISABLED: Inertia tensor calculation produces NaN for tetrahedron
@@ -689,10 +692,10 @@ TEST(ProjectileMotion, rotationFromOffsetForce)
   const InertialState& state = mutableAsset.getInertialState();
 
   // Object should have both linear and angular velocity
-  EXPECT_GT(state.velocity.y(), 0.0);           // Linear motion in +Y
+  EXPECT_GT(state.velocity.y(), 0.0);                // Linear motion in +Y
   EXPECT_GT(state.getAngularVelocity().yaw(), 0.0);  // Rotation about +Z
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-  EXPECT_GT(state.getEulerAngles().yaw(), 0.0);      // Accumulated rotation
-  #pragma GCC diagnostic pop
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+  EXPECT_GT(state.getEulerAngles().yaw(), 0.0);  // Accumulated rotation
+#pragma GCC diagnostic pop
 }

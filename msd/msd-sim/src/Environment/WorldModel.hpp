@@ -4,8 +4,9 @@
 #include <chrono>
 #include <memory>
 #include <vector>
+
 #include "msd-sim/src/Environment/Platform.hpp"
-#include "msd-sim/src/Physics/CollisionHandler.hpp"
+#include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Integration/Integrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/PotentialEnergy.hpp"
@@ -291,11 +292,13 @@ private:
   uint32_t inertialAssetIdCounter_{0};
   uint32_t environmentAssetIdCounter_{0};
 
-  // NEW: Gravity (deprecated, ticket 0023a, replaced by potentialEnergies_ in ticket 0030)
+  // NEW: Gravity (deprecated, ticket 0023a, replaced by potentialEnergies_ in
+  // ticket 0030)
   [[deprecated("Use potentialEnergies_ instead")]]
   Coordinate gravity_{0.0, 0.0, -9.81};
 
-  // Collision detection (ticket 0027) and constraint-based response (ticket 0032)
+  // Collision detection (ticket 0027) and constraint-based response (ticket
+  // 0032)
   CollisionHandler collisionHandler_{1e-6};
   ConstraintSolver contactSolver_;  // PGS solver for contact constraints
 

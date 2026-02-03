@@ -6,7 +6,7 @@
 
 #include "msd-sim/src/Agent/BaseAgent.hpp"
 #include "msd-sim/src/Agent/InputCommands.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -106,8 +106,8 @@ public:
 
 private:
   InputCommands inputCommands_;
-  double maxSpeed_{10.0};         // m/s
-  double maxAngularSpeed_{1.0};   // rad/s
+  double maxSpeed_{10.0};        // m/s
+  double maxAngularSpeed_{1.0};  // rad/s
 };
 
 }  // namespace msd_sim

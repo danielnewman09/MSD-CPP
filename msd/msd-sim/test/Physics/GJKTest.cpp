@@ -2,12 +2,14 @@
 // Design: docs/designs/0022_gjk_asset_physical_transform/design.md
 
 #include <gtest/gtest.h>
+
 #include <cmath>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Environment/AngularCoordinate.hpp"
+
+#include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Physics/GJK.hpp"
+#include "msd-sim/src/Physics/Collision/GJK.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 
@@ -75,8 +77,9 @@ TEST(GJKTest, IdentityTransformSeparatedCubes)
 TEST(GJKTest, IdentityTransformTouchingCubes)
 {
   // Two unit cubes barely overlapping should be detected as colliding
-  // Unit cube has half-size 0.5, so cubes at (0,0,0) and (0.99,0,0) will slightly overlap
-  // Note: Exact touching (distance = 1.0) is epsilon-dependent in GJK, so we test slight overlap
+  // Unit cube has half-size 0.5, so cubes at (0,0,0) and (0.99,0,0) will
+  // slightly overlap Note: Exact touching (distance = 1.0) is epsilon-dependent
+  // in GJK, so we test slight overlap
   auto pointsA = createCubePoints(1.0);
   auto pointsB = createCubePoints(1.0);
 
@@ -84,7 +87,8 @@ TEST(GJKTest, IdentityTransformTouchingCubes)
   ConvexHull hullB{pointsB};
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
-  ReferenceFrame frameB{Coordinate{0.99, 0.0, 0.0}};  // Slight overlap (0.01 penetration)
+  ReferenceFrame frameB{
+    Coordinate{0.99, 0.0, 0.0}};  // Slight overlap (0.01 penetration)
 
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
@@ -136,7 +140,8 @@ TEST(GJKTest, TranslationOnlyLargeOffset)
   ConvexHull hullB{points};
 
   ReferenceFrame frameA{Coordinate{1000.0, 2000.0, 3000.0}};
-  ReferenceFrame frameB{Coordinate{1000.5, 2000.5, 3000.5}};  // Overlap despite large offset
+  ReferenceFrame frameB{
+    Coordinate{1000.5, 2000.5, 3000.5}};  // Overlap despite large offset
 
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
@@ -157,7 +162,8 @@ TEST(GJKTest, RotationOnlyCollision)
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
 
-  AngularCoordinate rotation{0.0, 0.0, 45.0 * M_PI / 180.0};  // pitch, roll, yaw
+  AngularCoordinate rotation{
+    0.0, 0.0, 45.0 * M_PI / 180.0};  // pitch, roll, yaw
   ReferenceFrame frameB{Coordinate{0.0, 0.0, 0.0}, rotation};
 
   AssetPhysical assetA{0, 0, hullA, frameA};
@@ -175,7 +181,8 @@ TEST(GJKTest, RotationOnly90Degrees)
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
 
-  AngularCoordinate rotation{0.0, 0.0, 90.0 * M_PI / 180.0};  // pitch, roll, yaw
+  AngularCoordinate rotation{
+    0.0, 0.0, 90.0 * M_PI / 180.0};  // pitch, roll, yaw
   ReferenceFrame frameB{Coordinate{0.0, 0.0, 0.0}, rotation};
 
   AssetPhysical assetA{0, 0, hullA, frameA};
@@ -197,7 +204,8 @@ TEST(GJKTest, CombinedTransformCollision)
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
 
-  AngularCoordinate rotation{0.0, 0.0, 45.0 * M_PI / 180.0};  // pitch, roll, yaw
+  AngularCoordinate rotation{
+    0.0, 0.0, 45.0 * M_PI / 180.0};  // pitch, roll, yaw
   ReferenceFrame frameB{Coordinate{0.5, 0.5, 0.0}, rotation};
 
   AssetPhysical assetA{0, 0, hullA, frameA};
@@ -267,7 +275,8 @@ TEST(GJKTest, DeepPenetration)
   ConvexHull hullB{points};
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
-  ReferenceFrame frameB{Coordinate{0.1, 0.1, 0.1}};  // Almost completely overlapping
+  ReferenceFrame frameB{
+    Coordinate{0.1, 0.1, 0.1}};  // Almost completely overlapping
 
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};

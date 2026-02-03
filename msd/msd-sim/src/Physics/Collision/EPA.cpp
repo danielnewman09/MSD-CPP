@@ -1,12 +1,13 @@
 // Ticket: 0027a_expanding_polytope_algorithm
 // Design: docs/designs/0027a_expanding_polytope_algorithm/design.md
 
-#include "msd-sim/src/Physics/EPA.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <set>
 #include <stdexcept>
+
+#include "msd-sim/src/Physics/Collision/EPA.hpp"
 #include "msd-sim/src/Physics/SupportFunction.hpp"
 
 namespace msd_sim
@@ -399,16 +400,16 @@ std::vector<Coordinate> buildPolygonFromFacets(
 
   // 4. Build a local 2D basis on the face plane
   // Choose an arbitrary vector not parallel to faceNormal
-  Coordinate arbitrary = (std::abs(faceNormal.x()) < 0.9)
-                           ? Coordinate{1, 0, 0}
-                           : Coordinate{0, 1, 0};
+  Coordinate arbitrary = (std::abs(faceNormal.x()) < 0.9) ? Coordinate{1, 0, 0}
+                                                          : Coordinate{0, 1, 0};
   Coordinate basisU = faceNormal.cross(arbitrary).normalized();
   Coordinate basisV = faceNormal.cross(basisU).normalized();
 
   // 5. Sort vertices by angle around centroid (counter-clockwise)
   std::sort(vertices.begin(),
             vertices.end(),
-            [&](const Coordinate& a, const Coordinate& b) {
+            [&](const Coordinate& a, const Coordinate& b)
+            {
               Coordinate da = a - centroid;
               Coordinate db = b - centroid;
               double angleA = std::atan2(da.dot(basisV), da.dot(basisU));
@@ -459,18 +460,18 @@ size_t EPA::extractContactManifold(size_t faceIndex,
     incFrame.localToGlobal(CoordinateRate{incFaces[0].get().normal.x(),
                                           incFaces[0].get().normal.y(),
                                           incFaces[0].get().normal.z()});
-  std::vector<Coordinate> incidentPoly = buildPolygonFromFacets(
-    incFaces,
-    incAsset.getCollisionHull().getVertices(),
-    incFrame,
-    incNormalWorld);
+  std::vector<Coordinate> incidentPoly =
+    buildPolygonFromFacets(incFaces,
+                           incAsset.getCollisionHull().getVertices(),
+                           incFrame,
+                           incNormalWorld);
 
   // Build reference polygon from coplanar facets (properly ordered)
-  std::vector<Coordinate> refVerts = buildPolygonFromFacets(
-    refFaces,
-    refAsset.getCollisionHull().getVertices(),
-    refFrame,
-    refNormalWorld);
+  std::vector<Coordinate> refVerts =
+    buildPolygonFromFacets(refFaces,
+                           refAsset.getCollisionHull().getVertices(),
+                           refFrame,
+                           refNormalWorld);
 
   // Handle degenerate cases
   if (refVerts.size() < 3 || incidentPoly.size() < 3)
@@ -491,7 +492,8 @@ size_t EPA::extractContactManifold(size_t faceIndex,
     const Coordinate& edgeEnd = refVerts[(i + 1) % refVerts.size()];
 
     // Side plane normal: perpendicular to edge and reference face normal,
-    // pointing inward (edgeDir × normal points left of edge = inward for CCW winding)
+    // pointing inward (edgeDir × normal points left of edge = inward for CCW
+    // winding)
     Coordinate edgeDir = (edgeEnd - edgeStart).normalized();
     CoordinateRate sidePlaneNormal = edgeDir.cross(refNormalWorld).normalized();
 

@@ -8,22 +8,22 @@
 #ifndef MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
 #define MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
 
-#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
-#include "msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
 #include <Eigen/Dense>
+
 #include <functional>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
-#include <limits>
+
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include "msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp"
+#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
+#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
 {
-
-// Forward declarations
-struct InertialState;
-class TwoBodyConstraint;
 
 /**
  * @brief Computes Lagrange multipliers for arbitrary constraint systems
@@ -45,25 +45,28 @@ class TwoBodyConstraint;
  * Thread safety: Thread-safe (stateless solver, mutable matrices are local)
  * Error handling: Returns converged=false for singular matrices (no exceptions)
  *
- * @see docs/designs/0031_generalized_lagrange_constraints/0031_generalized_lagrange_constraints.puml
+ * @see
+ * docs/designs/0031_generalized_lagrange_constraints/0031_generalized_lagrange_constraints.puml
  * @ticket 0031_generalized_lagrange_constraints
  */
 class ConstraintSolver
 {
 public:
   /**
-   * @brief Result of constraint solve containing Lagrange multipliers and forces
+   * @brief Result of constraint solve containing Lagrange multipliers and
+   * forces
    *
    * Provides diagnostic information (condition number, convergence) alongside
    * forces for solver health monitoring.
    */
   struct SolveResult
   {
-    Eigen::VectorXd lambdas;               // Lagrange multipliers
-    Coordinate linearConstraintForce;      // Net linear force [N]
-    Coordinate angularConstraintForce;     // Net angular torque [N·m]
-    bool converged{false};                 // Solver convergence flag
-    double conditionNumber{std::numeric_limits<double>::quiet_NaN()};  // Matrix conditioning
+    Eigen::VectorXd lambdas;            // Lagrange multipliers
+    Coordinate linearConstraintForce;   // Net linear force [N]
+    Coordinate angularConstraintForce;  // Net angular torque [N·m]
+    bool converged{false};              // Solver convergence flag
+    double conditionNumber{
+      std::numeric_limits<double>::quiet_NaN()};  // Matrix conditioning
 
     SolveResult() = default;
 
@@ -77,7 +80,8 @@ public:
         angularConstraintForce{angForce},
         converged{conv},
         conditionNumber{cond}
-    {}
+    {
+    }
   };
 
   /**
@@ -117,13 +121,14 @@ public:
    */
   struct BodyForces
   {
-    Coordinate linearForce;     // Net linear constraint force [N]
-    Coordinate angularTorque;   // Net angular constraint torque [N·m]
+    Coordinate linearForce;    // Net linear constraint force [N]
+    Coordinate angularTorque;  // Net angular constraint torque [N·m]
 
     BodyForces() = default;
     BodyForces(const Coordinate& lf, const Coordinate& at)
       : linearForce{lf}, angularTorque{at}
-    {}
+    {
+    }
   };
 
   /**
@@ -167,12 +172,12 @@ public:
    * @ticket 0034_active_set_method_contact_solver
    */
   MultiBodySolveResult solveWithContacts(
-      const std::vector<TwoBodyConstraint*>& contactConstraints,
-      const std::vector<std::reference_wrapper<const InertialState>>& states,
-      const std::vector<double>& inverseMasses,
-      const std::vector<Eigen::Matrix3d>& inverseInertias,
-      size_t numBodies,
-      double dt);
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<std::reference_wrapper<const InertialState>>& states,
+    const std::vector<double>& inverseMasses,
+    const std::vector<Eigen::Matrix3d>& inverseInertias,
+    size_t numBodies,
+    double dt);
 
   /**
    * @brief Set maximum safety iteration cap for Active Set Method
@@ -185,7 +190,10 @@ public:
    * @param maxIter Maximum safety iterations (default: 100)
    * @ticket 0034_active_set_method_contact_solver
    */
-  void setMaxIterations(int maxIter) { max_safety_iterations_ = maxIter; }
+  void setMaxIterations(int maxIter)
+  {
+    max_safety_iterations_ = maxIter;
+  }
 
   /**
    * @brief Set constraint violation tolerance for Active Set Method
@@ -197,14 +205,18 @@ public:
    * @param tol Violation tolerance (default: 1e-6)
    * @ticket 0034_active_set_method_contact_solver
    */
-  void setConvergenceTolerance(double tol) { convergence_tolerance_ = tol; }
+  void setConvergenceTolerance(double tol)
+  {
+    convergence_tolerance_ = tol;
+  }
 
   // ===== ECOS Solver Configuration (Ticket 0035b4) =====
 
   /**
    * @brief Set ECOS solver tolerance for convergence
    *
-   * ECOS uses separate absolute and relative tolerances. Default: 1e-6 for both.
+   * ECOS uses separate absolute and relative tolerances. Default: 1e-6 for
+   * both.
    *
    * @param abs_tol Absolute tolerance (primal/dual residuals)
    * @param rel_tol Relative tolerance (gap)
@@ -225,7 +237,10 @@ public:
    * @param max_iters Maximum iterations
    * @ticket 0035b4_ecos_solve_integration
    */
-  void setECOSMaxIterations(int max_iters) { ecos_max_iters_ = max_iters; }
+  void setECOSMaxIterations(int max_iters)
+  {
+    ecos_max_iters_ = max_iters;
+  }
 
   /**
    * @brief Get ECOS tolerance settings
@@ -240,7 +255,10 @@ public:
    * @brief Get maximum ECOS iterations
    * @return Maximum iterations
    */
-  int getECOSMaxIterations() const { return ecos_max_iters_; }
+  int getECOSMaxIterations() const
+  {
+    return ecos_max_iters_;
+  }
 
   // ===== Low-Level Solver Results (Ticket 0034, 0035b4) =====
 
@@ -256,17 +274,19 @@ public:
    */
   struct ActiveSetResult
   {
-    Eigen::VectorXd lambda;         // Lagrange multipliers (all >= 0)
-    bool converged{false};          // True if all KKT conditions satisfied
-    int iterations{0};              // ASM iterations OR ECOS iterations
-    int active_set_size{0};         // ASM: active set size, ECOS: unused (set to 0)
+    Eigen::VectorXd lambda;  // Lagrange multipliers (all >= 0)
+    bool converged{false};   // True if all KKT conditions satisfied
+    int iterations{0};       // ASM iterations OR ECOS iterations
+    int active_set_size{0};  // ASM: active set size, ECOS: unused (set to 0)
 
     // ECOS-specific diagnostic fields (Ticket 0035b4)
     std::string solver_type{"ASM"};  // "ASM" or "ECOS"
-    int ecos_exit_flag{0};           // ECOS exit code (ECOS_OPTIMAL, ECOS_MAXIT, etc.)
-    double primal_residual{std::numeric_limits<double>::quiet_NaN()};  // ECOS primal feasibility
-    double dual_residual{std::numeric_limits<double>::quiet_NaN()};    // ECOS dual feasibility
-    double gap{std::numeric_limits<double>::quiet_NaN()};              // ECOS duality gap
+    int ecos_exit_flag{0};  // ECOS exit code (ECOS_OPTIMAL, ECOS_MAXIT, etc.)
+    double primal_residual{
+      std::numeric_limits<double>::quiet_NaN()};  // ECOS primal feasibility
+    double dual_residual{
+      std::numeric_limits<double>::quiet_NaN()};  // ECOS dual feasibility
+    double gap{std::numeric_limits<double>::quiet_NaN()};  // ECOS duality gap
   };
 
   /**
@@ -285,11 +305,10 @@ public:
    *
    * @ticket 0035b4_ecos_solve_integration
    */
-  ActiveSetResult solveWithECOS(
-      const Eigen::MatrixXd& A,
-      const Eigen::VectorXd& b,
-      const FrictionConeSpec& coneSpec,
-      int numContacts) const;
+  ActiveSetResult solveWithECOS(const Eigen::MatrixXd& A,
+                                const Eigen::VectorXd& b,
+                                const FrictionConeSpec& coneSpec,
+                                int numContacts) const;
 
   // Rule of Five
   ConstraintSolver(const ConstraintSolver&) = default;
@@ -307,11 +326,11 @@ private:
    * @return Constraint matrix (n × n) where n = total constraint dimension
    */
   Eigen::MatrixXd assembleConstraintMatrix(
-      const std::vector<Constraint*>& constraints,
-      const InertialState& state,
-      double time,
-      double mass,
-      const Eigen::Matrix3d& inverseInertia) const;
+    const std::vector<Constraint*>& constraints,
+    const InertialState& state,
+    double time,
+    double mass,
+    const Eigen::Matrix3d& inverseInertia) const;
 
   /**
    * @brief Assemble RHS vector b = -J·M^-1·F_ext - α·C - β·Ċ
@@ -321,15 +340,14 @@ private:
    *
    * @return RHS vector (n × 1) where n = total constraint dimension
    */
-  Eigen::VectorXd assembleRHS(
-      const std::vector<Constraint*>& constraints,
-      const InertialState& state,
-      const Coordinate& externalForce,
-      const Coordinate& externalTorque,
-      double mass,
-      const Eigen::Matrix3d& inverseInertia,
-      double time,
-      double dt) const;
+  Eigen::VectorXd assembleRHS(const std::vector<Constraint*>& constraints,
+                              const InertialState& state,
+                              const Coordinate& externalForce,
+                              const Coordinate& externalTorque,
+                              double mass,
+                              const Eigen::Matrix3d& inverseInertia,
+                              double time,
+                              double dt) const;
 
   /**
    * @brief Extract constraint forces from Lagrange multipliers
@@ -340,39 +358,41 @@ private:
    * @return Pair of (linear force, angular torque)
    */
   std::pair<Coordinate, Coordinate> extractConstraintForces(
-      const Eigen::VectorXd& lambdas,
-      const std::vector<Constraint*>& constraints,
-      const InertialState& state,
-      double time) const;
+    const Eigen::VectorXd& lambdas,
+    const std::vector<Constraint*>& constraints,
+    const InertialState& state,
+    double time) const;
 
   // ===== Contact solver helpers (Ticket 0032, 0034) =====
 
   /**
    * @brief Compute per-contact 1×12 Jacobians
    *
-   * Each contact produces a Jacobian [J_A(1×6) | J_B(1×6)] in the velocity-level
-   * formulation [v_A, ω_A, v_B, ω_B].
+   * Each contact produces a Jacobian [J_A(1×6) | J_B(1×6)] in the
+   * velocity-level formulation [v_A, ω_A, v_B, ω_B].
    *
    * @return Vector of per-contact Jacobian matrices (C entries, each 1×12)
    */
   std::vector<Eigen::MatrixXd> assembleContactJacobians(
-      const std::vector<TwoBodyConstraint*>& contactConstraints,
-      const std::vector<std::reference_wrapper<const InertialState>>& states) const;
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<std::reference_wrapper<const InertialState>>& states)
+    const;
 
   /**
    * @brief Build effective mass matrix A = J·M⁻¹·Jᵀ with regularization
    *
    * Constructs per-body 6×6 inverse mass matrices internally and assembles
-   * the symmetric effective mass matrix. Adds kRegularizationEpsilon to diagonal.
+   * the symmetric effective mass matrix. Adds kRegularizationEpsilon to
+   * diagonal.
    *
    * @return Effective mass matrix (C × C)
    */
   Eigen::MatrixXd assembleContactEffectiveMass(
-      const std::vector<TwoBodyConstraint*>& contactConstraints,
-      const std::vector<Eigen::MatrixXd>& jacobians,
-      const std::vector<double>& inverseMasses,
-      const std::vector<Eigen::Matrix3d>& inverseInertias,
-      size_t numBodies) const;
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Eigen::MatrixXd>& jacobians,
+    const std::vector<double>& inverseMasses,
+    const std::vector<Eigen::Matrix3d>& inverseInertias,
+    size_t numBodies) const;
 
   /**
    * @brief Assemble RHS vector with restitution and Baumgarte terms
@@ -382,24 +402,26 @@ private:
    * @return RHS vector (C × 1)
    */
   Eigen::VectorXd assembleContactRHS(
-      const std::vector<TwoBodyConstraint*>& contactConstraints,
-      const std::vector<Eigen::MatrixXd>& jacobians,
-      const std::vector<std::reference_wrapper<const InertialState>>& states,
-      double dt) const;
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Eigen::MatrixXd>& jacobians,
+    const std::vector<std::reference_wrapper<const InertialState>>& states,
+    double dt) const;
 
   /**
    * @brief Solve contact LCP using Active Set Method
    *
    * Partitions contacts into active (compressive) and inactive (separating)
-   * sets, solving an equality subproblem at each iteration via LLT decomposition
-   * until all KKT conditions are satisfied.
+   * sets, solving an equality subproblem at each iteration via LLT
+   * decomposition until all KKT conditions are satisfied.
    *
    * Algorithm:
    * 1. Initialize working set W = {0, 1, ..., C-1} (all contacts active)
    * 2. Solve equality subproblem: A_W * lambda_W = b_W via LLT
-   * 3. If any lambda_W[i] < 0: remove most negative from W (Bland's rule for ties)
+   * 3. If any lambda_W[i] < 0: remove most negative from W (Bland's rule for
+   * ties)
    * 4. If all lambda_W >= 0: check inactive constraints for violation
-   * 5. If violated inactive constraint found: add most violated to W (Bland's rule)
+   * 5. If violated inactive constraint found: add most violated to W (Bland's
+   * rule)
    * 6. If no violations: KKT conditions satisfied, return exact solution
    *
    * Convergence: Finite, typically <= C iterations for non-degenerate systems.
@@ -407,11 +429,13 @@ private:
    *
    * @param A Effective mass matrix (C x C), symmetric positive semi-definite
    * @param b RHS vector (C x 1) with restitution and Baumgarte terms
-   * @param numContacts Number of contacts (used for safety iteration cap = 2*C).
-   *        Note: numContacts == b.size() by construction (one constraint row per contact).
-   *        Passed explicitly rather than derived from b.size() to document intent and
-   *        decouple the safety cap computation from the Eigen vector internals.
-   * @return ActiveSetResult with lambda vector, convergence info, and active set size
+   * @param numContacts Number of contacts (used for safety iteration cap =
+   * 2*C). Note: numContacts == b.size() by construction (one constraint row per
+   * contact). Passed explicitly rather than derived from b.size() to document
+   * intent and decouple the safety cap computation from the Eigen vector
+   * internals.
+   * @return ActiveSetResult with lambda vector, convergence info, and active
+   * set size
    *
    * @ticket 0034_active_set_method_contact_solver
    */
@@ -422,16 +446,17 @@ private:
   /**
    * @brief Extract per-body forces from solved lambda values
    *
-   * Computes F_body_k = Σ J_i_k^T · λ_i / dt for each body k touched by contacts.
+   * Computes F_body_k = Σ J_i_k^T · λ_i / dt for each body k touched by
+   * contacts.
    *
    * @return Per-body constraint forces (numBodies entries)
    */
   std::vector<BodyForces> extractContactBodyForces(
-      const std::vector<TwoBodyConstraint*>& contactConstraints,
-      const std::vector<Eigen::MatrixXd>& jacobians,
-      const Eigen::VectorXd& lambda,
-      size_t numBodies,
-      double dt) const;
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Eigen::MatrixXd>& jacobians,
+    const Eigen::VectorXd& lambda,
+    size_t numBodies,
+    double dt) const;
 
   // ===== ECOS solver helpers (Ticket 0035b4) =====
 
@@ -445,25 +470,29 @@ private:
    * The constraint ordering convention is: for each contact i, the normal
    * constraint is at index 3i, tangent1 at 3i+1, tangent2 at 3i+2.
    *
-   * @param contactConstraints All contact constraints (normal + friction interleaved)
-   * @param numContacts Number of contacts (C, where constraints has 3C rows total)
+   * @param contactConstraints All contact constraints (normal + friction
+   * interleaved)
+   * @param numContacts Number of contacts (C, where constraints has 3C rows
+   * total)
    * @return FrictionConeSpec with μ values and normal indices
    *
    * @ticket 0035b4_ecos_solve_integration
    */
   FrictionConeSpec buildFrictionConeSpec(
-      const std::vector<TwoBodyConstraint*>& contactConstraints,
-      int numContacts) const;
+    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    int numContacts) const;
 
   // Active Set Method configuration (Ticket 0034)
-  int max_safety_iterations_{100};     // Safety cap; effective limit = min(2*C, max_safety_iterations_)
-  double convergence_tolerance_{1e-6}; // Inactive constraint violation threshold
+  int max_safety_iterations_{
+    100};  // Safety cap; effective limit = min(2*C, max_safety_iterations_)
+  double convergence_tolerance_{
+    1e-6};  // Inactive constraint violation threshold
   static constexpr double kRegularizationEpsilon = 1e-8;
 
   // ECOS solver configuration (Ticket 0035b4)
-  double ecos_abs_tol_{1e-6};   // Absolute tolerance (primal/dual residuals)
-  double ecos_rel_tol_{1e-6};   // Relative tolerance (gap)
-  int ecos_max_iters_{100};     // Maximum iterations (safety cap)
+  double ecos_abs_tol_{1e-6};  // Absolute tolerance (primal/dual residuals)
+  double ecos_rel_tol_{1e-6};  // Relative tolerance (gap)
+  int ecos_max_iters_{100};    // Maximum iterations (safety cap)
 };
 
 }  // namespace msd_sim

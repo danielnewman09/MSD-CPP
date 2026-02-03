@@ -1,6 +1,8 @@
-#include "msd-sim/src/Environment/WorldModel.hpp"
+
 #include <iostream>
 #include <stdexcept>
+
+#include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"

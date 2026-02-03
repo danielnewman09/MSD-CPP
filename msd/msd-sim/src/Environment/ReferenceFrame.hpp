@@ -6,9 +6,10 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
-#include "msd-sim/src/Environment/AngularCoordinate.hpp"
-#include "msd-sim/src/Environment/AngularRate.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
+
+#include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 
 namespace msd_sim
 {
@@ -85,7 +86,8 @@ public:
    * @param origin The origin of this frame in global coordinates
    * @param quaternion The orientation as a unit quaternion (will be normalized)
    */
-  ReferenceFrame(const Coordinate& origin, const Eigen::Quaterniond& quaternion);
+  ReferenceFrame(const Coordinate& origin,
+                 const Eigen::Quaterniond& quaternion);
 
   /**
    * @brief Transform a coordinate from global frame to this local frame

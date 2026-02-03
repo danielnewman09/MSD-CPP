@@ -6,8 +6,8 @@
 #include <cmath>
 
 #include "msd-sim/src/Agent/InputCommands.hpp"
-#include "msd-sim/src/Environment/AngularCoordinate.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/MotionController.hpp"
 #include "msd-sim/src/Environment/Platform.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
@@ -468,9 +468,9 @@ TEST(MotionControllerTest, UpdateTransform_NoCommands_NoChange)
     10.0 * M_PI / 180.0, 20.0 * M_PI / 180.0, 30.0 * M_PI / 180.0};
   frame.setOrigin(initialOrigin);
   Eigen::Quaterniond q =
-      Eigen::AngleAxisd{initialAngles.yaw(), Eigen::Vector3d::UnitZ()} *
-      Eigen::AngleAxisd{initialAngles.pitch(), Eigen::Vector3d::UnitY()} *
-      Eigen::AngleAxisd{initialAngles.roll(), Eigen::Vector3d::UnitX()};
+    Eigen::AngleAxisd{initialAngles.yaw(), Eigen::Vector3d::UnitZ()} *
+    Eigen::AngleAxisd{initialAngles.pitch(), Eigen::Vector3d::UnitY()} *
+    Eigen::AngleAxisd{initialAngles.roll(), Eigen::Vector3d::UnitX()};
   frame.setQuaternion(q);
 
   InputCommands commands;  // All false

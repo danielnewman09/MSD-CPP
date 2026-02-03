@@ -4,10 +4,10 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include <memory>
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
 
 using namespace msd_sim;
 
@@ -19,7 +19,9 @@ namespace
 {
 
 // Create a default InertialState at rest
-InertialState createDefaultState(const Coordinate& position = Coordinate{0.0, 0.0, 0.0})
+InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
+                                                                         0.0,
+                                                                         0.0})
 {
   InertialState state;
   state.position = position;
@@ -33,11 +35,11 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0, 0.
 
 // Compute numerical Jacobian via finite differences
 [[maybe_unused]] Eigen::MatrixXd numericalJacobianTwoBody(
-    const ContactConstraint& constraint,
-    const InertialState& stateA,
-    const InertialState& stateB,
-    double time,
-    double epsilon = 1e-7)
+  const ContactConstraint& constraint,
+  const InertialState& stateA,
+  const InertialState& stateB,
+  double time,
+  double epsilon = 1e-7)
 {
   Eigen::MatrixXd J_numerical(1, 12);
 
@@ -49,17 +51,20 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0, 0.
   InertialState stateB_perturbed = stateB;
 
   // Body A linear velocity (columns 0-2)
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 3; ++i)
+  {
     stateA_perturbed = stateA;
     stateA_perturbed.velocity[i] += epsilon;
-    Eigen::VectorXd C_plus = constraint.evaluateTwoBody(stateA_perturbed, stateB, time + epsilon);
+    Eigen::VectorXd C_plus =
+      constraint.evaluateTwoBody(stateA_perturbed, stateB, time + epsilon);
     J_numerical(0, i) = (C_plus(0) - C0(0)) / epsilon;
   }
 
   // Body A angular velocity (columns 3-5)
   // Note: For numerical Jacobian, we approximate angular velocity contribution
   // by perturbing position via small rotation
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 3; ++i)
+  {
     stateA_perturbed = stateA;
     // Small rotation: theta = epsilon * e_i
     Eigen::Vector3d axis = Eigen::Vector3d::Zero();
@@ -68,29 +73,36 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0, 0.
     Eigen::AngleAxisd rotation(angle, axis);
 
     // Apply rotation to position offset from COM
-    stateA_perturbed.position = stateA.position + rotation * Eigen::Vector3d::Zero();
-    Eigen::VectorXd C_plus = constraint.evaluateTwoBody(stateA_perturbed, stateB, time + epsilon);
+    stateA_perturbed.position =
+      stateA.position + rotation * Eigen::Vector3d::Zero();
+    Eigen::VectorXd C_plus =
+      constraint.evaluateTwoBody(stateA_perturbed, stateB, time + epsilon);
     J_numerical(0, 3 + i) = (C_plus(0) - C0(0)) / epsilon;
   }
 
   // Body B linear velocity (columns 6-8)
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 3; ++i)
+  {
     stateB_perturbed = stateB;
     stateB_perturbed.velocity[i] += epsilon;
-    Eigen::VectorXd C_plus = constraint.evaluateTwoBody(stateA, stateB_perturbed, time + epsilon);
+    Eigen::VectorXd C_plus =
+      constraint.evaluateTwoBody(stateA, stateB_perturbed, time + epsilon);
     J_numerical(0, 6 + i) = (C_plus(0) - C0(0)) / epsilon;
   }
 
   // Body B angular velocity (columns 9-11)
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 3; ++i)
+  {
     stateB_perturbed = stateB;
     Eigen::Vector3d axis = Eigen::Vector3d::Zero();
     axis(i) = 1.0;
     double angle = epsilon;
     Eigen::AngleAxisd rotation(angle, axis);
 
-    stateB_perturbed.position = stateB.position + rotation * Eigen::Vector3d::Zero();
-    Eigen::VectorXd C_plus = constraint.evaluateTwoBody(stateA, stateB_perturbed, time + epsilon);
+    stateB_perturbed.position =
+      stateB.position + rotation * Eigen::Vector3d::Zero();
+    Eigen::VectorXd C_plus =
+      constraint.evaluateTwoBody(stateA, stateB_perturbed, time + epsilon);
     J_numerical(0, 9 + i) = (C_plus(0) - C0(0)) / epsilon;
   }
 
@@ -113,22 +125,23 @@ TEST(ContactConstraintTest, Dimension_ReturnsOne_0032a)
   Coordinate comB{0, 0, 0.5};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
 
   EXPECT_EQ(1, constraint.dimension());
 }
 
-TEST(ContactConstraintTest, EvaluateTwoBody_PenetratingBodies_ReturnsNegative_0032a)
+TEST(ContactConstraintTest,
+     EvaluateTwoBody_PenetratingBodies_ReturnsNegative_0032a)
 {
   // Test: C(q) < 0 for penetrating bodies (constraint violated)
-  Coordinate normal{0, 0, 1};  // A → B
-  Coordinate contactA{0, 0, 0.5};   // On A's surface
-  Coordinate contactB{0, 0, 0.4};   // On B's surface (overlapping)
+  Coordinate normal{0, 0, 1};      // A → B
+  Coordinate contactA{0, 0, 0.5};  // On A's surface
+  Coordinate contactB{0, 0, 0.4};  // On B's surface (overlapping)
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
 
   InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0});
@@ -141,7 +154,8 @@ TEST(ContactConstraintTest, EvaluateTwoBody_PenetratingBodies_ReturnsNegative_00
   EXPECT_NEAR(-0.1, C(0), 1e-10);
 }
 
-TEST(ContactConstraintTest, EvaluateTwoBody_SeparatedBodies_ReturnsPositive_0032a)
+TEST(ContactConstraintTest,
+     EvaluateTwoBody_SeparatedBodies_ReturnsPositive_0032a)
 {
   // Test: C(q) > 0 for separated bodies (constraint satisfied)
   Coordinate normal{0, 0, 1};
@@ -151,7 +165,7 @@ TEST(ContactConstraintTest, EvaluateTwoBody_SeparatedBodies_ReturnsPositive_0032
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.0, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.0, comA, comB, 0.5, 0.0};
 
   InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0});
@@ -174,7 +188,7 @@ TEST(ContactConstraintTest, JacobianTwoBody_LinearComponents_0032a)
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
 
   InertialState stateA = createDefaultState();
   InertialState stateB = createDefaultState();
@@ -185,9 +199,9 @@ TEST(ContactConstraintTest, JacobianTwoBody_LinearComponents_0032a)
   ASSERT_EQ(12, J.cols());
 
   // Linear components for body A (columns 0-2): -n^T
-  EXPECT_NEAR(0.0, J(0, 0), 1e-10);  // -n_x
-  EXPECT_NEAR(0.0, J(0, 1), 1e-10);  // -n_y
-  EXPECT_NEAR(-1.0, J(0, 2), 1e-10); // -n_z
+  EXPECT_NEAR(0.0, J(0, 0), 1e-10);   // -n_x
+  EXPECT_NEAR(0.0, J(0, 1), 1e-10);   // -n_y
+  EXPECT_NEAR(-1.0, J(0, 2), 1e-10);  // -n_z
 
   // Linear components for body B (columns 6-8): n^T
   EXPECT_NEAR(0.0, J(0, 6), 1e-10);  // n_x
@@ -199,13 +213,13 @@ TEST(ContactConstraintTest, JacobianTwoBody_AngularComponents_0032a)
 {
   // Test: Jacobian angular components are -(r_A × n)^T and +(r_B × n)^T
   Coordinate normal{0, 0, 1};
-  Coordinate contactA{1, 0, 0};   // Offset from COM
-  Coordinate contactB{0, 1, 0};   // Different offset
+  Coordinate contactA{1, 0, 0};  // Offset from COM
+  Coordinate contactB{0, 1, 0};  // Different offset
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.0, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.0, comA, comB, 0.5, 0.0};
 
   InertialState stateA = createDefaultState();
   InertialState stateB = createDefaultState();
@@ -215,9 +229,9 @@ TEST(ContactConstraintTest, JacobianTwoBody_AngularComponents_0032a)
   // Lever arm A: contactA - comA = (1, 0, 0)
   // r_A × n = (1, 0, 0) × (0, 0, 1) = (0, -1, 0)
   // Angular component A (columns 3-5): -(r_A × n)^T
-  EXPECT_NEAR(0.0, J(0, 3), 1e-10);   // -(r_A × n)_x
-  EXPECT_NEAR(1.0, J(0, 4), 1e-10);   // -(r_A × n)_y (flipped sign)
-  EXPECT_NEAR(0.0, J(0, 5), 1e-10);   // -(r_A × n)_z
+  EXPECT_NEAR(0.0, J(0, 3), 1e-10);  // -(r_A × n)_x
+  EXPECT_NEAR(1.0, J(0, 4), 1e-10);  // -(r_A × n)_y (flipped sign)
+  EXPECT_NEAR(0.0, J(0, 5), 1e-10);  // -(r_A × n)_z
 
   // Lever arm B: contactB - comB = (0, 1, 0)
   // r_B × n = (0, 1, 0) × (0, 0, 1) = (1, 0, 0)
@@ -230,20 +244,22 @@ TEST(ContactConstraintTest, JacobianTwoBody_AngularComponents_0032a)
 TEST(ContactConstraintTest, JacobianTwoBody_NumericalVerification_0032a)
 {
   // Test: Analytical Jacobian matches finite-difference numerical Jacobian
-  Coordinate normal{1.0 / std::sqrt(3.0), 1.0 / std::sqrt(3.0), 1.0 / std::sqrt(3.0)};
+  Coordinate normal{
+    1.0 / std::sqrt(3.0), 1.0 / std::sqrt(3.0), 1.0 / std::sqrt(3.0)};
   Coordinate contactA{0.5, 0.3, 0.2};
   Coordinate contactB{0.6, 0.4, 0.3};
   Coordinate comA{0.1, 0.1, 0.1};
   Coordinate comB{0.2, 0.2, 0.2};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.05, comA, comB, 0.8, 1.5};
+    0, 1, normal, contactA, contactB, 0.05, comA, comB, 0.8, 1.5};
 
   InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
   InertialState stateB = createDefaultState(Coordinate{1, 0, 0});
 
   // Analytical Jacobian
-  Eigen::MatrixXd J_analytical = constraint.jacobianTwoBody(stateA, stateB, 0.0);
+  Eigen::MatrixXd J_analytical =
+    constraint.jacobianTwoBody(stateA, stateB, 0.0);
 
   // The Jacobian is constant (doesn't depend on velocity), so we can verify
   // by checking that the constraint function is linear in position
@@ -291,7 +307,7 @@ TEST(ContactConstraintTest, IsActiveTwoBody_PenetratingPair_ReturnsTrue_0032a)
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
 
   InertialState stateA = createDefaultState();
   InertialState stateB = createDefaultState();
@@ -309,7 +325,7 @@ TEST(ContactConstraintTest, IsActiveTwoBody_SeparatedPair_ReturnsFalse_0032a)
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.0, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.0, comA, comB, 0.5, 0.0};
 
   InertialState stateA = createDefaultState();
   InertialState stateB = createDefaultState();
@@ -327,7 +343,7 @@ TEST(ContactConstraintTest, BaumgarteParameters_DefaultERP_0032a)
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
 
   EXPECT_NEAR(0.2, constraint.alpha(), 1e-10);
   EXPECT_NEAR(0.0, constraint.beta(), 1e-10);
@@ -343,7 +359,7 @@ TEST(ContactConstraintTest, TypeName_ReturnsContactConstraint_0032a)
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
 
   EXPECT_EQ("ContactConstraint", constraint.typeName());
 }
@@ -358,7 +374,7 @@ TEST(ContactConstraintTest, SingleBodyEvaluate_ThrowsLogicError_0032a)
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
 
   InertialState state = createDefaultState();
 
@@ -375,7 +391,7 @@ TEST(ContactConstraintTest, SingleBodyJacobian_ThrowsLogicError_0032a)
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
 
   InertialState state = createDefaultState();
 
@@ -392,14 +408,15 @@ TEST(ContactConstraintTest, SingleBodyIsActive_ThrowsLogicError_0032a)
   Coordinate comB{0, 0, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
+    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
 
   InertialState state = createDefaultState();
 
   EXPECT_THROW(constraint.isActive(state, 0.0), std::logic_error);
 }
 
-TEST(ContactConstraintTest, Constructor_InvalidNormal_ThrowsInvalidArgument_0032a)
+TEST(ContactConstraintTest,
+     Constructor_InvalidNormal_ThrowsInvalidArgument_0032a)
 {
   // Test: Constructor validates normal is unit length
   Coordinate normal{0, 0, 2.0};  // Not unit length
@@ -408,12 +425,13 @@ TEST(ContactConstraintTest, Constructor_InvalidNormal_ThrowsInvalidArgument_0032
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 0};
 
-  EXPECT_THROW(
-      ContactConstraint(0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0),
-      std::invalid_argument);
+  EXPECT_THROW(ContactConstraint(
+                 0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0),
+               std::invalid_argument);
 }
 
-TEST(ContactConstraintTest, Constructor_NegativePenetration_ThrowsInvalidArgument_0032a)
+TEST(ContactConstraintTest,
+     Constructor_NegativePenetration_ThrowsInvalidArgument_0032a)
 {
   // Test: Constructor validates penetration depth >= 0
   Coordinate normal{0, 0, 1};
@@ -422,12 +440,13 @@ TEST(ContactConstraintTest, Constructor_NegativePenetration_ThrowsInvalidArgumen
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 0};
 
-  EXPECT_THROW(
-      ContactConstraint(0, 1, normal, contactA, contactB, -0.1, comA, comB, 0.5, 0.0),
-      std::invalid_argument);
+  EXPECT_THROW(ContactConstraint(
+                 0, 1, normal, contactA, contactB, -0.1, comA, comB, 0.5, 0.0),
+               std::invalid_argument);
 }
 
-TEST(ContactConstraintTest, Constructor_InvalidRestitution_ThrowsInvalidArgument_0032a)
+TEST(ContactConstraintTest,
+     Constructor_InvalidRestitution_ThrowsInvalidArgument_0032a)
 {
   // Test: Constructor validates restitution in [0, 1]
   Coordinate normal{0, 0, 1};
@@ -436,13 +455,13 @@ TEST(ContactConstraintTest, Constructor_InvalidRestitution_ThrowsInvalidArgument
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 0};
 
-  EXPECT_THROW(
-      ContactConstraint(0, 1, normal, contactA, contactB, 0.1, comA, comB, 1.5, 0.0),
-      std::invalid_argument);
+  EXPECT_THROW(ContactConstraint(
+                 0, 1, normal, contactA, contactB, 0.1, comA, comB, 1.5, 0.0),
+               std::invalid_argument);
 
-  EXPECT_THROW(
-      ContactConstraint(0, 1, normal, contactA, contactB, 0.1, comA, comB, -0.1, 0.0),
-      std::invalid_argument);
+  EXPECT_THROW(ContactConstraint(
+                 0, 1, normal, contactA, contactB, 0.1, comA, comB, -0.1, 0.0),
+               std::invalid_argument);
 }
 
 TEST(ContactConstraintTest, Accessors_ReturnCorrectValues_0032a)
@@ -455,7 +474,7 @@ TEST(ContactConstraintTest, Accessors_ReturnCorrectValues_0032a)
   Coordinate comB{0, 0.5, 0};
 
   ContactConstraint constraint{
-      0, 1, normal, contactA, contactB, 0.05, comA, comB, 0.8, 2.5};
+    0, 1, normal, contactA, contactB, 0.05, comA, comB, 0.8, 2.5};
 
   // Normal
   EXPECT_NEAR(0.0, constraint.getContactNormal().x(), 1e-10);

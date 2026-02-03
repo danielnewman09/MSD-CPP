@@ -4,7 +4,7 @@
 #ifndef MSD_SIM_PHYSICS_SUPPORT_FUNCTION_HPP
 #define MSD_SIM_PHYSICS_SUPPORT_FUNCTION_HPP
 
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 

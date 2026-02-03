@@ -2,10 +2,11 @@
 // Design: docs/designs/0024_angular_coordinate/design.md
 
 #include <gtest/gtest.h>
+
 #include <cmath>
 #include <format>
 
-#include "msd-sim/src/Environment/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
 
 using namespace msd_sim;
 
@@ -53,7 +54,8 @@ TEST(AngularCoordinateTest, NegativeValuesExceedingThresholdAreNormalized)
 {
   // -101π exceeds -100π threshold
   AngularCoordinate angular{-101 * M_PI, 0, 0};
-  // Normalizes to (-π, π] range, so -101π → +π (since -π is excluded from range)
+  // Normalizes to (-π, π] range, so -101π → +π (since -π is excluded from
+  // range)
   EXPECT_NEAR(angular.pitch(), M_PI, 1e-10);
 }
 

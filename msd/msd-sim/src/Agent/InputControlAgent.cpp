@@ -2,7 +2,7 @@
 // Design: docs/designs/input-state-management/design.md
 
 #include "msd-sim/src/Agent/InputControlAgent.hpp"
-#include "msd-sim/src/Environment/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/AngularRate.hpp"
 
 namespace msd_sim
 {

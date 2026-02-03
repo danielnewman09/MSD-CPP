@@ -3,8 +3,8 @@
 
 #include <gtest/gtest.h>
 #include <cmath>
-#include "msd-sim/src/Environment/AngularCoordinate.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Utils/utils.hpp"
 
@@ -199,7 +199,7 @@ TEST(ReferenceFrameTest, ConstructorFromAxes_RoundTrip)
 {
   // Arbitrary frame - verify round-trip transformation
   Coordinate origin{5.0, 10.0, 15.0};
-  Coordinate xDir{1.0, 1.0, 0.0};    // X at 45 degrees in XY plane
+  Coordinate xDir{1.0, 1.0, 0.0};  // X at 45 degrees in XY plane
   Coordinate zDir{0.0, 0.0, 1.0};
 
   ReferenceFrame frame{origin, xDir, zDir};
@@ -217,24 +217,26 @@ TEST(ReferenceFrameTest, ConstructorFromAxes_CollisionResponseUseCase)
   // - Contact normal (Z) pointing from surface
   // - Tangent direction (X) along surface
   Coordinate contactPoint{10.0, 5.0, 0.0};
-  Coordinate normal{0.0, 0.0, 1.0};    // Pointing up
-  Coordinate tangent{1.0, 0.0, 0.0};   // Along X-axis
+  Coordinate normal{0.0, 0.0, 1.0};   // Pointing up
+  Coordinate tangent{1.0, 0.0, 0.0};  // Along X-axis
 
   ReferenceFrame contactFrame{contactPoint, tangent, normal};
 
   // A velocity in world frame
-  Coordinate worldVelocity{2.0, 3.0, -5.0};  // Moving with some downward component
+  Coordinate worldVelocity{
+    2.0, 3.0, -5.0};  // Moving with some downward component
 
   // Transform to contact frame
-  CoordinateRate localVelocity = contactFrame.globalToLocal(
-    CoordinateRate{worldVelocity});
+  CoordinateRate localVelocity =
+    contactFrame.globalToLocal(CoordinateRate{worldVelocity});
 
   // In contact frame:
   // - Z component should be the normal component (penetrating = negative)
   // - X component should be the tangent component
   EXPECT_TRUE(msd_sim::almostEqual(localVelocity.x(), 2.0, 1e-9));  // Tangent X
   EXPECT_TRUE(msd_sim::almostEqual(localVelocity.y(), 3.0, 1e-9));  // Tangent Y
-  EXPECT_TRUE(msd_sim::almostEqual(localVelocity.z(), -5.0, 1e-9)); // Normal (penetrating)
+  EXPECT_TRUE(msd_sim::almostEqual(
+    localVelocity.z(), -5.0, 1e-9));  // Normal (penetrating)
 }
 
 TEST(ReferenceFrameTest, ConstructorFromAxes_ZeroXDirectionThrows)
@@ -346,14 +348,15 @@ TEST(ReferenceFrameTest, SetOrigin)
 
 TEST(ReferenceFrameTest, SetRotation)
 {
-  // Normal case (away from gimbal lock): individual Euler angles round-trip exactly
+  // Normal case (away from gimbal lock): individual Euler angles round-trip
+  // exactly
   ReferenceFrame frame;
   AngularCoordinate angular{M_PI / 6, M_PI / 4, M_PI / 3};  // pitch, roll, yaw
 
   Eigen::Quaterniond q =
-      Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
-      Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
-      Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
+    Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
+    Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
+    Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
   frame.setQuaternion(q);
 
   AngularCoordinate frameAngular = frame.getAngularCoordinate();
@@ -370,9 +373,9 @@ TEST(ReferenceFrameTest, SetRotationGimbalLock)
   AngularCoordinate angular{M_PI / 2, M_PI / 4, M_PI / 6};  // pitch, roll, yaw
 
   Eigen::Quaterniond q =
-      Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
-      Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
-      Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
+    Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
+    Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
+    Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
   Eigen::Matrix3d expectedRotation = q.toRotationMatrix();
 
   frame.setQuaternion(q);
@@ -785,7 +788,8 @@ TEST(ReferenceFrameTest, QuaternionConstructor_90DegYaw)
 {
   // 90 degree rotation about Z-axis (yaw)
   Coordinate origin{0.0, 0.0, 0.0};
-  Eigen::Quaterniond quat{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
+  Eigen::Quaterniond quat{
+    Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -802,7 +806,8 @@ TEST(ReferenceFrameTest, QuaternionConstructor_90DegPitch)
 {
   // 90 degree rotation about Y-axis (pitch)
   Coordinate origin{0.0, 0.0, 0.0};
-  Eigen::Quaterniond quat{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitY()}};
+  Eigen::Quaterniond quat{
+    Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitY()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -819,7 +824,8 @@ TEST(ReferenceFrameTest, QuaternionConstructor_90DegRoll)
 {
   // 90 degree rotation about X-axis (roll)
   Coordinate origin{0.0, 0.0, 0.0};
-  Eigen::Quaterniond quat{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitX()}};
+  Eigen::Quaterniond quat{
+    Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitX()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -863,7 +869,8 @@ TEST(ReferenceFrameTest, QuaternionConstructor_RoundTrip)
 {
   // Create frame from quaternion, transform point, transform back
   Coordinate origin{5.0, 10.0, 15.0};
-  Eigen::Quaterniond quat{Eigen::AngleAxisd{M_PI / 3, Eigen::Vector3d{1, 1, 1}.normalized()}};
+  Eigen::Quaterniond quat{
+    Eigen::AngleAxisd{M_PI / 3, Eigen::Vector3d{1, 1, 1}.normalized()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -883,9 +890,9 @@ TEST(ReferenceFrameTest, QuaternionConstructor_UnnormalizedInput)
   Eigen::Quaterniond normalizedQuat{
     Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
   Eigen::Quaterniond unnormalizedQuat{normalizedQuat.w() * 3.0,
-                                       normalizedQuat.x() * 3.0,
-                                       normalizedQuat.y() * 3.0,
-                                       normalizedQuat.z() * 3.0};
+                                      normalizedQuat.x() * 3.0,
+                                      normalizedQuat.y() * 3.0,
+                                      normalizedQuat.z() * 3.0};
 
   ReferenceFrame frame{origin, unnormalizedQuat};
 
@@ -930,7 +937,8 @@ TEST(ReferenceFrameTest, GetQuaternion_FromEulerAngles)
   {
     for (int j = 0; j < 3; ++j)
     {
-      EXPECT_TRUE(msd_sim::almostEqual(quatRotation(i, j), frameRotation(i, j), 1e-9))
+      EXPECT_TRUE(
+        msd_sim::almostEqual(quatRotation(i, j), frameRotation(i, j), 1e-9))
         << "Mismatch at (" << i << ", " << j << "): " << quatRotation(i, j)
         << " vs " << frameRotation(i, j);
     }
@@ -949,14 +957,16 @@ TEST(ReferenceFrameTest, QuaternionRoundTrip)
 
   // Quaternions q and -q represent the same rotation
   // Check that they produce the same rotation matrix
-  Eigen::Matrix3d originalRotation = originalQuat.normalized().toRotationMatrix();
+  Eigen::Matrix3d originalRotation =
+    originalQuat.normalized().toRotationMatrix();
   Eigen::Matrix3d retrievedRotation = retrievedQuat.toRotationMatrix();
 
   for (int i = 0; i < 3; ++i)
   {
     for (int j = 0; j < 3; ++j)
     {
-      EXPECT_TRUE(msd_sim::almostEqual(originalRotation(i, j), retrievedRotation(i, j), 1e-9))
+      EXPECT_TRUE(msd_sim::almostEqual(
+        originalRotation(i, j), retrievedRotation(i, j), 1e-9))
         << "Mismatch at (" << i << ", " << j << ")";
     }
   }
@@ -968,7 +978,8 @@ TEST(ReferenceFrameTest, QuaternionConstructor_GimbalLockPitchPositive)
   Coordinate origin{0.0, 0.0, 0.0};
 
   // Create quaternion for pitch = +90 degrees
-  Eigen::Quaterniond quat{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitY()}};
+  Eigen::Quaterniond quat{
+    Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitY()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -988,7 +999,8 @@ TEST(ReferenceFrameTest, QuaternionConstructor_GimbalLockPitchPositive)
   {
     for (int j = 0; j < 3; ++j)
     {
-      EXPECT_TRUE(msd_sim::almostEqual(originalRotation(i, j), retrievedRotation(i, j), 1e-9));
+      EXPECT_TRUE(msd_sim::almostEqual(
+        originalRotation(i, j), retrievedRotation(i, j), 1e-9));
     }
   }
 }
@@ -999,7 +1011,8 @@ TEST(ReferenceFrameTest, QuaternionConstructor_GimbalLockPitchNegative)
   Coordinate origin{0.0, 0.0, 0.0};
 
   // Create quaternion for pitch = -90 degrees
-  Eigen::Quaterniond quat{Eigen::AngleAxisd{-M_PI / 2, Eigen::Vector3d::UnitY()}};
+  Eigen::Quaterniond quat{
+    Eigen::AngleAxisd{-M_PI / 2, Eigen::Vector3d::UnitY()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -1019,14 +1032,16 @@ TEST(ReferenceFrameTest, QuaternionConstructor_GimbalLockPitchNegative)
   {
     for (int j = 0; j < 3; ++j)
     {
-      EXPECT_TRUE(msd_sim::almostEqual(originalRotation(i, j), retrievedRotation(i, j), 1e-9));
+      EXPECT_TRUE(msd_sim::almostEqual(
+        originalRotation(i, j), retrievedRotation(i, j), 1e-9));
     }
   }
 }
 
 TEST(ReferenceFrameTest, EulerQuaternionConsistency)
 {
-  // Create frame from Euler angles, compare with equivalent quaternion-based frame
+  // Create frame from Euler angles, compare with equivalent quaternion-based
+  // frame
   Coordinate origin{10.0, 20.0, 30.0};
   double pitch = 0.4;
   double roll = -0.3;

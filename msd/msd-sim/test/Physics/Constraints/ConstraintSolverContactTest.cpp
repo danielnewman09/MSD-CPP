@@ -6,7 +6,7 @@
 #include <cmath>
 #include <memory>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"

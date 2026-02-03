@@ -9,7 +9,8 @@
 #include <array>
 #include <limits>
 #include <stdexcept>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 
 namespace msd_sim
 {
@@ -20,7 +21,8 @@ namespace msd_sim
  * Stores contact locations on both object surfaces in world space.
  * Simple POD struct with value semantics.
  *
- * @see docs/designs/0029_contact_manifold_generation/0029_contact_manifold_generation.puml
+ * @see
+ * docs/designs/0029_contact_manifold_generation/0029_contact_manifold_generation.puml
  * @ticket 0029_contact_manifold_generation
  */
 struct ContactPoint
@@ -43,7 +45,8 @@ struct ContactPoint
 };
 
 /**
- * @brief Complete collision information for physics response with contact manifold.
+ * @brief Complete collision information for physics response with contact
+ * manifold.
  *
  * This struct is returned by EPA when a collision is detected.
  * It does NOT contain an 'intersecting' boolean because:
@@ -63,9 +66,11 @@ struct ContactPoint
  * - Added contactCount field for number of valid contacts [1, 4]
  * - Enables multi-point collision response for improved stability
  *
- * @see docs/designs/0027a_expanding_polytope_algorithm/0027a_expanding_polytope_algorithm.puml
+ * @see
+ * docs/designs/0027a_expanding_polytope_algorithm/0027a_expanding_polytope_algorithm.puml
  * @see docs/designs/0028_epa_witness_points/0028_epa_witness_points.puml
- * @see docs/designs/0029_contact_manifold_generation/0029_contact_manifold_generation.puml
+ * @see
+ * docs/designs/0029_contact_manifold_generation/0029_contact_manifold_generation.puml
  * @ticket 0027a_expanding_polytope_algorithm
  * @ticket 0028_epa_witness_points
  * @ticket 0029_contact_manifold_generation
@@ -74,11 +79,11 @@ struct CollisionResult
 {
   Coordinate normal;  // Contact normal (world space, A→B, unit length)
   double penetrationDepth{
-      std::numeric_limits<double>::quiet_NaN()};  // Overlap distance [m]
+    std::numeric_limits<double>::quiet_NaN()};  // Overlap distance [m]
 
   // Contact manifold storage (replaces legacy contactPointA/contactPointB)
   std::array<ContactPoint, 4> contacts;  // Up to 4 contact points
-  size_t contactCount{0};                 // Number of valid contacts [1, 4]
+  size_t contactCount{0};                // Number of valid contacts [1, 4]
 
   // Default constructor
   CollisionResult() = default;
@@ -88,7 +93,10 @@ struct CollisionResult
                   double depth,
                   const std::array<ContactPoint, 4>& contactsArray,
                   size_t count)
-    : normal{n}, penetrationDepth{depth}, contacts{contactsArray}, contactCount{count}
+    : normal{n},
+      penetrationDepth{depth},
+      contacts{contactsArray},
+      contactCount{count}
   {
     if (count < 1 || count > 4)
     {
@@ -101,7 +109,10 @@ struct CollisionResult
                   double depth,
                   const Coordinate& pointA,
                   const Coordinate& pointB)
-    : normal{n}, penetrationDepth{depth}, contacts{ContactPoint{pointA, pointB}}, contactCount{1}
+    : normal{n},
+      penetrationDepth{depth},
+      contacts{ContactPoint{pointA, pointB}},
+      contactCount{1}
   {
   }
 

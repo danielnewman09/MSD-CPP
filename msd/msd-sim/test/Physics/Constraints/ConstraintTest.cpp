@@ -5,18 +5,18 @@
 #include <cmath>
 #include <memory>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/BilateralConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
+#include "msd-sim/src/Physics/Constraints/DistanceConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/UnilateralConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/DistanceConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
-#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
+#include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
-#include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
+#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 using namespace msd_sim;
 
@@ -78,7 +78,8 @@ TEST(UnitQuaternionConstraintTest, Evaluate_UnitQuaternion_ReturnsZero)
   // Test: C(Q) = Q^T·Q - 1 = 0 for unit quaternion
   UnitQuaternionConstraint constraint;
   InertialState state = createDefaultState();
-  state.orientation = Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};  // Unit quaternion
+  state.orientation =
+    Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};  // Unit quaternion
 
   Eigen::VectorXd C = constraint.evaluate(state, 0.0);
 
@@ -97,7 +98,8 @@ TEST(UnitQuaternionConstraintTest, Evaluate_NonUnitQuaternion_ReturnsViolation)
   state.orientation.x() = 1.0;
   state.orientation.y() = 1.0;
   state.orientation.z() = 1.0;
-  // Note: Eigen stores coefficients as (x, y, z, w) internally but constructor is (w, x, y, z)
+  // Note: Eigen stores coefficients as (x, y, z, w) internally but constructor
+  // is (w, x, y, z)
 
   Eigen::VectorXd C = constraint.evaluate(state, 0.0);
 
@@ -249,9 +251,9 @@ TEST(DistanceConstraintTest, Jacobian_CorrectStructure)
   ASSERT_EQ(7, J.cols());
 
   // Position derivatives: ∂C/∂X = 2·X^T
-  EXPECT_NEAR(2.0, J(0, 0), 1e-10);   // 2·x = 2·1 = 2
-  EXPECT_NEAR(4.0, J(0, 1), 1e-10);   // 2·y = 2·2 = 4
-  EXPECT_NEAR(6.0, J(0, 2), 1e-10);   // 2·z = 2·3 = 6
+  EXPECT_NEAR(2.0, J(0, 0), 1e-10);  // 2·x = 2·1 = 2
+  EXPECT_NEAR(4.0, J(0, 1), 1e-10);  // 2·y = 2·2 = 4
+  EXPECT_NEAR(6.0, J(0, 2), 1e-10);  // 2·z = 2·3 = 6
 
   // Quaternion derivatives should be zero (constraint doesn't depend on Q)
   EXPECT_NEAR(0.0, J(0, 3), 1e-10);
@@ -304,12 +306,13 @@ TEST(ConstraintSolverTest, EmptyConstraintSet_ReturnsZeroForces)
   InertialState state = createDefaultState();
   std::vector<Constraint*> constraints;
 
-  auto result = solver.solve(constraints, state,
-                              Coordinate{0.0, 0.0, 0.0},   // external force
-                              Coordinate{0.0, 0.0, 0.0},   // external torque
-                              1.0,                          // mass
-                              createIdentityInertia(),      // inverse inertia
-                              0.016);                       // dt
+  auto result = solver.solve(constraints,
+                             state,
+                             Coordinate{0.0, 0.0, 0.0},  // external force
+                             Coordinate{0.0, 0.0, 0.0},  // external torque
+                             1.0,                        // mass
+                             createIdentityInertia(),    // inverse inertia
+                             0.016);                     // dt
 
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(0, result.lambdas.size());
@@ -326,17 +329,19 @@ TEST(ConstraintSolverTest, SingleQuaternionConstraint_Converges)
   // Test: Single quaternion constraint produces valid Lagrange multiplier
   ConstraintSolver solver;
   InertialState state = createDefaultState();
-  state.orientation = Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};  // Unit quaternion
+  state.orientation =
+    Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};  // Unit quaternion
 
   auto constraint = std::make_unique<UnitQuaternionConstraint>();
   std::vector<Constraint*> constraints{constraint.get()};
 
-  auto result = solver.solve(constraints, state,
-                              Coordinate{0.0, 0.0, -9.81},  // gravity
-                              Coordinate{0.0, 0.0, 0.0},
-                              1.0,
-                              createIdentityInertia(),
-                              0.016);
+  auto result = solver.solve(constraints,
+                             state,
+                             Coordinate{0.0, 0.0, -9.81},  // gravity
+                             Coordinate{0.0, 0.0, 0.0},
+                             1.0,
+                             createIdentityInertia(),
+                             0.016);
 
   EXPECT_TRUE(result.converged);
   EXPECT_EQ(1, result.lambdas.size());
@@ -355,17 +360,20 @@ TEST(ConstraintSolverTest, MultipleConstraints_Converges)
 
   auto quatConstraint = std::make_unique<UnitQuaternionConstraint>();
   auto distConstraint = std::make_unique<DistanceConstraint>(5.0);
-  std::vector<Constraint*> constraints{quatConstraint.get(), distConstraint.get()};
+  std::vector<Constraint*> constraints{quatConstraint.get(),
+                                       distConstraint.get()};
 
-  auto result = solver.solve(constraints, state,
-                              Coordinate{0.0, 0.0, -9.81},
-                              Coordinate{0.0, 0.0, 0.0},
-                              1.0,
-                              createIdentityInertia(),
-                              0.016);
+  auto result = solver.solve(constraints,
+                             state,
+                             Coordinate{0.0, 0.0, -9.81},
+                             Coordinate{0.0, 0.0, 0.0},
+                             1.0,
+                             createIdentityInertia(),
+                             0.016);
 
   EXPECT_TRUE(result.converged);
-  EXPECT_EQ(2, result.lambdas.size());  // Two constraints = two Lagrange multipliers
+  EXPECT_EQ(
+    2, result.lambdas.size());  // Two constraints = two Lagrange multipliers
   EXPECT_TRUE(std::isfinite(result.conditionNumber));
 }
 
@@ -380,12 +388,13 @@ TEST(ConstraintSolverTest, ConditionNumber_WellConditioned)
   auto quatConstraint = std::make_unique<UnitQuaternionConstraint>();
   std::vector<Constraint*> constraints{quatConstraint.get()};
 
-  auto result = solver.solve(constraints, state,
-                              Coordinate{0.0, 0.0, 0.0},
-                              Coordinate{0.0, 0.0, 0.0},
-                              1.0,
-                              createIdentityInertia(),
-                              0.016);
+  auto result = solver.solve(constraints,
+                             state,
+                             Coordinate{0.0, 0.0, 0.0},
+                             Coordinate{0.0, 0.0, 0.0},
+                             1.0,
+                             createIdentityInertia(),
+                             0.016);
 
   // Condition number should be small for well-conditioned system
   EXPECT_TRUE(result.converged);
@@ -539,7 +548,8 @@ TEST(ConstraintIntegrationTest, QuaternionRemainNormalized_1000Steps)
 
   // Quaternion should remain normalized within tolerance
   double qNorm = asset.getInertialState().orientation.norm();
-  EXPECT_NEAR(1.0, qNorm, 1e-4);  // Slightly looser tolerance for long simulation
+  EXPECT_NEAR(
+    1.0, qNorm, 1e-4);  // Slightly looser tolerance for long simulation
 }
 
 TEST(ConstraintIntegrationTest, MultipleConstraints_BothEnforced)
@@ -577,7 +587,8 @@ TEST(ConstraintIntegrationTest, MultipleConstraints_BothEnforced)
   double qNorm = asset.getInertialState().orientation.norm();
   EXPECT_NEAR(1.0, qNorm, 1e-4);
 
-  // Check distance constraint (note: constraint forces may not perfectly maintain distance
-  // with direct projection; this tests the solver runs without error)
-  // The solver provides stabilization forces but explicit projection isn't done
+  // Check distance constraint (note: constraint forces may not perfectly
+  // maintain distance with direct projection; this tests the solver runs
+  // without error) The solver provides stabilization forces but explicit
+  // projection isn't done
 }

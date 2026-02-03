@@ -9,8 +9,8 @@
 #include <filesystem>
 #include <vector>
 #include "msd-assets/src/GeometryFactory.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Engine.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
 
 namespace fs = std::filesystem;

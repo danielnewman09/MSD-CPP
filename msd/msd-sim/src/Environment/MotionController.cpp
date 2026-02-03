@@ -2,8 +2,7 @@
 // Design: docs/designs/0005_camera_controller_sim/design.md
 
 #include "msd-sim/src/Environment/MotionController.hpp"
-
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 
 namespace msd_sim
 {
@@ -86,9 +85,9 @@ void MotionController::updateTransform(ReferenceFrame& frame,
 
   // Update rotation from Euler angles via quaternion (ZYX convention)
   Eigen::Quaterniond q =
-      Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
-      Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
-      Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
+    Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
+    Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
+    Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
   frame.setQuaternion(q);
 }
 

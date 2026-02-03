@@ -4,12 +4,13 @@
 
 #include <gtest/gtest.h>
 #include <Eigen/Dense>
+
 #include <array>
 #include <cmath>
 
 // Include ReferenceFrame and related types from msd-sim
-#include "msd-sim/src/Environment/AngularCoordinate.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 
 // Tolerance for floating-point comparisons

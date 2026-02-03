@@ -4,30 +4,33 @@
 #ifndef INERTIAL_STATE_HPP
 #define INERTIAL_STATE_HPP
 
-#include <cstdint>
 #include <Eigen/Geometry>
+#include <cstdint>
 
-#include "msd-sim/src/Environment/AngularCoordinate.hpp"
-#include "msd-sim/src/Environment/AngularRate.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 
 namespace msd_sim
 {
 
 /**
- * @brief Complete kinematic state representation with 7-state quaternion formulation.
+ * @brief Complete kinematic state representation with 7-state quaternion
+ * formulation.
  *
  * State vector: (X, Q, Ẋ, Q̇) with 14 components total.
  *
- * Contains position, velocity, and acceleration for both linear and angular motion.
- * Uses quaternion representation for orientation to eliminate gimbal lock singularities.
- * Quaternion rate Q̇ is stored directly for efficiency (avoids ω→Q̇ conversion every step).
+ * Contains position, velocity, and acceleration for both linear and angular
+ * motion. Uses quaternion representation for orientation to eliminate gimbal
+ * lock singularities. Quaternion rate Q̇ is stored directly for efficiency
+ * (avoids ω→Q̇ conversion every step).
  *
  * Conversion formulas:
  * - Q̇ → ω: ω = 2 * Q̄ ⊗ Q̇  (where Q̄ is conjugate)
  * - ω → Q̇: Q̇ = ½ * Q ⊗ [0, ω]
  *
- * @see docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml
+ * @see
+ * docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml
  * @ticket 0030_lagrangian_quaternion_physics
  */
 struct InertialState
@@ -38,9 +41,12 @@ struct InertialState
   Coordinate acceleration;
 
   // Angular components (quaternion representation)
-  Eigen::Quaterniond orientation{1.0, 0.0, 0.0, 0.0};  // Identity quaternion (w, x, y, z)
+  Eigen::Quaterniond orientation{1.0,
+                                 0.0,
+                                 0.0,
+                                 0.0};  // Identity quaternion (w, x, y, z)
   Eigen::Vector4d quaternionRate{0.0, 0.0, 0.0, 0.0};  // Q̇ (w, x, y, z)
-  AngularRate angularAcceleration;  // α = I⁻¹ * τ [rad/s²]
+  AngularRate angularAcceleration;                     // α = I⁻¹ * τ [rad/s²]
 
   /**
    * @brief Convert quaternion rate to angular velocity
@@ -68,7 +74,7 @@ struct InertialState
    * Formula: Q̇ = ½ * Q ⊗ [0, ω]
    */
   static Eigen::Vector4d omegaToQuaternionRate(const AngularRate& omega,
-                                                const Eigen::Quaterniond& Q);
+                                               const Eigen::Quaterniond& Q);
 
   /**
    * @brief Convert quaternion rate to angular velocity
@@ -82,14 +88,17 @@ struct InertialState
                                            const Eigen::Quaterniond& Q);
 
   /**
-   * @brief Get Euler angles from quaternion (deprecated, for backward compatibility)
+   * @brief Get Euler angles from quaternion (deprecated, for backward
+   * compatibility)
    * @return Euler angles extracted from current quaternion
-   * @deprecated Use quaternion representation directly. Euler angles have gimbal lock.
+   * @deprecated Use quaternion representation directly. Euler angles have
+   * gimbal lock.
    *
    * Extracts ZYX Euler angles from quaternion using Eigen's conversion.
    * Warning: This conversion is ambiguous near gimbal lock (pitch ≈ ±90°).
    */
-  [[deprecated("Use quaternion representation directly. Euler angles have gimbal lock.")]]
+  [[deprecated(
+    "Use quaternion representation directly. Euler angles have gimbal lock.")]]
   AngularCoordinate getEulerAngles() const;
 };
 

@@ -2,10 +2,10 @@
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 
 #include <gtest/gtest.h>
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
-#include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
 
 using namespace msd_sim;
 
@@ -138,8 +138,10 @@ TEST(AssetEnvironmentTest, SetCoefficientOfRestitution_ValidatesRange_0032a)
   EXPECT_NO_THROW(environment.setCoefficientOfRestitution(0.5));
 
   // Invalid values should throw
-  EXPECT_THROW(environment.setCoefficientOfRestitution(-0.1), std::invalid_argument);
-  EXPECT_THROW(environment.setCoefficientOfRestitution(1.1), std::invalid_argument);
+  EXPECT_THROW(environment.setCoefficientOfRestitution(-0.1),
+               std::invalid_argument);
+  EXPECT_THROW(environment.setCoefficientOfRestitution(1.1),
+               std::invalid_argument);
 }
 
 TEST(AssetEnvironmentTest, Constructor_WithRestitution_SetsValue_0032a)

@@ -7,7 +7,7 @@
 
 #include <Eigen/Dense>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -29,8 +29,10 @@ class Constraint;
  *
  * Thread safety: Implementations should be stateless and thread-safe
  *
- * @see docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml
- * @see docs/designs/0031_generalized_lagrange_constraints/0031_generalized_lagrange_constraints.puml
+ * @see
+ * docs/designs/0030_lagrangian_quaternion_physics/0030_lagrangian_quaternion_physics.puml
+ * @see
+ * docs/designs/0031_generalized_lagrange_constraints/0031_generalized_lagrange_constraints.puml
  * @ticket 0030_lagrangian_quaternion_physics
  * @ticket 0031_generalized_lagrange_constraints
  */
@@ -49,8 +51,9 @@ public:
    * @param constraints Vector of constraint pointers (non-owning)
    * @param dt Timestep [s]
    *
-   * Ticket 0031 breaking change: Parameter changed from single QuaternionConstraint&
-   * to std::vector<Constraint*>& to support multiple constraints per object.
+   * Ticket 0031 breaking change: Parameter changed from single
+   * QuaternionConstraint& to std::vector<Constraint*>& to support multiple
+   * constraints per object.
    */
   virtual void step(InertialState& state,
                     const Coordinate& force,

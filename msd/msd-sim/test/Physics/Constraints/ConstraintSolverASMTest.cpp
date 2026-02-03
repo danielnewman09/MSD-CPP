@@ -12,7 +12,7 @@
 #include <numeric>
 #include <random>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
@@ -54,8 +54,9 @@ Eigen::Matrix3d createIdentityInertia()
 
 TEST(ConstraintSolverASMTest, ActiveSetResult_DefaultConstruction_Zeroed_0034)
 {
-  // Verify ActiveSetResult default constructor initializes all fields correctly.
-  // active_set_size defaults to 0 (empty active set), not an uninitialized sentinel.
+  // Verify ActiveSetResult default constructor initializes all fields
+  // correctly. active_set_size defaults to 0 (empty active set), not an
+  // uninitialized sentinel.
   ConstraintSolver solver;
 
   // Solve with empty contacts to get a default-like result
@@ -76,7 +77,8 @@ TEST(ConstraintSolverASMTest, ActiveSetResult_DefaultConstruction_Zeroed_0034)
 // 2. Single Contact Exact Solution
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, SingleContact_ExactSolution_MatchesAnalytical_0034)
+TEST(ConstraintSolverASMTest,
+     SingleContact_ExactSolution_MatchesAnalytical_0034)
 {
   // For a single contact, lambda = b / A (scalar).
   // ASM should match this analytical result within 1e-12.
@@ -96,7 +98,8 @@ TEST(ConstraintSolverASMTest, SingleContact_ExactSolution_MatchesAnalytical_0034
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
   std::vector<TwoBodyConstraint*> constraints{contact.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
@@ -116,10 +119,11 @@ TEST(ConstraintSolverASMTest, SingleContact_ExactSolution_MatchesAnalytical_0034
 // 3. Order Independence
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, OrderIndependence_ShuffledContacts_IdenticalLambdas_0034)
+TEST(ConstraintSolverASMTest,
+     OrderIndependence_ShuffledContacts_IdenticalLambdas_0034)
 {
-  // Two different orderings of the same contacts must produce identical lambdas.
-  // ASM is deterministic and order-independent (unlike PGS).
+  // Two different orderings of the same contacts must produce identical
+  // lambdas. ASM is deterministic and order-independent (unlike PGS).
   ConstraintSolver solver;
 
   InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
@@ -130,37 +134,73 @@ TEST(ConstraintSolverASMTest, OrderIndependence_ShuffledContacts_IdenticalLambda
   Coordinate comB{0, 0, 0};
 
   // Contact at +X offset
-  auto contact1a = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{0.2, 0, 0.5}, Coordinate{0.2, 0, 0.4}, 0.1, comA, comB, 0.5, 0.0);
+  auto contact1a = std::make_unique<ContactConstraint>(0,
+                                                       1,
+                                                       normal,
+                                                       Coordinate{0.2, 0, 0.5},
+                                                       Coordinate{0.2, 0, 0.4},
+                                                       0.1,
+                                                       comA,
+                                                       comB,
+                                                       0.5,
+                                                       0.0);
   // Contact at -X offset
-  auto contact2a = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{-0.2, 0, 0.5}, Coordinate{-0.2, 0, 0.4}, 0.1, comA, comB, 0.5, 0.0);
+  auto contact2a = std::make_unique<ContactConstraint>(0,
+                                                       1,
+                                                       normal,
+                                                       Coordinate{-0.2, 0, 0.5},
+                                                       Coordinate{-0.2, 0, 0.4},
+                                                       0.1,
+                                                       comA,
+                                                       comB,
+                                                       0.5,
+                                                       0.0);
 
   // Duplicate contacts for second solve (reversed order)
-  auto contact1b = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{0.2, 0, 0.5}, Coordinate{0.2, 0, 0.4}, 0.1, comA, comB, 0.5, 0.0);
-  auto contact2b = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{-0.2, 0, 0.5}, Coordinate{-0.2, 0, 0.4}, 0.1, comA, comB, 0.5, 0.0);
+  auto contact1b = std::make_unique<ContactConstraint>(0,
+                                                       1,
+                                                       normal,
+                                                       Coordinate{0.2, 0, 0.5},
+                                                       Coordinate{0.2, 0, 0.4},
+                                                       0.1,
+                                                       comA,
+                                                       comB,
+                                                       0.5,
+                                                       0.0);
+  auto contact2b = std::make_unique<ContactConstraint>(0,
+                                                       1,
+                                                       normal,
+                                                       Coordinate{-0.2, 0, 0.5},
+                                                       Coordinate{-0.2, 0, 0.4},
+                                                       0.1,
+                                                       comA,
+                                                       comB,
+                                                       0.5,
+                                                       0.0);
 
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
   // Order 1: [contact1, contact2]
-  std::vector<TwoBodyConstraint*> constraints1{contact1a.get(), contact2a.get()};
+  std::vector<TwoBodyConstraint*> constraints1{contact1a.get(),
+                                               contact2a.get()};
   auto result1 = solver.solveWithContacts(
     constraints1, states, inverseMasses, inverseInertias, 2, 0.016);
 
   // Order 2: [contact2, contact1]
-  std::vector<TwoBodyConstraint*> constraints2{contact2b.get(), contact1b.get()};
+  std::vector<TwoBodyConstraint*> constraints2{contact2b.get(),
+                                               contact1b.get()};
   auto result2 = solver.solveWithContacts(
     constraints2, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result1.converged);
   EXPECT_TRUE(result2.converged);
 
-  // Lambdas should be identical (order swapped: result1.lambda[0] == result2.lambda[1])
+  // Lambdas should be identical (order swapped: result1.lambda[0] ==
+  // result2.lambda[1])
   EXPECT_NEAR(result1.lambdas(0), result2.lambdas(1), 1e-12);
   EXPECT_NEAR(result1.lambdas(1), result2.lambdas(0), 1e-12);
 }
@@ -187,7 +227,8 @@ TEST(ConstraintSolverASMTest, HighMassRatio_1e6_Converges_0034)
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
   std::vector<TwoBodyConstraint*> constraints{contact.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 1e6, 1.0 / 1.0};  // 1e6:1 ratio
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
@@ -210,23 +251,40 @@ TEST(ConstraintSolverASMTest, AllSeparating_EmptyActiveSet_0034)
   ConstraintSolver solver;
 
   // Bodies moving apart rapidly
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0},
-                                            Coordinate{0, 0, -2.0});
-  InertialState stateB = createDefaultState(Coordinate{0, 0, 1.0},
-                                            Coordinate{0, 0, 2.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, -2.0});
+  InertialState stateB =
+    createDefaultState(Coordinate{0, 0, 1.0}, Coordinate{0, 0, 2.0});
 
   Coordinate normal{0, 0, 1};
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 1.0};
 
   // Both contacts have separating velocity and no penetration
-  auto contact1 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{0.1, 0, 0.5}, Coordinate{0.1, 0, 0.6}, 0.0, comA, comB, 0.0, -4.0);
-  auto contact2 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{-0.1, 0, 0.5}, Coordinate{-0.1, 0, 0.6}, 0.0, comA, comB, 0.0, -4.0);
+  auto contact1 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normal,
+                                                      Coordinate{0.1, 0, 0.5},
+                                                      Coordinate{0.1, 0, 0.6},
+                                                      0.0,
+                                                      comA,
+                                                      comB,
+                                                      0.0,
+                                                      -4.0);
+  auto contact2 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normal,
+                                                      Coordinate{-0.1, 0, 0.5},
+                                                      Coordinate{-0.1, 0, 0.6},
+                                                      0.0,
+                                                      comA,
+                                                      comB,
+                                                      0.0,
+                                                      -4.0);
 
   std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
@@ -257,13 +315,31 @@ TEST(ConstraintSolverASMTest, AllCompressive_FullActiveSet_0034)
   Coordinate comB{0, 0, 0};
 
   // Both contacts penetrating with Baumgarte bias
-  auto contact1 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{0.1, 0.1, 0.5}, Coordinate{0.1, 0.1, 0.4}, 0.1, comA, comB, 0.5, 0.0);
-  auto contact2 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{-0.1, -0.1, 0.5}, Coordinate{-0.1, -0.1, 0.4}, 0.1, comA, comB, 0.5, 0.0);
+  auto contact1 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normal,
+                                                      Coordinate{0.1, 0.1, 0.5},
+                                                      Coordinate{0.1, 0.1, 0.4},
+                                                      0.1,
+                                                      comA,
+                                                      comB,
+                                                      0.5,
+                                                      0.0);
+  auto contact2 =
+    std::make_unique<ContactConstraint>(0,
+                                        1,
+                                        normal,
+                                        Coordinate{-0.1, -0.1, 0.5},
+                                        Coordinate{-0.1, -0.1, 0.4},
+                                        0.1,
+                                        comA,
+                                        comB,
+                                        0.5,
+                                        0.0);
 
   std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
@@ -291,10 +367,10 @@ TEST(ConstraintSolverASMTest, MixedActiveInactive_CorrectPartition_0034)
   ConstraintSolver solver;
 
   // Bodies at rest — penetration only resolved by Baumgarte stabilization
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0},
-                                            Coordinate{0, 0, 0.0});
-  InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9},
-                                            Coordinate{0, 0, 0.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 0.0});
+  InertialState stateB =
+    createDefaultState(Coordinate{0, 0, 0.9}, Coordinate{0, 0, 0.0});
 
   Coordinate normalZ{0, 0, 1};
   Coordinate comA{0, 0, 0};
@@ -302,17 +378,34 @@ TEST(ConstraintSolverASMTest, MixedActiveInactive_CorrectPartition_0034)
 
   // Contact 1: Penetrating with Baumgarte bias, zero relative velocity
   // -> positive RHS from ERP/dt * penetration, so lambda > 0
-  auto contact1 = std::make_unique<ContactConstraint>(0, 1, normalZ,
-    Coordinate{0, 0, 0.5}, Coordinate{0, 0, 0.4}, 0.1, comA, comB, 0.0, 0.0);
+  auto contact1 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normalZ,
+                                                      Coordinate{0, 0, 0.5},
+                                                      Coordinate{0, 0, 0.4},
+                                                      0.1,
+                                                      comA,
+                                                      comB,
+                                                      0.0,
+                                                      0.0);
 
   // Contact 2: Bodies separating — pre-impact relative velocity is negative
   // -> RHS = -(1+e)*Jv + 0 where Jv is negative, giving negative RHS
   //    In the coupled system, this pulls lambda(1) negative, forcing removal
-  auto contact2 = std::make_unique<ContactConstraint>(0, 1, normalZ,
-    Coordinate{0.3, 0, 0.5}, Coordinate{0.3, 0, 0.6}, 0.0, comA, comB, 0.0, -5.0);
+  auto contact2 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normalZ,
+                                                      Coordinate{0.3, 0, 0.5},
+                                                      Coordinate{0.3, 0, 0.6},
+                                                      0.0,
+                                                      comA,
+                                                      comB,
+                                                      0.0,
+                                                      -5.0);
 
   std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
@@ -334,7 +427,8 @@ TEST(ConstraintSolverASMTest, MixedActiveInactive_CorrectPartition_0034)
 // 8. Redundant Contacts — Regularization Prevents Failure
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, RedundantContacts_RegularizationPreventsFailure_0034)
+TEST(ConstraintSolverASMTest,
+     RedundantContacts_RegularizationPreventsFailure_0034)
 {
   // Two contacts at the exact same point with same normal.
   // Without regularization, A_W would be singular. With kRegularizationEpsilon,
@@ -357,7 +451,8 @@ TEST(ConstraintSolverASMTest, RedundantContacts_RegularizationPreventsFailure_00
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
   std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
@@ -385,24 +480,41 @@ TEST(ConstraintSolverASMTest, SafetyCapReached_ReportsNotConverged_0034)
   solver.setMaxIterations(1);  // Safety cap = min(2*C, 1) = 1
 
   // Create a scenario where the first iteration finds a negative lambda
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0},
-                                            Coordinate{0, 0, 0.0});
-  InertialState stateB = createDefaultState(Coordinate{0, 0, 1.0},
-                                            Coordinate{0, 0, 5.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 0.0});
+  InertialState stateB =
+    createDefaultState(Coordinate{0, 0, 1.0}, Coordinate{0, 0, 5.0});
 
   Coordinate normal{0, 0, 1};
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 1.0};
 
   // Contact with large separating velocity — produces negative lambda
-  auto contact1 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{0, 0, 0.5}, Coordinate{0, 0, 0.6}, 0.0, comA, comB, 0.0, -5.0);
+  auto contact1 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normal,
+                                                      Coordinate{0, 0, 0.5},
+                                                      Coordinate{0, 0, 0.6},
+                                                      0.0,
+                                                      comA,
+                                                      comB,
+                                                      0.0,
+                                                      -5.0);
   // Contact with penetration — compressive
-  auto contact2 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{0.2, 0, 0.5}, Coordinate{0.2, 0, 0.4}, 0.1, comA, comB, 0.0, 0.0);
+  auto contact2 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normal,
+                                                      Coordinate{0.2, 0, 0.5},
+                                                      Coordinate{0.2, 0, 0.4},
+                                                      0.1,
+                                                      comA,
+                                                      comB,
+                                                      0.0,
+                                                      0.0);
 
   std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
@@ -430,24 +542,41 @@ TEST(ConstraintSolverASMTest, KKTConditions_VerifiedPostSolve_0034)
   ConstraintSolver solver;
 
   // Bodies at rest with penetration — Baumgarte produces positive RHS
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0},
-                                            Coordinate{0, 0, 0.0});
-  InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9},
-                                            Coordinate{0, 0, 0.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 0.0});
+  InertialState stateB =
+    createDefaultState(Coordinate{0, 0, 0.9}, Coordinate{0, 0, 0.0});
 
   Coordinate normalZ{0, 0, 1};
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 0.9};
 
   // Contact 1: Penetrating, at rest — compressive (Baumgarte bias > 0)
-  auto contact1 = std::make_unique<ContactConstraint>(0, 1, normalZ,
-    Coordinate{0, 0, 0.5}, Coordinate{0, 0, 0.4}, 0.1, comA, comB, 0.0, 0.0);
+  auto contact1 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normalZ,
+                                                      Coordinate{0, 0, 0.5},
+                                                      Coordinate{0, 0, 0.4},
+                                                      0.1,
+                                                      comA,
+                                                      comB,
+                                                      0.0,
+                                                      0.0);
   // Contact 2: Pre-impact relative velocity negative (separating)
-  auto contact2 = std::make_unique<ContactConstraint>(0, 1, normalZ,
-    Coordinate{0.3, 0, 0.5}, Coordinate{0.3, 0, 0.6}, 0.0, comA, comB, 0.0, -5.0);
+  auto contact2 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normalZ,
+                                                      Coordinate{0.3, 0, 0.5},
+                                                      Coordinate{0.3, 0, 0.6},
+                                                      0.0,
+                                                      comA,
+                                                      comB,
+                                                      0.0,
+                                                      -5.0);
 
   std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
@@ -487,17 +616,51 @@ TEST(ConstraintSolverASMTest, IterationCount_WithinTwoCBound_0034)
   Coordinate comB{0, 0, 0};
 
   // Create 4 contacts
-  auto c1 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{0.1, 0.1, 0.5}, Coordinate{0.1, 0.1, 0.4}, 0.1, comA, comB, 0.5, 0.0);
-  auto c2 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{-0.1, 0.1, 0.5}, Coordinate{-0.1, 0.1, 0.4}, 0.1, comA, comB, 0.5, 0.0);
-  auto c3 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{0.1, -0.1, 0.5}, Coordinate{0.1, -0.1, 0.4}, 0.1, comA, comB, 0.5, 0.0);
-  auto c4 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{-0.1, -0.1, 0.5}, Coordinate{-0.1, -0.1, 0.4}, 0.1, comA, comB, 0.5, 0.0);
+  auto c1 = std::make_unique<ContactConstraint>(0,
+                                                1,
+                                                normal,
+                                                Coordinate{0.1, 0.1, 0.5},
+                                                Coordinate{0.1, 0.1, 0.4},
+                                                0.1,
+                                                comA,
+                                                comB,
+                                                0.5,
+                                                0.0);
+  auto c2 = std::make_unique<ContactConstraint>(0,
+                                                1,
+                                                normal,
+                                                Coordinate{-0.1, 0.1, 0.5},
+                                                Coordinate{-0.1, 0.1, 0.4},
+                                                0.1,
+                                                comA,
+                                                comB,
+                                                0.5,
+                                                0.0);
+  auto c3 = std::make_unique<ContactConstraint>(0,
+                                                1,
+                                                normal,
+                                                Coordinate{0.1, -0.1, 0.5},
+                                                Coordinate{0.1, -0.1, 0.4},
+                                                0.1,
+                                                comA,
+                                                comB,
+                                                0.5,
+                                                0.0);
+  auto c4 = std::make_unique<ContactConstraint>(0,
+                                                1,
+                                                normal,
+                                                Coordinate{-0.1, -0.1, 0.5},
+                                                Coordinate{-0.1, -0.1, 0.4},
+                                                0.1,
+                                                comA,
+                                                comB,
+                                                0.5,
+                                                0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{c1.get(), c2.get(), c3.get(), c4.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<TwoBodyConstraint*> constraints{
+    c1.get(), c2.get(), c3.get(), c4.get()};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
@@ -527,13 +690,30 @@ TEST(ConstraintSolverASMTest, ActiveSetSize_ReportedCorrectly_0034)
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 0};
 
-  auto contact1 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{0.1, 0, 0.5}, Coordinate{0.1, 0, 0.4}, 0.1, comA, comB, 0.5, 0.0);
-  auto contact2 = std::make_unique<ContactConstraint>(0, 1, normal,
-    Coordinate{-0.1, 0, 0.5}, Coordinate{-0.1, 0, 0.4}, 0.1, comA, comB, 0.5, 0.0);
+  auto contact1 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normal,
+                                                      Coordinate{0.1, 0, 0.5},
+                                                      Coordinate{0.1, 0, 0.4},
+                                                      0.1,
+                                                      comA,
+                                                      comB,
+                                                      0.5,
+                                                      0.0);
+  auto contact2 = std::make_unique<ContactConstraint>(0,
+                                                      1,
+                                                      normal,
+                                                      Coordinate{-0.1, 0, 0.5},
+                                                      Coordinate{-0.1, 0, 0.4},
+                                                      0.1,
+                                                      comA,
+                                                      comB,
+                                                      0.5,
+                                                      0.0);
 
   std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA, stateB};
+  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};

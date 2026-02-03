@@ -3,7 +3,7 @@
 #include <vector>
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-assets/src/GeometryFactory.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 
 using namespace msd_sim;
@@ -40,7 +40,8 @@ std::vector<Coordinate> createTetrahedronPoints()
 
 // Create pyramid vertices (5 unique points: 4 base corners + 1 apex)
 // Matches GeometryFactory::createPyramid layout
-std::vector<Eigen::Vector3d> createPyramidVertices(double baseSize, double height)
+std::vector<Eigen::Vector3d> createPyramidVertices(double baseSize,
+                                                   double height)
 {
   double half = baseSize / 2.0;
   double halfHeight = height / 2.0;
@@ -59,16 +60,14 @@ std::vector<Eigen::Vector3d> createPyramidVertices(double baseSize, double heigh
 std::vector<Eigen::Vector3d> createCubeVertices(double size)
 {
   double half = size / 2.0;
-  return {
-    Eigen::Vector3d{-half, -half, -half},
-    Eigen::Vector3d{half, -half, -half},
-    Eigen::Vector3d{half, half, -half},
-    Eigen::Vector3d{-half, half, -half},
-    Eigen::Vector3d{-half, -half, half},
-    Eigen::Vector3d{half, -half, half},
-    Eigen::Vector3d{half, half, half},
-    Eigen::Vector3d{-half, half, half}
-  };
+  return {Eigen::Vector3d{-half, -half, -half},
+          Eigen::Vector3d{half, -half, -half},
+          Eigen::Vector3d{half, half, -half},
+          Eigen::Vector3d{-half, half, -half},
+          Eigen::Vector3d{-half, -half, half},
+          Eigen::Vector3d{half, -half, half},
+          Eigen::Vector3d{half, half, half},
+          Eigen::Vector3d{-half, half, half}};
 }
 
 // Create points with some interior points (should be removed by hull)
@@ -145,8 +144,8 @@ TEST(ConvexHullTest, FromGeometry)
 TEST(ConvexHullTest, FromGeometryPyramid)
 {
   // Ticket: 0003_geometry-factory-type-safety
-  // CollisionGeometry should be constructed from raw vertices, not factory MeshRecord
-  // (factory produces VisualGeometry blobs with Vertex structs)
+  // CollisionGeometry should be constructed from raw vertices, not factory
+  // MeshRecord (factory produces VisualGeometry blobs with Vertex structs)
   auto vertices = createPyramidVertices(2.0, 3.0);
   msd_assets::CollisionGeometry geometry{vertices};
   ConvexHull hull{geometry};
@@ -338,7 +337,7 @@ TEST(ConvexHullTest, SignedDistanceOutsideIsPositive)
   Coordinate outside(5.0, 0.0, 0.0);
   double distance = hull.signedDistance(outside);
 
-  EXPECT_GT(distance, 0.0);          // Outside points have positive distance
+  EXPECT_GT(distance, 0.0);         // Outside points have positive distance
   EXPECT_NEAR(distance, 4.0, 0.1);  // Should be ~4 units away
 }
 
@@ -530,12 +529,11 @@ TEST(ConvexHullTest, HandlesCoplanarPoints)
 
 TEST(ConvexHullTest, HandlesDuplicatePoints)
 {
-  std::vector<Coordinate> duplicates = {
-    Coordinate(0.0, 0.0, 0.0),
-    Coordinate(0.0, 0.0, 0.0),  // Duplicate
-    Coordinate(1.0, 0.0, 0.0),
-    Coordinate(1.0, 1.0, 0.0),
-    Coordinate(0.0, 1.0, 1.0)};
+  std::vector<Coordinate> duplicates = {Coordinate(0.0, 0.0, 0.0),
+                                        Coordinate(0.0, 0.0, 0.0),  // Duplicate
+                                        Coordinate(1.0, 0.0, 0.0),
+                                        Coordinate(1.0, 1.0, 0.0),
+                                        Coordinate(0.0, 1.0, 1.0)};
 
   // Qhull should handle duplicates gracefully
   EXPECT_NO_THROW(ConvexHull hull(duplicates));
@@ -548,7 +546,8 @@ TEST(ConvexHullTest, HandlesDuplicatePoints)
 TEST(ConvexHullTest, WorksWithGeometryFactoryCube)
 {
   // Ticket: 0003_geometry-factory-type-safety
-  // CollisionGeometry should be constructed from raw vertices, not factory MeshRecord
+  // CollisionGeometry should be constructed from raw vertices, not factory
+  // MeshRecord
   auto vertices = createCubeVertices(2.0);
   msd_assets::CollisionGeometry geometry{vertices};
   ConvexHull hull(geometry.getVertices());
@@ -561,7 +560,8 @@ TEST(ConvexHullTest, WorksWithGeometryFactoryCube)
 TEST(ConvexHullTest, WorksWithGeometryFactoryPyramid)
 {
   // Ticket: 0003_geometry-factory-type-safety
-  // CollisionGeometry should be constructed from raw vertices, not factory MeshRecord
+  // CollisionGeometry should be constructed from raw vertices, not factory
+  // MeshRecord
   auto vertices = createPyramidVertices(2.0, 3.0);
   msd_assets::CollisionGeometry geometry{vertices};
   ConvexHull hull(geometry.getVertices());

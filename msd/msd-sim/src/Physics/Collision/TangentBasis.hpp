@@ -4,10 +4,11 @@
 #ifndef MSD_SIM_PHYSICS_TANGENT_BASIS_HPP
 #define MSD_SIM_PHYSICS_TANGENT_BASIS_HPP
 
-#include "msd-sim/src/Environment/Coordinate.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <stdexcept>
+
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 
 namespace msd_sim
 {
@@ -15,8 +16,8 @@ namespace msd_sim
 /**
  * @brief Orthonormal tangent frame {t1, t2} for a contact normal
  *
- * Represents the two orthonormal tangent directions perpendicular to a contact normal.
- * Used by FrictionConstraint to define friction constraint directions.
+ * Represents the two orthonormal tangent directions perpendicular to a contact
+ * normal. Used by FrictionConstraint to define friction constraint directions.
  *
  * Invariants (enforced by TangentBasis::computeTangentBasis):
  * - ||t1|| = 1, ||t2|| = 1 (unit length)
@@ -24,12 +25,15 @@ namespace msd_sim
  * - t1 · n = 0, t2 · n = 0 (perpendicular to normal)
  *
  * Thread safety: Value type, safe to copy across threads
- * Error handling: Constructor validates unit length (throws std::invalid_argument if violated)
+ * Error handling: Constructor validates unit length (throws
+ * std::invalid_argument if violated)
  *
- * @see docs/designs/0035a_tangent_basis_and_friction_constraint/0035a_tangent_basis_and_friction_constraint.puml
+ * @see
+ * docs/designs/0035a_tangent_basis_and_friction_constraint/0035a_tangent_basis_and_friction_constraint.puml
  * @ticket 0035a_tangent_basis_and_friction_constraint
  */
-struct TangentFrame {
+struct TangentFrame
+{
   Coordinate t1;  // First tangent direction (unit length)
   Coordinate t2;  // Second tangent direction (unit length)
 
@@ -37,7 +41,8 @@ struct TangentFrame {
    * @brief Construct tangent frame from two tangent vectors
    * @param tangent1 First tangent direction (must be unit length)
    * @param tangent2 Second tangent direction (must be unit length)
-   * @throws std::invalid_argument if either tangent is not unit length (within 1e-6)
+   * @throws std::invalid_argument if either tangent is not unit length (within
+   * 1e-6)
    */
   TangentFrame(const Coordinate& tangent1, const Coordinate& tangent2)
     : t1{tangent1}, t2{tangent2}
@@ -46,13 +51,17 @@ struct TangentFrame {
     const double norm1 = t1.norm();
     const double norm2 = t2.norm();
 
-    if (std::abs(norm1 - 1.0) > kUnitLengthTolerance) {
+    if (std::abs(norm1 - 1.0) > kUnitLengthTolerance)
+    {
       throw std::invalid_argument(
-        "TangentFrame: tangent1 is not unit length (norm = " + std::to_string(norm1) + ")");
+        "TangentFrame: tangent1 is not unit length (norm = " +
+        std::to_string(norm1) + ")");
     }
-    if (std::abs(norm2 - 1.0) > kUnitLengthTolerance) {
+    if (std::abs(norm2 - 1.0) > kUnitLengthTolerance)
+    {
       throw std::invalid_argument(
-        "TangentFrame: tangent2 is not unit length (norm = " + std::to_string(norm2) + ")");
+        "TangentFrame: tangent2 is not unit length (norm = " +
+        std::to_string(norm2) + ")");
     }
   }
 };
@@ -60,21 +69,23 @@ struct TangentFrame {
 /**
  * @brief Utility namespace for tangent basis construction
  *
- * Implements Duff et al. (2017) algorithm for deterministic, continuous orthonormal
- * basis construction from a single vector.
+ * Implements Duff et al. (2017) algorithm for deterministic, continuous
+ * orthonormal basis construction from a single vector.
  *
- * Reference: Duff et al. (2017), "Building an Orthonormal Basis, Revisited", JCGT
- * Mathematical formulation: docs/designs/0035_friction_constraints/M1-tangent-basis.md
+ * Reference: Duff et al. (2017), "Building an Orthonormal Basis, Revisited",
+ * JCGT Mathematical formulation:
+ * docs/designs/0035_friction_constraints/M1-tangent-basis.md
  *
  * @ticket 0035a_tangent_basis_and_friction_constraint
  */
-namespace TangentBasis {
+namespace TangentBasis
+{
 
 /**
  * @brief Compute orthonormal tangent basis from contact normal
  *
- * Uses Duff et al. (2017) method: selects the coordinate axis most orthogonal to n,
- * computes t1 via cross product, then t2 = n × t1.
+ * Uses Duff et al. (2017) method: selects the coordinate axis most orthogonal
+ * to n, computes t1 via cross product, then t2 = n × t1.
  *
  * Properties:
  * - Orthonormal: ||t1|| = ||t2|| = 1, t1·t2 = 0, ti·n = 0
@@ -99,7 +110,8 @@ inline TangentFrame computeTangentBasis(const Coordinate& normal)
   // Validate input: normal must be unit length
   constexpr double kUnitLengthTolerance = 1e-6;
   const double norm = normal.norm();
-  if (std::abs(norm - 1.0) > kUnitLengthTolerance) {
+  if (std::abs(norm - 1.0) > kUnitLengthTolerance)
+  {
     throw std::invalid_argument(
       "TangentBasis::computeTangentBasis: normal is not unit length (norm = " +
       std::to_string(norm) + ")");
@@ -118,26 +130,30 @@ inline TangentFrame computeTangentBasis(const Coordinate& normal)
 
   Coordinate t1{};
 
-  if (ax <= ay && ax <= az) {
+  if (ax <= ay && ax <= az)
+  {
     // |nx| is smallest (or tied) → select ex = [1, 0, 0]
     // ex × n = [1, 0, 0] × [nx, ny, nz] = [0, -nz, ny]
     const double denom = std::sqrt(ny * ny + nz * nz);
     t1 = Coordinate{0.0, -nz / denom, ny / denom};
   }
-  else if (ay <= az) {
+  else if (ay <= az)
+  {
     // |ny| is smallest → select ey = [0, 1, 0]
     // ey × n = [0, 1, 0] × [nx, ny, nz] = [-nz, 0, nx]
     const double denom = std::sqrt(nx * nx + nz * nz);
     t1 = Coordinate{-nz / denom, 0.0, nx / denom};
   }
-  else {
+  else
+  {
     // |nz| is smallest → select ez = [0, 0, 1]
     // ez × n = [0, 0, 1] × [nx, ny, nz] = [ny, -nx, 0]
     const double denom = std::sqrt(nx * nx + ny * ny);
     t1 = Coordinate{ny / denom, -nx / denom, 0.0};
   }
 
-  // Compute t2 = n × t1 (automatically unit length and orthogonal to both n and t1)
+  // Compute t2 = n × t1 (automatically unit length and orthogonal to both n and
+  // t1)
   Coordinate t2 = normal.cross(t1);
 
   return TangentFrame{t1, t2};

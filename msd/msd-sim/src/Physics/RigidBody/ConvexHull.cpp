@@ -9,7 +9,7 @@ extern "C"
 #include <libqhull_r/libqhull_r.h>
 }
 
-#include "msd-sim/src/Physics/GJK.hpp"
+#include "msd-sim/src/Physics/Collision/GJK.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 
 namespace msd_sim
@@ -47,12 +47,11 @@ const std::vector<Facet>& ConvexHull::getFacets() const
 
 const Facet& ConvexHull::getFacetAlignedWith(const CoordinateRate& normal) const
 {
-  auto it = std::max_element(
-    facets_.begin(),
-    facets_.end(),
-    [&normal](const Facet& a, const Facet& b) {
-      return a.normal.dot(normal) < b.normal.dot(normal);
-    });
+  auto it =
+    std::max_element(facets_.begin(),
+                     facets_.end(),
+                     [&normal](const Facet& a, const Facet& b)
+                     { return a.normal.dot(normal) < b.normal.dot(normal); });
   return *it;
 }
 
@@ -61,13 +60,12 @@ ConvexHull::getFacetsAlignedWith(const CoordinateRate& normal,
                                  double tolerance) const
 {
   // First pass: find maximum alignment
-  double maxDot = std::max_element(
-                    facets_.begin(),
-                    facets_.end(),
-                    [&normal](const Facet& a, const Facet& b) {
-                      return a.normal.dot(normal) < b.normal.dot(normal);
-                    })
-                    ->normal.dot(normal);
+  double maxDot =
+    std::max_element(facets_.begin(),
+                     facets_.end(),
+                     [&normal](const Facet& a, const Facet& b)
+                     { return a.normal.dot(normal) < b.normal.dot(normal); })
+      ->normal.dot(normal);
 
   // Second pass: collect all facets within tolerance of the maximum
   std::vector<std::reference_wrapper<const Facet>> result;

@@ -8,8 +8,8 @@
 
 #include <msd-assets/src/GeometryFactory.hpp>
 #include <msd-gui/src/GPUInstanceManager.hpp>
-#include <msd-sim/src/Environment/Coordinate.hpp>
-#include <msd-sim/src/Environment/AngularCoordinate.hpp>
+#include <msd-sim/src/DataTypes/AngularCoordinate.hpp>
+#include <msd-sim/src/DataTypes/Coordinate.hpp>
 #include <msd-sim/src/Environment/ReferenceFrame.hpp>
 #include <msd-sim/src/Physics/RigidBody/ConvexHull.hpp>
 
@@ -236,7 +236,8 @@ TEST_F(FullTransformInstanceManagerTest, BuildInstanceDataExtractsColor)
   EXPECT_FLOAT_EQ(data.color[2], 0.3f);
 }
 
-TEST_F(FullTransformInstanceManagerTest, BuildInstanceDataCreatesIdentityMatrixForNoRotation)
+TEST_F(FullTransformInstanceManagerTest,
+       BuildInstanceDataCreatesIdentityMatrixForNoRotation)
 {
   auto asset = factory_.createAsset(1, 100, Coordinate{0.0, 0.0, 0.0});
 
@@ -418,10 +419,10 @@ TEST(InstanceManagerPerformance, PositionOnlyHandlesManyInstances)
   const size_t count = 1000;
   for (size_t i = 0; i < count; ++i)
   {
-    auto asset = factory.createAsset(
-      static_cast<uint32_t>(i),
-      static_cast<uint32_t>(i + 1000),
-      Coordinate{static_cast<double>(i), 0.0, 0.0});
+    auto asset =
+      factory.createAsset(static_cast<uint32_t>(i),
+                          static_cast<uint32_t>(i + 1000),
+                          Coordinate{static_cast<double>(i), 0.0, 0.0});
     manager.buildInstanceData(
       asset, 0, static_cast<float>(i) / count, 0.5f, 0.5f);
   }
@@ -437,10 +438,10 @@ TEST(InstanceManagerPerformance, FullTransformHandlesManyInstances)
   const size_t count = 1000;
   for (size_t i = 0; i < count; ++i)
   {
-    auto asset = factory.createAsset(
-      static_cast<uint32_t>(i),
-      static_cast<uint32_t>(i + 1000),
-      Coordinate{static_cast<double>(i), 0.0, 0.0});
+    auto asset =
+      factory.createAsset(static_cast<uint32_t>(i),
+                          static_cast<uint32_t>(i + 1000),
+                          Coordinate{static_cast<double>(i), 0.0, 0.0});
     manager.buildInstanceData(asset,
                               static_cast<uint32_t>(i % 10),
                               static_cast<float>(i) / count,

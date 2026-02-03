@@ -5,6 +5,7 @@
 #define MSD_SIM_PHYSICS_GJK_HPP
 
 #include <vector>
+
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 

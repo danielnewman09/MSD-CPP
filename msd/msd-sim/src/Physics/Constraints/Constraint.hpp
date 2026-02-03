@@ -7,17 +7,17 @@
 #include <Eigen/Dense>
 #include <string>
 
+#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
+
 namespace msd_sim
 {
-
-// Forward declaration
-struct InertialState;
 
 /**
  * @brief Abstract base class for constraint definitions in Lagrangian mechanics
  *
- * Defines the mathematical interface for arbitrary constraints C(q, t) that can be
- * enforced via Lagrange multipliers. Each constraint implementation provides:
+ * Defines the mathematical interface for arbitrary constraints C(q, t) that can
+ * be enforced via Lagrange multipliers. Each constraint implementation
+ * provides:
  * - Constraint function evaluation C(q, t)
  * - Constraint Jacobian J = ∂C/∂q
  * - Optional time derivative ∂C/∂t
@@ -33,7 +33,8 @@ struct InertialState;
  * Error handling: Implementations may throw std::invalid_argument for invalid
  * state or parameters.
  *
- * @see docs/designs/0031_generalized_lagrange_constraints/0031_generalized_lagrange_constraints.puml
+ * @see
+ * docs/designs/0031_generalized_lagrange_constraints/0031_generalized_lagrange_constraints.puml
  * @ticket 0031_generalized_lagrange_constraints
  */
 class Constraint
@@ -66,9 +67,9 @@ public:
   /**
    * @brief Compute constraint Jacobian J = ∂C/∂q
    *
-   * Returns partial derivatives of constraint function w.r.t. position-level DOFs.
-   * For the current 14-component state vector (X, Q, Ẋ, Q̇), the Jacobian operates
-   * on the 7 position-level DOFs (X: 3, Q: 4).
+   * Returns partial derivatives of constraint function w.r.t. position-level
+   * DOFs. For the current 14-component state vector (X, Q, Ẋ, Q̇), the Jacobian
+   * operates on the 7 position-level DOFs (X: 3, Q: 4).
    *
    * @param state Current inertial state
    * @param time Simulation time [s]
@@ -104,7 +105,10 @@ public:
    *
    * @return Position error gain α [1/s²]
    */
-  virtual double alpha() const { return 10.0; }
+  virtual double alpha() const
+  {
+    return 10.0;
+  }
 
   /**
    * @brief Baumgarte stabilization velocity error gain
@@ -116,7 +120,10 @@ public:
    *
    * @return Velocity error gain β [1/s]
    */
-  virtual double beta() const { return 10.0; }
+  virtual double beta() const
+  {
+    return 10.0;
+  }
 
   /**
    * @brief Constraint type identifier for debugging/logging

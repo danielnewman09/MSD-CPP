@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/Platform.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
@@ -28,5 +28,5 @@ TEST(EnvTestSuite, PlatformMovement)
 {
   msd_sim::ConvexHull hull = createTestHull();
   msd_sim::ReferenceFrame frame;
-  msd_sim::Platform p{1, 0,0, hull, 1.0, frame};
+  msd_sim::Platform p{1, 0, 0, hull, 1.0, frame};
 }

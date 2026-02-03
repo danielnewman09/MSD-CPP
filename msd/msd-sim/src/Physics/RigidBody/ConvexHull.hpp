@@ -8,10 +8,11 @@
 #include <sstream>
 #include <stdexcept>
 #include <vector>
+
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-assets/src/GeometryTraits.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Physics/Facet.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Facet.hpp"
 
 // Forward declare Qhull C API types
 extern "C"

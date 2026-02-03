@@ -5,7 +5,8 @@
 #define MSD_SIM_PHYSICS_COLLISION_HANDLER_HPP
 
 #include <optional>
-#include "msd-sim/src/Physics/CollisionResult.hpp"
+
+#include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 
 namespace msd_sim
@@ -22,7 +23,8 @@ namespace msd_sim
  * This abstraction allows future enhancements (broadphase,
  * continuous collision detection, etc.) without changing callers.
  *
- * @see docs/designs/0027a_expanding_polytope_algorithm/0027a_expanding_polytope_algorithm.puml
+ * @see
+ * docs/designs/0027a_expanding_polytope_algorithm/0027a_expanding_polytope_algorithm.puml
  * @ticket 0027a_expanding_polytope_algorithm
  */
 class CollisionHandler
@@ -47,8 +49,8 @@ public:
    * @return std::nullopt if no collision, CollisionResult if collision
    */
   std::optional<CollisionResult> checkCollision(
-      const AssetPhysical& assetA,
-      const AssetPhysical& assetB) const;
+    const AssetPhysical& assetA,
+    const AssetPhysical& assetB) const;
 
   CollisionHandler(const CollisionHandler&) = default;
   CollisionHandler(CollisionHandler&&) noexcept = default;

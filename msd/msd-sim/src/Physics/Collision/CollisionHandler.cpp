@@ -1,18 +1,20 @@
 // Ticket: 0027a_expanding_polytope_algorithm
 // Design: docs/designs/0027a_expanding_polytope_algorithm/design.md
 
-#include "msd-sim/src/Physics/CollisionHandler.hpp"
-#include "msd-sim/src/Physics/EPA.hpp"
-#include "msd-sim/src/Physics/GJK.hpp"
+#include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
+#include "msd-sim/src/Physics/Collision/EPA.hpp"
+#include "msd-sim/src/Physics/Collision/GJK.hpp"
 
 namespace msd_sim
 {
 
-CollisionHandler::CollisionHandler(double epsilon) : epsilon_{epsilon} {}
+CollisionHandler::CollisionHandler(double epsilon) : epsilon_{epsilon}
+{
+}
 
 std::optional<CollisionResult> CollisionHandler::checkCollision(
-    const AssetPhysical& assetA,
-    const AssetPhysical& assetB) const
+  const AssetPhysical& assetA,
+  const AssetPhysical& assetB) const
 {
   // Phase 1: Broad intersection test via GJK
   GJK gjk{assetA, assetB, epsilon_};

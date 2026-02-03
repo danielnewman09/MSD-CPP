@@ -5,7 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
@@ -24,10 +24,14 @@ namespace
 std::vector<Coordinate> createCubePoints(double size)
 {
   double half = size / 2.0;
-  return {Coordinate(-half, -half, -half), Coordinate(half, -half, -half),
-          Coordinate(half, half, -half),   Coordinate(-half, half, -half),
-          Coordinate(-half, -half, half),  Coordinate(half, -half, half),
-          Coordinate(half, half, half),    Coordinate(-half, half, half)};
+  return {Coordinate(-half, -half, -half),
+          Coordinate(half, -half, -half),
+          Coordinate(half, half, -half),
+          Coordinate(-half, half, -half),
+          Coordinate(-half, -half, half),
+          Coordinate(half, -half, half),
+          Coordinate(half, half, half),
+          Coordinate(-half, half, half)};
 }
 
 }  // anonymous namespace
@@ -60,7 +64,8 @@ TEST(WorldModelCollisionTest, updateCollisions_SingleObject_NoCollision)
   EXPECT_NO_THROW(world.update(std::chrono::milliseconds{16}));
 }
 
-TEST(WorldModelCollisionTest, updateCollisions_TwoSeparatedObjects_NoInteraction)
+TEST(WorldModelCollisionTest,
+     updateCollisions_TwoSeparatedObjects_NoInteraction)
 {
   // Two separated objects should not interact
   WorldModel world;
@@ -91,7 +96,8 @@ TEST(WorldModelCollisionTest, updateCollisions_TwoSeparatedObjects_NoInteraction
   EXPECT_DOUBLE_EQ(-1.0, world.getObject(idB).getInertialState().velocity.x());
 }
 
-TEST(WorldModelCollisionTest, updateCollisions_OverlappingObjects_ImpulseApplied)
+TEST(WorldModelCollisionTest,
+     updateCollisions_OverlappingObjects_ImpulseApplied)
 {
   // Overlapping objects should have impulse applied
   WorldModel world;
@@ -130,13 +136,15 @@ TEST(WorldModelCollisionTest, updateCollisions_OverlappingObjects_ImpulseApplied
   double vAxFinal = world.getObject(idA).getInertialState().velocity.x();
   double vBxFinal = world.getObject(idB).getInertialState().velocity.x();
 
-  // For elastic collision with equal mass, velocities should swap or at least change
-  // We can't predict exact values without knowing penetration depth, but they should differ
+  // For elastic collision with equal mass, velocities should swap or at least
+  // change We can't predict exact values without knowing penetration depth, but
+  // they should differ
   EXPECT_NE(vAxInitial, vAxFinal);
   EXPECT_NE(vBxInitial, vBxFinal);
 }
 
-TEST(WorldModelCollisionTest, updateCollisions_PositionCorrection_ObjectsSeparated)
+TEST(WorldModelCollisionTest,
+     updateCollisions_PositionCorrection_ObjectsSeparated)
 {
   // Position correction should separate overlapping objects
   WorldModel world;
@@ -161,22 +169,23 @@ TEST(WorldModelCollisionTest, updateCollisions_PositionCorrection_ObjectsSeparat
   world.getObject(idB).getInertialState().velocity = Coordinate{0.0, 0.0, 0.0};
 
   // Store initial distance
-  double initialDistance = std::abs(
-      world.getObject(idB).getInertialState().position.x() -
-      world.getObject(idA).getInertialState().position.x());
+  double initialDistance =
+    std::abs(world.getObject(idB).getInertialState().position.x() -
+             world.getObject(idA).getInertialState().position.x());
 
   // Update simulation (position correction happens)
   world.update(std::chrono::milliseconds{16});
 
   // Final distance should be greater (objects pushed apart)
-  double finalDistance = std::abs(
-      world.getObject(idB).getInertialState().position.x() -
-      world.getObject(idA).getInertialState().position.x());
+  double finalDistance =
+    std::abs(world.getObject(idB).getInertialState().position.x() -
+             world.getObject(idA).getInertialState().position.x());
 
   EXPECT_GT(finalDistance, initialDistance);
 }
 
-TEST(WorldModelCollisionTest, updateCollisions_InelasticCollision_VelocityReduced)
+TEST(WorldModelCollisionTest,
+     updateCollisions_InelasticCollision_VelocityReduced)
 {
   // Inelastic collision (e=0) should absorb kinetic energy
   WorldModel world;
@@ -206,7 +215,8 @@ TEST(WorldModelCollisionTest, updateCollisions_InelasticCollision_VelocityReduce
   // Store initial kinetic energy (approximation)
   double vAinitial = world.getObject(idA).getInertialState().velocity.norm();
   double vBinitial = world.getObject(idB).getInertialState().velocity.norm();
-  double initialKE = 0.5 * 1.0 * (vAinitial * vAinitial + vBinitial * vBinitial);
+  double initialKE =
+    0.5 * 1.0 * (vAinitial * vAinitial + vBinitial * vBinitial);
 
   // Update simulation
   world.update(std::chrono::milliseconds{16});
@@ -220,7 +230,8 @@ TEST(WorldModelCollisionTest, updateCollisions_InelasticCollision_VelocityReduce
   EXPECT_LT(finalKE, initialKE);
 }
 
-TEST(WorldModelCollisionTest, updateCollisions_ElasticCollision_MomentumConserved)
+TEST(WorldModelCollisionTest,
+     updateCollisions_ElasticCollision_MomentumConserved)
 {
   // Elastic collision should conserve total momentum
   // Note: Linear KE may decrease as energy goes into rotation
@@ -251,8 +262,8 @@ TEST(WorldModelCollisionTest, updateCollisions_ElasticCollision_MomentumConserve
   // Store initial momentum (p = m * v)
   // Both masses are 1.0 (default in spawnObject)
   Coordinate initialMomentum =
-      world.getObject(idA).getInertialState().velocity * 1.0 +
-      world.getObject(idB).getInertialState().velocity * 1.0;
+    world.getObject(idA).getInertialState().velocity * 1.0 +
+    world.getObject(idB).getInertialState().velocity * 1.0;
   // Initial momentum = (2, 0, 0) + (-2, 0, 0) = (0, 0, 0)
 
   // Update simulation
@@ -260,11 +271,12 @@ TEST(WorldModelCollisionTest, updateCollisions_ElasticCollision_MomentumConserve
 
   // Final momentum (gravity adds z component, but x and y should be conserved)
   Coordinate finalMomentum =
-      world.getObject(idA).getInertialState().velocity * 1.0 +
-      world.getObject(idB).getInertialState().velocity * 1.0;
+    world.getObject(idA).getInertialState().velocity * 1.0 +
+    world.getObject(idB).getInertialState().velocity * 1.0;
 
   // X and Y momentum should be conserved (collision impulse cancels)
-  // Z momentum changes due to gravity: 2 * m * g * dt = 2 * 1 * 9.81 * 0.016 ≈ 0.31
+  // Z momentum changes due to gravity: 2 * m * g * dt = 2 * 1 * 9.81 * 0.016 ≈
+  // 0.31
   EXPECT_NEAR(initialMomentum.x(), finalMomentum.x(), 0.01);
   EXPECT_NEAR(initialMomentum.y(), finalMomentum.y(), 0.01);
 }
@@ -307,7 +319,8 @@ TEST(WorldModelStaticCollisionTest, inertialVsEnvironment_ImpulseApplied)
 
   // Set dynamic object moving toward static
   world.getObject(dynamicId).setCoefficientOfRestitution(1.0);
-  world.getObject(dynamicId).getInertialState().velocity = Coordinate{2.0, 0.0, 0.0};
+  world.getObject(dynamicId).getInertialState().velocity =
+    Coordinate{2.0, 0.0, 0.0};
 
   double vxInitial = world.getObject(dynamicId).getInertialState().velocity.x();
 
@@ -342,7 +355,8 @@ TEST(WorldModelStaticCollisionTest, inertialVsEnvironment_PositionCorrected)
   uint32_t dynamicId = 1;
 
   // Dynamic at rest
-  world.getObject(dynamicId).getInertialState().velocity = Coordinate{0.0, 0.0, 0.0};
+  world.getObject(dynamicId).getInertialState().velocity =
+    Coordinate{0.0, 0.0, 0.0};
 
   double xInitial = world.getObject(dynamicId).getInertialState().position.x();
 
@@ -372,10 +386,12 @@ TEST(WorldModelStaticCollisionTest, inertialVsEnvironment_StaticUnchanged)
   uint32_t dynamicId = 1;
 
   // Dynamic object with high velocity toward static
-  world.getObject(dynamicId).getInertialState().velocity = Coordinate{10.0, 0.0, 0.0};
+  world.getObject(dynamicId).getInertialState().velocity =
+    Coordinate{10.0, 0.0, 0.0};
 
   // Store static object's initial position
-  Coordinate staticPosInitial = world.getEnvironmentalObjects()[0].getReferenceFrame().getOrigin();
+  Coordinate staticPosInitial =
+    world.getEnvironmentalObjects()[0].getReferenceFrame().getOrigin();
 
   // Update simulation multiple times
   for (int i = 0; i < 10; ++i)
@@ -384,7 +400,8 @@ TEST(WorldModelStaticCollisionTest, inertialVsEnvironment_StaticUnchanged)
   }
 
   // Static object position should be unchanged
-  Coordinate staticPosFinal = world.getEnvironmentalObjects()[0].getReferenceFrame().getOrigin();
+  Coordinate staticPosFinal =
+    world.getEnvironmentalObjects()[0].getReferenceFrame().getOrigin();
 
   EXPECT_DOUBLE_EQ(staticPosInitial.x(), staticPosFinal.x());
   EXPECT_DOUBLE_EQ(staticPosInitial.y(), staticPosFinal.y());
@@ -409,7 +426,8 @@ TEST(WorldModelStaticCollisionTest, inertialVsEnvironment_NoCollision_NoEffect)
   uint32_t dynamicId = 1;
 
   // Dynamic object moving away from static
-  world.getObject(dynamicId).getInertialState().velocity = Coordinate{-1.0, 0.0, 0.0};
+  world.getObject(dynamicId).getInertialState().velocity =
+    Coordinate{-1.0, 0.0, 0.0};
 
   double vxInitial = world.getObject(dynamicId).getInertialState().velocity.x();
 

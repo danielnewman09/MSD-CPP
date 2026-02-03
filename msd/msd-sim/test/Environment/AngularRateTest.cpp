@@ -5,7 +5,7 @@
 #include <cmath>
 #include <format>
 
-#include "msd-sim/src/Environment/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/AngularRate.hpp"
 
 using namespace msd_sim;
 
@@ -254,7 +254,7 @@ TEST(AngularRateTest, FormatCustomPrecision)
 TEST(AngularRateTest, AngularVelocityIntegration)
 {
   AngularRate angularVelocity{0.0, 0.0, 2.0 * M_PI};  // 1 revolution per second
-  double deltaTime = 0.5;  // 0.5 seconds
+  double deltaTime = 0.5;                             // 0.5 seconds
   AngularRate deltaOrientation = angularVelocity * deltaTime;
   // Half revolution = π radians
   EXPECT_DOUBLE_EQ(deltaOrientation.yaw(), M_PI);
@@ -263,7 +263,7 @@ TEST(AngularRateTest, AngularVelocityIntegration)
 TEST(AngularRateTest, TorqueCalculation)
 {
   // r × F for torque calculation
-  Eigen::Vector3d r{1.0, 0.0, 0.0};  // Moment arm
+  Eigen::Vector3d r{1.0, 0.0, 0.0};   // Moment arm
   Eigen::Vector3d F{0.0, 10.0, 0.0};  // Force
   AngularRate torque{r.cross(F)};
   // Torque = r × F = (1, 0, 0) × (0, 10, 0) = (0, 0, 10)

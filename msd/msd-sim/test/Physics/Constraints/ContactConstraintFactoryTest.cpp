@@ -4,11 +4,11 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include <memory>
-#include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/CollisionResult.hpp"
+#include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
 
 using namespace msd_sim;
 
@@ -20,7 +20,9 @@ namespace
 {
 
 // Create a default InertialState at rest
-InertialState createDefaultState(const Coordinate& position = Coordinate{0.0, 0.0, 0.0})
+InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
+                                                                         0.0,
+                                                                         0.0})
 {
   InertialState state;
   state.position = position;
@@ -50,10 +52,12 @@ InertialState createRotatingState(const Coordinate& position,
   // Convert angular velocity to quaternion rate
   // Q̇ = 0.5 * Q ⊗ [0, ω]
   Eigen::Quaterniond Q = state.orientation;
-  Eigen::Quaterniond omega_quat{0.0, angularVelocity.x(), angularVelocity.y(), angularVelocity.z()};
+  Eigen::Quaterniond omega_quat{
+    0.0, angularVelocity.x(), angularVelocity.y(), angularVelocity.z()};
   Eigen::Quaterniond Qdot_quat = Q * omega_quat;
 
-  state.quaternionRate << Qdot_quat.x(), Qdot_quat.y(), Qdot_quat.z(), Qdot_quat.w();
+  state.quaternionRate << Qdot_quat.x(), Qdot_quat.y(), Qdot_quat.z(),
+    Qdot_quat.w();
   state.quaternionRate *= 0.5;
 
   return state;
@@ -81,13 +85,14 @@ TEST(ContactConstraintFactoryTest, CreateFromCollision_SingleContact_0032a)
   Coordinate comB{0, 0, 0.5};
 
   auto constraints = ContactConstraintFactory::createFromCollision(
-      0, 1, result, stateA, stateB, comA, comB, 0.8);
+    0, 1, result, stateA, stateB, comA, comB, 0.8);
 
   ASSERT_EQ(1, constraints.size());
   EXPECT_EQ(1, constraints[0]->dimension());
 }
 
-TEST(ContactConstraintFactoryTest, CreateFromCollision_ManifoldWith4Contacts_0032a)
+TEST(ContactConstraintFactoryTest,
+     CreateFromCollision_ManifoldWith4Contacts_0032a)
 {
   // Test: Creates 4 constraints for 4-point contact manifold
   CollisionResult result;
@@ -111,10 +116,11 @@ TEST(ContactConstraintFactoryTest, CreateFromCollision_ManifoldWith4Contacts_003
   Coordinate comB{0, 0, 0.5};
 
   auto constraints = ContactConstraintFactory::createFromCollision(
-      0, 1, result, stateA, stateB, comA, comB, 0.5);
+    0, 1, result, stateA, stateB, comA, comB, 0.5);
 
   ASSERT_EQ(4, constraints.size());
-  for (const auto& constraint : constraints) {
+  for (const auto& constraint : constraints)
+  {
     EXPECT_EQ(1, constraint->dimension());
   }
 }
@@ -134,9 +140,12 @@ TEST(ContactConstraintFactoryTest, CombineRestitution_GeometricMean_0032a)
 TEST(ContactConstraintFactoryTest, CombineRestitution_ZeroValues_0032a)
 {
   // Test: Returns zero when either coefficient is zero
-  EXPECT_NEAR(0.0, ContactConstraintFactory::combineRestitution(0.0, 0.8), 1e-10);
-  EXPECT_NEAR(0.0, ContactConstraintFactory::combineRestitution(0.8, 0.0), 1e-10);
-  EXPECT_NEAR(0.0, ContactConstraintFactory::combineRestitution(0.0, 0.0), 1e-10);
+  EXPECT_NEAR(
+    0.0, ContactConstraintFactory::combineRestitution(0.0, 0.8), 1e-10);
+  EXPECT_NEAR(
+    0.0, ContactConstraintFactory::combineRestitution(0.8, 0.0), 1e-10);
+  EXPECT_NEAR(
+    0.0, ContactConstraintFactory::combineRestitution(0.0, 0.0), 1e-10);
 }
 
 TEST(ContactConstraintFactoryTest, ComputeRelativeNormalVelocity_HeadOn_0032a)
@@ -147,18 +156,21 @@ TEST(ContactConstraintFactoryTest, ComputeRelativeNormalVelocity_HeadOn_0032a)
   Coordinate leverArmB{0, 0, 0};  // Contact at COM
 
   // Body A moving right (+z), body B moving left (-z)
-  InertialState stateA = createMovingState(Coordinate{0, 0, -1}, Coordinate{0, 0, 2});
-  InertialState stateB = createMovingState(Coordinate{0, 0, 1}, Coordinate{0, 0, -2});
+  InertialState stateA =
+    createMovingState(Coordinate{0, 0, -1}, Coordinate{0, 0, 2});
+  InertialState stateB =
+    createMovingState(Coordinate{0, 0, 1}, Coordinate{0, 0, -2});
 
   double relVelNormal = ContactConstraintFactory::computeRelativeNormalVelocity(
-      stateA, stateB, leverArmA, leverArmB, normal);
+    stateA, stateB, leverArmA, leverArmB, normal);
 
   // v_rel = v_B - v_A = (-2) - (2) = -4
   // Approaching collision: negative relative velocity
   EXPECT_NEAR(-4.0, relVelNormal, 1e-10);
 }
 
-TEST(ContactConstraintFactoryTest, ComputeRelativeNormalVelocity_WithAngular_0032a)
+TEST(ContactConstraintFactoryTest,
+     ComputeRelativeNormalVelocity_WithAngular_0032a)
 {
   // Test: Includes angular velocity contribution (ω × r term)
   Coordinate normal{0, 0, 1};
@@ -166,12 +178,14 @@ TEST(ContactConstraintFactoryTest, ComputeRelativeNormalVelocity_WithAngular_003
   Coordinate leverArmB{0, 0, 0};  // Contact at COM
 
   // Body A rotating around z-axis with ω = (0, 0, 1) rad/s
-  // At lever arm (1, 0, 0), velocity contribution: ω × r = (0, 0, 1) × (1, 0, 0) = (0, 1, 0)
-  InertialState stateA = createRotatingState(Coordinate{0, 0, -1}, AngularRate{0, 0, 1});
+  // At lever arm (1, 0, 0), velocity contribution: ω × r = (0, 0, 1) × (1, 0,
+  // 0) = (0, 1, 0)
+  InertialState stateA =
+    createRotatingState(Coordinate{0, 0, -1}, AngularRate{0, 0, 1});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 1});
 
   double relVelNormal = ContactConstraintFactory::computeRelativeNormalVelocity(
-      stateA, stateB, leverArmA, leverArmB, normal);
+    stateA, stateB, leverArmA, leverArmB, normal);
 
   // v_A at contact = v_A + ω_A × r_A = (0, 0, 0) + (0, 1, 0) = (0, 1, 0)
   // v_B at contact = (0, 0, 0)
@@ -180,7 +194,8 @@ TEST(ContactConstraintFactoryTest, ComputeRelativeNormalVelocity_WithAngular_003
   EXPECT_NEAR(0.0, relVelNormal, 1e-10);
 }
 
-TEST(ContactConstraintFactoryTest, RestVelocityThreshold_DisablesRestitution_0032a)
+TEST(ContactConstraintFactoryTest,
+     RestVelocityThreshold_DisablesRestitution_0032a)
 {
   // Test: Restitution disabled below rest velocity threshold (0.5 m/s)
   CollisionResult result;
@@ -191,20 +206,23 @@ TEST(ContactConstraintFactoryTest, RestVelocityThreshold_DisablesRestitution_003
   result.contacts[0].pointB = Coordinate{0, 0, 0.01};
 
   // Slow collision: 0.2 m/s (below threshold)
-  InertialState stateA = createMovingState(Coordinate{0, 0, -0.5}, Coordinate{0, 0, 0.1});
-  InertialState stateB = createMovingState(Coordinate{0, 0, 0.5}, Coordinate{0, 0, -0.1});
+  InertialState stateA =
+    createMovingState(Coordinate{0, 0, -0.5}, Coordinate{0, 0, 0.1});
+  InertialState stateB =
+    createMovingState(Coordinate{0, 0, 0.5}, Coordinate{0, 0, -0.1});
   Coordinate comA{0, 0, -0.5};
   Coordinate comB{0, 0, 0.5};
 
   auto constraints = ContactConstraintFactory::createFromCollision(
-      0, 1, result, stateA, stateB, comA, comB, 0.8);
+    0, 1, result, stateA, stateB, comA, comB, 0.8);
 
   ASSERT_EQ(1, constraints.size());
   // Restitution should be disabled (set to 0) below threshold
   EXPECT_NEAR(0.0, constraints[0]->getRestitution(), 1e-10);
 }
 
-TEST(ContactConstraintFactoryTest, CreateFromCollision_NoContacts_ReturnsEmpty_0032a)
+TEST(ContactConstraintFactoryTest,
+     CreateFromCollision_NoContacts_ReturnsEmpty_0032a)
 {
   // Test: Returns empty vector when contactCount == 0
   CollisionResult result;
@@ -218,7 +236,7 @@ TEST(ContactConstraintFactoryTest, CreateFromCollision_NoContacts_ReturnsEmpty_0
   Coordinate comB{0, 0, 0};
 
   auto constraints = ContactConstraintFactory::createFromCollision(
-      0, 1, result, stateA, stateB, comA, comB, 0.5);
+    0, 1, result, stateA, stateB, comA, comB, 0.5);
 
   EXPECT_EQ(0, constraints.size());
 }

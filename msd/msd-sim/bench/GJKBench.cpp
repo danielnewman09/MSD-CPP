@@ -4,7 +4,7 @@
 #include <benchmark/benchmark.h>
 #include <random>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/AngularCoordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Physics/GJK.hpp"
@@ -17,24 +17,29 @@ using namespace msd_sim;
 // Helper Functions
 // ============================================================================
 
-namespace {
+namespace
+{
 
 // Generate random point cloud with fixed seed for reproducibility
-std::vector<Coordinate> generateRandomPointCloud(size_t count) {
+std::vector<Coordinate> generateRandomPointCloud(size_t count)
+{
   static std::mt19937 rng{42};  // Fixed seed for deterministic benchmarks
   std::uniform_real_distribution<double> dist{-10.0, 10.0};
 
   std::vector<Coordinate> points;
   points.reserve(count);
-  for (size_t i = 0; i < count; ++i) {
+  for (size_t i = 0; i < count; ++i)
+  {
     points.emplace_back(dist(rng), dist(rng), dist(rng));
   }
   return points;
 }
 
 // Generate random convex hull with specified vertex count
-ConvexHull generateRandomHull(size_t vertexCount) {
-  auto points = generateRandomPointCloud(vertexCount * 2);  // More points to ensure target vertex count
+ConvexHull generateRandomHull(size_t vertexCount)
+{
+  auto points = generateRandomPointCloud(
+    vertexCount * 2);  // More points to ensure target vertex count
   return ConvexHull{points};
 }
 
@@ -53,7 +58,8 @@ ConvexHull generateRandomHull(size_t vertexCount) {
  *
  * @ticket 0022_gjk_asset_physical_transform
  */
-static void BM_GJK_IdentityTransform(benchmark::State& state) {
+static void BM_GJK_IdentityTransform(benchmark::State& state)
+{
   size_t vertexCount = static_cast<size_t>(state.range(0));
   auto hullA = generateRandomHull(vertexCount);
   auto hullB = generateRandomHull(vertexCount);
@@ -62,21 +68,22 @@ static void BM_GJK_IdentityTransform(benchmark::State& state) {
   AssetPhysical assetA{0, 0, hullA, identityFrame};
   AssetPhysical assetB{0, 1, hullB, identityFrame};
 
-  for (auto _ : state) {
+  for (auto _ : state)
+  {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
   state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_IdentityTransform)
-    ->Arg(10)     // Simple collision hull
-    ->Arg(20)
-    ->Arg(50)     // Typical collision hull
-    ->Arg(100)
-    ->Arg(200)
-    ->Arg(500)    // Complex collision hull
-    ->Arg(1000)
-    ->Complexity();
+  ->Arg(10)  // Simple collision hull
+  ->Arg(20)
+  ->Arg(50)  // Typical collision hull
+  ->Arg(100)
+  ->Arg(200)
+  ->Arg(500)  // Complex collision hull
+  ->Arg(1000)
+  ->Complexity();
 
 // ============================================================================
 // Transformed Collision Benchmarks
@@ -91,7 +98,8 @@ BENCHMARK(BM_GJK_IdentityTransform)
  *
  * @ticket 0022_gjk_asset_physical_transform
  */
-static void BM_GJK_TransformedCollision(benchmark::State& state) {
+static void BM_GJK_TransformedCollision(benchmark::State& state)
+{
   size_t vertexCount = static_cast<size_t>(state.range(0));
   auto hullA = generateRandomHull(vertexCount);
   auto hullB = generateRandomHull(vertexCount);
@@ -109,21 +117,22 @@ static void BM_GJK_TransformedCollision(benchmark::State& state) {
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
 
-  for (auto _ : state) {
+  for (auto _ : state)
+  {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
   state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_TransformedCollision)
-    ->Arg(10)
-    ->Arg(20)
-    ->Arg(50)
-    ->Arg(100)
-    ->Arg(200)
-    ->Arg(500)
-    ->Arg(1000)
-    ->Complexity();
+  ->Arg(10)
+  ->Arg(20)
+  ->Arg(50)
+  ->Arg(100)
+  ->Arg(200)
+  ->Arg(500)
+  ->Arg(1000)
+  ->Complexity();
 
 // ============================================================================
 // Transformation Overhead Analysis
@@ -138,7 +147,8 @@ BENCHMARK(BM_GJK_TransformedCollision)
  *
  * @ticket 0022_gjk_asset_physical_transform
  */
-static void BM_GJK_TranslationOnly(benchmark::State& state) {
+static void BM_GJK_TranslationOnly(benchmark::State& state)
+{
   size_t vertexCount = static_cast<size_t>(state.range(0));
   auto hullA = generateRandomHull(vertexCount);
   auto hullB = generateRandomHull(vertexCount);
@@ -149,19 +159,20 @@ static void BM_GJK_TranslationOnly(benchmark::State& state) {
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
 
-  for (auto _ : state) {
+  for (auto _ : state)
+  {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
   state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_TranslationOnly)
-    ->Arg(10)
-    ->Arg(50)
-    ->Arg(100)
-    ->Arg(500)
-    ->Arg(1000)
-    ->Complexity();
+  ->Arg(10)
+  ->Arg(50)
+  ->Arg(100)
+  ->Arg(500)
+  ->Arg(1000)
+  ->Complexity();
 
 /**
  * @brief Benchmark rotation-only transformation overhead.
@@ -171,7 +182,8 @@ BENCHMARK(BM_GJK_TranslationOnly)
  *
  * @ticket 0022_gjk_asset_physical_transform
  */
-static void BM_GJK_RotationOnly(benchmark::State& state) {
+static void BM_GJK_RotationOnly(benchmark::State& state)
+{
   size_t vertexCount = static_cast<size_t>(state.range(0));
   auto hullA = generateRandomHull(vertexCount);
   auto hullB = generateRandomHull(vertexCount);
@@ -188,19 +200,20 @@ static void BM_GJK_RotationOnly(benchmark::State& state) {
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
 
-  for (auto _ : state) {
+  for (auto _ : state)
+  {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
   state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_RotationOnly)
-    ->Arg(10)
-    ->Arg(50)
-    ->Arg(100)
-    ->Arg(500)
-    ->Arg(1000)
-    ->Complexity();
+  ->Arg(10)
+  ->Arg(50)
+  ->Arg(100)
+  ->Arg(500)
+  ->Arg(1000)
+  ->Complexity();
 
 // ============================================================================
 // Extreme Cases
@@ -215,7 +228,8 @@ BENCHMARK(BM_GJK_RotationOnly)
  *
  * @ticket 0022_gjk_asset_physical_transform
  */
-static void BM_GJK_LargeTranslationOffset(benchmark::State& state) {
+static void BM_GJK_LargeTranslationOffset(benchmark::State& state)
+{
   size_t vertexCount = static_cast<size_t>(state.range(0));
   auto hullA = generateRandomHull(vertexCount);
   auto hullB = generateRandomHull(vertexCount);
@@ -226,19 +240,20 @@ static void BM_GJK_LargeTranslationOffset(benchmark::State& state) {
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
 
-  for (auto _ : state) {
+  for (auto _ : state)
+  {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
   state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_LargeTranslationOffset)
-    ->Arg(10)
-    ->Arg(50)
-    ->Arg(100)
-    ->Arg(500)
-    ->Arg(1000)
-    ->Complexity();
+  ->Arg(10)
+  ->Arg(50)
+  ->Arg(100)
+  ->Arg(500)
+  ->Arg(1000)
+  ->Complexity();
 
 /**
  * @brief Benchmark non-colliding case (early termination).
@@ -249,7 +264,8 @@ BENCHMARK(BM_GJK_LargeTranslationOffset)
  *
  * @ticket 0022_gjk_asset_physical_transform
  */
-static void BM_GJK_NonColliding(benchmark::State& state) {
+static void BM_GJK_NonColliding(benchmark::State& state)
+{
   size_t vertexCount = static_cast<size_t>(state.range(0));
   auto hullA = generateRandomHull(vertexCount);
   auto hullB = generateRandomHull(vertexCount);
@@ -260,18 +276,19 @@ static void BM_GJK_NonColliding(benchmark::State& state) {
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
 
-  for (auto _ : state) {
+  for (auto _ : state)
+  {
     bool result = gjkIntersects(assetA, assetB);
     benchmark::DoNotOptimize(result);
   }
   state.SetComplexityN(static_cast<long long>(vertexCount));
 }
 BENCHMARK(BM_GJK_NonColliding)
-    ->Arg(10)
-    ->Arg(50)
-    ->Arg(100)
-    ->Arg(500)
-    ->Arg(1000)
-    ->Complexity();
+  ->Arg(10)
+  ->Arg(50)
+  ->Arg(100)
+  ->Arg(500)
+  ->Arg(1000)
+  ->Complexity();
 
 BENCHMARK_MAIN();

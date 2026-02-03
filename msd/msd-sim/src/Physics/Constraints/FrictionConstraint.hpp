@@ -4,21 +4,23 @@
 #ifndef MSD_SIM_PHYSICS_FRICTION_CONSTRAINT_HPP
 #define MSD_SIM_PHYSICS_FRICTION_CONSTRAINT_HPP
 
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
-#include "msd-sim/src/Physics/Collision/TangentBasis.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 #include <Eigen/Dense>
 #include <utility>
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Physics/Collision/TangentBasis.hpp"
+#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
+#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
 {
 
 /**
- * @brief Friction constraint for two-body contact (two tangential constraint rows)
+ * @brief Friction constraint for two-body contact (two tangential constraint
+ * rows)
  *
- * Implements tangential friction constraints for a contact point using two orthogonal
- * tangent directions. Each FrictionConstraint has dimension() = 2 (one row per tangent).
+ * Implements tangential friction constraints for a contact point using two
+ * orthogonal tangent directions. Each FrictionConstraint has dimension() = 2
+ * (one row per tangent).
  *
  * Constraint formulation:
  * - C_t1(q) = relative tangential velocity in t1 direction
@@ -31,18 +33,23 @@ namespace msd_sim
  * - √2 factor distributes circular cone into two orthogonal box constraints
  *
  * Design notes:
- * - Tangent basis computed once at construction via TangentBasis::computeTangentBasis()
- * - Friction coefficient μ stored (combined from materials, computed externally)
+ * - Tangent basis computed once at construction via
+ * TangentBasis::computeTangentBasis()
+ * - Friction coefficient μ stored (combined from materials, computed
+ * externally)
  * - Normal force λn updated each solver iteration via setNormalLambda()
- * - Follows same 12-DOF Jacobian structure as ContactConstraint (direct angular velocity)
+ * - Follows same 12-DOF Jacobian structure as ContactConstraint (direct angular
+ * velocity)
  *
- * Mathematical formulation: docs/designs/0035_friction_constraints/M2-friction-jacobian.md
- * Thread safety: Immutable after construction except setNormalLambda() (not thread-safe)
- * Error handling: Constructor validates normal unit length, mu in [0, ∞)
+ * Mathematical formulation:
+ * docs/designs/0035_friction_constraints/M2-friction-jacobian.md Thread safety:
+ * Immutable after construction except setNormalLambda() (not thread-safe) Error
+ * handling: Constructor validates normal unit length, mu in [0, ∞)
  *
  * @see TwoBodyConstraint
  * @see ContactConstraint
- * @see docs/designs/0035a_tangent_basis_and_friction_constraint/0035a_tangent_basis_and_friction_constraint.puml
+ * @see
+ * docs/designs/0035a_tangent_basis_and_friction_constraint/0035a_tangent_basis_and_friction_constraint.puml
  * @ticket 0035a_tangent_basis_and_friction_constraint
  */
 class FrictionConstraint : public TwoBodyConstraint
@@ -83,7 +90,10 @@ public:
    * @brief Number of scalar constraint equations (always 2 for friction)
    * @return 2 (one row for t1 direction, one row for t2 direction)
    */
-  int dimension() const override { return 2; }
+  int dimension() const override
+  {
+    return 2;
+  }
 
   /**
    * @brief Evaluate tangential relative velocities at contact point
@@ -99,10 +109,9 @@ public:
    * @param time Simulation time [s] (unused for friction)
    * @return 2×1 vector of tangential relative velocities [m/s]
    */
-  Eigen::VectorXd evaluateTwoBody(
-      const InertialState& stateA,
-      const InertialState& stateB,
-      double time) const override;
+  Eigen::VectorXd evaluateTwoBody(const InertialState& stateA,
+                                  const InertialState& stateB,
+                                  double time) const override;
 
   /**
    * @brief Compute two-body Jacobian for friction constraints
@@ -118,10 +127,9 @@ public:
    * @param time Simulation time [s] (unused for friction)
    * @return 2×12 Jacobian matrix
    */
-  Eigen::MatrixXd jacobianTwoBody(
-      const InertialState& stateA,
-      const InertialState& stateB,
-      double time) const override;
+  Eigen::MatrixXd jacobianTwoBody(const InertialState& stateA,
+                                  const InertialState& stateB,
+                                  double time) const override;
 
   /**
    * @brief Check if friction constraint is active
@@ -135,24 +143,32 @@ public:
    * @param time Simulation time [s] (unused for activation check)
    * @return true if friction should be enforced
    */
-  bool isActiveTwoBody(
-      const InertialState& stateA,
-      const InertialState& stateB,
-      double time) const override;
+  bool isActiveTwoBody(const InertialState& stateA,
+                       const InertialState& stateB,
+                       double time) const override;
 
-  std::string typeName() const override { return "FrictionConstraint"; }
+  std::string typeName() const override
+  {
+    return "FrictionConstraint";
+  }
 
   /**
    * @brief No position-level Baumgarte stabilization for friction
    * @return 0.0 (friction is velocity-level constraint)
    */
-  double alpha() const override { return 0.0; }
+  double alpha() const override
+  {
+    return 0.0;
+  }
 
   /**
    * @brief No velocity-level Baumgarte stabilization for friction
    * @return 0.0 (friction is velocity-level constraint)
    */
-  double beta() const override { return 0.0; }
+  double beta() const override
+  {
+    return 0.0;
+  }
 
   // ===== Friction-specific interface =====
 
@@ -189,19 +205,28 @@ public:
    * @brief Get first tangent direction (world space)
    * @return Unit tangent vector t1
    */
-  const Coordinate& getTangent1() const { return tangent1_; }
+  const Coordinate& getTangent1() const
+  {
+    return tangent1_;
+  }
 
   /**
    * @brief Get second tangent direction (world space)
    * @return Unit tangent vector t2
    */
-  const Coordinate& getTangent2() const { return tangent2_; }
+  const Coordinate& getTangent2() const
+  {
+    return tangent2_;
+  }
 
   /**
    * @brief Get friction coefficient
    * @return Combined friction coefficient μ
    */
-  double getFrictionCoefficient() const { return friction_coefficient_; }
+  double getFrictionCoefficient() const
+  {
+    return friction_coefficient_;
+  }
 
   // Rule of Five
   FrictionConstraint(const FrictionConstraint&) = default;
@@ -210,13 +235,14 @@ public:
   FrictionConstraint& operator=(FrictionConstraint&&) noexcept = default;
 
 private:
-  Coordinate contact_normal_;         // A → B, unit length (stored for reference)
-  Coordinate tangent1_;               // First tangent direction (unit length)
-  Coordinate tangent2_;               // Second tangent direction (unit length)
-  Coordinate lever_arm_a_;            // contactPointA - comA (world frame) [m]
-  Coordinate lever_arm_b_;            // contactPointB - comB (world frame) [m]
-  double friction_coefficient_;       // Combined friction coefficient μ [0, ∞)
-  double normal_lambda_{0.0};         // Normal contact force λn [N] (updated each iteration)
+  Coordinate contact_normal_;    // A → B, unit length (stored for reference)
+  Coordinate tangent1_;          // First tangent direction (unit length)
+  Coordinate tangent2_;          // Second tangent direction (unit length)
+  Coordinate lever_arm_a_;       // contactPointA - comA (world frame) [m]
+  Coordinate lever_arm_b_;       // contactPointB - comB (world frame) [m]
+  double friction_coefficient_;  // Combined friction coefficient μ [0, ∞)
+  double normal_lambda_{
+    0.0};  // Normal contact force λn [N] (updated each iteration)
 };
 
 }  // namespace msd_sim

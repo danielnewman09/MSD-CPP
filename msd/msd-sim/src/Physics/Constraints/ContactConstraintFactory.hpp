@@ -4,12 +4,13 @@
 #ifndef MSD_SIM_PHYSICS_CONTACT_CONSTRAINT_FACTORY_HPP
 #define MSD_SIM_PHYSICS_CONTACT_CONSTRAINT_FACTORY_HPP
 
-#include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/CollisionResult.hpp"
-#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
-#include <vector>
 #include <memory>
+#include <vector>
+
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
+#include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
+#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
 {
@@ -26,10 +27,13 @@ namespace msd_sim
  * focused on the mathematical interface and makes testing easier.
  *
  * Thread safety: Stateless functions, thread-safe
- * Error handling: Returns empty vector if collision result has contactCount == 0
+ * Error handling: Returns empty vector if collision result has contactCount ==
+ * 0
  *
- * @see docs/designs/0032_contact_constraint_refactor/0032_contact_constraint_refactor.puml
- * @see prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
+ * @see
+ * docs/designs/0032_contact_constraint_refactor/0032_contact_constraint_refactor.puml
+ * @see
+ * prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
  * @ticket 0032_contact_constraint_refactor
  */
 namespace ContactConstraintFactory
@@ -59,9 +63,9 @@ constexpr double kEnvironmentRestitution = 0.5;
  * Generates one ContactConstraint per contact point in the collision manifold.
  * For a CollisionResult with contactCount = 4, this produces 4 constraints.
  *
- * CRITICAL: Uses correct restitution formula v_target = -e * v_pre (not -(1+e)*v_pre).
- * See P2 Debug Findings for explanation of the difference between constraint RHS
- * and target velocity formulations.
+ * CRITICAL: Uses correct restitution formula v_target = -e * v_pre (not
+ * -(1+e)*v_pre). See P2 Debug Findings for explanation of the difference
+ * between constraint RHS and target velocity formulations.
  *
  * @param bodyAIndex Index of body A in the solver body list
  * @param bodyBIndex Index of body B in the solver body list
@@ -74,14 +78,14 @@ constexpr double kEnvironmentRestitution = 0.5;
  * @return Vector of contact constraints (one per contact point)
  */
 std::vector<std::unique_ptr<ContactConstraint>> createFromCollision(
-    size_t bodyAIndex,
-    size_t bodyBIndex,
-    const CollisionResult& result,
-    const InertialState& stateA,
-    const InertialState& stateB,
-    const Coordinate& comA,
-    const Coordinate& comB,
-    double restitution);
+  size_t bodyAIndex,
+  size_t bodyBIndex,
+  const CollisionResult& result,
+  const InertialState& stateA,
+  const InertialState& stateB,
+  const Coordinate& comA,
+  const Coordinate& comB,
+  double restitution);
 
 /**
  * @brief Combine two coefficients of restitution using geometric mean
@@ -111,12 +115,11 @@ double combineRestitution(double eA, double eB);
  * @param normal Contact normal (A → B, unit length)
  * @return Relative normal velocity [m/s]
  */
-double computeRelativeNormalVelocity(
-    const InertialState& stateA,
-    const InertialState& stateB,
-    const Coordinate& leverArmA,
-    const Coordinate& leverArmB,
-    const Coordinate& normal);
+double computeRelativeNormalVelocity(const InertialState& stateA,
+                                     const InertialState& stateB,
+                                     const Coordinate& leverArmA,
+                                     const Coordinate& leverArmB,
+                                     const Coordinate& normal);
 
 }  // namespace ContactConstraintFactory
 

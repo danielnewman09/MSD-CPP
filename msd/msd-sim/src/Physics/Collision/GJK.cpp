@@ -1,9 +1,10 @@
 // Ticket: 0022_gjk_asset_physical_transform
 // Design: docs/designs/0022_gjk_asset_physical_transform/design.md
 
-#include "msd-sim/src/Physics/GJK.hpp"
 #include <algorithm>
 #include <vector>
+
+#include "msd-sim/src/Physics/Collision/GJK.hpp"
 #include "msd-sim/src/Physics/SupportFunction.hpp"
 
 namespace msd_sim
@@ -40,7 +41,7 @@ bool GJK::intersects(int maxIterations)
   // Helper: compute world-space AABB by transforming all 8 local corners
   // This is necessary because rotation changes which corners are min/max
   auto computeWorldAABB =
-      [](const ConvexHull::BoundingBox& localBbox, const ReferenceFrame& frame)
+    [](const ConvexHull::BoundingBox& localBbox, const ReferenceFrame& frame)
   {
     // Build 3x8 matrix with all 8 corners of the local AABB
     Eigen::Matrix3Xd corners(3, 8);
@@ -95,7 +96,8 @@ bool GJK::intersects(int maxIterations)
 
   // Get first support point
   simplex_.clear();
-  simplex_.push_back(SupportFunction::supportMinkowski(assetA_, assetB_, direction_));
+  simplex_.push_back(
+    SupportFunction::supportMinkowski(assetA_, assetB_, direction_));
 
   // New direction points toward origin
   direction_ = -simplex_[0];
@@ -104,7 +106,8 @@ bool GJK::intersects(int maxIterations)
   for (int iteration = 0; iteration < maxIterations; ++iteration)
   {
     // Get support point in search direction
-    Coordinate newPoint = SupportFunction::supportMinkowski(assetA_, assetB_, direction_);
+    Coordinate newPoint =
+      SupportFunction::supportMinkowski(assetA_, assetB_, direction_);
 
     // Check if we've passed the origin
     // If the new point isn't past the origin in our search direction,

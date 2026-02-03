@@ -6,9 +6,9 @@
 
 #include <array>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
-#include "msd-sim/src/Physics/CollisionResult.hpp"
-#include "msd-sim/src/Physics/Facet.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Facet.hpp"
+#include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 
 namespace msd_sim

@@ -4,7 +4,7 @@
 #include <benchmark/benchmark.h>
 #include <random>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Physics/GJK.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"

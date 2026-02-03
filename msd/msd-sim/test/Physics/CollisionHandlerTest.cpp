@@ -2,13 +2,15 @@
 // Design: docs/designs/0027a_expanding_polytope_algorithm/design.md
 
 #include <gtest/gtest.h>
+
 #include <cmath>
 #include <vector>
-#include "msd-sim/src/Environment/AngularCoordinate.hpp"
-#include "msd-sim/src/Environment/Coordinate.hpp"
+
+#include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Physics/CollisionHandler.hpp"
-#include "msd-sim/src/Physics/CollisionResult.hpp"
+#include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
+#include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 
@@ -135,7 +137,7 @@ TEST(CollisionHandlerIntegrationTest, OverlappingCubes_FullPipeline)
 
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
   ReferenceFrame frameB{
-      Coordinate{0.8, 0.0, 0.0}};  // 0.2 overlap (depth = 0.2)
+    Coordinate{0.8, 0.0, 0.0}};  // 0.2 overlap (depth = 0.2)
 
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
@@ -208,8 +210,8 @@ TEST(CollisionHandlerIntegrationTest, MultipleOrientations_ConsistentResults)
     AngularCoordinate rotation{0.0, 0.0, M_PI / 4.0};
     ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
     ReferenceFrame frameB{
-        Coordinate{0.3, 0.0, 0.0},
-        rotation};  // Closer for reliable collision with rotation
+      Coordinate{0.3, 0.0, 0.0},
+      rotation};  // Closer for reliable collision with rotation
 
     AssetPhysical assetA{0, 0, hullA, frameA};
     AssetPhysical assetB{0, 1, hullB, frameB};
@@ -228,8 +230,8 @@ TEST(CollisionHandlerIntegrationTest, MultipleOrientations_ConsistentResults)
     AngularCoordinate rotationB{0.0, 0.0, M_PI / 3.0};
     ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}, rotationA};
     ReferenceFrame frameB{
-        Coordinate{0.2, 0.0, 0.0},
-        rotationB};  // Very close for reliable collision with both rotated
+      Coordinate{0.2, 0.0, 0.0},
+      rotationB};  // Very close for reliable collision with both rotated
 
     AssetPhysical assetA{0, 0, hullA, frameA};
     AssetPhysical assetB{0, 1, hullB, frameB};

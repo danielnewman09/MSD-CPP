@@ -4,7 +4,7 @@
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <vector>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
@@ -22,10 +22,14 @@ namespace
 std::vector<Coordinate> createCubePoints(double size)
 {
   double half = size / 2.0;
-  return {Coordinate(-half, -half, -half), Coordinate(half, -half, -half),
-          Coordinate(half, half, -half),   Coordinate(-half, half, -half),
-          Coordinate(-half, -half, half),  Coordinate(half, -half, half),
-          Coordinate(half, half, half),    Coordinate(-half, half, half)};
+  return {Coordinate(-half, -half, -half),
+          Coordinate(half, -half, -half),
+          Coordinate(half, half, -half),
+          Coordinate(-half, half, -half),
+          Coordinate(-half, -half, half),
+          Coordinate(half, -half, half),
+          Coordinate(half, half, half),
+          Coordinate(-half, half, half)};
 }
 
 }  // anonymous namespace

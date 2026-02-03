@@ -2,7 +2,7 @@
 #define MSD_SIM_PHYSICS_INERTIAL_CALCULATIONS_HPP
 
 #include <Eigen/Dense>
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 
 namespace msd_sim
 {
