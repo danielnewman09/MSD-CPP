@@ -1,11 +1,11 @@
 #include <stdexcept>
 
 #include "msd-assets/src/Geometry.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include "msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialCalculations.hpp"
-#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
-#include "msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp"
 
 namespace msd_sim
 {
@@ -43,7 +43,8 @@ AssetInertial::AssetInertial(uint32_t assetId,
   // Ticket: 0030_lagrangian_quaternion_physics
 
   // Add default UnitQuaternionConstraint for quaternion normalization
-  constraints_.push_back(std::make_unique<UnitQuaternionConstraint>(10.0, 10.0));
+  constraints_.push_back(
+    std::make_unique<UnitQuaternionConstraint>(10.0, 10.0));
   // Ticket: 0031_generalized_lagrange_constraints
 }
 
@@ -88,7 +89,8 @@ AssetInertial::AssetInertial(uint32_t assetId,
   // Ticket: 0030_lagrangian_quaternion_physics
 
   // Add default UnitQuaternionConstraint for quaternion normalization
-  constraints_.push_back(std::make_unique<UnitQuaternionConstraint>(10.0, 10.0));
+  constraints_.push_back(
+    std::make_unique<UnitQuaternionConstraint>(10.0, 10.0));
   // Ticket: 0031_generalized_lagrange_constraints
 }
 
@@ -132,13 +134,13 @@ Eigen::Matrix3d AssetInertial::getInverseInertiaTensorWorld() const
 
 // ========== Force Application API (ticket 0023a) ==========
 
-void AssetInertial::applyForce(const CoordinateRate& force)
+void AssetInertial::applyForce(const Eigen::Vector3d& force)
 {
   accumulatedForce_ += force;
   // Ticket: 0023a_force_application_scaffolding
 }
 
-void AssetInertial::applyForceAtPoint(const CoordinateRate& force,
+void AssetInertial::applyForceAtPoint(const Eigen::Vector3d& force,
                                       const Coordinate& worldPoint)
 {
   // Accumulate linear force
@@ -155,7 +157,7 @@ void AssetInertial::applyForceAtPoint(const CoordinateRate& force,
   // Ticket: 0023_force_application_system
 }
 
-void AssetInertial::applyTorque(const CoordinateRate& torque)
+void AssetInertial::applyTorque(const Eigen::Vector3d& torque)
 {
   accumulatedTorque_ += torque;
   // Ticket: 0023a_force_application_scaffolding
@@ -168,12 +170,12 @@ void AssetInertial::clearForces()
   // Ticket: 0023a_force_application_scaffolding
 }
 
-const CoordinateRate& AssetInertial::getAccumulatedForce() const
+const Eigen::Vector3d& AssetInertial::getAccumulatedForce() const
 {
   return accumulatedForce_;
 }
 
-const CoordinateRate& AssetInertial::getAccumulatedTorque() const
+const Eigen::Vector3d& AssetInertial::getAccumulatedTorque() const
 {
   return accumulatedTorque_;
 }
@@ -213,7 +215,8 @@ void AssetInertial::applyAngularImpulse(const AngularRate& angularImpulse)
   AngularRate omega = dynamicState_.getAngularVelocity();
   omega += angularImpulse;
   dynamicState_.setAngularVelocity(omega);
-  // Ticket: 0027_collision_response_system (updated for quaternions, ticket 0030)
+  // Ticket: 0027_collision_response_system (updated for quaternions, ticket
+  // 0030)
 }
 
 // ========== Constraint Management (ticket 0031) ==========
@@ -227,9 +230,9 @@ void AssetInertial::removeConstraint(size_t index)
 {
   if (index >= constraints_.size())
   {
-    throw std::out_of_range("Constraint index out of range: " +
-                            std::to_string(index) + " >= " +
-                            std::to_string(constraints_.size()));
+    throw std::out_of_range(
+      "Constraint index out of range: " + std::to_string(index) +
+      " >= " + std::to_string(constraints_.size()));
   }
   constraints_.erase(constraints_.begin() + static_cast<long>(index));
 }

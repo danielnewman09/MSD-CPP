@@ -4,8 +4,9 @@
 #ifndef ANGULAR_RATE_HPP
 #define ANGULAR_RATE_HPP
 
+#include "Vec3FormatterBase.hpp"
+
 #include <Eigen/Dense>
-#include <format>
 
 namespace msd_sim
 {
@@ -31,7 +32,7 @@ namespace msd_sim
  * @see docs/designs/0024_angular_coordinate/0024_angular_coordinate.puml
  * @ticket 0024_angular_coordinate
  */
-class AngularRate : public Eigen::Vector3d
+class AngularRate final : public Eigen::Vector3d
 {
 public:
   // Default constructor - initializes to (0, 0, 0)
@@ -46,13 +47,14 @@ public:
   }
 
   // Constructor from Eigen::Vector3d
-  AngularRate(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec}
+  AngularRate(const Eigen::Vector3d& vec)  // NOLINT(google-explicit-constructor)
+    : Eigen::Vector3d{vec}
   {
   }
 
   // Template constructor for Eigen expressions
   template <typename OtherDerived>
-  AngularRate(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularRate(const Eigen::MatrixBase<OtherDerived>& other)  // NOLINT(google-explicit-constructor)
     : Eigen::Vector3d{other}
   {
   }
@@ -81,17 +83,17 @@ public:
     return (*this)[2];
   }
 
-  double pitch() const
+  [[nodiscard]] double pitch() const
   {
     return (*this)[0];
   }
 
-  double roll() const
+  [[nodiscard]] double roll() const
   {
     return (*this)[1];
   }
 
-  double yaw() const
+  [[nodiscard]] double yaw() const
   {
     return (*this)[2];
   }
@@ -109,82 +111,16 @@ public:
 // Formatter specialization for std::format support
 template <>
 struct std::formatter<msd_sim::AngularRate>
+  : msd_sim::detail::Vec3FormatterBase<msd_sim::AngularRate>
 {
-  // Format specification: can be empty or contain floating-point format specs
-  // Examples: "{}", "{:.2f}", "{:10.3f}"
-  char presentation = 'f';
-  int precision = 6;
-  int width = 0;
-
-  // Parse the format specification
-  constexpr auto parse(std::format_parse_context& ctx)
+  auto format(const msd_sim::AngularRate& rate,
+              std::format_context& ctx) const
   {
-    auto it = ctx.begin();
-    auto end = ctx.end();
-
-    // If no format spec, use defaults
-    if (it == end || *it == '}')
-      return it;
-
-    // Parse optional width
-    if (it != end && *it >= '0' && *it <= '9')
-    {
-      width = 0;
-      while (it != end && *it >= '0' && *it <= '9')
-      {
-        width = width * 10 + (*it - '0');
-        ++it;
-      }
-    }
-
-    // Parse optional precision
-    if (it != end && *it == '.')
-    {
-      ++it;
-      precision = 0;
-      while (it != end && *it >= '0' && *it <= '9')
-      {
-        precision = precision * 10 + (*it - '0');
-        ++it;
-      }
-    }
-
-    // Parse optional presentation type
-    if (it != end && (*it == 'f' || *it == 'e' || *it == 'g'))
-    {
-      presentation = *it;
-      ++it;
-    }
-
-    return it;
-  }
-
-  // Format the AngularRate object
-  auto format(const msd_sim::AngularRate& rate, std::format_context& ctx) const
-  {
-    // Build format string for individual components
-    std::string component_fmt = "{:";
-    if (width > 0)
-      component_fmt += std::to_string(width);
-    component_fmt += '.';
-    component_fmt += std::to_string(precision);
-    component_fmt += presentation;
-    component_fmt += '}';
-
-    // Get values as lvalues for std::make_format_args
-    double pitchVal = rate.pitch();
-    double rollVal = rate.roll();
-    double yawVal = rate.yaw();
-
-    // Format as "(pitch, roll, yaw)"
-    return std::format_to(ctx.out(),
-                          "({}, {}, {})",
-                          std::vformat(component_fmt,
-                                       std::make_format_args(pitchVal)),
-                          std::vformat(component_fmt,
-                                       std::make_format_args(rollVal)),
-                          std::vformat(component_fmt,
-                                       std::make_format_args(yawVal)));
+    return formatComponents(
+      rate,
+      [](const auto& r)
+      { return std::tuple{r.pitch(), r.roll(), r.yaw()}; },
+      ctx);
   }
 };
 

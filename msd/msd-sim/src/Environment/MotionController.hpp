@@ -71,7 +71,7 @@ public:
    */
   void updateTransform(ReferenceFrame& frame,
                        const InputCommands& commands,
-                       std::chrono::milliseconds deltaTime);
+                       std::chrono::milliseconds deltaTime) const;
 
   /**
    * @brief Set movement speed
@@ -104,7 +104,7 @@ public:
    * @brief Get movement speed
    * @return Units per second
    */
-  double getMoveSpeed() const
+  [[nodiscard]] double getMoveSpeed() const
   {
     return moveSpeed_;
   }
@@ -113,7 +113,7 @@ public:
    * @brief Get rotation speed
    * @return Radians per second
    */
-  double getRotationSpeed() const
+  [[nodiscard]] double getRotationSpeed() const
   {
     return rotSpeed_;
   }
@@ -122,7 +122,7 @@ public:
    * @brief Get input sensitivity
    * @return Sensitivity multiplier
    */
-  double getSensitivity() const
+  [[nodiscard]] double getSensitivity() const
   {
     return sensitivity_;
   }
@@ -130,7 +130,7 @@ public:
 private:
   double rotSpeed_;     // Radians per second
   double moveSpeed_;    // Units per second
-  double sensitivity_;  // Input multiplier
+  double sensitivity_{1.0};  // Input multiplier
 };
 
 }  // namespace msd_sim

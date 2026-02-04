@@ -94,7 +94,7 @@ public:
   {
     // Validate vertex_data blob size
     if (record.vertex_data.size() % sizeof(T) != 0 ||
-        record.vertex_data.size() == 0)
+        record.vertex_data.empty())
     {
       throw std::runtime_error(
         "Invalid vertex_data BLOB size: not a multiple of expected type size");
@@ -103,11 +103,11 @@ public:
     // Deserialize cached vertex data directly as type T
     const size_t vertexCount =
       record.vertex_data.size() / sizeof(Eigen::Vector3d);
-    const Eigen::Vector3d* vertexBegin =
+    const auto* vertexBegin =
       reinterpret_cast<const Eigen::Vector3d*>(record.vertex_data.data());
     const Eigen::Vector3d* vertexEnd = vertexBegin + vertexCount;
 
-    std::vector<Eigen::Vector3d> vertices =
+    std::vector<Eigen::Vector3d> const vertices =
       std::vector<Eigen::Vector3d>(vertexBegin, vertexEnd);
 
     if constexpr (std::is_same_v<T, Vertex>)
@@ -126,7 +126,7 @@ public:
    * @brief Get number of vertices
    * @return Number of vertices in the cached vertex data
    */
-  size_t getVertexCount() const
+  [[nodiscard]] size_t getVertexCount() const
   {
     return cachedVertices_.size();
   }
@@ -139,7 +139,7 @@ public:
    * Each Coordinate is 24 bytes: 3 doubles × 8 bytes
    * Colors and normals are computed on-demand via toGUIVertices()
    */
-  std::vector<uint8_t> serializeVertices() const
+  [[nodiscard]] std::vector<uint8_t> serializeVertices() const
   {
     const size_t blobSize = cachedVertices_.size() * sizeof(T);
     std::vector<uint8_t> blob(blobSize);
@@ -155,7 +155,7 @@ public:
    * Lazily computes and caches vertex data on first access.
    * Use toGUIVertices() if you need to apply colors.
    */
-  const std::vector<T>& getVertices() const
+  [[nodiscard]] const std::vector<T>& getVertices() const
   {
     return cachedVertices_;
   }
@@ -168,7 +168,7 @@ public:
    * Note: Does not populate hull_data - use ConvexHull::serializeToBlob()
    * separately.
    */
-  msd_transfer::MeshRecord populateMeshRecord() const
+  [[nodiscard]] msd_transfer::MeshRecord populateMeshRecord() const
   {
     msd_transfer::MeshRecord record;
     // Populate vertex data

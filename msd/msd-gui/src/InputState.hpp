@@ -57,14 +57,14 @@ public:
    * @param key The SDL keycode to query
    * @return True if key is currently pressed
    */
-  bool isKeyPressed(SDL_Keycode key) const;
+  [[nodiscard]] bool isKeyPressed(SDL_Keycode key) const;
 
   /**
    * @brief Query if a key was just pressed this frame
    * @param key The SDL keycode to query
    * @return True if key was pressed this frame (before update() clears it)
    */
-  bool isKeyJustPressed(SDL_Keycode key) const;
+  [[nodiscard]] bool isKeyJustPressed(SDL_Keycode key) const;
 
   /**
    * @brief Query if a key is held down
@@ -72,14 +72,14 @@ public:
    * @return True if key is currently pressed
    * @note This is currently equivalent to isKeyPressed, provided for semantic clarity
    */
-  bool isKeyHeld(SDL_Keycode key) const;
+  [[nodiscard]] bool isKeyHeld(SDL_Keycode key) const;
 
   /**
    * @brief Get the duration a key has been held
    * @param key The SDL keycode to query
    * @return Duration in milliseconds (0 if key not pressed)
    */
-  std::chrono::milliseconds getKeyHoldDuration(SDL_Keycode key) const;
+  [[nodiscard]] std::chrono::milliseconds getKeyHoldDuration(SDL_Keycode key) const;
 
   /**
    * @brief Update frame timing and clear frame-specific flags

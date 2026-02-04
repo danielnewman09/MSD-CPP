@@ -33,13 +33,14 @@ namespace msd_sim
  * Thread safety: Same as Constraint base class
  * Error handling: Same as Constraint base class
  *
- * @see docs/designs/0031_generalized_lagrange_constraints/0031_generalized_lagrange_constraints.puml
+ * @see
+ * docs/designs/0031_generalized_lagrange_constraints/0031_generalized_lagrange_constraints.puml
  * @ticket 0031_generalized_lagrange_constraints
  */
 class UnilateralConstraint : public Constraint
 {
 public:
-  virtual ~UnilateralConstraint() = default;
+  ~UnilateralConstraint() override = default;
 
   /**
    * @brief Check if constraint is active (C ≈ 0)
@@ -53,7 +54,9 @@ public:
    * @param time Simulation time [s]
    * @return true if constraint is active (should be enforced)
    */
-  virtual bool isActive(const InertialState& state, double time) const = 0;
+  [[nodiscard]] virtual bool isActive(
+    const InertialState& state,
+    double time) const = 0;
 
 protected:
   // Protected Rule of Five: prevent direct instantiation of abstract base

@@ -1,0 +1,130 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "msd-sim::Environment" {
+    class WorldModel <<modified>> {
+        -inertialAssets_: vector<AssetInertial>
+        -environmentalAssets_: vector<AssetEnvironment>
+        -collisionHandler_: CollisionHandler
+        -contactSolver_: ConstraintSolver
+        -collisionPipeline_: CollisionPipeline <<new>>
+
+        +update(dt: milliseconds): void
+        -updateCollisions(dt: double): void <<modified>>
+    }
+}
+
+package "msd-sim::Physics::Collision" {
+    class CollisionPipeline <<new>> {
+        -collisionHandler_: const CollisionHandler&
+        -constraintSolver_: ConstraintSolver&
+
+        ' Frame-persistent storage for memory reuse
+        -collisions_: vector<CollisionPair>
+        -constraints_: vector<unique_ptr<ContactConstraint>>
+        -states_: vector<reference_wrapper<const InertialState>>
+        -inverseMasses_: vector<double>
+        -inverseInertias_: vector<Matrix3d>
+        -constraintPtrs_: vector<TwoBodyConstraint*>
+
+        +execute(inertialAssets: span<AssetInertial>, \\n         environmentalAssets: span<AssetEnvironment>, \\n         dt: double): void
+
+        #detectCollisions(inertial: span<AssetInertial>, \\n                  environmental: span<AssetEnvironment>): void
+        #createConstraints(dt: double): void
+        #assembleSolverInput(numBodies: size_t): void
+        #solveConstraints(dt: double): MultiBodySolveResult
+        #applyForces(inertialAssets: span<AssetInertial>, \\n             solveResult: MultiBodySolveResult): void
+
+        -clearFrameData(): void
+    }
+
+    class CollisionHandler {
+        +checkCollision(assetA, assetB): optional<CollisionResult>
+    }
+
+    class ConstraintSolver {
+        +solveWithContacts(...): MultiBodySolveResult
+    }
+
+    class ContactConstraintFactory <<namespace>> {
+        +createFromCollision(...): vector<unique_ptr<ContactConstraint>>
+        +combineRestitution(eA, eB): double
+    }
+}
+
+package "msd-sim::Physics::Constraints" {
+    class ContactConstraint {
+        +evaluateTwoBody(...): VectorXd
+        +jacobianTwoBody(...): MatrixXd
+    }
+}
+
+package "msd-sim::Physics::RigidBody" {
+    class AssetInertial {
+        +getInertialState(): InertialState&
+        +getInverseMass(): double
+        +getInverseInertiaTensorWorld(): Matrix3d
+        +getCoefficientOfRestitution(): double
+        +applyForce(force: Coordinate): void
+        +applyTorque(torque: Coordinate): void
+    }
+
+    class AssetEnvironment {
+        +getInertialState(): const InertialState&
+        +getInverseMass(): double
+        +getInverseInertiaTensor(): Matrix3d
+        +getCoefficientOfRestitution(): double
+    }
+}
+
+' Relationships
+WorldModel --> CollisionPipeline : owns
+CollisionPipeline --> CollisionHandler : uses
+CollisionPipeline --> ConstraintSolver : uses
+CollisionPipeline ..> ContactConstraintFactory : uses
+CollisionPipeline ..> ContactConstraint : creates via factory
+CollisionPipeline --> AssetInertial : accesses (non-owning)
+CollisionPipeline --> AssetEnvironment : accesses (non-owning)
+
+note right of CollisionPipeline::execute
+  **Single public entry point**
+
+  1. detectCollisions() - O(n²) narrow phase
+  2. createConstraints() - Factory calls
+  3. assembleSolverInput() - Gather states/masses
+  4. solveConstraints() - ASM/ECOS
+  5. applyForces() - Apply impulses
+
+  All sub-phases testable via
+  friend test classes (protected access)
+end note
+
+note right of CollisionPipeline::collisions_
+  **Frame-persistent storage**
+
+  Member vectors reused across frames
+  to avoid repeated heap allocations
+  (NFR-1: Zero additional allocations)
+
+  Cleared at START and END of execute()
+  to prevent dangling references when idle
+end note
+
+note left of WorldModel::updateCollisions
+  **Thin delegation**
+
+  WorldModel::updateCollisions(double dt) {
+    collisionPipeline_.execute(
+      inertialAssets_,
+      environmentalAssets_,
+      dt
+    );
+  }
+
+  ~180 lines → ~3 lines
+end note
+
+@enduml

@@ -17,7 +17,7 @@ InertialState InputControlAgent::updateState(const InertialState& currentState)
   InertialState newState = currentState;
 
   // Calculate linear velocity based on input commands
-  CoordinateRate velocity{0, 0, 0};
+  Eigen::Vector3d velocity{0, 0, 0};
 
   if (inputCommands_.moveForward)
   {

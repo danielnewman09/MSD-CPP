@@ -78,28 +78,32 @@ public:
                     double restitution,
                     double preImpactRelVelNormal);
 
-  ~ContactConstraint() = default;
+  ~ContactConstraint() override = default;
 
   // ===== TwoBodyConstraint interface =====
 
-  int dimension() const override
+  [[nodiscard]] int dimension() const override
   {
     return 1;
   }
 
-  Eigen::VectorXd evaluateTwoBody(const InertialState& stateA,
-                                  const InertialState& stateB,
-                                  double time) const override;
+  [[nodiscard]] Eigen::VectorXd evaluateTwoBody(
+    const InertialState& stateA,
+    const InertialState& stateB,
+    double time) const override;
 
-  Eigen::MatrixXd jacobianTwoBody(const InertialState& stateA,
-                                  const InertialState& stateB,
-                                  double time) const override;
+  [[nodiscard]] Eigen::MatrixXd jacobianTwoBody(
+    const InertialState& stateA,
+    const InertialState& stateB,
+    double time) const override;
 
-  bool isActiveTwoBody(const InertialState& stateA,
-                       const InertialState& stateB,
-                       double time) const override;
+  [[nodiscard]] bool isActiveTwoBody(
+    const InertialState& stateA,
+    const InertialState& stateB,
+    double time) const override;
 
-  std::string typeName() const override
+  [[nodiscard]] std::string typeName()
+    const override
   {
     return "ContactConstraint";
   }
@@ -116,7 +120,7 @@ public:
    *
    * @return ERP value (dimensionless, 0 to 1)
    */
-  double alpha() const override
+  [[nodiscard]] double alpha() const override
   {
     return erp_;
   }
@@ -128,34 +132,38 @@ public:
    *
    * @return 0.0 (velocity term not used)
    */
-  double beta() const override
+  [[nodiscard]] double beta() const override
   {
     return 0.0;
   }
 
   // ===== Accessors =====
 
-  const Coordinate& getContactNormal() const
+  [[nodiscard]] const Coordinate& getContactNormal()
+    const
   {
     return contact_normal_;
   }
-  double getPenetrationDepth() const
+  [[nodiscard]] double getPenetrationDepth() const
   {
     return penetration_depth_;
   }
-  double getRestitution() const
+  [[nodiscard]] double getRestitution() const
   {
     return restitution_;
   }
-  double getPreImpactRelVelNormal() const
+  [[nodiscard]] double getPreImpactRelVelNormal()
+    const
   {
     return pre_impact_rel_vel_normal_;
   }
-  const Coordinate& getLeverArmA() const
+  [[nodiscard]] const Coordinate& getLeverArmA()
+    const
   {
     return lever_arm_a_;
   }
-  const Coordinate& getLeverArmB() const
+  [[nodiscard]] const Coordinate& getLeverArmB()
+    const
   {
     return lever_arm_b_;
   }

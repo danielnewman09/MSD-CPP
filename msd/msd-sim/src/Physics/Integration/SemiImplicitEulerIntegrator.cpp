@@ -30,7 +30,7 @@ void SemiImplicitEulerIntegrator::step(
   // ===== Compute Unconstrained Accelerations =====
 
   Coordinate linearAccelFree = force / mass;
-  AngularRate angularAccelFree = inverseInertiaWorld * torque;
+  AngularRate angularAccelFree{inverseInertiaWorld * torque};
 
   // ===== Solve Constraint System =====
 
@@ -51,8 +51,8 @@ void SemiImplicitEulerIntegrator::step(
 
   Coordinate linearAccelTotal =
     linearAccelFree + (constraintLinearForce / mass);
-  AngularRate angularAccelTotal =
-    angularAccelFree + (inverseInertiaWorld * constraintAngularTorque);
+  AngularRate angularAccelTotal{
+    angularAccelFree + (inverseInertiaWorld * constraintAngularTorque)};
 
   state.acceleration = linearAccelTotal;
   state.angularAcceleration = angularAccelTotal;

@@ -15,3 +15,4 @@ profile_results/
 **/build_diag/**
 .debug-sessions/*
 test_geometry.db
+analysis/clang_tidy_reports/

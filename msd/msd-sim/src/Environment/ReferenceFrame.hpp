@@ -136,7 +136,7 @@ public:
    * @param globalVector Direction vector in global frame
    * @return Direction vector in local frame
    */
-  CoordinateRate globalToLocal(const CoordinateRate& globalVector) const;
+  Eigen::Vector3d globalToLocal(const Eigen::Vector3d& globalVector) const;
 
   /**
    * @brief Transform a direction vector from global frame to local frame
@@ -162,7 +162,7 @@ public:
    * @param localVector Direction vector in local frame
    * @return Direction vector in global frame
    */
-  CoordinateRate localToGlobal(const CoordinateRate& localVector) const;
+  Eigen::Vector3d localToGlobal(const Eigen::Vector3d& localVector) const;
 
   /**
    * @brief Transform a direction vector from local frame to global frame

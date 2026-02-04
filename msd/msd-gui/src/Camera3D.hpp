@@ -60,7 +60,8 @@ public:
    * @brief Get the underlying reference frame (const version)
    * @return Const reference to the camera's reference frame
    */
-  const msd_sim::ReferenceFrame& getReferenceFrame() const
+  [[nodiscard]] const msd_sim::ReferenceFrame& getReferenceFrame()
+    const
   {
     return frame_.get();
   }
@@ -88,20 +89,20 @@ public:
    * @brief Get the view matrix (transforms from world space to camera space)
    * @return 4x4 view matrix in single precision (column-major)
    */
-  Eigen::Matrix4f getViewMatrix() const;
+  [[nodiscard]] Eigen::Matrix4f getViewMatrix() const;
 
   /**
    * @brief Get the projection matrix (perspective projection)
    * @return 4x4 projection matrix in single precision (column-major)
    */
-  Eigen::Matrix4f getProjectionMatrix() const;
+  [[nodiscard]] Eigen::Matrix4f getProjectionMatrix() const;
 
   /**
    * @brief Get the combined Model-View-Projection matrix
    * @param modelMatrix Optional model matrix (default: identity)
    * @return 4x4 MVP matrix in single precision (column-major)
    */
-  Eigen::Matrix4f getMVPMatrix(
+  [[nodiscard]] Eigen::Matrix4f getMVPMatrix(
     const Eigen::Matrix4f& modelMatrix = Eigen::Matrix4f::Identity()) const;
 
 private:

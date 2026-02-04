@@ -116,7 +116,7 @@ public:
    * @param normal Direction to compare against
    * @return Reference to the facet with greatest dot product
    */
-  const Facet& getFacetAlignedWith(const CoordinateRate& normal) const;
+  const Facet& getFacetAlignedWith(const Eigen::Vector3d& normal) const;
 
   /**
    * @brief Get all facets aligned with a given direction within tolerance.
@@ -130,7 +130,7 @@ public:
    * @return Vector of references to aligned facets
    */
   std::vector<std::reference_wrapper<const Facet>> getFacetsAlignedWith(
-    const CoordinateRate& normal,
+    const Eigen::Vector3d& normal,
     double tolerance = 1e-9) const;
 
   /**

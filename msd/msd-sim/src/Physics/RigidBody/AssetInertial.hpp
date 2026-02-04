@@ -3,9 +3,9 @@
 
 #include <memory>
 #include <vector>
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
-#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 
 
 namespace msd_sim
@@ -153,7 +153,7 @@ public:
    *
    * @param force Force vector in world coordinates [N]
    */
-  void applyForce(const CoordinateRate& force);
+  void applyForce(const Eigen::Vector3d& force);
 
   /**
    * @brief Apply a force at a specific world-space point.
@@ -165,7 +165,7 @@ public:
    * @param force Force vector in world coordinates [N]
    * @param worldPoint Application point in world coordinates [m]
    */
-  void applyForceAtPoint(const CoordinateRate& force,
+  void applyForceAtPoint(const Eigen::Vector3d& force,
                          const Coordinate& worldPoint);
 
   /**
@@ -175,7 +175,7 @@ public:
    *
    * @param torque Torque vector in world coordinates [N·m]
    */
-  void applyTorque(const CoordinateRate& torque);
+  void applyTorque(const Eigen::Vector3d& torque);
 
   /**
    * @brief Clear all accumulated forces and torques.
@@ -188,13 +188,13 @@ public:
    * @brief Get the accumulated force for this frame.
    * @return Accumulated force vector [N]
    */
-  const CoordinateRate& getAccumulatedForce() const;
+  const Eigen::Vector3d& getAccumulatedForce() const;
 
   /**
    * @brief Get the accumulated torque for this frame.
    * @return Accumulated torque vector [N·m]
    */
-  const CoordinateRate& getAccumulatedTorque() const;
+  const Eigen::Vector3d& getAccumulatedTorque() const;
 
   // ========== NEW: Coefficient of Restitution (ticket 0027) ==========
 
@@ -329,8 +329,8 @@ private:
   InertialState dynamicState_;
 
   // NEW: Force accumulation (ticket 0023a)
-  CoordinateRate accumulatedForce_{0.0, 0.0, 0.0};
-  CoordinateRate accumulatedTorque_{0.0, 0.0, 0.0};
+  Eigen::Vector3d accumulatedForce_{0.0, 0.0, 0.0};
+  Eigen::Vector3d accumulatedTorque_{0.0, 0.0, 0.0};
 
   // NEW: Coefficient of restitution (ticket 0027)
   double coefficientOfRestitution_{0.5};  // Default: moderate elasticity

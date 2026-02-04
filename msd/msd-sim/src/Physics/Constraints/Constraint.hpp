@@ -47,7 +47,7 @@ public:
    *
    * @return Dimension of constraint vector C(q, t)
    */
-  virtual int dimension() const = 0;
+  [[nodiscard]] virtual int dimension() const = 0;
 
   /**
    * @brief Evaluate constraint function C(q, t)
@@ -61,7 +61,7 @@ public:
    *
    * @throws std::invalid_argument if state is invalid
    */
-  virtual Eigen::VectorXd evaluate(const InertialState& state,
+  [[nodiscard]] virtual Eigen::VectorXd evaluate(const InertialState& state,
                                    double time) const = 0;
 
   /**
@@ -77,7 +77,7 @@ public:
    *
    * @throws std::invalid_argument if state is invalid
    */
-  virtual Eigen::MatrixXd jacobian(const InertialState& state,
+  [[nodiscard]] virtual Eigen::MatrixXd jacobian(const InertialState& state,
                                    double time) const = 0;
 
   /**
@@ -92,7 +92,7 @@ public:
    * @param time Simulation time [s]
    * @return Time derivative vector (dimension × 1)
    */
-  virtual Eigen::VectorXd partialTimeDerivative(const InertialState& state,
+  [[nodiscard]] virtual Eigen::VectorXd partialTimeDerivative(const InertialState& state,
                                                 double time) const;
 
   /**
@@ -105,7 +105,7 @@ public:
    *
    * @return Position error gain α [1/s²]
    */
-  virtual double alpha() const
+  [[nodiscard]] virtual double alpha() const
   {
     return 10.0;
   }
@@ -120,7 +120,7 @@ public:
    *
    * @return Velocity error gain β [1/s]
    */
-  virtual double beta() const
+  [[nodiscard]] virtual double beta() const
   {
     return 10.0;
   }
@@ -130,7 +130,7 @@ public:
    *
    * @return Human-readable constraint type name
    */
-  virtual std::string typeName() const = 0;
+  [[nodiscard]] virtual std::string typeName() const = 0;
 
 protected:
   // Protected Rule of Five: prevent direct instantiation of abstract base

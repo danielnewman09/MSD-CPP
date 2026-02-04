@@ -5,8 +5,8 @@
 #include <cmath>
 #include <vector>
 
-#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
@@ -359,7 +359,7 @@ TEST(SupportFunctionTest, supportMinkowskiWithWitness_IdentityTransform)
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
 
-  CoordinateRate dir{1.0, 0.0, 0.0};
+  Eigen::Vector3d dir{1.0, 0.0, 0.0};
 
   SupportResult result =
     SupportFunction::supportMinkowskiWithWitness(assetA, assetB, dir);
@@ -390,7 +390,7 @@ TEST(SupportFunctionTest, supportMinkowskiWithWitness_TranslatedObjects)
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
 
-  CoordinateRate dir{1.0, 0.0, 0.0};
+  Eigen::Vector3d dir{1.0, 0.0, 0.0};
 
   SupportResult result =
     SupportFunction::supportMinkowskiWithWitness(assetA, assetB, dir);

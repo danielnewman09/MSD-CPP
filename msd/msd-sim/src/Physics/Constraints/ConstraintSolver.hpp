@@ -70,14 +70,14 @@ public:
 
     SolveResult() = default;
 
-    SolveResult(const Eigen::VectorXd& l,
-                const Coordinate& linForce,
-                const Coordinate& angForce,
+    SolveResult(Eigen::VectorXd l,
+                Coordinate linForce,
+                Coordinate angForce,
                 bool conv,
                 double cond)
-      : lambdas{l},
-        linearConstraintForce{linForce},
-        angularConstraintForce{angForce},
+      : lambdas{std::move(l)},
+        linearConstraintForce{std::move(linForce)},
+        angularConstraintForce{std::move(angForce)},
         converged{conv},
         conditionNumber{cond}
     {
@@ -106,13 +106,13 @@ public:
    * @param dt Timestep [s]
    * @return SolveResult with forces and convergence status
    */
-  SolveResult solve(const std::vector<Constraint*>& constraints,
-                    const InertialState& state,
-                    const Coordinate& externalForce,
-                    const Coordinate& externalTorque,
-                    double mass,
-                    const Eigen::Matrix3d& inverseInertia,
-                    double dt);
+  static SolveResult solve(const std::vector<Constraint*>& constraints,
+                           const InertialState& state,
+                           const Coordinate& externalForce,
+                           const Coordinate& externalTorque,
+                           double mass,
+                           const Eigen::Matrix3d& inverseInertia,
+                           double dt);
 
   // ===== Multi-Body Contact Constraint Solver (Ticket 0032) =====
 
@@ -121,12 +121,12 @@ public:
    */
   struct BodyForces
   {
-    Coordinate linearForce;    // Net linear constraint force [N]
-    Coordinate angularTorque;  // Net angular constraint torque [N·m]
+    Eigen::Vector3d linearForce;    // Net linear constraint force [N]
+    Eigen::Vector3d angularTorque;  // Net angular constraint torque [N·m]
 
     BodyForces() = default;
-    BodyForces(const Coordinate& lf, const Coordinate& at)
-      : linearForce{lf}, angularTorque{at}
+    BodyForces(Coordinate lf, Coordinate at)
+      : linearForce{std::move(lf)}, angularTorque{std::move(at)}
     {
     }
   };
@@ -246,7 +246,7 @@ public:
    * @brief Get ECOS tolerance settings
    * @return Pair of (absolute tolerance, relative tolerance)
    */
-  std::pair<double, double> getECOSTolerance() const
+  [[nodiscard]] std::pair<double, double> getECOSTolerance() const
   {
     return {ecos_abs_tol_, ecos_rel_tol_};
   }
@@ -255,7 +255,7 @@ public:
    * @brief Get maximum ECOS iterations
    * @return Maximum iterations
    */
-  int getECOSMaxIterations() const
+  [[nodiscard]] int getECOSMaxIterations() const
   {
     return ecos_max_iters_;
   }
@@ -305,10 +305,10 @@ public:
    *
    * @ticket 0035b4_ecos_solve_integration
    */
-  ActiveSetResult solveWithECOS(const Eigen::MatrixXd& A,
-                                const Eigen::VectorXd& b,
-                                const FrictionConeSpec& coneSpec,
-                                int numContacts) const;
+  [[nodiscard]] ActiveSetResult solveWithECOS(const Eigen::MatrixXd& A,
+                                              const Eigen::VectorXd& b,
+                                              const FrictionConeSpec& coneSpec,
+                                              int numContacts) const;
 
   // Rule of Five
   ConstraintSolver(const ConstraintSolver&) = default;
@@ -325,12 +325,12 @@ private:
    *
    * @return Constraint matrix (n × n) where n = total constraint dimension
    */
-  Eigen::MatrixXd assembleConstraintMatrix(
+  [[nodiscard]] static Eigen::MatrixXd assembleConstraintMatrix(
     const std::vector<Constraint*>& constraints,
     const InertialState& state,
     double time,
     double mass,
-    const Eigen::Matrix3d& inverseInertia) const;
+    const Eigen::Matrix3d& inverseInertia);
 
   /**
    * @brief Assemble RHS vector b = -J·M^-1·F_ext - α·C - β·Ċ
@@ -340,14 +340,15 @@ private:
    *
    * @return RHS vector (n × 1) where n = total constraint dimension
    */
-  Eigen::VectorXd assembleRHS(const std::vector<Constraint*>& constraints,
-                              const InertialState& state,
-                              const Coordinate& externalForce,
-                              const Coordinate& externalTorque,
-                              double mass,
-                              const Eigen::Matrix3d& inverseInertia,
-                              double time,
-                              double dt) const;
+  [[nodiscard]] static Eigen::VectorXd assembleRHS(
+    const std::vector<Constraint*>& constraints,
+    const InertialState& state,
+    const Coordinate& externalForce,
+    const Coordinate& externalTorque,
+    double mass,
+    const Eigen::Matrix3d& inverseInertia,
+    double time,
+    double dt);
 
   /**
    * @brief Extract constraint forces from Lagrange multipliers
@@ -357,11 +358,11 @@ private:
    *
    * @return Pair of (linear force, angular torque)
    */
-  std::pair<Coordinate, Coordinate> extractConstraintForces(
-    const Eigen::VectorXd& lambdas,
-    const std::vector<Constraint*>& constraints,
-    const InertialState& state,
-    double time) const;
+  [[nodiscard]] static std::pair<Coordinate, Coordinate>
+  extractConstraintForces(const Eigen::VectorXd& lambdas,
+                          const std::vector<Constraint*>& constraints,
+                          const InertialState& state,
+                          double time);
 
   // ===== Contact solver helpers (Ticket 0032, 0034) =====
 
@@ -373,10 +374,9 @@ private:
    *
    * @return Vector of per-contact Jacobian matrices (C entries, each 1×12)
    */
-  std::vector<Eigen::MatrixXd> assembleContactJacobians(
+  [[nodiscard]] static std::vector<Eigen::MatrixXd> assembleContactJacobians(
     const std::vector<TwoBodyConstraint*>& contactConstraints,
-    const std::vector<std::reference_wrapper<const InertialState>>& states)
-    const;
+    const std::vector<std::reference_wrapper<const InertialState>>& states);
 
   /**
    * @brief Build effective mass matrix A = J·M⁻¹·Jᵀ with regularization
@@ -387,12 +387,12 @@ private:
    *
    * @return Effective mass matrix (C × C)
    */
-  Eigen::MatrixXd assembleContactEffectiveMass(
+  [[nodiscard]] static Eigen::MatrixXd assembleContactEffectiveMass(
     const std::vector<TwoBodyConstraint*>& contactConstraints,
     const std::vector<Eigen::MatrixXd>& jacobians,
     const std::vector<double>& inverseMasses,
     const std::vector<Eigen::Matrix3d>& inverseInertias,
-    size_t numBodies) const;
+    size_t numBodies);
 
   /**
    * @brief Assemble RHS vector with restitution and Baumgarte terms
@@ -401,11 +401,11 @@ private:
    *
    * @return RHS vector (C × 1)
    */
-  Eigen::VectorXd assembleContactRHS(
+  [[nodiscard]] static Eigen::VectorXd assembleContactRHS(
     const std::vector<TwoBodyConstraint*>& contactConstraints,
     const std::vector<Eigen::MatrixXd>& jacobians,
     const std::vector<std::reference_wrapper<const InertialState>>& states,
-    double dt) const;
+    double dt);
 
   /**
    * @brief Solve contact LCP using Active Set Method
@@ -439,9 +439,9 @@ private:
    *
    * @ticket 0034_active_set_method_contact_solver
    */
-  ActiveSetResult solveActiveSet(const Eigen::MatrixXd& A,
-                                 const Eigen::VectorXd& b,
-                                 int numContacts) const;
+  [[nodiscard]] ActiveSetResult solveActiveSet(const Eigen::MatrixXd& A,
+                                               const Eigen::VectorXd& b,
+                                               int numContacts) const;
 
   /**
    * @brief Extract per-body forces from solved lambda values
@@ -451,12 +451,12 @@ private:
    *
    * @return Per-body constraint forces (numBodies entries)
    */
-  std::vector<BodyForces> extractContactBodyForces(
+  [[nodiscard]] static std::vector<BodyForces> extractContactBodyForces(
     const std::vector<TwoBodyConstraint*>& contactConstraints,
     const std::vector<Eigen::MatrixXd>& jacobians,
     const Eigen::VectorXd& lambda,
     size_t numBodies,
-    double dt) const;
+    double dt);
 
   // ===== ECOS solver helpers (Ticket 0035b4) =====
 
@@ -478,9 +478,9 @@ private:
    *
    * @ticket 0035b4_ecos_solve_integration
    */
-  FrictionConeSpec buildFrictionConeSpec(
+  [[nodiscard]] static FrictionConeSpec buildFrictionConeSpec(
     const std::vector<TwoBodyConstraint*>& contactConstraints,
-    int numContacts) const;
+    int numContacts);
 
   // Active Set Method configuration (Ticket 0034)
   int max_safety_iterations_{

@@ -1,0 +1,262 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<removed>> LightPink
+}
+
+package "Eigen3 (External)" {
+    class "Eigen::Vector3d" as EigenVector {
+        +double x()
+        +double y()
+        +double z()
+        +Vector3d cross(Vector3d)
+        +double dot(Vector3d)
+        +double norm()
+        +Vector3d normalized()
+        +Vector3d operator+(Vector3d)
+        +Vector3d operator-(Vector3d)
+        +Vector3d operator*(double)
+        +Vector3d operator/(double)
+    }
+
+    class "Eigen::MatrixBase<OtherDerived>" as EigenMatrix {
+        <<template>>
+    }
+}
+
+package "msd_sim::detail (Internal)" {
+    class "Vec3Base<Derived>" as Vec3Base <<modified>> {
+        - <<CRTP Base>>
+        --
+        + Vec3Base()
+        + Vec3Base(double x, double y, double z)
+        # Vec3Base(const Eigen::Vector3d&)
+        # Vec3Base(const Eigen::MatrixBase<OtherDerived>&)
+        # operator=(const Eigen::MatrixBase<OtherDerived>&)
+        --
+        - using Eigen::Vector3d::operator[]
+        - using Eigen::Vector3d::x
+        - using Eigen::Vector3d::y
+        - using Eigen::Vector3d::z
+        - using Eigen::Vector3d::norm
+        - using Eigen::Vector3d::squaredNorm
+        - using Eigen::Vector3d::dot
+        - using Eigen::Vector3d::cross
+        --
+        + static constexpr Eigen::Index X = 0
+        + static constexpr Eigen::Index Y = 1
+        + static constexpr Eigen::Index Z = 2
+    }
+
+    note right of Vec3Base
+        **Phase D Changes:**
+        - Make Eigen template ctor implicit
+        - Add NOLINT(google-explicit-constructor)
+        - Keep public element ctors as-is
+        - Expose using Base::operator=
+    end note
+}
+
+package "msd_sim (Public API)" {
+    class "Coordinate" as Coordinate <<modified>> {
+        <<Position/Displacement>>
+        --
+        + using Vec3Base::Vec3Base
+        + using Vec3Base::operator=
+        --
+        + Coordinate()
+        + Coordinate(double x, double y, double z)
+        # Coordinate(const Eigen::MatrixBase<OtherDerived>&)
+    }
+
+    class "AngularCoordinate" as AngularCoordinate <<modified>> {
+        <<Orientation Angles>>
+        --
+        - static constexpr double kNormalizationThreshold
+        --
+        + AngularCoordinate()
+        + AngularCoordinate(double pitch, double roll, double yaw)
+        # AngularCoordinate(const Eigen::MatrixBase<OtherDerived>&)
+        # operator=(const Eigen::MatrixBase<OtherDerived>&)
+        # operator+=(const Eigen::MatrixBase<OtherDerived>&)
+        # operator-=(const Eigen::MatrixBase<OtherDerived>&)
+        # operator*=(double)
+        # operator/=(double)
+        --
+        + double pitch() const
+        + double roll() const
+        + double yaw() const
+        + double pitchDeg() const
+        + double rollDeg() const
+        + double yawDeg() const
+        + void setPitch(double)
+        + void setRoll(double)
+        + void setYaw(double)
+        + AngularCoordinate normalized() const
+        + void normalize()
+        --
+        - void normalizeIfNeeded()
+        - static double normalizeAngle(double)
+    }
+
+    class "AngularRate" as AngularRate <<modified>> {
+        <<Angular Velocity/Acceleration>>
+        --
+        + AngularRate()
+        + AngularRate(double pitchRate, double rollRate, double yawRate)
+        # AngularRate(const Eigen::Vector3d&)
+        # AngularRate(const Eigen::MatrixBase<OtherDerived>&)
+        # operator=(const Eigen::MatrixBase<OtherDerived>&)
+        --
+        + double& pitch()
+        + double& roll()
+        + double& yaw()
+        + double pitch() const
+        + double roll() const
+        + double yaw() const
+    }
+
+    note bottom of AngularCoordinate
+        **Phase A Changes:**
+        - Fix kKNormalizationThreshold → kNormalizationThreshold
+        - Remove triple [[nodiscard]]
+        - Remove nested braces in normalizeIfNeeded()
+        - Remove triple parentheses in formatter
+    end note
+
+    note bottom of AngularRate
+        **Phase A Changes:**
+        - Remove triple [[nodiscard]]
+        - Remove nested braces in formatter
+        - Remove triple parentheses in formatter
+    end note
+}
+
+package "std (Formatting Support)" {
+    class "std::formatter<Coordinate>" as CoordFormatter <<modified>> {
+        + auto parse(format_parse_context&)
+        + auto format(const Coordinate&, format_context&)
+    }
+
+    class "std::formatter<AngularCoordinate>" as AngularCoordFormatter <<modified>> {
+        + auto parse(format_parse_context&)
+        + auto format(const AngularCoordinate&, format_context&)
+    }
+
+    class "std::formatter<AngularRate>" as AngularRateFormatter <<modified>> {
+        + auto parse(format_parse_context&)
+        + auto format(const AngularRate&, format_context&)
+    }
+
+    class "Vec3FormatterBase<T>" as Vec3FormatterBase <<new>> {
+        <<template>>
+        --
+        - char presentation = 'f'
+        - int precision = 6
+        - int width = 0
+        --
+        + constexpr auto parse(format_parse_context&)
+        # std::string buildComponentFormat() const
+        # auto formatComponents(const T& vec, F&& accessor, format_context&)
+    }
+
+    note right of Vec3FormatterBase
+        **Phase B Change:**
+        Template base for all three formatters.
+        Parameterized on T only.
+        Accessor passed to formatComponents()
+        as function template parameter.
+    end note
+}
+
+package "Usage Examples (Phase C Impact)" {
+    class "Facet" as Facet <<modified>> {
+        - std::array<size_t, 3> vertexIndices
+        - Eigen::Vector3d normal
+        - double offset
+    }
+
+    class "CollisionResult" as CollisionResult <<modified>> {
+        - Eigen::Vector3d normal
+        - double penetrationDepth
+        - std::array<ContactPoint, 4> contacts
+        - size_t contactCount
+    }
+
+    class "TangentFrame" as TangentFrame <<modified>> {
+        - Eigen::Vector3d t1
+        - Eigen::Vector3d t2
+    }
+
+    class "ContactConstraint" as ContactConstraint <<modified>> {
+        - Eigen::Vector3d contactNormal_
+        - Coordinate leverArmA_
+        - Coordinate leverArmB_
+    }
+
+    class "FrictionConstraint" as FrictionConstraint <<modified>> {
+        - Eigen::Vector3d tangent1_
+        - Eigen::Vector3d tangent2_
+    }
+
+    note bottom of Facet
+        **Phase C Change:**
+        CoordinateRate normal → Eigen::Vector3d normal
+        (Normal vector is not a velocity)
+    end note
+
+    note bottom of CollisionResult
+        **Phase C Change:**
+        CoordinateRate normal → Eigen::Vector3d normal
+        (Normal vector is not a velocity)
+    end note
+
+    note bottom of TangentFrame
+        **Phase C Change:**
+        Coordinate t1/t2 → Eigen::Vector3d t1/t2
+        (Tangent vectors are not positions)
+    end note
+
+    note bottom of ContactConstraint
+        **Phase C Change:**
+        contactNormal_: CoordinateRate → Eigen::Vector3d
+        (Keep leverArms as Coordinate - semantically positions)
+    end note
+
+    note bottom of FrictionConstraint
+        **Phase C Change:**
+        tangent1_/tangent2_: Coordinate → Eigen::Vector3d
+        (Tangent vectors are not positions)
+    end note
+}
+
+' Inheritance relationships
+Vec3Base <|-- Coordinate
+EigenVector <|-- AngularCoordinate
+EigenVector <|-- AngularRate
+
+' CRTP pattern
+Vec3Base --|> EigenVector : inherits
+
+' Template dependencies
+Vec3Base ..> EigenMatrix : template ctor
+
+' Formatter relationships
+Vec3FormatterBase <|-- CoordFormatter : specializes
+Vec3FormatterBase <|-- AngularCoordFormatter : specializes
+Vec3FormatterBase <|-- AngularRateFormatter : specializes
+
+CoordFormatter ..> Coordinate : formats
+AngularCoordFormatter ..> AngularCoordinate : formats
+AngularRateFormatter ..> AngularRate : formats
+
+' Usage examples
+Facet ..> EigenVector : uses for normal
+CollisionResult ..> EigenVector : uses for normal
+TangentFrame ..> EigenVector : uses for tangents
+ContactConstraint ..> EigenVector : uses for normal
+ContactConstraint ..> Coordinate : uses for lever arms
+FrictionConstraint ..> EigenVector : uses for tangents
+
+@enduml

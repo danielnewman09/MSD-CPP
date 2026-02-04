@@ -227,8 +227,8 @@ TEST(ReferenceFrameTest, ConstructorFromAxes_CollisionResponseUseCase)
     2.0, 3.0, -5.0};  // Moving with some downward component
 
   // Transform to contact frame
-  CoordinateRate localVelocity =
-    contactFrame.globalToLocal(CoordinateRate{worldVelocity});
+  Eigen::Vector3d localVelocity =
+    contactFrame.globalToLocal(Eigen::Vector3d{worldVelocity});
 
   // In contact frame:
   // - Z component should be the normal component (penetrating = negative)

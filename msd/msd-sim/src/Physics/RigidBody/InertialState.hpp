@@ -55,7 +55,7 @@ struct InertialState
    * Formula: ω = 2 * Q̄ ⊗ Q̇
    * where Q̄ is the conjugate quaternion (w, -x, -y, -z)
    */
-  AngularRate getAngularVelocity() const;
+  [[nodiscard]] AngularRate getAngularVelocity() const;
 
   /**
    * @brief Set angular velocity (converts to quaternion rate)
@@ -97,7 +97,7 @@ struct InertialState
    * Extracts ZYX Euler angles from quaternion using Eigen's conversion.
    * Warning: This conversion is ambiguous near gimbal lock (pitch ≈ ±90°).
    */
-  [[deprecated(
+  [[nodiscard]] [[deprecated(
     "Use quaternion representation directly. Euler angles have gimbal lock.")]]
   AngularCoordinate getEulerAngles() const;
 };

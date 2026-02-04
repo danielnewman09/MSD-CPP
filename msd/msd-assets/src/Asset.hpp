@@ -30,17 +30,17 @@ public:
   static Asset fromObjectRecord(msd_transfer::ObjectRecord& record,
                                 cpp_sqlite::Database& db);
 
-  uint32_t getId() const;
-  const std::string& getName() const;
-  const std::string& getCategory() const;
+  [[nodiscard]] uint32_t getId() const;
+  [[nodiscard]] const std::string& getName() const;
+  [[nodiscard]] const std::string& getCategory() const;
 
-  std::optional<std::reference_wrapper<const VisualGeometry>>
+  [[nodiscard]] std::optional<std::reference_wrapper<const VisualGeometry>>
   getVisualGeometry() const;
-  std::optional<std::reference_wrapper<const CollisionGeometry>>
+  [[nodiscard]] std::optional<std::reference_wrapper<const CollisionGeometry>>
   getCollisionGeometry() const;
 
-  bool hasVisualGeometry() const;
-  bool hasCollisionGeometry() const;
+  [[nodiscard]] bool hasVisualGeometry() const;
+  [[nodiscard]] bool hasCollisionGeometry() const;
 
 private:
   // The visualgeometry and collisiongeometry objects can be build from the

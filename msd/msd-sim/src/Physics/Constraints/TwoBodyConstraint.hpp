@@ -20,22 +20,23 @@ namespace msd_sim
  * (12 columns total), matching the velocity-level formulation used for
  * collision response. The solver handles quaternion conversion internally.
  *
- * Design rationale: Introducing TwoBodyConstraint as a subclass avoids modifying
- * the existing Constraint interface, which would risk breaking all single-body
- * constraint implementations (UnitQuaternionConstraint, DistanceConstraint).
- * The solver uses dynamic_cast<TwoBodyConstraint*> to dispatch between
- * single-body and two-body evaluation.
+ * Design rationale: Introducing TwoBodyConstraint as a subclass avoids
+ * modifying the existing Constraint interface, which would risk breaking all
+ * single-body constraint implementations (UnitQuaternionConstraint,
+ * DistanceConstraint). The solver uses dynamic_cast<TwoBodyConstraint*> to
+ * dispatch between single-body and two-body evaluation.
  *
  * Thread safety: Read-only operations thread-safe after construction
  * Error handling: Single-body methods throw std::logic_error (misuse)
  *
- * @see docs/designs/0032_contact_constraint_refactor/0032_contact_constraint_refactor.puml
+ * @see
+ * docs/designs/0032_contact_constraint_refactor/0032_contact_constraint_refactor.puml
  * @ticket 0032_contact_constraint_refactor
  */
 class TwoBodyConstraint : public UnilateralConstraint
 {
 public:
-  virtual ~TwoBodyConstraint() = default;
+  ~TwoBodyConstraint() override = default;
 
   // ===== Two-Body Interface (subclass must implement) =====
 
@@ -47,10 +48,10 @@ public:
    * @param time Simulation time [s]
    * @return Constraint violation vector (dimension x 1)
    */
-  virtual Eigen::VectorXd evaluateTwoBody(
-      const InertialState& stateA,
-      const InertialState& stateB,
-      double time) const = 0;
+  [[nodiscard]] virtual Eigen::VectorXd
+  evaluateTwoBody(const InertialState& stateA,
+                  const InertialState& stateB,
+                  double time) const = 0;
 
   /**
    * @brief Compute two-body Jacobian [J_A | J_B]
@@ -64,10 +65,10 @@ public:
    * @param time Simulation time [s]
    * @return Jacobian matrix (dimension x 12)
    */
-  virtual Eigen::MatrixXd jacobianTwoBody(
-      const InertialState& stateA,
-      const InertialState& stateB,
-      double time) const = 0;
+  [[nodiscard]] virtual Eigen::MatrixXd
+  jacobianTwoBody(const InertialState& stateA,
+                  const InertialState& stateB,
+                  double time) const = 0;
 
   /**
    * @brief Check if constraint is active for two-body state
@@ -77,22 +78,28 @@ public:
    * @param time Simulation time [s]
    * @return true if constraint is active (should be enforced)
    */
-  virtual bool isActiveTwoBody(
-      const InertialState& stateA,
-      const InertialState& stateB,
-      double time) const = 0;
+  [[nodiscard]] virtual bool isActiveTwoBody(
+    const InertialState& stateA,
+    const InertialState& stateB,
+    double time) const = 0;
 
   /**
    * @brief Get body A index in the solver's body list
    * @return Index of body A (0-based)
    */
-  size_t getBodyAIndex() const { return body_a_index_; }
+  [[nodiscard]] size_t getBodyAIndex() const
+  {
+    return body_a_index_;
+  }
 
   /**
    * @brief Get body B index in the solver's body list
    * @return Index of body B (0-based)
    */
-  size_t getBodyBIndex() const { return body_b_index_; }
+  [[nodiscard]] size_t getBodyBIndex() const
+  {
+    return body_b_index_;
+  }
 
   // ===== Single-Body Overrides (throw std::logic_error) =====
 
@@ -100,25 +107,25 @@ public:
    * @brief Single-body evaluate (NOT SUPPORTED for two-body constraints)
    * @throws std::logic_error Two-body constraints must use evaluateTwoBody()
    */
-  Eigen::VectorXd evaluate(
-      const InertialState& state,
-      double time) const override;
+  [[nodiscard]] Eigen::VectorXd evaluate(
+    const InertialState& state,
+    double time) const override;
 
   /**
    * @brief Single-body Jacobian (NOT SUPPORTED for two-body constraints)
    * @throws std::logic_error Two-body constraints must use jacobianTwoBody()
    */
-  Eigen::MatrixXd jacobian(
-      const InertialState& state,
-      double time) const override;
+  [[nodiscard]] Eigen::MatrixXd jacobian(
+    const InertialState& state,
+    double time) const override;
 
   /**
    * @brief Single-body isActive (NOT SUPPORTED for two-body constraints)
    * @throws std::logic_error Two-body constraints must use isActiveTwoBody()
    */
-  bool isActive(
-      const InertialState& state,
-      double time) const override;
+  [[nodiscard]] bool isActive(
+    const InertialState& state,
+    double time) const override;
 
   // Rule of Five
   TwoBodyConstraint(const TwoBodyConstraint&) = default;
@@ -134,9 +141,9 @@ protected:
    * @param bodyBIndex Index of body B in solver body list
    */
   TwoBodyConstraint(size_t bodyAIndex, size_t bodyBIndex)
-    : body_a_index_{bodyAIndex},
-      body_b_index_{bodyBIndex}
-  {}
+    : body_a_index_{bodyAIndex}, body_b_index_{bodyBIndex}
+  {
+  }
 
 private:
   size_t body_a_index_;

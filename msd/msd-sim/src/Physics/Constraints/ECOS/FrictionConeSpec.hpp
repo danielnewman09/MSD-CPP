@@ -43,8 +43,8 @@ namespace msd_sim
 struct FrictionConeSpec
 {
   int numContacts{0};                           // Number of contacts
-  std::vector<double> frictionCoefficients{};   // μ per contact
-  std::vector<int> normalIndices{};             // Index of normal constraint per contact
+  std::vector<double> frictionCoefficients;   // μ per contact
+  std::vector<int> normalIndices;             // Index of normal constraint per contact
 
   /**
    * @brief Default constructor creates empty specification
@@ -80,13 +80,13 @@ struct FrictionConeSpec
    *
    * @return Vector of cone sizes (all 3)
    */
-  std::vector<idxint> getConeSizes() const;
+  [[nodiscard]] std::vector<idxint> getConeSizes() const;
 
   /**
    * @brief Get number of contacts
    * @return Number of contacts in specification
    */
-  int getNumContacts() const { return numContacts; }
+  [[nodiscard]] int getNumContacts() const { return numContacts; }
 
   /**
    * @brief Get friction coefficient for specific contact
@@ -94,7 +94,7 @@ struct FrictionConeSpec
    * @return Friction coefficient μ for that contact
    * @throws std::invalid_argument if contactIndex out of range
    */
-  double getFrictionCoefficient(int contactIndex) const;
+  [[nodiscard]] double getFrictionCoefficient(int contactIndex) const;
 
   // Rule of Zero (compiler-generated copy/move/destructor)
   FrictionConeSpec(const FrictionConeSpec&) = default;

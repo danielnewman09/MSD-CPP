@@ -12,9 +12,10 @@ MotionController::MotionController(double rotSpeed, double moveSpeed)
 {
 }
 
-void MotionController::updateTransform(ReferenceFrame& frame,
-                                       const InputCommands& commands,
-                                       std::chrono::milliseconds deltaTime)
+void MotionController::updateTransform(
+  ReferenceFrame& frame,
+  const InputCommands& commands,
+  std::chrono::milliseconds deltaTime) const
 {
   // Convert deltaTime to seconds for speed calculations
   const double deltaSeconds = deltaTime.count() / 1000.0;
@@ -30,32 +31,32 @@ void MotionController::updateTransform(ReferenceFrame& frame,
   if (commands.moveForward)
   {
     // Move forward in local Z direction
-    newOrigin -= frame.localToGlobal(CoordinateRate{0, 0, scaledMoveSpeed});
+    newOrigin -= frame.localToGlobal(Eigen::Vector3d{0, 0, scaledMoveSpeed});
   }
   if (commands.moveBackward)
   {
     // Move backward in local Z direction
-    newOrigin += frame.localToGlobal(CoordinateRate{0, 0, scaledMoveSpeed});
+    newOrigin += frame.localToGlobal(Eigen::Vector3d{0, 0, scaledMoveSpeed});
   }
   if (commands.moveLeft)
   {
     // Move left in local X direction
-    newOrigin -= frame.localToGlobal(CoordinateRate{scaledMoveSpeed, 0, 0});
+    newOrigin -= frame.localToGlobal(Eigen::Vector3d{scaledMoveSpeed, 0, 0});
   }
   if (commands.moveRight)
   {
     // Move right in local X direction
-    newOrigin += frame.localToGlobal(CoordinateRate{scaledMoveSpeed, 0, 0});
+    newOrigin += frame.localToGlobal(Eigen::Vector3d{scaledMoveSpeed, 0, 0});
   }
   if (commands.moveUp)
   {
     // Move up in local Y direction
-    newOrigin += frame.localToGlobal(CoordinateRate{0, scaledMoveSpeed, 0});
+    newOrigin += frame.localToGlobal(Eigen::Vector3d{0, scaledMoveSpeed, 0});
   }
   if (commands.moveDown)
   {
     // Move down in local Y direction
-    newOrigin -= frame.localToGlobal(CoordinateRate{0, scaledMoveSpeed, 0});
+    newOrigin -= frame.localToGlobal(Eigen::Vector3d{0, scaledMoveSpeed, 0});
   }
 
   // Apply movement

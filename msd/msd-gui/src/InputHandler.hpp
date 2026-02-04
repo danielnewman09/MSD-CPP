@@ -64,13 +64,13 @@ public:
    * @brief Get the bound key
    * @return SDL keycode
    */
-  SDL_Keycode getKey() const { return key_; }
+  [[nodiscard]] SDL_Keycode getKey() const { return key_; }
 
   /**
    * @brief Get the input mode
    * @return Input mode enum
    */
-  InputMode getMode() const { return mode_; }
+  [[nodiscard]] InputMode getMode() const { return mode_; }
 
   /**
    * @brief Check if binding should trigger given current input state
@@ -172,7 +172,7 @@ public:
    * @brief Get read-only access to the input state
    * @return Const reference to InputState
    */
-  const InputState& getInputState() const { return inputState_; }
+  [[nodiscard]] const InputState& getInputState() const { return inputState_; }
 
 private:
   InputState inputState_;

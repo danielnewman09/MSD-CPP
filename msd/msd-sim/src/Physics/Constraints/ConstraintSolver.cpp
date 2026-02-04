@@ -6,28 +6,42 @@
 // Design: docs/designs/0035b_box_constrained_asm_solver/design.md
 
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/ECOS/ECOSProblemBuilder.hpp"
-#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
+#include <Eigen/src/Cholesky/LLT.h>
+#include <Eigen/src/Core/Map.h>
+#include <Eigen/src/Core/Matrix.h>
+#include <Eigen/src/Core/util/Constants.h>
+#include <Eigen/src/Core/util/Meta.h>
+#include <Eigen/src/SVD/JacobiSVD.h>
 #include <ecos/ecos.h>
-#include <Eigen/Cholesky>
-#include <Eigen/SVD>
+#include <ecos/glblopts.h>
 #include <algorithm>
-#include <cmath>
+#include <cstddef>
+#include <functional>
+#include <limits>
+#include <utility>
+#include <vector>
+#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/ECOS/ECOSData.hpp"
+#include "msd-sim/src/Physics/Constraints/ECOS/ECOSProblemBuilder.hpp"
+#include "msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp"
+#include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
+#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
 {
 
 ConstraintSolver::SolveResult ConstraintSolver::solve(
-    const std::vector<Constraint*>& constraints,
-    const InertialState& state,
-    const Coordinate& externalForce,
-    const Coordinate& externalTorque,
-    double mass,
-    const Eigen::Matrix3d& inverseInertia,
-    double dt)
+  const std::vector<Constraint*>& constraints,
+  const InertialState& state,
+  const Coordinate& externalForce,
+  const Coordinate& externalTorque,
+  double mass,
+  const Eigen::Matrix3d& inverseInertia,
+  double dt)
 {
   // Handle empty constraint set
   if (constraints.empty())
@@ -39,22 +53,32 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
                        1.0};  // condition number
   }
 
-  // Current simulation time (not used by current constraints, but part of interface)
-  double time = 0.0;  // WorldModel doesn't track absolute time yet
+  // Current simulation time (not used by current constraints, but part of
+  // interface)
+  double const time = 0.0;  // WorldModel doesn't track absolute time yet
 
   // Assemble constraint matrix A = J·M^-1·J^T
-  Eigen::MatrixXd A = assembleConstraintMatrix(constraints, state, time, mass, inverseInertia);
+  Eigen::MatrixXd a =
+    assembleConstraintMatrix(constraints, state, time, mass, inverseInertia);
 
   // Assemble RHS b = -J·M^-1·F_ext - α·C - β·Ċ
-  Eigen::VectorXd b = assembleRHS(constraints, state, externalForce, externalTorque,
-                                   mass, inverseInertia, time, dt);
+  Eigen::VectorXd const b = assembleRHS(constraints,
+                                        state,
+                                        externalForce,
+                                        externalTorque,
+                                        mass,
+                                        inverseInertia,
+                                        time,
+                                        dt);
 
   // Compute condition number for diagnostics
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd(A);
-  double conditionNumber = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size() - 1);
+  Eigen::JacobiSVD<Eigen::MatrixXd> const svd(a);
+  double const conditionNumber =
+    svd.singularValues()(0) /
+    svd.singularValues()(svd.singularValues().size() - 1);
 
   // Solve A·λ = b using LLT decomposition (assumes positive definite)
-  Eigen::LLT<Eigen::MatrixXd> llt(A);
+  Eigen::LLT<Eigen::MatrixXd> const llt(a);
   if (llt.info() != Eigen::Success)
   {
     // Matrix is not positive definite (singular or ill-conditioned)
@@ -65,10 +89,11 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
                        conditionNumber};
   }
 
-  Eigen::VectorXd lambdas = llt.solve(b);
+  Eigen::VectorXd const lambdas = llt.solve(b);
 
   // Extract constraint forces F_c = J^T·λ
-  auto [linearForce, angularTorque] = extractConstraintForces(lambdas, constraints, state, time);
+  auto [linearForce, angularTorque] =
+    extractConstraintForces(lambdas, constraints, state, time);
 
   return SolveResult{lambdas,
                      linearForce,
@@ -78,11 +103,11 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
 }
 
 Eigen::MatrixXd ConstraintSolver::assembleConstraintMatrix(
-    const std::vector<Constraint*>& constraints,
-    const InertialState& state,
-    double time,
-    double mass,
-    const Eigen::Matrix3d& inverseInertia) const
+  const std::vector<Constraint*>& constraints,
+  const InertialState& state,
+  double time,
+  double mass,
+  const Eigen::Matrix3d& inverseInertia)
 {
   // Compute total constraint dimension
   int totalDim = 0;
@@ -92,46 +117,47 @@ Eigen::MatrixXd ConstraintSolver::assembleConstraintMatrix(
   }
 
   // Assemble stacked Jacobian J (totalDim × 7)
-  Eigen::MatrixXd J(totalDim, 7);
+  Eigen::MatrixXd j(totalDim, 7);
   int rowOffset = 0;
   for (const auto* constraint : constraints)
   {
-    int dim = constraint->dimension();
-    J.block(rowOffset, 0, dim, 7) = constraint->jacobian(state, time);
+    int const dim = constraint->dimension();
+    j.block(rowOffset, 0, dim, 7) = constraint->jacobian(state, time);
     rowOffset += dim;
   }
 
   // Construct mass matrix inverse M^-1 (7 × 7 block diagonal)
-  Eigen::MatrixXd M_inv = Eigen::MatrixXd::Zero(7, 7);
+  Eigen::MatrixXd mInv = Eigen::MatrixXd::Zero(7, 7);
 
   // Linear mass inverse: (1/m)·I₃
-  M_inv.block<3, 3>(0, 0) = (1.0 / mass) * Eigen::Matrix3d::Identity();
+  mInv.block<3, 3>(0, 0) = (1.0 / mass) * Eigen::Matrix3d::Identity();
 
   // Angular mass inverse: I^-1 (inverse inertia tensor)
-  M_inv.block<3, 3>(3, 3) = inverseInertia;
+  mInv.block<3, 3>(3, 3) = inverseInertia;
 
-  // Note: Quaternion components don't have a direct "mass" in configuration space,
-  // but the inertia tensor relates angular velocity to quaternion rate via
-  // ω = 2·Q̄⊗Q̇. The 4×4 block should technically be derived from the quaternion
-  // kinetic energy metric, but for the quaternion constraint (which only cares
-  // about normalization), we use the identity for the remaining component.
-  M_inv(6, 6) = 1.0;  // Quaternion scalar component (simplified)
+  // Note: Quaternion components don't have a direct "mass" in configuration
+  // space, but the inertia tensor relates angular velocity to quaternion rate
+  // via ω = 2·Q̄⊗Q̇. The 4×4 block should technically be derived from the
+  // quaternion kinetic energy metric, but for the quaternion constraint (which
+  // only cares about normalization), we use the identity for the remaining
+  // component.
+  mInv(6, 6) = 1.0;  // Quaternion scalar component (simplified)
 
   // Compute constraint matrix A = J·M^-1·J^T
-  Eigen::MatrixXd A = J * M_inv * J.transpose();
+  Eigen::MatrixXd a = j * mInv * j.transpose();
 
-  return A;
+  return a;
 }
 
 Eigen::VectorXd ConstraintSolver::assembleRHS(
-    const std::vector<Constraint*>& constraints,
-    const InertialState& state,
-    const Coordinate& externalForce,
-    const Coordinate& externalTorque,
-    double mass,
-    const Eigen::Matrix3d& inverseInertia,
-    double time,
-    double /* dt */) const
+  const std::vector<Constraint*>& constraints,
+  const InertialState& state,
+  const Coordinate& externalForce,
+  const Coordinate& externalTorque,
+  double mass,
+  const Eigen::Matrix3d& inverseInertia,
+  double time,
+  double /* dt */)
 {
   // Compute total constraint dimension
   int totalDim = 0;
@@ -141,44 +167,47 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
   }
 
   // Assemble stacked Jacobian J (totalDim × 7)
-  Eigen::MatrixXd J(totalDim, 7);
+  Eigen::MatrixXd j(totalDim, 7);
   int rowOffset = 0;
   for (const auto* constraint : constraints)
   {
-    int dim = constraint->dimension();
-    J.block(rowOffset, 0, dim, 7) = constraint->jacobian(state, time);
+    int const dim = constraint->dimension();
+    j.block(rowOffset, 0, dim, 7) = constraint->jacobian(state, time);
     rowOffset += dim;
   }
 
   // Construct mass matrix inverse M^-1 (7 × 7 block diagonal)
-  Eigen::MatrixXd M_inv = Eigen::MatrixXd::Zero(7, 7);
-  M_inv.block<3, 3>(0, 0) = (1.0 / mass) * Eigen::Matrix3d::Identity();
-  M_inv.block<3, 3>(3, 3) = inverseInertia;
-  M_inv(6, 6) = 1.0;
+  Eigen::MatrixXd mInv = Eigen::MatrixXd::Zero(7, 7);
+  mInv.block<3, 3>(0, 0) = (1.0 / mass) * Eigen::Matrix3d::Identity();
+  mInv.block<3, 3>(3, 3) = inverseInertia;
+  mInv(6, 6) = 1.0;
 
   // External forces in generalized coordinates (7 × 1)
-  Eigen::VectorXd F_ext(7);
-  F_ext.segment<3>(0) = Eigen::Vector3d{externalForce.x(), externalForce.y(), externalForce.z()};
-  F_ext.segment<3>(3) = Eigen::Vector3d{externalTorque.x(), externalTorque.y(), externalTorque.z()};
-  F_ext(6) = 0.0;  // No external force on quaternion scalar component
+  Eigen::VectorXd fExt(7);
+  fExt.segment<3>(0) =
+    Eigen::Vector3d{externalForce.x(), externalForce.y(), externalForce.z()};
+  fExt.segment<3>(3) =
+    Eigen::Vector3d{externalTorque.x(), externalTorque.y(), externalTorque.z()};
+  fExt(6) = 0.0;  // No external force on quaternion scalar component
 
   // Assemble constraint violation C and time derivative Ċ
-  Eigen::VectorXd C(totalDim);
-  Eigen::VectorXd C_dot(totalDim);
-  Eigen::VectorXd alpha_vec(totalDim);
-  Eigen::VectorXd beta_vec(totalDim);
+  Eigen::VectorXd c(totalDim);
+  Eigen::VectorXd cDot(totalDim);
+  Eigen::VectorXd alphaVec(totalDim);
+  Eigen::VectorXd betaVec(totalDim);
   rowOffset = 0;
   for (const auto* constraint : constraints)
   {
-    int dim = constraint->dimension();
-    C.segment(rowOffset, dim) = constraint->evaluate(state, time);
-    C_dot.segment(rowOffset, dim) = constraint->partialTimeDerivative(state, time);
+    int const dim = constraint->dimension();
+    c.segment(rowOffset, dim) = constraint->evaluate(state, time);
+    cDot.segment(rowOffset, dim) =
+      constraint->partialTimeDerivative(state, time);
 
     // Baumgarte parameters (per-constraint)
     for (int i = 0; i < dim; ++i)
     {
-      alpha_vec(rowOffset + i) = constraint->alpha();
-      beta_vec(rowOffset + i) = constraint->beta();
+      alphaVec(rowOffset + i) = constraint->alpha();
+      betaVec(rowOffset + i) = constraint->beta();
     }
 
     rowOffset += dim;
@@ -187,26 +216,28 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
   // Compute velocity-level constraint violation Ċ = J·q̇
   // For holonomic constraints, Ċ = J·q̇ + ∂C/∂t
   // State velocity vector (7 × 1)
-  Eigen::VectorXd q_dot(7);
-  q_dot.segment<3>(0) = Eigen::Vector3d{state.velocity.x(), state.velocity.y(), state.velocity.z()};
+  Eigen::VectorXd qDot(7);
+  qDot.segment<3>(0) =
+    Eigen::Vector3d{state.velocity.x(), state.velocity.y(), state.velocity.z()};
 
   // Quaternion rate Q̇
-  q_dot.segment<4>(3) = state.quaternionRate;
+  qDot.segment<4>(3) = state.quaternionRate;
 
-  Eigen::VectorXd J_q_dot = J * q_dot;
-  Eigen::VectorXd C_dot_total = J_q_dot + C_dot;
+  Eigen::VectorXd const jQDot = j * qDot;
+  Eigen::VectorXd const cDotTotal = jQDot + cDot;
 
   // RHS: b = -J·M^-1·F_ext - α·C - β·Ċ
-  Eigen::VectorXd b = -J * M_inv * F_ext - alpha_vec.cwiseProduct(C) - beta_vec.cwiseProduct(C_dot_total);
+  Eigen::VectorXd b = -j * mInv * fExt - alphaVec.cwiseProduct(c) -
+                      betaVec.cwiseProduct(cDotTotal);
 
   return b;
 }
 
 std::pair<Coordinate, Coordinate> ConstraintSolver::extractConstraintForces(
-    const Eigen::VectorXd& lambdas,
-    const std::vector<Constraint*>& constraints,
-    const InertialState& state,
-    double time) const
+  const Eigen::VectorXd& lambdas,
+  const std::vector<Constraint*>& constraints,
+  const InertialState& state,
+  double time)
 {
   // Compute total constraint dimension
   int totalDim = 0;
@@ -216,25 +247,25 @@ std::pair<Coordinate, Coordinate> ConstraintSolver::extractConstraintForces(
   }
 
   // Assemble stacked Jacobian J (totalDim × 7)
-  Eigen::MatrixXd J(totalDim, 7);
+  Eigen::MatrixXd j(totalDim, 7);
   int rowOffset = 0;
   for (const auto* constraint : constraints)
   {
-    int dim = constraint->dimension();
-    J.block(rowOffset, 0, dim, 7) = constraint->jacobian(state, time);
+    int const dim = constraint->dimension();
+    j.block(rowOffset, 0, dim, 7) = constraint->jacobian(state, time);
     rowOffset += dim;
   }
 
   // Constraint forces: F_c = J^T·λ (7 × 1)
-  Eigen::VectorXd F_c = J.transpose() * lambdas;
+  Eigen::VectorXd fC = j.transpose() * lambdas;
 
   // Extract linear force (first 3 components)
-  Coordinate linearForce{F_c(0), F_c(1), F_c(2)};
+  Coordinate const linearForce{fC(0), fC(1), fC(2)};
 
   // Extract angular torque (next 3 components)
   // Note: Component 6 is the quaternion scalar force, which we ignore
   // (it contributes to quaternion normalization but not angular dynamics)
-  Coordinate angularTorque{F_c(3), F_c(4), F_c(5)};
+  Coordinate const angularTorque{fC(3), fC(4), fC(5)};
 
   return {linearForce, angularTorque};
 }
@@ -248,19 +279,21 @@ std::pair<Coordinate, Coordinate> ConstraintSolver::extractConstraintForces(
 // - Baumgarte uses ERP formulation: b += (ERP/dt) · penetration_depth
 // - Restitution RHS: b = -(1+e) · J·v_minus (for system A·λ = b)
 // - DO NOT use -(1+e)·v as target velocity directly (causes energy injection)
-// See: prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
+// See:
+// prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
 
 ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
-    const std::vector<std::reference_wrapper<const InertialState>>& states,
-    const std::vector<double>& inverseMasses,
-    const std::vector<Eigen::Matrix3d>& inverseInertias,
-    size_t numBodies,
-    double dt)
+  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<std::reference_wrapper<const InertialState>>& states,
+  const std::vector<double>& inverseMasses,
+  const std::vector<Eigen::Matrix3d>& inverseInertias,
+  size_t numBodies,
+  double dt)
 {
   MultiBodySolveResult result;
-  result.bodyForces.resize(numBodies, BodyForces{Coordinate{0.0, 0.0, 0.0},
-                                                  Coordinate{0.0, 0.0, 0.0}});
+  result.bodyForces.resize(
+    numBodies,
+    BodyForces{Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 0.0}});
 
   if (contactConstraints.empty())
   {
@@ -287,8 +320,8 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
   auto jacobians = assembleContactJacobians(contactConstraints, states);
 
   // Step 2+3: Build effective mass matrix A = J·M⁻¹·Jᵀ
-  auto A = assembleContactEffectiveMass(contactConstraints, jacobians,
-                                         inverseMasses, inverseInertias, numBodies);
+  auto a = assembleContactEffectiveMass(
+    contactConstraints, jacobians, inverseMasses, inverseInertias, numBodies);
 
   // Step 4: Assemble RHS vector
   auto b = assembleContactRHS(contactConstraints, jacobians, states, dt);
@@ -314,27 +347,28 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     }
 
     // Build friction cone specification from constraint list
-    FrictionConeSpec coneSpec = buildFrictionConeSpec(contactConstraints, numContacts);
+    FrictionConeSpec const coneSpec =
+      buildFrictionConeSpec(contactConstraints, numContacts);
 
     // Route to ECOS SOCP solver
-    asmResult = solveWithECOS(A, b, coneSpec, numContacts);
+    asmResult = solveWithECOS(a, b, coneSpec, numContacts);
   }
   else
   {
     // No friction — use existing Active Set Method (zero-regression path)
-    asmResult = solveActiveSet(A, b, numConstraintRows);
+    asmResult = solveActiveSet(a, b, numConstraintRows);
   }
 
   // Step 6: Extract per-body forces
-  result.bodyForces = extractContactBodyForces(contactConstraints, jacobians,
-                                                asmResult.lambda, numBodies, dt);
+  result.bodyForces = extractContactBodyForces(
+    contactConstraints, jacobians, asmResult.lambda, numBodies, dt);
 
   result.lambdas = asmResult.lambda;
   result.converged = asmResult.converged;
   result.iterations = asmResult.iterations;
 
   // Compute residual: ||A·λ - b||
-  Eigen::VectorXd residualVec = A * asmResult.lambda - b;
+  Eigen::VectorXd const residualVec = a * asmResult.lambda - b;
   result.residual = residualVec.norm();
 
   return result;
@@ -343,32 +377,32 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
 // ===== Contact solver helper implementations =====
 
 std::vector<Eigen::MatrixXd> ConstraintSolver::assembleContactJacobians(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
-    const std::vector<std::reference_wrapper<const InertialState>>& states) const
+  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<std::reference_wrapper<const InertialState>>& states)
 {
-  const size_t C = contactConstraints.size();
-  std::vector<Eigen::MatrixXd> jacobians(C);
+  const size_t c = contactConstraints.size();
+  std::vector<Eigen::MatrixXd> jacobians(c);
 
-  for (size_t i = 0; i < C; ++i)
+  for (size_t i = 0; i < c; ++i)
   {
     const auto* contact = contactConstraints[i];
-    size_t bodyA = contact->getBodyAIndex();
-    size_t bodyB = contact->getBodyBIndex();
-    jacobians[i] = contact->jacobianTwoBody(
-        states[bodyA].get(), states[bodyB].get(), 0.0);
+    size_t const bodyA = contact->getBodyAIndex();
+    size_t const bodyB = contact->getBodyBIndex();
+    jacobians[i] =
+      contact->jacobianTwoBody(states[bodyA].get(), states[bodyB].get(), 0.0);
   }
 
   return jacobians;
 }
 
 Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
-    const std::vector<Eigen::MatrixXd>& jacobians,
-    const std::vector<double>& inverseMasses,
-    const std::vector<Eigen::Matrix3d>& inverseInertias,
-    size_t numBodies) const
+  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<Eigen::MatrixXd>& jacobians,
+  const std::vector<double>& inverseMasses,
+  const std::vector<Eigen::Matrix3d>& inverseInertias,
+  size_t numBodies)
 {
-  const size_t C = contactConstraints.size();
+  const size_t c = contactConstraints.size();
 
   // Build per-body inverse mass matrices (6×6)
   // M_k_inv = diag(inverseMass_k · I_3, inverseInertia_k)
@@ -376,75 +410,88 @@ Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
   for (size_t k = 0; k < numBodies; ++k)
   {
     bodyMInv[k] = Eigen::Matrix<double, 6, 6>::Zero();
-    bodyMInv[k].block<3, 3>(0, 0) = inverseMasses[k] * Eigen::Matrix3d::Identity();
+    bodyMInv[k].block<3, 3>(0, 0) =
+      inverseMasses[k] * Eigen::Matrix3d::Identity();
     bodyMInv[k].block<3, 3>(3, 3) = inverseInertias[k];
   }
 
   // Assemble effective mass matrix A (C×C)
   // A_ij = sum over shared bodies k of: J_i_k · M_k_inv · J_j_k^T
-  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(C), static_cast<Eigen::Index>(C));
-  for (size_t i = 0; i < C; ++i)
+  Eigen::MatrixXd a = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(c),
+                                            static_cast<Eigen::Index>(c));
+  for (size_t i = 0; i < c; ++i)
   {
-    size_t bodyA_i = contactConstraints[i]->getBodyAIndex();
-    size_t bodyB_i = contactConstraints[i]->getBodyBIndex();
+    size_t const bodyAI = contactConstraints[i]->getBodyAIndex();
+    size_t const bodyBI = contactConstraints[i]->getBodyBIndex();
 
     // J_i is 1×12: [J_i_A(1×6) | J_i_B(1×6)]
-    Eigen::Matrix<double, 1, 6> J_i_A = jacobians[i].block<1, 6>(0, 0);
-    Eigen::Matrix<double, 1, 6> J_i_B = jacobians[i].block<1, 6>(0, 6);
+    Eigen::Matrix<double, 1, 6> const jIA = jacobians[i].block<1, 6>(0, 0);
+    Eigen::Matrix<double, 1, 6> const jIB = jacobians[i].block<1, 6>(0, 6);
 
-    for (size_t j = i; j < C; ++j)
+    for (size_t j = i; j < c; ++j)
     {
-      size_t bodyA_j = contactConstraints[j]->getBodyAIndex();
-      size_t bodyB_j = contactConstraints[j]->getBodyBIndex();
+      size_t const bodyAJ = contactConstraints[j]->getBodyAIndex();
+      size_t const bodyBJ = contactConstraints[j]->getBodyBIndex();
 
-      Eigen::Matrix<double, 1, 6> J_j_A = jacobians[j].block<1, 6>(0, 0);
-      Eigen::Matrix<double, 1, 6> J_j_B = jacobians[j].block<1, 6>(0, 6);
+      Eigen::Matrix<double, 1, 6> jJA = jacobians[j].block<1, 6>(0, 0);
+      Eigen::Matrix<double, 1, 6> jJB = jacobians[j].block<1, 6>(0, 6);
 
-      double a_ij = 0.0;
+      double aIj = 0.0;
 
       // Check all body sharing combinations
-      if (bodyA_i == bodyA_j)
-        a_ij += (J_i_A * bodyMInv[bodyA_i] * J_j_A.transpose())(0);
-      if (bodyA_i == bodyB_j)
-        a_ij += (J_i_A * bodyMInv[bodyA_i] * J_j_B.transpose())(0);
-      if (bodyB_i == bodyA_j)
-        a_ij += (J_i_B * bodyMInv[bodyB_i] * J_j_A.transpose())(0);
-      if (bodyB_i == bodyB_j)
-        a_ij += (J_i_B * bodyMInv[bodyB_i] * J_j_B.transpose())(0);
+      if (bodyAI == bodyAJ)
+      {
+        aIj += (jIA * bodyMInv[bodyAI] * jJA.transpose())(0);
+      }
+      if (bodyAI == bodyBJ)
+      {
+        aIj += (jIA * bodyMInv[bodyAI] * jJB.transpose())(0);
+      }
+      if (bodyBI == bodyAJ)
+      {
+        aIj += (jIB * bodyMInv[bodyBI] * jJA.transpose())(0);
+      }
+      if (bodyBI == bodyBJ)
+      {
+        aIj += (jIB * bodyMInv[bodyBI] * jJB.transpose())(0);
+      }
 
-      A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) = a_ij;
-      A(static_cast<Eigen::Index>(j), static_cast<Eigen::Index>(i)) = a_ij;  // Symmetric
+      a(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) = aIj;
+      a(static_cast<Eigen::Index>(j), static_cast<Eigen::Index>(i)) =
+        aIj;  // Symmetric
     }
   }
 
   // Add regularization to diagonal for numerical stability
-  for (size_t i = 0; i < C; ++i)
+  for (size_t i = 0; i < c; ++i)
   {
-    A(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(i)) += kRegularizationEpsilon;
+    a(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(i)) +=
+      kRegularizationEpsilon;
   }
 
-  return A;
+  return a;
 }
 
 Eigen::VectorXd ConstraintSolver::assembleContactRHS(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
-    const std::vector<Eigen::MatrixXd>& jacobians,
-    const std::vector<std::reference_wrapper<const InertialState>>& states,
-    double dt) const
+  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<Eigen::MatrixXd>& jacobians,
+  const std::vector<std::reference_wrapper<const InertialState>>& states,
+  double dt)
 {
-  const size_t C = contactConstraints.size();
+  const size_t c = contactConstraints.size();
 
   // b_i = -(1 + e_i) · (J_i · v_minus) + (ERP_i / dt) · penetration_i
   //
   // CRITICAL: The -(1+e) factor is correct for the PGS system A·λ = b.
   // This differs from the target velocity formulation v_target = -e · v_pre.
   // See P2 Debug Findings for explanation.
-  Eigen::VectorXd b(static_cast<Eigen::Index>(C));
-  for (size_t i = 0; i < C; ++i)
+  Eigen::VectorXd b(static_cast<Eigen::Index>(c));
+  for (size_t i = 0; i < c; ++i)
   {
-    const auto* contact = dynamic_cast<const ContactConstraint*>(contactConstraints[i]);
-    size_t bodyA = contactConstraints[i]->getBodyAIndex();
-    size_t bodyB = contactConstraints[i]->getBodyBIndex();
+    const auto* contact =
+      dynamic_cast<const ContactConstraint*>(contactConstraints[i]);
+    size_t const bodyA = contactConstraints[i]->getBodyAIndex();
+    size_t const bodyB = contactConstraints[i]->getBodyBIndex();
 
     // Compute pre-impact relative velocity along constraint: J_i · v_minus
     const InertialState& stateA = states[bodyA].get();
@@ -452,29 +499,34 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
 
     // Velocity vector v = [v_A, omega_A, v_B, omega_B] (12×1)
     Eigen::VectorXd v(12);
-    v.segment<3>(0) = Eigen::Vector3d{stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
+    v.segment<3>(0) = Eigen::Vector3d{
+      stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
     AngularRate omegaA = stateA.getAngularVelocity();
     v.segment<3>(3) = Eigen::Vector3d{omegaA.x(), omegaA.y(), omegaA.z()};
-    v.segment<3>(6) = Eigen::Vector3d{stateB.velocity.x(), stateB.velocity.y(), stateB.velocity.z()};
+    v.segment<3>(6) = Eigen::Vector3d{
+      stateB.velocity.x(), stateB.velocity.y(), stateB.velocity.z()};
     AngularRate omegaB = stateB.getAngularVelocity();
     v.segment<3>(9) = Eigen::Vector3d{omegaB.x(), omegaB.y(), omegaB.z()};
 
-    double Jv = (jacobians[i] * v)(0);  // Scalar: relative velocity along constraint
+    double const jv =
+      (jacobians[i] * v)(0);  // Scalar: relative velocity along constraint
 
     // Restitution and Baumgarte terms
     if (contact != nullptr)
     {
-      double e = contact->getRestitution();
-      double erp = contact->alpha();  // alpha() returns ERP for ContactConstraint
-      double penetration = contact->getPenetrationDepth();
+      double const e = contact->getRestitution();
+      double const erp =
+        contact->alpha();  // alpha() returns ERP for ContactConstraint
+      double const penetration = contact->getPenetrationDepth();
 
       // RHS: -(1+e) · J·v⁻ + (ERP/dt) · penetration
-      b(static_cast<Eigen::Index>(i)) = -(1.0 + e) * Jv + (erp / dt) * penetration;
+      b(static_cast<Eigen::Index>(i)) =
+        (-(1.0 + e) * jv) + ((erp / dt) * penetration);
     }
     else
     {
       // Generic two-body constraint (no restitution)
-      b(static_cast<Eigen::Index>(i)) = -Jv;
+      b(static_cast<Eigen::Index>(i)) = -jv;
     }
   }
 
@@ -484,25 +536,30 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
 // Ticket: 0034_active_set_method_contact_solver
 // Design: docs/designs/0034_active_set_method_contact_solver/design.md
 ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
-    const Eigen::MatrixXd& A, const Eigen::VectorXd& b, int numContacts) const
+  const Eigen::MatrixXd& A,
+  const Eigen::VectorXd& b,
+  int numContacts) const
 {
-  const int C = numContacts;
-  Eigen::VectorXd lambda = Eigen::VectorXd::Zero(C);
+  const int c = numContacts;
+  Eigen::VectorXd lambda = Eigen::VectorXd::Zero(c);
 
-  if (C == 0)
+  if (c == 0)
   {
-    return ActiveSetResult{lambda, true, 0, 0};
+    return ActiveSetResult{.lambda = lambda,
+                           .converged = true,
+                           .iterations = 0,
+                           .active_set_size = 0};
   }
 
   // Initialize working set: all contacts active (optimal for resting contacts)
   std::vector<int> activeIndices;
-  activeIndices.reserve(static_cast<size_t>(C));
-  for (int i = 0; i < C; ++i)
+  activeIndices.reserve(static_cast<size_t>(c));
+  for (int i = 0; i < c; ++i)
   {
     activeIndices.push_back(i);
   }
 
-  const int effectiveMaxIter = std::min(2 * C, max_safety_iterations_);
+  const int effectiveMaxIter = std::min(2 * c, max_safety_iterations_);
 
   for (int iter = 1; iter <= effectiveMaxIter; ++iter)
   {
@@ -517,34 +574,37 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
     else
     {
       // Extract active submatrix and subvector
-      Eigen::MatrixXd A_W(activeSize, activeSize);
-      Eigen::VectorXd b_W(activeSize);
+      Eigen::MatrixXd aW(activeSize, activeSize);
+      Eigen::VectorXd bW(activeSize);
 
       for (int i = 0; i < activeSize; ++i)
       {
-        b_W(i) = b(activeIndices[static_cast<size_t>(i)]);
+        bW(i) = b(activeIndices[static_cast<size_t>(i)]);
         for (int j = 0; j < activeSize; ++j)
         {
-          A_W(i, j) = A(activeIndices[static_cast<size_t>(i)],
-                        activeIndices[static_cast<size_t>(j)]);
+          aW(i, j) = A(activeIndices[static_cast<size_t>(i)],
+                       activeIndices[static_cast<size_t>(j)]);
         }
       }
 
       // Direct LLT solve
-      Eigen::LLT<Eigen::MatrixXd> llt{A_W};
+      Eigen::LLT<Eigen::MatrixXd> const llt{aW};
       if (llt.info() != Eigen::Success)
       {
         // Subproblem is singular despite regularization (extremely rare)
-        return ActiveSetResult{lambda, false, iter, activeSize};
+        return ActiveSetResult{.lambda = lambda,
+                               .converged = false,
+                               .iterations = iter,
+                               .active_set_size = activeSize};
       }
 
-      Eigen::VectorXd lambda_W = llt.solve(b_W);
+      Eigen::VectorXd lambdaW = llt.solve(bW);
 
       // Assign solution back to full lambda vector
       lambda.setZero();
       for (int i = 0; i < activeSize; ++i)
       {
-        lambda(activeIndices[static_cast<size_t>(i)]) = lambda_W(i);
+        lambda(activeIndices[static_cast<size_t>(i)]) = lambdaW(i);
       }
     }
 
@@ -553,8 +613,8 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
     int minIndex = -1;
     for (int i = 0; i < activeSize; ++i)
     {
-      int idx = activeIndices[static_cast<size_t>(i)];
-      double val = lambda(idx);
+      int const idx = activeIndices[static_cast<size_t>(i)];
+      double const val = lambda(idx);
       if (val < minLambda || (val == minLambda && idx < minIndex))
       {
         minLambda = val;
@@ -566,8 +626,8 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
     {
       // Remove most negative lambda from active set (Bland's rule for ties)
       activeIndices.erase(
-          std::remove(activeIndices.begin(), activeIndices.end(), minIndex),
-          activeIndices.end());
+        std::remove(activeIndices.begin(), activeIndices.end(), minIndex),
+        activeIndices.end());
       continue;
     }
 
@@ -576,10 +636,11 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
 
     double maxViolation = 0.0;
     int maxViolationIndex = -1;
-    for (int i = 0; i < C; ++i)
+    for (int i = 0; i < c; ++i)
     {
       // Skip active contacts
-      bool isActive = std::find(activeIndices.begin(), activeIndices.end(), i) != activeIndices.end();
+      bool const isActive =
+        std::ranges::find(activeIndices, i) != activeIndices.end();
       if (isActive)
       {
         continue;
@@ -587,8 +648,7 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
 
       if (w(i) < -convergence_tolerance_)
       {
-        if (maxViolationIndex == -1 ||
-            w(i) < maxViolation ||
+        if (maxViolationIndex == -1 || w(i) < maxViolation ||
             (w(i) == maxViolation && i < maxViolationIndex))
         {
           maxViolation = w(i);
@@ -600,51 +660,69 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
     if (maxViolationIndex == -1)
     {
       // All KKT conditions satisfied — exact solution found
-      return ActiveSetResult{lambda, true, iter, activeSize};
+      return ActiveSetResult{.lambda = lambda,
+                             .converged = true,
+                             .iterations = iter,
+                             .active_set_size = activeSize};
     }
 
     // Step 4: Add most violated constraint to active set (sorted insertion)
-    auto insertPos = std::lower_bound(activeIndices.begin(), activeIndices.end(), maxViolationIndex);
+    auto insertPos = std::ranges::lower_bound(activeIndices, maxViolationIndex);
     activeIndices.insert(insertPos, maxViolationIndex);
   }
 
   // Safety cap reached
-  return ActiveSetResult{lambda, false, effectiveMaxIter, static_cast<int>(activeIndices.size())};
+  return ActiveSetResult{
+    .lambda = lambda,
+    .converged = false,
+    .iterations = effectiveMaxIter,
+    .active_set_size = static_cast<int>(activeIndices.size())};
 }
 
-std::vector<ConstraintSolver::BodyForces> ConstraintSolver::extractContactBodyForces(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
-    const std::vector<Eigen::MatrixXd>& jacobians,
-    const Eigen::VectorXd& lambda,
-    size_t numBodies,
-    double dt) const
+std::vector<ConstraintSolver::BodyForces>
+ConstraintSolver::extractContactBodyForces(
+  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<Eigen::MatrixXd>& jacobians,
+  const Eigen::VectorXd& lambda,
+  size_t numBodies,
+  double dt)
 {
-  const size_t C = contactConstraints.size();
-  std::vector<BodyForces> bodyForces(numBodies, BodyForces{Coordinate{0.0, 0.0, 0.0},
-                                                            Coordinate{0.0, 0.0, 0.0}});
+  const size_t c = contactConstraints.size();
+  std::vector<BodyForces> bodyForces(
+    numBodies,
+    BodyForces{Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 0.0}});
 
   // F_body_k = sum over contacts touching body k: J_i_k^T · lambda_i / dt
-  // Dividing by dt converts impulse to force (since integrator multiplies by dt)
-  for (size_t i = 0; i < C; ++i)
+  // Dividing by dt converts impulse to force (since integrator multiplies by
+  // dt)
+  for (size_t i = 0; i < c; ++i)
   {
     if (lambda(static_cast<Eigen::Index>(i)) <= 0.0)
+    {
       continue;
+    }
 
-    size_t bodyA = contactConstraints[i]->getBodyAIndex();
-    size_t bodyB = contactConstraints[i]->getBodyBIndex();
+    size_t const bodyA = contactConstraints[i]->getBodyAIndex();
+    size_t const bodyB = contactConstraints[i]->getBodyBIndex();
 
-    Eigen::Matrix<double, 1, 6> J_i_A = jacobians[i].block<1, 6>(0, 0);
-    Eigen::Matrix<double, 1, 6> J_i_B = jacobians[i].block<1, 6>(0, 6);
+    Eigen::Matrix<double, 1, 6> jIA = jacobians[i].block<1, 6>(0, 0);
+    Eigen::Matrix<double, 1, 6> jIB = jacobians[i].block<1, 6>(0, 6);
 
     // Force = J^T · lambda / dt (convert impulse to force)
-    Eigen::Matrix<double, 6, 1> forceA = J_i_A.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;
-    Eigen::Matrix<double, 6, 1> forceB = J_i_B.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;
+    Eigen::Matrix<double, 6, 1> forceA =
+      jIA.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;
+    Eigen::Matrix<double, 6, 1> forceB =
+      jIB.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;
 
-    bodyForces[bodyA].linearForce += Coordinate{forceA(0), forceA(1), forceA(2)};
-    bodyForces[bodyA].angularTorque += Coordinate{forceA(3), forceA(4), forceA(5)};
+    bodyForces[bodyA].linearForce +=
+      Coordinate{forceA(0), forceA(1), forceA(2)};
+    bodyForces[bodyA].angularTorque +=
+      Coordinate{forceA(3), forceA(4), forceA(5)};
 
-    bodyForces[bodyB].linearForce += Coordinate{forceB(0), forceB(1), forceB(2)};
-    bodyForces[bodyB].angularTorque += Coordinate{forceB(3), forceB(4), forceB(5)};
+    bodyForces[bodyB].linearForce +=
+      Coordinate{forceB(0), forceB(1), forceB(2)};
+    bodyForces[bodyB].angularTorque +=
+      Coordinate{forceB(3), forceB(4), forceB(5)};
   }
 
   return bodyForces;
@@ -658,8 +736,8 @@ std::vector<ConstraintSolver::BodyForces> ConstraintSolver::extractContactBodyFo
 // where K_SOC is a product of second-order cones (one 3D cone per contact).
 
 FrictionConeSpec ConstraintSolver::buildFrictionConeSpec(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
-    int numContacts) const
+  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  int numContacts)
 {
   FrictionConeSpec coneSpec{numContacts};
 
@@ -679,8 +757,8 @@ FrictionConeSpec ConstraintSolver::buildFrictionConeSpec(
     const auto* friction = dynamic_cast<const FrictionConstraint*>(constraint);
     if (friction != nullptr)
     {
-      coneSpec.setFriction(contactIdx, friction->getFrictionCoefficient(),
-                            3 * contactIdx);
+      coneSpec.setFriction(
+        contactIdx, friction->getFrictionCoefficient(), 3 * contactIdx);
       ++contactIdx;
     }
   }
@@ -689,10 +767,10 @@ FrictionConeSpec ConstraintSolver::buildFrictionConeSpec(
 }
 
 ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithECOS(
-    const Eigen::MatrixXd& A,
-    const Eigen::VectorXd& b,
-    const FrictionConeSpec& coneSpec,
-    int numContacts) const
+  const Eigen::MatrixXd& A,
+  const Eigen::VectorXd& b,
+  const FrictionConeSpec& coneSpec,
+  int numContacts) const
 {
   const int n = 3 * numContacts;  // Decision variables
 
@@ -713,19 +791,19 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithECOS(
   workspace->stgs->verbose = 0;
 
   // Solve
-  idxint exitFlag = ECOS_solve(workspace);
+  idxint const exitFlag = ECOS_solve(workspace);
 
   // Extract solution
-  Eigen::VectorXd lambda = Eigen::Map<Eigen::VectorXd>(workspace->x, n);
+  Eigen::VectorXd const lambda = Eigen::Map<Eigen::VectorXd>(workspace->x, n);
 
   // Determine convergence from exit code
-  bool converged = (exitFlag == ECOS_OPTIMAL);
+  bool const converged = (exitFlag == ECOS_OPTIMAL);
 
   // Extract diagnostics
-  int iterations = static_cast<int>(workspace->info->iter);
-  double primalRes = workspace->info->pres;
-  double dualRes = workspace->info->dres;
-  double gapVal = workspace->info->gap;
+  int const iterations = static_cast<int>(workspace->info->iter);
+  double const primalRes = workspace->info->pres;
+  double const dualRes = workspace->info->dres;
+  double const gapVal = workspace->info->gap;
 
   // Build result with ECOS-specific fields
   ActiveSetResult result;

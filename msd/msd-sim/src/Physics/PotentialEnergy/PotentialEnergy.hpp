@@ -42,7 +42,7 @@ public:
    * @param mass Object mass [kg]
    * @return Generalized force F = -∂V/∂X [N]
    */
-  virtual Coordinate computeForce(const InertialState& state,
+  [[nodiscard]] virtual Coordinate computeForce(const InertialState& state,
                                   double mass) const = 0;
 
   /**
@@ -51,7 +51,7 @@ public:
    * @param inertia Inertia tensor in world frame [kg·m²]
    * @return Generalized torque τ = -∂V/∂Q [N·m]
    */
-  virtual Coordinate computeTorque(const InertialState& state,
+  [[nodiscard]] virtual Coordinate computeTorque(const InertialState& state,
                                    const Eigen::Matrix3d& inertia) const = 0;
 
   /**
@@ -60,7 +60,7 @@ public:
    * @param mass Object mass [kg]
    * @return Potential energy V [J]
    */
-  virtual double computeEnergy(const InertialState& state,
+  [[nodiscard]] virtual double computeEnergy(const InertialState& state,
                                double mass) const = 0;
 
 protected:
