@@ -136,6 +136,45 @@ if(ENABLE_CLANG_TIDY)
   endif()
 endif()
 
+# Doxygen documentation (auto-enabled when doxygen is found)
+find_package(Doxygen QUIET)
+if(DOXYGEN_FOUND)
+  set(DOXYGEN_IN ${CMAKE_SOURCE_DIR}/Doxyfile.in)
+  set(DOXYGEN_OUT ${CMAKE_BINARY_DIR}/Doxyfile)
+
+  # Configure the Doxyfile
+  configure_file(${DOXYGEN_IN} ${DOXYGEN_OUT} @ONLY)
+
+  add_custom_target(doxygen
+    COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Generating API documentation with Doxygen"
+    VERBATIM
+  )
+
+  # Find Python for the XML to SQLite converter
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if(Python3_FOUND)
+    set(DOXYGEN_DB ${CMAKE_BINARY_DIR}/docs/codebase.db)
+    add_custom_target(doxygen-db
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/doxygen_to_sqlite.py
+              ${CMAKE_BINARY_DIR}/docs/xml ${DOXYGEN_DB}
+              --project-root ${CMAKE_SOURCE_DIR}
+      DEPENDS doxygen
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      COMMENT "Generating codebase SQLite database from Doxygen XML"
+      VERBATIM
+    )
+    message(STATUS "  Run 'cmake --build <build-dir> --target doxygen-db' to generate SQLite database")
+  endif()
+
+  message(STATUS "Doxygen found: ${DOXYGEN_EXECUTABLE}")
+  message(STATUS "  Run 'cmake --build <build-dir> --target doxygen' to generate documentation")
+  message(STATUS "  Output will be in ${CMAKE_BINARY_DIR}/docs/")
+else()
+  message(STATUS "Doxygen not found - documentation target will not be available")
+endif()
+
 # Always include the test directory first to define testing functions
 # This ensures the testing framework is available to all modules
 if(BUILD_TESTING)

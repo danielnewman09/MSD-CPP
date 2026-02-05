@@ -219,6 +219,96 @@ Uses Xcode Instruments for CPU profiling and memory analysis on macOS. Provides 
 - **Regression Detection**: Track function-level CPU usage changes over time
 - **Full documentation**: [`docs/profiling.md`](docs/profiling.md)
 
+### Doxygen Documentation
+
+Generates API documentation from source code comments. Automatically enabled when Doxygen is installed.
+
+```bash
+# Generate documentation (after cmake --preset conan-debug)
+cmake --build --preset doxygen
+
+# Or using the target directly
+cmake --build build/Debug --target doxygen
+```
+
+Output is generated to `build/{build_type}/docs/html/`.
+
+### Codebase SQLite Database
+
+Generates a SQLite database from Doxygen XML output for programmatic codebase navigation. This enables efficient symbol search, call graph queries, and documentation lookup.
+
+```bash
+# Generate documentation and SQLite database
+cmake --build --preset doxygen-db
+
+# Or using the target directly
+cmake --build build/Debug --target doxygen-db
+```
+
+Database is generated at `build/{build_type}/docs/codebase.db`.
+
+### MCP Server for AI Assistants
+
+The project includes an MCP (Model Context Protocol) server that provides AI assistants with efficient codebase navigation tools using the SQLite database.
+
+**Setup:**
+1. Generate the database: `cmake --build --preset doxygen-db`
+2. Add to your Claude configuration (see `scripts/mcp_config.json`)
+
+**Available Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `search_symbols` | Full-text search across all symbols |
+| `find_class` | Find class/struct by name with details |
+| `find_function` | Find function by name with signature |
+| `get_class_hierarchy` | Get inheritance hierarchy (base + derived) |
+| `get_callers` | Find all functions that call a given function |
+| `get_callees` | Find all functions called by a given function |
+| `get_file_symbols` | List all symbols defined in a file |
+| `get_includes` | Get include dependencies for a file |
+| `get_class_members` | Get all members of a class (categorized) |
+| `search_documentation` | Full-text search in documentation |
+| `get_statistics` | Get database statistics |
+| `list_classes` | List all classes in the codebase |
+
+**CLI Usage:**
+```bash
+# Show available commands
+python3 scripts/mcp_codebase_server.py build/Debug/docs/codebase.db
+
+# Search for symbols
+python3 scripts/mcp_codebase_server.py build/Debug/docs/codebase.db search_symbols Convex
+
+# Find a class
+python3 scripts/mcp_codebase_server.py build/Debug/docs/codebase.db find_class ConvexHull
+
+# Get class members
+python3 scripts/mcp_codebase_server.py build/Debug/docs/codebase.db get_class_members ConvexHull
+
+# Find callers of a function
+python3 scripts/mcp_codebase_server.py build/Debug/docs/codebase.db get_callers contains
+
+# Search documentation
+python3 scripts/mcp_codebase_server.py build/Debug/docs/codebase.db search_documentation collision
+```
+
+### When to Use MCP vs CLAUDE.md
+
+The documentation is split between two sources with distinct purposes:
+
+| Question Type | Use | Examples |
+|---------------|-----|----------|
+| **"What is the API?"** | MCP | `find_class ConvexHull`, `get_class_members AssetInertial` |
+| **"What methods does X have?"** | MCP | `get_class_members CollisionHandler` |
+| **"What calls this function?"** | MCP | `get_callers checkCollision` |
+| **"Why was it designed this way?"** | CLAUDE.md | Design rationale, algorithm choices |
+| **"How does it fit together?"** | CLAUDE.md | Architecture diagrams, component relationships |
+| **"What are the conventions?"** | CLAUDE.md | Coordinate systems, units, error handling |
+
+**MCP answers "what"** — API signatures, class members, call graphs, file locations
+**CLAUDE.md answers "why"** — Design decisions, architectural context, cross-cutting concerns
+
 ---
 
 ## Coding Standards

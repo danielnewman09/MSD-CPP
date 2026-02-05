@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "msd-codebase": {
+      "command": "python3",
+      "args": [
+        "scripts/mcp_server.py",
+        "build/Debug/docs/codebase.db"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {}
+    }
+  }
+}

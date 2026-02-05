@@ -179,6 +179,24 @@
             "targets": [
                 "coverage"
             ]
+        },
+        {
+            "name": "doxygen",
+            "displayName": "Generate Doxygen Documentation",
+            "description": "Generate API documentation with Doxygen",
+            "configurePreset": "conan-debug",
+            "targets": [
+                "doxygen"
+            ]
+        },
+        {
+            "name": "doxygen-db",
+            "displayName": "Generate Codebase SQLite Database",
+            "description": "Generate Doxygen docs and convert to SQLite for MCP server",
+            "configurePreset": "conan-debug",
+            "targets": [
+                "doxygen-db"
+            ]
         }
     ]
 }

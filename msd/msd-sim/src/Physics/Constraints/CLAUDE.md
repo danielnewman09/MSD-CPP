@@ -1,905 +1,160 @@
-# Constraints Module Architecture Guide
+# Constraints Module Architecture
 
-> This document provides architectural context for AI assistants and developers.
-> It references PlantUML diagrams in `docs/msd/msd-sim/Physics/` for detailed component relationships.
-
-**Diagram**: [`generalized-constraints.puml`](../../../../../../docs/msd/msd-sim/Physics/generalized-constraints.puml)
-
-## Module Overview
-
-**Constraints** is a sub-module within the Physics module that provides an extensible constraint framework using Lagrange multipliers. The system enables users to define arbitrary constraints by implementing the `Constraint` interface, with all constraints enforced by a unified solver infrastructure.
-
-**Key benefit**: New constraint types (joints, contacts, limits) can be added by implementing the `Constraint` interface without modifying the solver or integration infrastructure.
-
-**Introduced**: [Ticket: 0031_generalized_lagrange_constraints](../../../../../../tickets/0031_generalized_lagrange_constraints.md)
-
----
+> Extensible constraint framework using Lagrange multipliers.
+> For API details, use MCP: `find_class ConstraintSolver`, `get_class_members Constraint`, etc.
 
 ## Architecture Overview
 
-### High-Level Architecture
-
-The Constraints module provides a layered architecture for constraint-based physics:
-
 ```
 AssetInertial (Owns constraints)
-    ├── std::vector<std::unique_ptr<Constraint>>
-    │   ├── UnitQuaternionConstraint (default)
-    │   ├── DistanceConstraint
-    │   └── ... (user-defined constraints)
-    │
-    └── SemiImplicitEulerIntegrator
-        └── ConstraintSolver
-            ├── Assembles constraint matrix: A = J·M⁻¹·Jᵀ
-            ├── Builds RHS: b = -J·M⁻¹·F_ext - α·C - β·Ċ
-            ├── Solves: A·λ = b (LLT decomposition)
-            └── Extracts forces: F_constraint = Jᵀ·λ
+    └── std::vector<std::unique_ptr<Constraint>>
+        ├── UnitQuaternionConstraint (default)
+        ├── DistanceConstraint
+        └── ... (user-defined constraints)
+
+SemiImplicitEulerIntegrator
+    └── ConstraintSolver
+        ├── Bilateral constraints → LLT direct solve
+        ├── Contacts (no friction) → Active Set Method
+        └── Contacts (with friction) → ECOS SOCP solver
 ```
 
-### Core Components
-
-| Component | Location | Purpose | Type |
-|-----------|----------|---------|------|
-| Constraint | `Constraint.hpp` | Abstract constraint interface | Abstract base class |
-| BilateralConstraint | `BilateralConstraint.hpp` | Equality constraint marker (C = 0) | Abstract subclass |
-| UnilateralConstraint | `UnilateralConstraint.hpp` | Inequality constraint marker (C ≥ 0) | Abstract subclass |
-| ConstraintSolver | `ConstraintSolver.hpp` | Lagrange multiplier solver | Utility class |
-| UnitQuaternionConstraint | `UnitQuaternionConstraint.hpp` | Unit quaternion normalization | Concrete implementation |
-| DistanceConstraint | `DistanceConstraint.hpp` | Fixed distance from origin | Concrete implementation |
-| QuaternionConstraint | `QuaternionConstraint.hpp` | **DEPRECATED** - Use UnitQuaternionConstraint | Legacy class |
-| **ECOS Module** | **`ECOS/`** | **ECOS solver integration utilities** | **Sub-module** |
-
-### Sub-Modules
-
-| Sub-Module | Location | Purpose | Documentation |
-|------------|----------|---------|---------------|
-| ECOS | `ECOS/` | ECOS solver integration utilities | [ECOS/CLAUDE.md](ECOS/CLAUDE.md) |
+**Key benefit**: New constraint types (joints, limits) can be added by implementing the `Constraint` interface without modifying the solver.
 
 ---
 
 ## Mathematical Framework
 
-### Constraint Definition
-
-A constraint is mathematically defined by:
-
-1. **Constraint function**: `C(q, t) = 0` (holonomic) or `C(q, q̇, t) = 0` (non-holonomic)
-2. **Constraint Jacobian**: `J = ∂C/∂q` (how constraint changes with configuration)
-3. **Constraint time derivative**: `Ċ = J·q̇ + ∂C/∂t`
-4. **Baumgarte stabilization terms**: `α` (position gain), `β` (velocity gain)
-
 ### Lagrange Multiplier Formulation
 
-The Lagrange multiplier λ is computed to satisfy:
+The multiplier λ is computed to satisfy:
 ```
 J·M⁻¹·Jᵀ·λ = -J·M⁻¹·F_ext - J̇·q̇ - α·C - β·Ċ
 ```
 
-The constraint force applied is:
-```
-F_constraint = Jᵀ·λ
-```
+Constraint force: `F_constraint = Jᵀ·λ`
 
 Where:
-- `J` is the constraint Jacobian (dimension × 7 for single-object constraints)
-- `M⁻¹` is the inverse mass matrix (block diagonal: [m⁻¹·I₃, I⁻¹])
-- `F_ext` is the external force vector
-- `α` is the position error gain (default: 10.0)
-- `β` is the velocity error gain (default: 10.0)
-- `C` is the constraint violation
-- `Ċ` is the constraint velocity violation
+- `J` = constraint Jacobian (∂C/∂q)
+- `α`, `β` = Baumgarte stabilization gains (default: 10.0)
+- `C` = constraint violation, `Ċ` = velocity violation
 
 ### Baumgarte Stabilization
 
-The Baumgarte stabilization method prevents constraint drift by adding feedback terms:
-- **Position term**: `-α·C` corrects position-level violations
-- **Velocity term**: `-β·Ċ` corrects velocity-level violations
-
-Default parameters: `α = 10.0`, `β = 10.0` (validated for dt ≈ 0.016s / 60 FPS)
+Prevents constraint drift by adding feedback:
+- Position term: `-α·C` corrects position errors
+- Velocity term: `-β·Ċ` corrects velocity errors
 
 ---
 
-## Component Details
+## Solver Methods
 
-### Constraint (Abstract Base Class)
+| Constraint Type | Method | Complexity | Notes |
+|-----------------|--------|------------|-------|
+| Bilateral (single-body) | LLT direct | O(n³) | n < 100 for real-time |
+| Contact (no friction) | Active Set Method | Finite iterations | Exact LCP solution |
+| Contact (with friction) | ECOS SOCP | ~5-30 iterations | Exact friction cone |
 
-**Location**: `Constraint.hpp`, `Constraint.cpp`
-**Type**: Abstract interface
+### Active Set Method (Tickets 0032b, 0034)
 
-#### Purpose
-Defines the mathematical interface for arbitrary constraint definitions in Lagrangian mechanics. All concrete constraint types inherit from this class and provide constraint evaluation, Jacobian computation, and optional time derivatives.
+Replaces Projected Gauss-Seidel for exact LCP solution:
+- Handles mass ratios up to 1e6:1
+- Deterministic (no ordering sensitivity)
+- No iteration tuning required
 
-#### Key Interfaces
-```cpp
-class Constraint {
-public:
-  virtual ~Constraint() = default;
+### ECOS SOCP Solver (Ticket 0035b4)
 
-  // Number of scalar constraint equations
-  virtual int dimension() const = 0;
+For friction constraints:
+- Satisfies ||λ_t|| ≤ μ·λ_n exactly
+- Interior-point with superlinear convergence
+- See [ECOS/CLAUDE.md](ECOS/CLAUDE.md) for integration details
 
-  // Evaluate constraint function C(q, t)
-  // Returns vector of constraint violations
-  virtual Eigen::VectorXd evaluate(
-      const InertialState& state,
-      double time) const = 0;
+---
 
-  // Compute constraint Jacobian J = ∂C/∂q
-  // Returns (dimension × 7) matrix for single-object constraints
-  virtual Eigen::MatrixXd jacobian(
-      const InertialState& state,
-      double time) const = 0;
+## Constraint Hierarchy
 
-  // Compute constraint time derivative ∂C/∂t (optional, default: zero)
-  virtual Eigen::VectorXd partialTimeDerivative(
-      const InertialState& state,
-      double time) const;
-
-  // Baumgarte stabilization parameters
-  virtual double alpha() const { return 10.0; }
-  virtual double beta() const { return 10.0; }
-
-  // Constraint type for debugging/logging
-  virtual std::string typeName() const = 0;
-
-protected:
-  Constraint() = default;
-  // Rule of Five with = default
-};
+```
+Constraint (abstract)
+├── BilateralConstraint (C = 0, λ unrestricted)
+│   ├── UnitQuaternionConstraint
+│   └── DistanceConstraint
+└── UnilateralConstraint (C ≥ 0, λ ≥ 0)
+    └── ContactConstraint (via TwoBodyConstraint)
 ```
 
-#### Usage Example
+### Implementing Custom Constraints
+
 ```cpp
-// Users implement Constraint interface for custom constraints
-class MyCustomConstraint : public BilateralConstraint {
+class MyConstraint : public BilateralConstraint {
 public:
   int dimension() const override { return 1; }
 
-  Eigen::VectorXd evaluate(const InertialState& state, double time) const override {
-    // Compute constraint violation C(q, t)
-    Eigen::VectorXd C(1);
-    C(0) = /* constraint function */;
-    return C;
+  Eigen::VectorXd evaluate(const InertialState& state, double) const override {
+    return Eigen::VectorXd::Constant(1, /* C(q) */);
   }
 
-  Eigen::MatrixXd jacobian(const InertialState& state, double time) const override {
-    // Compute ∂C/∂q
+  Eigen::MatrixXd jacobian(const InertialState& state, double) const override {
     Eigen::MatrixXd J(1, 7);
-    J << /* analytical Jacobian */;
+    J << /* ∂C/∂q */;
     return J;
   }
 
-  std::string typeName() const override { return "MyCustomConstraint"; }
+  std::string typeName() const override { return "MyConstraint"; }
 };
+
+// Usage
+asset.addConstraint(std::make_unique<MyConstraint>());
 ```
-
-#### Thread Safety
-**Read-only operations thread-safe after construction** — Evaluation and Jacobian computation are const methods.
-
-#### Error Handling
-Implementations may throw `std::invalid_argument` for invalid state or parameters.
-
----
-
-### BilateralConstraint (Abstract Subclass)
-
-**Location**: `BilateralConstraint.hpp`
-**Type**: Abstract subclass
-
-#### Purpose
-Specialization for equality constraints `C(q, t) = 0` with unrestricted Lagrange multipliers. This is a semantic marker that enables future solver optimizations distinguishing between equality and inequality constraints.
-
-#### Key Features
-- Enforces exact equalities using unrestricted Lagrange multipliers (λ can be positive or negative)
-- Examples: Unit quaternion, fixed distance, ball-socket joint
-
-#### Usage Example
-```cpp
-class UnitQuaternionConstraint : public BilateralConstraint {
-  // C(Q) = Q^T*Q - 1 = 0 (equality constraint)
-  // λ unrestricted
-};
-```
-
-#### Thread Safety
-Same as `Constraint` base class.
-
----
-
-### UnilateralConstraint (Abstract Subclass)
-
-**Location**: `UnilateralConstraint.hpp`
-**Type**: Abstract subclass
-
-#### Purpose
-Specialization for inequality constraints `C(q, t) ≥ 0` with complementarity conditions. Provides interface for contact activation logic.
-
-#### Key Features
-- Enforces one-sided inequalities with complementarity conditions:
-  - `C ≥ 0` (constraint satisfied when non-negative)
-  - `λ ≥ 0` (force only pushes, never pulls)
-  - `λ·C = 0` (force is zero when constraint is inactive)
-- Examples: Contact non-penetration, joint angle limits
-
-#### Key Interfaces
-```cpp
-class UnilateralConstraint : public Constraint {
-public:
-  /**
-   * @brief Check if constraint is active (C ≈ 0)
-   * Inactive constraints (C > threshold) are not included in solver.
-   */
-  virtual bool isActive(const InertialState& state, double time) const = 0;
-
-  // ... inherited Constraint interface
-};
-```
-
-#### Implementation Status
-**Partially implemented**. `ConstraintSolver::solveWithContacts()` implements Active Set Method for two-body contact constraints (ticket 0034). Single-body unilateral constraints and general two-body joints deferred to future tickets.
-
-#### Thread Safety
-Same as `Constraint` base class.
-
----
-
-### ConstraintSolver
-
-**Location**: `ConstraintSolver.hpp`, `ConstraintSolver.cpp`
-**Type**: Utility class
-
-#### Purpose
-Computes Lagrange multipliers for arbitrary constraint systems using three solver methods:
-- **Bilateral constraints** (single-body): Direct LLT solve (O(n³), suitable for n < 100)
-- **Contact constraints without friction** (two-body): Active Set Method for exact LCP solution (finite iterations, typically ≤ C)
-- **Contact constraints with friction** (two-body): ECOS SOCP solver for exact friction cone solution (typically ≤ 30 iterations)
-
-#### Algorithm Overview (Bilateral Constraints)
-1. **Assemble constraint Jacobian** J by stacking all constraint Jacobians
-2. **Compute mass matrix inverse** M⁻¹ (block diagonal: [m⁻¹·I₃, I⁻¹])
-3. **Form constraint matrix**: A = J·M⁻¹·Jᵀ
-4. **Build RHS**: b = -J·M⁻¹·F_ext - J̇·q̇ - α·C - β·Ċ
-5. **Solve A·λ = b** using Eigen LLT decomposition
-6. **Extract forces**: F_constraint = Jᵀ·λ
-
-#### Algorithm Overview (Contact Constraints - Active Set Method)
-1. **Assemble contact system**: A = J·M⁻¹·Jᵀ (C×C effective mass matrix), b = RHS with restitution and Baumgarte terms
-2. **Initialize working set** W = {0, 1, ..., C-1} (all contacts assumed active)
-3. **Iteration loop** (max: min(2*C, max_safety_iterations_)):
-   - **Solve active subproblem**: A_W·λ_W = b_W via LLT decomposition
-   - **Check primal feasibility**: If any λ[i] < 0 for i in W, remove most negative from W (Bland's rule)
-   - **Check dual feasibility**: Compute w = A·λ - b; if any w[i] < -tolerance for i not in W, add most violated to W (Bland's rule)
-   - **Convergence check**: If all λ ≥ 0 and w ≥ -tolerance, all KKT conditions satisfied → return exact solution
-4. **Extract forces**: F_constraint = Jᵀ·λ for each contact
-
-**Active Set Method Benefits**:
-- **Exact solution**: Converges to exact LCP solution satisfying all KKT conditions (λ ≥ 0, Aλ-b ≥ 0, λ^T(Aλ-b) ≈ 0)
-- **Mass ratio robustness**: Handles mass ratios up to 1e6:1 (LLT handles condition numbers ~1e12)
-- **Deterministic**: Solution independent of constraint ordering (no Gauss-Seidel iteration artifacts)
-- **No iteration tuning**: Converges naturally when KKT satisfied (safety cap is defensive, not convergence control)
-
-**Replaced**: Projected Gauss-Seidel (PGS) solver (ticket 0032b) — PGS produced approximate solutions with sensitivity to iteration count, constraint ordering, and high mass ratios
-
-#### Algorithm Overview (Contact Constraints with Friction - ECOS SOCP Solver)
-1. **Detect friction**: Scan contactConstraints for FrictionConstraint instances via dynamic_cast
-2. **Build friction cone spec**: Extract friction coefficient μ and normal index per contact
-3. **Construct SOCP problem**: Use ECOSProblemBuilder to convert A, b, coneSpec to ECOS standard form
-4. **Setup ECOS workspace**: Call ECOSData::setup() with tolerance and max iteration settings
-5. **Solve**: Call ECOS_solve() (interior-point method, typically converges in < 30 iterations)
-6. **Extract solution**: Map workspace->x to λ vector
-7. **Check convergence**: Validate ECOS exit code (ECOS_OPTIMAL → converged=true)
-8. **Extract diagnostics**: Populate primal/dual residuals, duality gap, iteration count
-9. **Extract forces**: F_constraint = Jᵀ·λ for each contact
-
-**ECOS SOCP Solver Benefits** (ticket 0035b4):
-- **Exact friction cone**: Satisfies ||λ_t|| ≤ μ·λ_n exactly (vs 29% error for box approximation)
-- **Fast convergence**: Interior-point method with superlinear convergence (5-15 iterations typical)
-- **Numerically stable**: Pre-allocated memory, equilibration for conditioning
-- **Configurable**: Adjustable tolerance (ecos_abs_tol_, ecos_rel_tol_) and max iterations (ecos_max_iters_)
-
-**For ECOS integration details, see** [ECOS/CLAUDE.md](ECOS/CLAUDE.md)
-
-#### Key Interfaces
-```cpp
-class ConstraintSolver {
-public:
-  struct SolveResult {
-    Eigen::VectorXd lambdas;               // Lagrange multipliers
-    Coordinate linearConstraintForce;      // Net linear force [N]
-    Coordinate angularConstraintForce;     // Net angular torque [N·m]
-    bool converged{false};                 // Solver convergence flag
-    double conditionNumber{NaN};           // Matrix conditioning
-  };
-
-  struct ActiveSetResult {
-    Eigen::VectorXd lambdas;               // Lagrange multipliers
-    bool converged{false};                 // Solver convergence flag
-    int iterations{0};                     // Active set changes (ASM) or solver iterations (ECOS)
-    double residual{NaN};                  // Dual residual norm (complementarity measure)
-
-    // ECOS-specific fields (ticket 0035b4)
-    std::string solver_type{"ASM"};        // "ASM" or "ECOS"
-    int ecos_exit_flag{0};                 // ECOS exit code (0 = ECOS_OPTIMAL)
-    double primal_residual{NaN};           // ECOS primal residual
-    double dual_residual{NaN};             // ECOS dual residual
-    double gap{NaN};                       // ECOS duality gap
-  };
-
-  struct MultiBodySolveResult {
-    std::vector<BodyForces> bodyForces;    // Per-body forces and torques
-    bool converged{false};                 // Solver convergence flag
-    int iterations{0};                     // Active set changes performed (ASM) or iterations (PGS)
-    double residual{NaN};                  // Dual residual norm (complementarity measure)
-  };
-
-  struct BodyForces {
-    Coordinate linearForce;                // Linear constraint force [N]
-    Coordinate angularForce;               // Angular constraint torque [N·m]
-  };
-
-  ConstraintSolver() = default;
-
-  /**
-   * @brief Solve single-body bilateral constraint system for Lagrange multipliers
-   * @return SolveResult with forces and convergence status
-   */
-  SolveResult solve(
-      const std::vector<Constraint*>& constraints,
-      const InertialState& state,
-      const Coordinate& externalForce,
-      const Coordinate& externalTorque,
-      double mass,
-      const Eigen::Matrix3d& inverseInertia,
-      double dt);
-
-  /**
-   * @brief Solve two-body contact constraint system using Active Set Method or ECOS
-   * Automatically dispatches to ECOS solver if friction constraints detected, otherwise uses ASM.
-   * @return MultiBodySolveResult with per-body forces and convergence info
-   */
-  MultiBodySolveResult solveWithContacts(
-      const std::vector<std::unique_ptr<TwoBodyConstraint>>& contactConstraints,
-      const std::vector<InertialState>& states,
-      const std::vector<double>& masses,
-      const std::vector<Eigen::Matrix3d>& inverseInertias,
-      double dt);
-
-  /**
-   * @brief Solve friction LCP using ECOS SOCP solver (ticket 0035b4)
-   * @param A Effective mass matrix (3C x 3C)
-   * @param b RHS vector (3C x 1)
-   * @param coneSpec Friction cone specification
-   * @param numContacts Number of contacts
-   * @return ActiveSetResult with lambda and ECOS diagnostics
-   */
-  ActiveSetResult solveWithECOS(
-      const Eigen::MatrixXd& A,
-      const Eigen::VectorXd& b,
-      const FrictionConeSpec& coneSpec,
-      int numContacts) const;
-
-  /**
-   * @brief Set maximum safety iteration cap for Active Set Method
-   * Effective limit per solve is min(2*C, maxIter). Default: 100
-   */
-  void setMaxIterations(int maxIter);
-
-  /**
-   * @brief Set constraint violation tolerance for Active Set Method
-   * Inactive constraints with violation below this threshold are considered satisfied. Default: 1e-6
-   */
-  void setConvergenceTolerance(double tol);
-
-  /**
-   * @brief Set ECOS solver absolute and relative tolerance (ticket 0035b4)
-   * @param absTol Absolute tolerance for ECOS convergence. Default: 1e-6
-   * @param relTol Relative tolerance for ECOS convergence. Default: 1e-6
-   */
-  void setECOSTolerance(double absTol, double relTol);
-
-  /**
-   * @brief Set ECOS solver maximum iterations (ticket 0035b4)
-   * @param maxIter Maximum iterations for ECOS. Default: 100
-   */
-  void setECOSMaxIterations(int maxIter);
-
-  /**
-   * @brief Get ECOS absolute tolerance
-   */
-  double getECOSAbsoluteTolerance() const;
-
-  /**
-   * @brief Get ECOS relative tolerance
-   */
-  double getECOSRelativeTolerance() const;
-
-  /**
-   * @brief Get ECOS maximum iterations
-   */
-  int getECOSMaxIterations() const;
-
-  // Rule of Five with = default
-};
-```
-
-#### Usage Example (Single-Body Bilateral Constraints)
-```cpp
-// Called internally by SemiImplicitEulerIntegrator::step()
-ConstraintSolver solver;
-auto result = solver.solve(
-    asset.getConstraints(),  // Non-owning pointers
-    asset.getInertialState(),
-    externalForce,
-    externalTorque,
-    asset.getMass(),
-    asset.getInverseInertiaTensor(),
-    dt);
-
-if (result.converged) {
-  // Apply constraint forces
-  Coordinate totalForce = externalForce + result.linearConstraintForce;
-  Coordinate totalTorque = externalTorque + result.angularConstraintForce;
-  // Proceed with integration...
-} else {
-  // Handle singular constraint matrix (rare)
-  // Condition number available in result.conditionNumber
-}
-```
-
-#### Usage Example (Contact Constraints with Automatic Friction Detection)
-```cpp
-// Configure solver (optional)
-ConstraintSolver solver;
-solver.setECOSTolerance(1e-6, 1e-6);  // ECOS absolute and relative tolerance
-solver.setECOSMaxIterations(100);     // ECOS max iterations
-
-// Solve contact constraints (automatic dispatch to ASM or ECOS)
-auto result = solver.solveWithContacts(
-    contactConstraints,  // May include FrictionConstraint instances
-    states,
-    masses,
-    inverseInertias,
-    dt);
-
-if (result.converged) {
-  // Apply constraint forces to each body
-  for (size_t i = 0; i < result.bodyForces.size(); ++i) {
-    // Use result.bodyForces[i].linearForce and angularForce
-  }
-} else {
-  // Handle non-convergence (rare with ECOS)
-  // Check result.iterations and result.residual for diagnostics
-}
-```
-
-#### Performance
-- **Complexity**: O(n³) where n = total constraint dimension (direct LLT solve)
-- **Typical usage**: n < 10 constraints per object (< 1ms solve time)
-- **Overhead**: ~1-2% of physics loop for typical constraint sets
-
-#### Thread Safety
-**Stateless utility** — Safe to call from multiple threads with different constraint sets.
-
-#### Error Handling
-Returns `converged = false` for singular/ill-conditioned matrices. No exceptions thrown.
-
-#### Memory Management
-- Stateless class (no member variables beyond vtable)
-- All matrices are local variables (freed after solve)
-
----
-
-### UnitQuaternionConstraint
-
-**Location**: `UnitQuaternionConstraint.hpp`, `UnitQuaternionConstraint.cpp`
-**Type**: Concrete implementation (BilateralConstraint)
-
-#### Purpose
-Maintains unit quaternion normalization constraint |Q| = 1 during numerical integration. Drop-in replacement for the deprecated `QuaternionConstraint` class.
-
-#### Mathematical Formulation
-- **Constraint**: C(Q) = Q^T·Q - 1 = 0 (scalar constraint)
-- **Jacobian**: J = 2·Q^T (1×4 row vector w.r.t. quaternion components)
-- **Time derivative**: ∂C/∂t = 0 (time-independent)
-
-#### Key Interfaces
-```cpp
-class UnitQuaternionConstraint : public BilateralConstraint {
-public:
-  explicit UnitQuaternionConstraint(double alpha = 10.0, double beta = 10.0);
-
-  int dimension() const override { return 1; }
-  Eigen::VectorXd evaluate(const InertialState& state, double time) const override;
-  Eigen::MatrixXd jacobian(const InertialState& state, double time) const override;
-  std::string typeName() const override { return "UnitQuaternionConstraint"; }
-
-  // Baumgarte parameter setters/getters
-  void setAlpha(double alpha);
-  void setBeta(double beta);
-  double alpha() const override;
-  double beta() const override;
-
-  // Rule of Five with = default
-};
-```
-
-#### Usage Example
-```cpp
-// Automatically added to every AssetInertial by default
-// (user does not need to manually add this constraint)
-
-// Custom Baumgarte parameters if needed:
-auto constraint = std::make_unique<UnitQuaternionConstraint>(15.0, 12.0);
-asset.addConstraint(std::move(constraint));
-```
-
-#### Accuracy
-Maintains |Q²-1| < 1e-10 over 10000 integration steps with default parameters (validated by unit tests).
-
-#### Thread Safety
-**Read-only operations thread-safe after construction**.
-
-#### Memory Management
-- Two `double` members (16 bytes total)
-- Value semantics with compiler-generated copy/move
-
----
-
-### DistanceConstraint
-
-**Location**: `DistanceConstraint.hpp`, `DistanceConstraint.cpp`
-**Type**: Concrete implementation (BilateralConstraint)
-
-#### Purpose
-Maintains fixed distance from origin constraint |X| = d. Single-object constraint demonstrating the constraint framework. Multi-object distance constraints (between two objects) deferred to future ticket.
-
-#### Mathematical Formulation
-- **Constraint**: C(X) = |X|² - d² = 0 (scalar constraint)
-- **Jacobian**: J = 2·X^T (1×3 row vector w.r.t. position components)
-- **Time derivative**: ∂C/∂t = 0 (time-independent)
-
-#### Use Cases
-- Orbital mechanics: fixed orbital radius
-- Pendulum: fixed rod length
-- Tethered objects: cable length constraint
-
-#### Key Interfaces
-```cpp
-class DistanceConstraint : public BilateralConstraint {
-public:
-  explicit DistanceConstraint(double targetDistance,
-                              double alpha = 10.0,
-                              double beta = 10.0);
-
-  int dimension() const override { return 1; }
-  Eigen::VectorXd evaluate(const InertialState& state, double time) const override;
-  Eigen::MatrixXd jacobian(const InertialState& state, double time) const override;
-  std::string typeName() const override { return "DistanceConstraint"; }
-
-  double getTargetDistance() const;
-
-  // Rule of Five with = default
-};
-```
-
-#### Usage Example
-```cpp
-// Add distance constraint to keep object at 5m from origin
-asset.addConstraint(std::make_unique<DistanceConstraint>(5.0));
-
-// Object will maintain fixed distance while still free to rotate
-// and move tangentially around origin (orbital motion)
-```
-
-#### Thread Safety
-**Read-only operations thread-safe after construction**.
-
-#### Error Handling
-Throws `std::invalid_argument` if `targetDistance <= 0`.
-
-#### Memory Management
-- Three `double` members (24 bytes total)
-- Value semantics with compiler-generated copy/move
-
----
-
-### QuaternionConstraint (DEPRECATED)
-
-**Location**: `QuaternionConstraint.hpp`, `QuaternionConstraint.cpp`
-**Type**: Legacy class (ticket 0030)
-
-#### Deprecation Notice
-**This class is deprecated**. Use `UnitQuaternionConstraint` with `ConstraintSolver` instead.
-
-#### Migration Path
-The old `QuaternionConstraint` uses a different API:
-```cpp
-// Old API (deprecated)
-QuaternionConstraint constraint{10.0, 10.0};
-constraint.enforceConstraint(Q, Qdot);
-
-// New API (recommended)
-auto constraint = std::make_unique<UnitQuaternionConstraint>(10.0, 10.0);
-asset.addConstraint(std::move(constraint));
-// Constraint enforced automatically by SemiImplicitEulerIntegrator
-```
-
-#### Removal Timeline
-This class will be removed in a future release after all callers have migrated to the new constraint framework.
 
 ---
 
 ## Integration with Physics Pipeline
 
-### Ownership Model
-
-**AssetInertial owns constraints**:
-```cpp
-class AssetInertial {
-private:
-  std::vector<std::unique_ptr<Constraint>> constraints_;
-
-public:
-  // Non-owning access for solver
-  std::vector<Constraint*> getConstraints() const;
-
-  // Add custom constraint
-  void addConstraint(std::unique_ptr<Constraint> constraint);
-};
-```
-
-### Default Constraints
-
-Every `AssetInertial` automatically includes a `UnitQuaternionConstraint` to maintain quaternion normalization.
-
-### Integration Workflow
-
-1. **AssetInertial ownership**: Each `AssetInertial` owns a vector of constraints via `std::vector<std::unique_ptr<Constraint>>`
-2. **Default constraint**: Every `AssetInertial` automatically includes a `UnitQuaternionConstraint`
-3. **Constraint gathering**: `WorldModel::updatePhysics()` gathers constraints from all assets
-4. **Solver invocation**: `SemiImplicitEulerIntegrator::step()` uses `ConstraintSolver` to compute constraint forces
-5. **Force application**: Constraint forces are added to external forces before integration
-
-### Integrator Signature Change (Breaking)
-
-Ticket 0031 changed the integrator signature:
-
-```cpp
-// Old (ticket 0030)
-void Integrator::step(InertialState& state,
-                      const Coordinate& force,
-                      const Coordinate& torque,
-                      double mass,
-                      const Eigen::Matrix3d& inverseInertia,
-                      QuaternionConstraint& constraint,
-                      double dt);
-
-// New (ticket 0031)
-void Integrator::step(InertialState& state,
-                      const Coordinate& force,
-                      const Coordinate& torque,
-                      double mass,
-                      const Eigen::Matrix3d& inverseInertia,
-                      const std::vector<Constraint*>& constraints,
-                      double dt);
-```
+1. **Ownership**: AssetInertial owns constraints via `unique_ptr`
+2. **Default**: Every AssetInertial includes UnitQuaternionConstraint
+3. **Gathering**: WorldModel collects constraints from all assets
+4. **Solving**: SemiImplicitEulerIntegrator invokes ConstraintSolver
+5. **Application**: Constraint forces added before integration
 
 ---
 
-## Adding Custom Constraints
+## Design Decisions
 
-### Step 1: Define Constraint Class
+### Why Baumgarte Stabilization?
 
-Inherit from `BilateralConstraint` or `UnilateralConstraint`:
+Numerical drift causes constraint violations to accumulate. Baumgarte adds proportional feedback to push the system back toward the constraint manifold. Default gains (α=β=10) validated for dt ≈ 0.016s.
 
-```cpp
-class MyJointConstraint : public BilateralConstraint {
-public:
-  explicit MyJointConstraint(/* parameters */)
-    : /* initialize members */ {}
+### Why Active Set Method over PGS?
 
-  int dimension() const override {
-    return 3;  // 3 scalar constraint equations
-  }
+PGS (Projected Gauss-Seidel) produced approximate solutions sensitive to iteration count, constraint ordering, and mass ratios. ASM provides exact LCP solutions with finite iteration guarantees.
 
-  Eigen::VectorXd evaluate(const InertialState& state, double time) const override {
-    Eigen::VectorXd C(3);
-    // Compute constraint violations
-    C(0) = /* constraint 1 */;
-    C(1) = /* constraint 2 */;
-    C(2) = /* constraint 3 */;
-    return C;
-  }
+### Why ECOS for Friction?
 
-  Eigen::MatrixXd jacobian(const InertialState& state, double time) const override {
-    Eigen::MatrixXd J(3, 7);
-    // Compute analytical Jacobian ∂C/∂q
-    // J has 3 rows (one per constraint) and 7 columns (3 position + 4 quaternion)
-    return J;
-  }
-
-  std::string typeName() const override {
-    return "MyJointConstraint";
-  }
-};
-```
-
-### Step 2: Add to AssetInertial
-
-```cpp
-AssetInertial asset{/* ... */};
-
-// Add custom constraint
-asset.addConstraint(std::make_unique<MyJointConstraint>(/* args */));
-
-// Constraint automatically enforced during physics updates
-```
-
-### Step 3: Test Constraint
-
-Validate constraint evaluation, Jacobian correctness, and convergence:
-
-```cpp
-TEST_CASE("MyJointConstraint: Jacobian correctness") {
-  MyJointConstraint constraint{/* args */};
-  InertialState state = /* setup test state */;
-
-  // Analytical Jacobian
-  Eigen::MatrixXd J_analytical = constraint.jacobian(state, 0.0);
-
-  // Numerical Jacobian (finite differences)
-  Eigen::MatrixXd J_numerical = /* compute via finite differences */;
-
-  // Validate
-  REQUIRE((J_analytical - J_numerical).norm() < 1e-6);
-}
-```
-
----
-
-## Design Patterns
-
-### Strategy Pattern
-Constraint implementations use the Strategy pattern, allowing different constraint types to be swapped at runtime without changing the solver.
-
-### Template Method Pattern
-`Constraint` base class defines the overall algorithm structure (evaluate, Jacobian, stabilization parameters), with concrete classes filling in specific behavior.
-
-### Factory Pattern (Implicit)
-AssetInertial automatically creates a `UnitQuaternionConstraint` in its constructor, following the Factory pattern for default initialization.
-
----
-
-## Performance Considerations
-
-### Solver Complexity
-- **Direct solve**: O(n³) where n = total constraint dimension
-- **Recommended**: n < 100 for real-time performance (typical: n = 1-10)
-- **Future optimization**: Sparse matrices, iterative solvers for large n
-
-### Virtual Dispatch Overhead
-- **Measured**: < 1% overhead compared to non-virtual baseline (validated by prototypes)
-- **Negligible**: Dominated by matrix operations in solver
-
-### Memory Allocation
-- **Hot path**: No heap allocations during constraint solving
-- **Matrices**: Pre-allocated in local scope, freed after solve
-- **Constraint storage**: Owned by AssetInertial, allocated once at creation
+Box friction approximation (linearized cone) had 29% error. ECOS solves second-order cone programs exactly, giving proper ||λ_t|| ≤ μ·λ_n behavior.
 
 ---
 
 ## Limitations and Future Work
 
-### Current Limitations
+**Current**:
+- Two-body constraints limited to contacts
+- Direct solve for bilateral (n < 100)
+- No warm starting
 
-1. **Two-body constraints for contacts only**: Multi-body constraints currently limited to contact constraints (non-penetration)
-   - Multi-body joints (hinges, ball-socket) deferred to future ticket
-2. **Bilateral solver for single-object constraints**: `ConstraintSolver::solve()` handles only single-object equality constraints (UnitQuaternionConstraint, DistanceConstraint)
-   - Active Set Method (`solveWithContacts()`) handles two-body unilateral contact constraints
-3. **Direct solve for bilateral constraints**: LLT decomposition suitable for small constraint counts (n < 100)
-   - Iterative solvers for large bilateral systems deferred to future ticket
-
-### Future Extensions
-
-- **Multi-object constraints**: Joints, contacts, cable/spring connections
-- **Unilateral solver**: Projected Gauss-Seidel for inequality constraints
-- **Motor/actuator constraints**: Constraints with target velocities
-- **Soft constraints**: Spring-damper approximations with compliance
-- **Constraint graphs**: Hierarchical constraint dependencies
-- **Warm starting**: Use previous λ as initial guess for iterative solvers
-- **Sparse matrices**: Memory-efficient representation for large constraint systems
+**Planned**:
+- Multi-body joints (hinges, ball-socket)
+- Sparse solvers for large systems
+- Warm starting from previous frame
 
 ---
 
-## Testing
+## Related Documentation
 
-### Test Organization
-```
-test/Physics/Constraints/
-└── ConstraintTest.cpp      # 30 unit tests covering all framework components
-```
-
-### Test Coverage
-
-**UnitQuaternionConstraint**: 9 tests
-- Dimension verification
-- Constraint evaluation (normalized/violated)
-- Jacobian correctness (analytical vs numerical)
-- Time derivative (zero)
-- Baumgarte parameter modification
-- Type name
-
-**DistanceConstraint**: 9 tests
-- Dimension verification
-- Constraint evaluation (satisfied/violated)
-- Jacobian correctness (analytical vs numerical)
-- Time derivative (zero)
-- Parameter validation (invalid distance throws)
-- Type name
-
-**ConstraintSolver**: 4 tests
-- Single constraint solving
-- Multiple constraint solving
-- Convergence flag validation
-- Force extraction
-
-**AssetInertial Integration**: 5 tests
-- Default constraint addition (UnitQuaternionConstraint)
-- Custom constraint addition
-- Multiple constraint ownership
-- Constraint retrieval (non-owning pointers)
-
-**Integration Tests**: 3 tests
-- Constraint enforcement during integration step
-- Multiple constraints enforced simultaneously
-- Convergence over multiple timesteps
-
-### Running Tests
-```bash
-cmake --build --preset debug-tests-only
-ctest --preset conan-debug --tests-regex ConstraintTest
-```
-
----
-
-## Coding Standards
-
-This module follows the project-wide coding standards defined in the [root CLAUDE.md](../../../../../../CLAUDE.md#coding-standards).
-
-Key standards applied in this module:
-- **Initialization**: `std::numeric_limits<double>::quiet_NaN()` for uninitialized floats
-- **Naming**: `PascalCase` for classes, `camelCase` for methods, `snake_case_` for members
-- **Return Values**: Return `Eigen::VectorXd` / `Eigen::MatrixXd` over output parameters
-- **Memory**: `std::unique_ptr` for constraint ownership, raw pointers for non-owning access
-
-See the [root CLAUDE.md](../../../../../../CLAUDE.md#coding-standards) for complete details and examples.
-
----
+- **ECOS Integration**: [ECOS/CLAUDE.md](ECOS/CLAUDE.md)
+- **Physics Overview**: [../CLAUDE.md](../CLAUDE.md)
+- **Diagrams**: `docs/msd/msd-sim/Physics/generalized-constraints.puml`
 
 ## References
 
-### Academic Literature
-- Baraff, D. (1996). "Linear-Time Dynamics using Lagrange Multipliers"
-- Cline, M. B. (2002). "Rigid Body Simulation with Contact and Constraints"
-- Baumgarte, J. (1972). "Stabilization of Constraints and Integrals of Motion in Dynamical Systems"
-
-### Physics Engine Implementations
-- Bullet Physics Library: `btSequentialImpulseConstraintSolver`
-- ODE (Open Dynamics Engine): Constraint solving architecture
-- Box2D: Contact constraint resolution
-
----
-
-## Getting Help
-
-### For AI Assistants
-1. This document provides complete architectural context for the Constraints module
-2. Review [`Physics/CLAUDE.md`](../CLAUDE.md) for overall Physics module architecture
-3. Review [`msd-sim/CLAUDE.md`](../../../../CLAUDE.md) for simulation engine context
-4. Check [root CLAUDE.md](../../../../../../CLAUDE.md) for project-wide conventions
-
-### For Developers
-- **Custom constraints**: Implement `Constraint` interface (see "Adding Custom Constraints")
-- **Solver internals**: See `ConstraintSolver` documentation above
-- **Integration**: Constraints automatically enforced by `SemiImplicitEulerIntegrator`
-- **Debugging**: Check `SolveResult::converged` and `conditionNumber` for solver health
+- Baraff (1996): "Linear-Time Dynamics using Lagrange Multipliers"
+- Baumgarte (1972): "Stabilization of Constraints and Integrals of Motion"
