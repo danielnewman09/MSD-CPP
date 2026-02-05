@@ -66,7 +66,7 @@ private:
   void spawnRandomObject(const std::string& geometryType);
 
   msd_sim::Engine engine_;
-  Status status_;
+  Status status_{Status::Starting};
   std::string basePath_;
 
   std::unique_ptr<SDL_Window, SDLWindowDeleter> window_;

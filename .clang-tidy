@@ -41,7 +41,7 @@ Checks: >
   -readability-magic-numbers,
   -readability-math-missing-parentheses,
   -misc-use-internal-linkage,
-  -clang-diagnostic-error
+  -clang-diagnostic-*
 
 WarningsAsErrors: ''
 
@@ -73,7 +73,7 @@ CheckOptions:
   - key: readability-identifier-naming.ConstantCase
     value: camelBack
   - key: readability-identifier-naming.StaticConstantCase
-    value: CamelCase
+    value: camelBack
   - key: readability-identifier-naming.StaticConstantIgnoredRegexp
     value: '^[A-Za-z]$'
   - key: readability-identifier-naming.GlobalConstantCase

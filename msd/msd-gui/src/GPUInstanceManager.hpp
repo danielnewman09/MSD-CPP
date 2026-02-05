@@ -190,7 +190,7 @@ public:
       return;
     }
 
-    SDL_GPUTransferBufferCreateInfo transferCreateInfo = {
+    const SDL_GPUTransferBufferCreateInfo transferCreateInfo = {
       .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
       .size =
         static_cast<uint32_t>(instances_.size() * sizeof(InstanceDataType))};

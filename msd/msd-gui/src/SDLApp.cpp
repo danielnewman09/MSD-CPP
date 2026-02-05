@@ -20,8 +20,7 @@ namespace msd_gui
 
 SDLApplication::SDLApplication(const std::string& dbPath)
   : engine_{dbPath},
-    status_{Status::Starting},
-    basePath_{SDL_GetBasePath() ? SDL_GetBasePath() : "/"}
+    basePath_{SDL_GetBasePath() != nullptr ? SDL_GetBasePath() : "/"}
 {
   SDL_Log("SDLApplication: Starting initialization");
   SDL_Log("SDLApplication: dbPath = %s", dbPath.c_str());
@@ -30,7 +29,7 @@ SDLApplication::SDLApplication(const std::string& dbPath)
   window_.reset(
     SDL_CreateWindow("MSD Application", 800, 600, SDL_WINDOW_RESIZABLE));
 
-  if (window_.get() == nullptr)
+  if (window_ == nullptr)
   {
     SDL_Log("ERROR: Failed to create SDL window: %s", SDL_GetError());
     throw SDLException("Failed to create SDL window");

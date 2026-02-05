@@ -148,6 +148,8 @@
                 "conan create conan/sdl_ttf --build=${input:conanBuildPolicy} -s build_type=Debug;",
                 "conan create conan/qhull --build=${input:conanBuildPolicy} -s build_type=Release;",
                 "conan create conan/qhull --build=${input:conanBuildPolicy} -s build_type=Debug;",
+                "conan create conan/cpp_sqlite --build=${input:conanBuildPolicy} -s build_type=Release;",
+                "conan create conan/cpp_sqlite --build=${input:conanBuildPolicy} -s build_type=Debug;",
             ],
             "presentation": {
                 "echo": true,

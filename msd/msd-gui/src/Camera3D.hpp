@@ -108,7 +108,8 @@ public:
 
 private:
   std::reference_wrapper<msd_sim::ReferenceFrame>
-    frame_;            ///< Non-owning reference to camera's reference frame
+    frame_;  ///< Non-owning reference to camera's reference frame
+  // NOLINTNEXTLINE(modernize-use-default-member-init,cppcoreguidelines-use-default-member-init)
   float fovRadians_;   ///< Vertical field of view in radians
   float aspectRatio_;  ///< Width/height ratio
   float nearPlane_;    ///< Near clipping plane distance

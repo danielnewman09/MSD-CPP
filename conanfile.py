@@ -51,6 +51,8 @@ class msd(ConanFile):
         tc.variables["ENABLE_BENCHMARKS"] = self.options.enable_benchmarks
         tc.variables["ENABLE_PROFILING"] = self.options.enable_profiling
 
+        tc.cache_variables["CMAKE_CXX_FLAGS"] = "-DFMT_USE_CONSTEVAL=0 -DFMT_CONSTEVAL="
+
         # Enable warnings as errors for Release builds by default,
         # but allow explicit override via the option
         if self.options.warnings_as_errors:

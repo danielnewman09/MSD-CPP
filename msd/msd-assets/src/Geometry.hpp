@@ -176,6 +176,10 @@ public:
     // Populate vertex data
     const size_t vertexBlobSize = cachedVertices_.size() * sizeof(T);
     record.vertex_data.resize(vertexBlobSize);
+    static_assert(
+      std::is_trivially_copyable_v<T> || std::is_same_v<T, Eigen::Vector3d>,
+      "T must be trivially copyable or Eigen::Vector3d");
+    // NOLINTNEXTLINE(bugprone-undefined-memory-manipulation)
     std::memcpy(
       record.vertex_data.data(), cachedVertices_.data(), vertexBlobSize);
     record.vertex_count = static_cast<uint32_t>(cachedVertices_.size());

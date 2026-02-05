@@ -67,6 +67,12 @@ class CppSQLiteRecipe(ConanFile):
         tc = CMakeToolchain(self)
         tc.cache_variables["CMAKE_CXX_STANDARD"] = "20"
         tc.cache_variables["CMAKE_CXX_STANDARD_REQUIRED"] = "ON"
+
+        # Workaround for fmt/spdlog consteval issue
+        # See: https://github.com/emscripten-core/emscripten/issues/22795
+        # Disable compile-time format string checking
+        tc.cache_variables["CMAKE_CXX_FLAGS"] = "-DFMT_USE_CONSTEVAL=0 -DFMT_CONSTEVAL="
+
         # Disable tests for Emscripten
         if self.settings.os == "Emscripten":
             tc.cache_variables["BUILD_TESTING"] = "OFF"

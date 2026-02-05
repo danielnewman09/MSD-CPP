@@ -62,9 +62,6 @@ bool InputBinding::shouldTrigger(const InputState& state)
       // This mode is documented but not fully implemented
       // TODO: Add "justReleased" tracking to InputState for PressAndHold mode
       break;
-
-    default:
-      break;
   }
   return returnStatus;
 }
