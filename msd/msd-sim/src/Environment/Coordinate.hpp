@@ -4,6 +4,8 @@
 #include <Eigen/Dense>
 #include <format>
 
+#include "msd-transfer/src/CoordinateRecord.hpp"
+
 namespace msd_sim
 {
 namespace detail
@@ -54,6 +56,20 @@ struct Coordinate : detail::Vec3Base<Coordinate>
   template <typename OtherDerived>
   Coordinate(const Eigen::MatrixBase<OtherDerived>& other) : Vec3Base{other}
   {
+  }
+
+  static Coordinate fromRecord(const msd_transfer::CoordinateRecord& record)
+  {
+    return Coordinate{record.x, record.y, record.z};
+  }
+
+  msd_transfer::CoordinateRecord toRecord() const
+  {
+    msd_transfer::CoordinateRecord record;
+    record.x = x();
+    record.y = y();
+    record.z = z();
+    return record;
   }
 };
 

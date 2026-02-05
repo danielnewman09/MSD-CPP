@@ -7,6 +7,8 @@
 #include <Eigen/Dense>
 #include <format>
 
+#include "msd-transfer/src/AngularRateRecord.hpp"
+
 namespace msd_sim
 {
 
@@ -94,6 +96,21 @@ public:
   double yaw() const
   {
     return (*this)[2];
+  }
+
+  // Transfer methods
+  static AngularRate fromRecord(const msd_transfer::AngularRateRecord& record)
+  {
+    return AngularRate{record.pitch, record.roll, record.yaw};
+  }
+
+  msd_transfer::AngularRateRecord toRecord() const
+  {
+    msd_transfer::AngularRateRecord record;
+    record.pitch = pitch();
+    record.roll = roll();
+    record.yaw = yaw();
+    return record;
   }
 
   // Rule of Zero
