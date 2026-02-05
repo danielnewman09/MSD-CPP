@@ -44,8 +44,8 @@ struct TangentFrame
    * @throws std::invalid_argument if either tangent is not unit length (within
    * 1e-6)
    */
-  TangentFrame(const Coordinate& tangent1, const Coordinate& tangent2)
-    : t1{tangent1}, t2{tangent2}
+  TangentFrame(Coordinate tangent1, Coordinate tangent2)
+    : t1{std::move(tangent1)}, t2{std::move(tangent2)}
   {
     constexpr double kUnitLengthTolerance = 1e-6;
     const double norm1 = t1.norm();
@@ -78,7 +78,7 @@ struct TangentFrame
  *
  * @ticket 0035a_tangent_basis_and_friction_constraint
  */
-namespace TangentBasis
+namespace tangent_basis
 {
 
 /**
@@ -154,12 +154,12 @@ inline TangentFrame computeTangentBasis(const Coordinate& normal)
 
   // Compute t2 = n × t1 (automatically unit length and orthogonal to both n and
   // t1)
-  Coordinate t2 = normal.cross(t1);
+  const Coordinate t2 = normal.cross(t1);
 
   return TangentFrame{t1, t2};
 }
 
-}  // namespace TangentBasis
+}  // namespace tangent_basis
 
 }  // namespace msd_sim
 

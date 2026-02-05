@@ -2,7 +2,10 @@
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 
 #include "msd-sim/src/Physics/Constraints/DistanceConstraint.hpp"
+#include <Eigen/src/Core/Matrix.h>
 #include <stdexcept>
+#include <string>
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -30,16 +33,16 @@ Eigen::VectorXd DistanceConstraint::evaluate(const InertialState& state,
                                              double /* time */) const
 {
   // Constraint: C(X) = |X|² - d²
-  const Coordinate& X = state.position;
+  const Coordinate& x = state.position;
 
   // Compute |X|² = X·X (dot product)
-  double X_squared = X.dot(X);
+  double const xSquared = x.dot(x);
 
   // Constraint violation: |X|² - d²
-  Eigen::VectorXd C(1);
-  C(0) = X_squared - (targetDistance_ * targetDistance_);
+  Eigen::VectorXd c(1);
+  c(0) = xSquared - (targetDistance_ * targetDistance_);
 
-  return C;
+  return c;
 }
 
 Eigen::MatrixXd DistanceConstraint::jacobian(const InertialState& state,
@@ -53,15 +56,15 @@ Eigen::MatrixXd DistanceConstraint::jacobian(const InertialState& state,
   //
   // Since the constraint only depends on position, ∂C/∂Q = 0
 
-  const Coordinate& X = state.position;
+  const Coordinate& x = state.position;
 
-  Eigen::MatrixXd J(1, 7);
-  J.setZero();
+  Eigen::MatrixXd j(1, 7);
+  j.setZero();
 
   // ∂C/∂X = 2·X^T
-  J(0, 0) = 2.0 * X.x();  // ∂C/∂x
-  J(0, 1) = 2.0 * X.y();  // ∂C/∂y
-  J(0, 2) = 2.0 * X.z();  // ∂C/∂z
+  j(0, 0) = 2.0 * x.x();  // ∂C/∂x
+  j(0, 1) = 2.0 * x.y();  // ∂C/∂y
+  j(0, 2) = 2.0 * x.z();  // ∂C/∂z
 
   // ∂C/∂Q = 0 (constraint doesn't depend on orientation)
   // J(0, 3) = 0;  // Already zero from setZero()
@@ -69,7 +72,7 @@ Eigen::MatrixXd DistanceConstraint::jacobian(const InertialState& state,
   // J(0, 5) = 0;
   // J(0, 6) = 0;
 
-  return J;
+  return j;
 }
 
 Eigen::VectorXd DistanceConstraint::partialTimeDerivative(

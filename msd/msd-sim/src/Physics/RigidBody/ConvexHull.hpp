@@ -17,6 +17,7 @@
 // Forward declare Qhull C API types
 extern "C"
 {
+  // NOLINTNEXTLINE(readability-identifier-naming)
   struct qhT;
 #include <libqhull_r/geom_r.h>
 #include <libqhull_r/libqhull_r.h>
@@ -100,7 +101,7 @@ public:
    *
    * @return Vector of hull vertex coordinates
    */
-  const std::vector<Coordinate>& getVertices() const;
+  [[nodiscard]] const std::vector<Coordinate>& getVertices() const;
 
   /**
    * @brief Get all facets of the convex hull.
@@ -109,14 +110,15 @@ public:
    *
    * @return Vector of triangular facets
    */
-  const std::vector<Facet>& getFacets() const;
+  [[nodiscard]] const std::vector<Facet>& getFacets() const;
 
   /**
    * @brief Get the facet most aligned with a given direction.
    * @param normal Direction to compare against
    * @return Reference to the facet with greatest dot product
    */
-  const Facet& getFacetAlignedWith(const Eigen::Vector3d& normal) const;
+  [[nodiscard]] const Facet& getFacetAlignedWith(
+    const Eigen::Vector3d& normal) const;
 
   /**
    * @brief Get all facets aligned with a given direction within tolerance.
@@ -129,21 +131,21 @@ public:
    * @param tolerance How close to max alignment to include (default: 1e-6)
    * @return Vector of references to aligned facets
    */
-  std::vector<std::reference_wrapper<const Facet>> getFacetsAlignedWith(
-    const Eigen::Vector3d& normal,
-    double tolerance = 1e-9) const;
+  [[nodiscard]] std::vector<std::reference_wrapper<const Facet>>
+  getFacetsAlignedWith(const Eigen::Vector3d& normal,
+                       double tolerance = 1e-9) const;
 
   /**
    * @brief Get the number of vertices in the hull.
    * @return Number of vertices
    */
-  size_t getVertexCount() const;
+  [[nodiscard]] size_t getVertexCount() const;
 
   /**
    * @brief Get the number of facets in the hull.
    * @return Number of triangular facets
    */
-  size_t getFacetCount() const;
+  [[nodiscard]] size_t getFacetCount() const;
 
   /**
    * @brief Get the volume enclosed by the convex hull.
@@ -152,7 +154,7 @@ public:
    *
    * @return Volume in cubic units
    */
-  double getVolume() const;
+  [[nodiscard]] double getVolume() const;
 
   /**
    * @brief Get the surface area of the convex hull.
@@ -161,7 +163,7 @@ public:
    *
    * @return Surface area in square units
    */
-  double getSurfaceArea() const;
+  [[nodiscard]] double getSurfaceArea() const;
 
   /**
    * @brief Get the geometric centroid of the convex hull.
@@ -171,7 +173,7 @@ public:
    *
    * @return Centroid coordinate
    */
-  Coordinate getCentroid() const;
+  [[nodiscard]] Coordinate getCentroid() const;
 
   /**
    * @brief Test if a point is contained within the convex hull.
@@ -183,7 +185,8 @@ public:
    * @param epsilon Tolerance for numerical precision (default: 1e-6)
    * @return true if point is inside or on the boundary, false otherwise
    */
-  bool contains(const Coordinate& point, double epsilon = 1e-6) const;
+  [[nodiscard]] bool contains(const Coordinate& point,
+                              double epsilon = 1e-6) const;
 
   /**
    * @brief Compute signed distance from a point to the hull surface.
@@ -194,7 +197,7 @@ public:
    * @param point Point to compute distance from
    * @return Signed distance to hull surface
    */
-  double signedDistance(const Coordinate& point) const;
+  [[nodiscard]] double signedDistance(const Coordinate& point) const;
 
   /**
    * @brief Get the axis-aligned bounding box of the convex hull.
@@ -203,13 +206,13 @@ public:
    *
    * @return Bounding box containing minimum and maximum corners
    */
-  BoundingBox getBoundingBox() const;
+  [[nodiscard]] BoundingBox getBoundingBox() const;
 
   /**
    * @brief Check if the hull is valid (non-degenerate).
    * @return true if hull has volume > 0, false otherwise
    */
-  bool isValid() const;
+  [[nodiscard]] bool isValid() const;
 
 
 private:
@@ -252,8 +255,8 @@ private:
     }
 
     // Initialize thread-local Qhull state
-    qhT qh_qh;
-    qhT* qh = &qh_qh;
+    qhT qhQh;
+    qhT* qh = &qhQh;
 
     QHULL_LIB_CHECK
     qh_zero(qh, stderr);
@@ -265,7 +268,7 @@ private:
       // "Qt" = triangulated output (ensures all facets are triangles)
       // "Pp" = suppress progress messages
       char options[] = "qhull Qt Pp";
-      int exitcode =
+      const int exitcode =
         qh_new_qhull(qh,
                      3,                                // dimension
                      static_cast<int>(points.size()),  // numpoints
@@ -277,7 +280,8 @@ private:
 
       if (exitcode != 0)
       {
-        int curlong, totlong;
+        int curlong{};
+        int totlong{};
         qh_freeqhull(qh, !qh_ALL);
         qh_memfreeshort(qh, &curlong, &totlong);
 
@@ -311,7 +315,8 @@ private:
       }
 
       // Clean up Qhull
-      int curlong, totlong;
+      int curlong{};
+      int totlong{};
       qh_freeqhull(qh, !qh_ALL);
       qh_memfreeshort(qh, &curlong, &totlong);
 
@@ -321,7 +326,8 @@ private:
     catch (const std::exception& e)
     {
       // Ensure cleanup on exception
-      int curlong, totlong;
+      int curlong{};
+      int totlong{};
       qh_freeqhull(qh, !qh_ALL);
       qh_memfreeshort(qh, &curlong, &totlong);
 

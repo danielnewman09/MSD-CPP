@@ -2,6 +2,8 @@
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include <Eigen/src/Core/Matrix.h>
+#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
 {

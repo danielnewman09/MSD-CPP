@@ -3,11 +3,13 @@
 
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
 
+#include <utility>
+
 namespace msd_sim
 {
 
-GravityPotential::GravityPotential(const Coordinate& gravityVector)
-  : g_{gravityVector}
+GravityPotential::GravityPotential(Coordinate  gravityVector)
+  : g_{std::move(gravityVector)}
 {
 }
 

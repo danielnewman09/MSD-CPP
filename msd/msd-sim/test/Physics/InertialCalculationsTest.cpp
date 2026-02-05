@@ -89,7 +89,7 @@ TEST(InertialCalculationsTest, UnitCubeAnalytical_Ticket0026)
 
   // Act
   Eigen::Matrix3d I =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density);
 
   // Assert: Diagonal elements
   EXPECT_NEAR(I(0, 0), expected_diagonal, 1e-10);
@@ -127,7 +127,7 @@ TEST(InertialCalculationsTest, RectangularBoxAnalytical_Ticket0026)
 
   // Act
   Eigen::Matrix3d I =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density);
 
   // Assert: Diagonal elements
   EXPECT_NEAR(I(0, 0), expected_xx, 1e-10);
@@ -161,7 +161,7 @@ TEST(InertialCalculationsTest, RegularTetrahedronAnalytical_Ticket0026)
 
   // Act
   Eigen::Matrix3d I =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density);
 
   // Assert: Diagonal elements should all be equal (symmetric geometry)
   double avg_diagonal = (I(0, 0) + I(1, 1) + I(2, 2)) / 3.0;
@@ -193,7 +193,7 @@ TEST(InertialCalculationsTest, VolumeByproduct_Ticket0026)
 
   // Act: Should not throw due to volume mismatch
   EXPECT_NO_THROW(
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density));
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density));
 }
 
 TEST(InertialCalculationsTest, CentroidByproduct_Ticket0026)
@@ -212,7 +212,7 @@ TEST(InertialCalculationsTest, CentroidByproduct_Ticket0026)
   // Compute inertia (internally computes centroid as byproduct)
   double density = 1.0;
   EXPECT_NO_THROW(
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density));
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density));
 }
 
 TEST(InertialCalculationsTest, SymmetryProperty_Ticket0026)
@@ -224,7 +224,7 @@ TEST(InertialCalculationsTest, SymmetryProperty_Ticket0026)
 
   // Act
   Eigen::Matrix3d I =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density);
 
   // Assert: Tensor is symmetric (I_ij == I_ji)
   EXPECT_NEAR(I(0, 1), I(1, 0), 1e-10);
@@ -241,7 +241,7 @@ TEST(InertialCalculationsTest, PositiveDefinite_Ticket0026)
 
   // Act
   Eigen::Matrix3d I =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density);
 
   // Assert: All eigenvalues > 0 (positive definite)
   Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(I);
@@ -270,7 +270,7 @@ TEST(InertialCalculationsTest, LargeCoordinateOffset_Ticket0026)
 
   // Act
   Eigen::Matrix3d I =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density);
 
   // Assert: Inertia about centroid is independent of translation
   // Note: Tolerance relaxed to 1e-8 due to floating-point precision degradation
@@ -297,7 +297,7 @@ TEST(InertialCalculationsTest, ExtremeAspectRatio_Ticket0026)
 
   // Act
   Eigen::Matrix3d I =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density);
 
   // Assert: Even with extreme aspect ratio, accuracy maintained
   EXPECT_NEAR(I(0, 0), expected_xx, 1e-9);
@@ -319,7 +319,7 @@ TEST(InertialCalculationsTest, SingleTetrahedron_Ticket0026)
 
   // Act
   Eigen::Matrix3d I =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density);
 
   // Assert: Produces valid result for minimal hull
   double avg_diagonal = (I(0, 0) + I(1, 1) + I(2, 2)) / 3.0;
@@ -341,12 +341,12 @@ TEST(InertialCalculationsTest, Invaliddensity_Ticket0026)
 
   // Act & Assert: Zero density
   EXPECT_THROW(
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, 0.0),
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, 0.0),
     std::invalid_argument);
 
   // Act & Assert: Negative density
   EXPECT_THROW(
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, -1.0),
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, -1.0),
     std::invalid_argument);
 }
 
@@ -358,7 +358,7 @@ TEST(InertialCalculationsTest, InvalidHull_Ticket0026)
 
   // Act & Assert
   EXPECT_THROW(
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density),
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density),
     std::runtime_error);
 }
 
@@ -373,9 +373,9 @@ TEST(InertialCalculationsTest, densityScaling_Ticket0026)
 
   // Act
   Eigen::Matrix3d I1 =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density1);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density1);
   Eigen::Matrix3d I2 =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, density2);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, density2);
 
   // Assert: Inertia scales linearly with density
   double scale = density2 / density1;
@@ -394,7 +394,7 @@ TEST(InertialCalculationsTest, Tetrahedron)
   ConvexHull hull{points};
 
   Eigen::Matrix3d I =
-    InertialCalculations::computeInertiaTensorAboutCentroid(hull, 1.0);
+    inertial_calculations::computeInertiaTensorAboutCentroid(hull, 1.0);
 
   EXPECT_NEAR(I(0, 0), 9.375, 1e-10);
   EXPECT_NEAR(I(0, 1), 2.50, 1E-10);

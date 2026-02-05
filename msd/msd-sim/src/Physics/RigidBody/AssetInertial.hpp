@@ -87,7 +87,7 @@ public:
   // Rule of Five: Move-only type due to std::unique_ptr<Constraint> ownership
   // Note: Move assignment deleted because base class has reference member
   // Ticket: 0031_generalized_lagrange_constraints
-  ~AssetInertial() = default;
+  ~AssetInertial() override = default;
   AssetInertial(const AssetInertial&) = delete;
   AssetInertial& operator=(const AssetInertial&) = delete;
   AssetInertial(AssetInertial&&) noexcept = default;

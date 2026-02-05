@@ -28,7 +28,7 @@ ContactConstraint::ContactConstraint(size_t bodyAIndex,
     pre_impact_rel_vel_normal_{preImpactRelVelNormal}
 {
   // Validate normal is unit length (within tolerance)
-  double normalLength = normal.norm();
+  double const normalLength = normal.norm();
   if (std::abs(normalLength - 1.0) > 1e-6) {
     throw std::invalid_argument(
         "ContactConstraint: normal must be unit length (|n| = " +
@@ -61,13 +61,13 @@ Eigen::VectorXd ContactConstraint::evaluateTwoBody(
   // For penetrating bodies, C < 0 (constraint violated)
   // For separated bodies, C > 0 (constraint satisfied)
 
-  Coordinate contactPointA = stateA.position + lever_arm_a_;
-  Coordinate contactPointB = stateB.position + lever_arm_b_;
+  Coordinate const contactPointA = stateA.position + lever_arm_a_;
+  Coordinate const contactPointB = stateB.position + lever_arm_b_;
 
-  Eigen::VectorXd C(1);
-  C(0) = (contactPointB - contactPointA).dot(contact_normal_);
+  Eigen::VectorXd c(1);
+  c(0) = (contactPointB - contactPointA).dot(contact_normal_);
 
-  return C;
+  return c;
 }
 
 Eigen::MatrixXd ContactConstraint::jacobianTwoBody(
@@ -86,20 +86,20 @@ Eigen::MatrixXd ContactConstraint::jacobianTwoBody(
   // - Columns 6-8: ∂C/∂v_B = n^T
   // - Columns 9-11: ∂C/∂ω_B = (r_B × n)^T
 
-  Eigen::MatrixXd J(1, 12);
+  Eigen::MatrixXd j(1, 12);
 
   // Linear components
-  J.block<1, 3>(0, 0) = -contact_normal_.transpose();  // -n^T
-  J.block<1, 3>(0, 6) = contact_normal_.transpose();   // n^T
+  j.block<1, 3>(0, 0) = -contact_normal_.transpose();  // -n^T
+  j.block<1, 3>(0, 6) = contact_normal_.transpose();   // n^T
 
   // Angular components (cross product: r × n)
-  Coordinate rA_cross_n = lever_arm_a_.cross(contact_normal_);
-  Coordinate rB_cross_n = lever_arm_b_.cross(contact_normal_);
+  Coordinate rACrossN = lever_arm_a_.cross(contact_normal_);
+  Coordinate rBCrossN = lever_arm_b_.cross(contact_normal_);
 
-  J.block<1, 3>(0, 3) = -rA_cross_n.transpose();  // -(r_A × n)^T
-  J.block<1, 3>(0, 9) = rB_cross_n.transpose();   // (r_B × n)^T
+  j.block<1, 3>(0, 3) = -rACrossN.transpose();  // -(r_A × n)^T
+  j.block<1, 3>(0, 9) = rBCrossN.transpose();   // (r_B × n)^T
 
-  return J;
+  return j;
 }
 
 bool ContactConstraint::isActiveTwoBody(
@@ -111,8 +111,8 @@ bool ContactConstraint::isActiveTwoBody(
   // Threshold chosen to match typical slop tolerance (0.01m)
   const double kActivationThreshold = 0.01;  // [m]
 
-  Eigen::VectorXd C = evaluateTwoBody(stateA, stateB, time);
-  return C(0) <= kActivationThreshold;
+  Eigen::VectorXd c = evaluateTwoBody(stateA, stateB, time);
+  return c(0) <= kActivationThreshold;
 }
 
 }  // namespace msd_sim

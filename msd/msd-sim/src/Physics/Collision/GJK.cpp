@@ -18,7 +18,6 @@ GJK::GJK(const AssetPhysical& assetA,
   : assetA_{assetA},
     assetB_{assetB},
     epsilon_{epsilon},
-    simplex_{},
     direction_{0.0, 0.0, 0.0}
 {
 }
@@ -35,8 +34,8 @@ bool GJK::intersects(int maxIterations)
 
   // Quick bounding box check first (cheap early-out)
   // Transform bounding boxes to world space before comparison
-  auto bboxA_local = hullA.getBoundingBox();
-  auto bboxB_local = hullB.getBoundingBox();
+  auto bBoxALocal = hullA.getBoundingBox();
+  auto bBoxBLocal = hullB.getBoundingBox();
 
   // Helper: compute world-space AABB by transforming all 8 local corners
   // This is necessary because rotation changes which corners are min/max
@@ -45,10 +44,12 @@ bool GJK::intersects(int maxIterations)
   {
     // Build 3x8 matrix with all 8 corners of the local AABB
     Eigen::Matrix3Xd corners(3, 8);
-    const double minX = localBbox.min.x(), minY = localBbox.min.y(),
-                 minZ = localBbox.min.z();
-    const double maxX = localBbox.max.x(), maxY = localBbox.max.y(),
-                 maxZ = localBbox.max.z();
+    const double minX = localBbox.min.x();
+    const double minY = localBbox.min.y();
+    const double minZ = localBbox.min.z();
+    const double maxX = localBbox.max.x();
+    const double maxY = localBbox.max.y();
+    const double maxZ = localBbox.max.z();
 
     corners.col(0) << minX, minY, minZ;
     corners.col(1) << maxX, minY, minZ;
@@ -63,18 +64,18 @@ bool GJK::intersects(int maxIterations)
     frame.localToGlobalBatch(corners);
 
     // Find min/max across all transformed corners
-    Coordinate worldMin{corners.row(0).minCoeff(),
-                        corners.row(1).minCoeff(),
-                        corners.row(2).minCoeff()};
-    Coordinate worldMax{corners.row(0).maxCoeff(),
-                        corners.row(1).maxCoeff(),
-                        corners.row(2).maxCoeff()};
+    const Coordinate worldMin{corners.row(0).minCoeff(),
+                              corners.row(1).minCoeff(),
+                              corners.row(2).minCoeff()};
+    const Coordinate worldMax{corners.row(0).maxCoeff(),
+                              corners.row(1).maxCoeff(),
+                              corners.row(2).maxCoeff()};
 
     return std::make_pair(worldMin, worldMax);
   };
 
-  auto [bboxA_min, bboxA_max] = computeWorldAABB(bboxA_local, frameA);
-  auto [bboxB_min, bboxB_max] = computeWorldAABB(bboxB_local, frameB);
+  auto [bboxA_min, bboxA_max] = computeWorldAABB(bBoxALocal, frameA);
+  auto [bboxB_min, bboxB_max] = computeWorldAABB(bBoxBLocal, frameB);
 
   if (bboxA_max.x() < bboxB_min.x() || bboxA_min.x() > bboxB_max.x() ||
       bboxA_max.y() < bboxB_min.y() || bboxA_min.y() > bboxB_max.y() ||
@@ -84,9 +85,9 @@ bool GJK::intersects(int maxIterations)
   }
 
   // Initialize: pick initial search direction (from A toward B in world space)
-  Coordinate centroidA_world = frameA.localToGlobal(hullA.getCentroid());
-  Coordinate centroidB_world = frameB.localToGlobal(hullB.getCentroid());
-  direction_ = centroidB_world - centroidA_world;
+  const Coordinate centroidAWorld = frameA.localToGlobal(hullA.getCentroid());
+  const Coordinate centroidBWorld = frameB.localToGlobal(hullB.getCentroid());
+  direction_ = centroidBWorld - centroidAWorld;
 
   // Handle edge case where centroids are identical
   if (direction_.norm() < epsilon_)
@@ -97,7 +98,7 @@ bool GJK::intersects(int maxIterations)
   // Get first support point
   simplex_.clear();
   simplex_.push_back(
-    SupportFunction::supportMinkowski(assetA_, assetB_, direction_));
+    support_function::supportMinkowski(assetA_, assetB_, direction_));
 
   // New direction points toward origin
   direction_ = -simplex_[0];
@@ -106,8 +107,8 @@ bool GJK::intersects(int maxIterations)
   for (int iteration = 0; iteration < maxIterations; ++iteration)
   {
     // Get support point in search direction
-    Coordinate newPoint =
-      SupportFunction::supportMinkowski(assetA_, assetB_, direction_);
+    const Coordinate newPoint =
+      support_function::supportMinkowski(assetA_, assetB_, direction_);
 
     // Check if we've passed the origin
     // If the new point isn't past the origin in our search direction,
@@ -160,12 +161,12 @@ bool GJK::handleLine()
   const Coordinate& a = simplex_[1];  // Newest point
   const Coordinate& b = simplex_[0];  // Previous point
 
-  Coordinate ab = b - a;  // Vector from A to B
-  Coordinate ao = -a;     // Vector from A to origin
+  const Coordinate ab = b - a;  // Vector from A to B
+  const Coordinate ao = -a;     // Vector from A to origin
 
   // Direction perpendicular to AB, pointing toward origin
   // This is the triple product: (AB × AO) × AB
-  Coordinate abPerp = ab.cross(ao).cross(ab);
+  const Coordinate abPerp = ab.cross(ao).cross(ab);
 
   direction_ = abPerp;
   // Keep both points in simplex
@@ -178,14 +179,14 @@ bool GJK::handleTriangle()
   const Coordinate& b = simplex_[1];
   const Coordinate& c = simplex_[0];
 
-  Coordinate ab = b - a;
-  Coordinate ac = c - a;
-  Coordinate ao = -a;
+  const Coordinate ab = b - a;
+  const Coordinate ac = c - a;
+  const Coordinate ao = -a;
 
-  Coordinate abc = ab.cross(ac);  // Triangle normal
+  const Coordinate abc = ab.cross(ac);  // Triangle normal
 
   // Check if origin is outside triangle in direction of edge AC
-  Coordinate acPerp = abc.cross(ac);
+  const Coordinate acPerp = abc.cross(ac);
   if (sameDirection(acPerp, ao))
   {
     // Origin is in Voronoi region of AC edge
@@ -195,7 +196,7 @@ bool GJK::handleTriangle()
   }
 
   // Check if origin is outside triangle in direction of edge AB
-  Coordinate abPerp = ab.cross(abc);
+  const Coordinate abPerp = ab.cross(abc);
   if (sameDirection(abPerp, ao))
   {
     // Origin is in Voronoi region of AB edge
@@ -229,15 +230,15 @@ bool GJK::handleTetrahedron()
   const Coordinate& c = simplex_[1];
   const Coordinate& d = simplex_[0];
 
-  Coordinate ab = b - a;
-  Coordinate ac = c - a;
-  Coordinate ad = d - a;
-  Coordinate ao = -a;
+  const Coordinate ab = b - a;
+  const Coordinate ac = c - a;
+  const Coordinate ad = d - a;
+  const Coordinate ao = -a;
 
   // Normals of tetrahedron faces (pointing outward from A)
-  Coordinate abc = ab.cross(ac);
-  Coordinate acd = ac.cross(ad);
-  Coordinate adb = ad.cross(ab);
+  const Coordinate abc = ab.cross(ac);
+  const Coordinate acd = ac.cross(ad);
+  const Coordinate adb = ad.cross(ab);
 
   // Check each face to see if origin is beyond it
 

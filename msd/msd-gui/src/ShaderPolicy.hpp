@@ -11,6 +11,7 @@
 
 #include <SDL3/SDL_gpu.h>
 #include <Eigen/Dense>
+
 #include <msd-assets/src/Geometry.hpp>
 #include <msd-sim/src/Environment/ReferenceFrame.hpp>
 #include <msd-sim/src/Physics/RigidBody/AssetInertial.hpp>
@@ -29,8 +30,8 @@ namespace msd_gui
  */
 struct PositionOnlyInstanceData
 {
-  float position[3];       // World position offset (12 bytes)
-  float color[3];          // RGB color (12 bytes)
+  float position[3]{};     // World position offset (12 bytes)
+  float color[3]{};        // RGB color (12 bytes)
   uint32_t padding[2]{0};  // Padding for 16-byte alignment (8 bytes)
 };
 
@@ -44,8 +45,8 @@ struct PositionOnlyInstanceData
  */
 struct FullTransformInstanceData
 {
-  float modelMatrix[16];      // 4x4 transform matrix (64 bytes)
-  float color[3];             // RGB color (12 bytes)
+  float modelMatrix[16]{};    // 4x4 transform matrix (64 bytes)
+  float color[3]{};           // RGB color (12 bytes)
   uint32_t geometryIndex{0};  // Index into geometry registry (4 bytes)
   uint32_t padding[4]{0};     // Padding for 16-byte alignment (16 bytes)
 };
@@ -82,7 +83,7 @@ public:
    * - Location 3-4: Per-instance attributes (position, color) from buffer slot
    * 1
    */
-  std::vector<SDL_GPUVertexAttribute> getVertexAttributes() const;
+  static std::vector<SDL_GPUVertexAttribute> getVertexAttributes();
 
   /**
    * @brief Get vertex buffer descriptions for both per-vertex and per-instance
@@ -90,8 +91,8 @@ public:
    * @return Vector of buffer descriptions (2 elements: vertex buffer, instance
    * buffer)
    */
-  std::vector<SDL_GPUVertexBufferDescription> getVertexBufferDescriptions()
-    const;
+  static std::vector<SDL_GPUVertexBufferDescription>
+  getVertexBufferDescriptions();
 
   /**
    * @brief Get complete vertex input state for pipeline creation
@@ -109,16 +110,17 @@ public:
    *
    * Extracts position and color from object, ignoring rotation.
    */
-  std::vector<uint8_t> buildInstanceData(const msd_sim::AssetInertial& object,
-                                         float r,
-                                         float g,
-                                         float b) const;
+  static std::vector<uint8_t> buildInstanceData(
+    const msd_sim::AssetInertial& object,
+    float r,
+    float g,
+    float b);
 
   /**
    * @brief Get vertex shader filename
    * @return Shader filename (without path or backend extension)
    */
-  std::string getVertexShaderFile() const
+  static std::string getVertexShaderFile()
   {
     return kVertexShaderFile;
   }
@@ -127,7 +129,7 @@ public:
    * @brief Get fragment shader filename
    * @return Shader filename (without path or backend extension)
    */
-  std::string getFragmentShaderFile() const
+  static std::string getFragmentShaderFile()
   {
     return kFragmentShaderFile;
   }
@@ -136,7 +138,7 @@ public:
    * @brief Get size of instance data structure
    * @return Size in bytes (32 bytes for PositionOnlyInstanceData)
    */
-  size_t getInstanceDataSize() const
+  static size_t getInstanceDataSize()
   {
     return sizeof(PositionOnlyInstanceData);
   }
@@ -183,7 +185,7 @@ public:
    * - Location 7: Per-instance color from buffer slot 1
    * - Location 8: Per-instance geometry index from buffer slot 1
    */
-  std::vector<SDL_GPUVertexAttribute> getVertexAttributes() const;
+  static std::vector<SDL_GPUVertexAttribute> getVertexAttributes();
 
   /**
    * @brief Get vertex buffer descriptions for both per-vertex and per-instance
@@ -191,8 +193,8 @@ public:
    * @return Vector of buffer descriptions (2 elements: vertex buffer, instance
    * buffer)
    */
-  std::vector<SDL_GPUVertexBufferDescription> getVertexBufferDescriptions()
-    const;
+  static std::vector<SDL_GPUVertexBufferDescription>
+  getVertexBufferDescriptions();
 
   /**
    * @brief Get complete vertex input state for pipeline creation
@@ -213,17 +215,18 @@ public:
    * Extracts full transform (4x4 matrix), color, and geometry index from
    * object.
    */
-  std::vector<uint8_t> buildInstanceData(const msd_sim::AssetInertial& object,
-                                         float r,
-                                         float g,
-                                         float b,
-                                         uint32_t geometryIndex) const;
+  static std::vector<uint8_t> buildInstanceData(
+    const msd_sim::AssetInertial& object,
+    float r,
+    float g,
+    float b,
+    uint32_t geometryIndex);
 
   /**
    * @brief Get vertex shader filename
    * @return Shader filename (without path or backend extension)
    */
-  std::string getVertexShaderFile() const
+  static std::string getVertexShaderFile()
   {
     return kVertexShaderFile;
   }
@@ -232,7 +235,7 @@ public:
    * @brief Get fragment shader filename
    * @return Shader filename (without path or backend extension)
    */
-  std::string getFragmentShaderFile() const
+  static std::string getFragmentShaderFile()
   {
     return kFragmentShaderFile;
   }
@@ -241,7 +244,7 @@ public:
    * @brief Get size of instance data structure
    * @return Size in bytes (96 bytes for FullTransformInstanceData)
    */
-  size_t getInstanceDataSize() const
+  static size_t getInstanceDataSize()
   {
     return sizeof(FullTransformInstanceData);
   }
@@ -259,8 +262,8 @@ private:
    * @param transform Reference frame containing position and orientation
    * @return Column-major 4x4 transformation matrix
    */
-  Eigen::Matrix4f createModelMatrix(
-    const msd_sim::ReferenceFrame& transform) const;
+  static Eigen::Matrix4f createModelMatrix(
+    const msd_sim::ReferenceFrame& transform);
 };
 
 }  // namespace msd_gui

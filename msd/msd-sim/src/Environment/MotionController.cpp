@@ -2,13 +2,17 @@
 // Design: docs/designs/0005_camera_controller_sim/design.md
 
 #include "msd-sim/src/Environment/MotionController.hpp"
+#include <Eigen/src/Geometry/Quaternion.h>
+#include <chrono>
+#include "msd-sim/src/Agent/InputCommands.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Environment/ReferenceFrame.hpp"
 
 namespace msd_sim
 {
 
 MotionController::MotionController(double rotSpeed, double moveSpeed)
-  : rotSpeed_{rotSpeed}, moveSpeed_{moveSpeed}, sensitivity_{1.0}
+  : rotSpeed_{rotSpeed}, moveSpeed_{moveSpeed}
 {
 }
 
@@ -18,7 +22,7 @@ void MotionController::updateTransform(
   std::chrono::milliseconds deltaTime) const
 {
   // Convert deltaTime to seconds for speed calculations
-  const double deltaSeconds = deltaTime.count() / 1000.0;
+  const double deltaSeconds = static_cast<double>(deltaTime.count()) / 1000.0;
   const double scaledMoveSpeed = moveSpeed_ * sensitivity_ * deltaSeconds;
   const double scaledRotSpeed = rotSpeed_ * deltaSeconds;
 
@@ -85,7 +89,7 @@ void MotionController::updateTransform(
   }
 
   // Update rotation from Euler angles via quaternion (ZYX convention)
-  Eigen::Quaterniond q =
+  Eigen::Quaterniond const q =
     Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
     Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
     Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};

@@ -16,7 +16,7 @@ namespace msd_sim
 EPA::EPA(const AssetPhysical& assetA,
          const AssetPhysical& assetB,
          double epsilon)
-  : assetA_{assetA}, assetB_{assetB}, epsilon_{epsilon}, vertices_{}, faces_{}
+  : assetA_{assetA}, assetB_{assetB}, epsilon_{epsilon}
 {
 }
 
@@ -37,42 +37,45 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
     vertices_.reserve(4);
     for (const auto& point : simplex)
     {
-      double norm = point.norm();
-      Eigen::Vector3d dir =
+      double const norm = point.norm();
+      Eigen::Vector3d const dir =
         (norm < epsilon_)
           ? Eigen::Vector3d{1, 0, 0}
           : Eigen::Vector3d{
               point.x() / norm, point.y() / norm, point.z() / norm};
-      SupportResult support =
-        SupportFunction::supportMinkowskiWithWitness(assetA_, assetB_, dir);
+      SupportResult const support =
+        support_function::supportMinkowskiWithWitness(assetA_, assetB_, dir);
 
       // Adjust witnesses to maintain invariant: witnessA - witnessB = point
       // offset = point - support.minkowski (difference between original and
       // queried) witnessA' = witnessA + offset/2, witnessB' = witnessB -
       // offset/2 Then witnessA' - witnessB' = witnessA - witnessB + offset =
       // support.minkowski + offset = point
-      Coordinate offset = point - support.minkowski;
-      Coordinate witnessA = support.witnessA + offset * 0.5;
-      Coordinate witnessB = support.witnessB - offset * 0.5;
+      Coordinate const offset = point - support.minkowski;
+      Coordinate const witnessA = support.witnessA + offset * 0.5;
+      Coordinate const witnessB = support.witnessB - offset * 0.5;
 
       vertices_.emplace_back(point, witnessA, witnessB);
     }
 
     // Add support points in cardinal directions until we have 4 vertices
-    std::vector<Eigen::Vector3d> directions = {Eigen::Vector3d{1.0, 0.0, 0.0},
-                                               Eigen::Vector3d{0.0, 1.0, 0.0},
-                                               Eigen::Vector3d{0.0, 0.0, 1.0},
-                                               Eigen::Vector3d{-1.0, 0.0, 0.0},
-                                               Eigen::Vector3d{0.0, -1.0, 0.0},
-                                               Eigen::Vector3d{0.0, 0.0, -1.0}};
+    std::vector<Eigen::Vector3d> const directions = {
+      Eigen::Vector3d{1.0, 0.0, 0.0},
+      Eigen::Vector3d{0.0, 1.0, 0.0},
+      Eigen::Vector3d{0.0, 0.0, 1.0},
+      Eigen::Vector3d{-1.0, 0.0, 0.0},
+      Eigen::Vector3d{0.0, -1.0, 0.0},
+      Eigen::Vector3d{0.0, 0.0, -1.0}};
 
     for (const auto& dir : directions)
     {
       if (vertices_.size() >= 4)
+      {
         break;
+      }
 
-      SupportResult support =
-        SupportFunction::supportMinkowskiWithWitness(assetA_, assetB_, dir);
+      SupportResult const support =
+        support_function::supportMinkowskiWithWitness(assetA_, assetB_, dir);
 
       // Only add if not duplicate (within epsilon)
       bool isDuplicate = false;
@@ -113,19 +116,19 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
     vertices_.reserve(4);
     for (const auto& point : simplex)
     {
-      double norm = point.norm();
-      Eigen::Vector3d dir =
+      double const norm = point.norm();
+      Eigen::Vector3d const dir =
         (norm < epsilon_)
           ? Eigen::Vector3d{1, 0, 0}
           : Eigen::Vector3d{
               point.x() / norm, point.y() / norm, point.z() / norm};
-      SupportResult support =
-        SupportFunction::supportMinkowskiWithWitness(assetA_, assetB_, dir);
+      SupportResult const support =
+        support_function::supportMinkowskiWithWitness(assetA_, assetB_, dir);
 
       // Adjust witnesses to maintain invariant: witnessA - witnessB = point
-      Coordinate offset = point - support.minkowski;
-      Coordinate witnessA = support.witnessA + offset * 0.5;
-      Coordinate witnessB = support.witnessB - offset * 0.5;
+      Coordinate const offset = point - support.minkowski;
+      Coordinate const witnessA = support.witnessA + offset * 0.5;
+      Coordinate const witnessB = support.witnessB - offset * 0.5;
 
       vertices_.emplace_back(point, witnessA, witnessB);
     }
@@ -147,12 +150,13 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
   }
 
   // Extract contact information from closest face
-  size_t closestFaceIndex = findClosestFace();
+  size_t const closestFaceIndex = findClosestFace();
   const Facet& closestFace = faces_[closestFaceIndex];
 
   // Extract contact manifold (Ticket: 0029_contact_manifold_generation)
   std::array<ContactPoint, 4> contacts;
-  size_t contactCount = extractContactManifold(closestFaceIndex, contacts);
+  size_t const contactCount =
+    extractContactManifold(closestFaceIndex, contacts);
 
   return CollisionResult{
     closestFace.normal, closestFace.offset, contacts, contactCount};
@@ -163,17 +167,17 @@ bool EPA::expandPolytope(int maxIterations)
   for (int iteration = 0; iteration < maxIterations; ++iteration)
   {
     // Find closest face to origin
-    size_t closestFaceIndex = findClosestFace();
+    size_t const closestFaceIndex = findClosestFace();
     const Facet& closestFace = faces_[closestFaceIndex];
 
     // Query support point in direction of closest face normal with witness
     // tracking
-    SupportResult support = SupportFunction::supportMinkowskiWithWitness(
+    SupportResult const support = support_function::supportMinkowskiWithWitness(
       assetA_, assetB_, closestFace.normal);
 
     // Convergence check: if new point is within tolerance of face distance,
     // we've found the closest point on the Minkowski boundary
-    double distanceToNewPoint = support.minkowski.dot(closestFace.normal);
+    double const distanceToNewPoint = support.minkowski.dot(closestFace.normal);
     if (distanceToNewPoint - closestFace.offset < epsilon_)
     {
       // Converged - closest face found
@@ -181,10 +185,11 @@ bool EPA::expandPolytope(int maxIterations)
     }
 
     // Expansion: remove visible faces, build horizon, add new faces
-    std::vector<EPAEdge> horizonEdges = buildHorizonEdges(support.minkowski);
+    std::vector<EPAEdge> const horizonEdges =
+      buildHorizonEdges(support.minkowski);
 
     // Add new vertex to polytope with witness tracking
-    size_t newVertexIndex = vertices_.size();
+    size_t const newVertexIndex = vertices_.size();
     vertices_.emplace_back(
       support.minkowski, support.witnessA, support.witnessB);
 
@@ -239,7 +244,7 @@ std::vector<EPA::EPAEdge> EPA::buildHorizonEdges(const Coordinate& newVertex)
 
   // Extract edges from visible faces
   std::vector<EPAEdge> edgeCandidates;
-  for (size_t idx : visibleFaceIndices)
+  for (size_t const idx : visibleFaceIndices)
   {
     const auto& f = faces_[idx];
     edgeCandidates.emplace_back(f.vertexIndices[0], f.vertexIndices[1]);
@@ -259,17 +264,15 @@ std::vector<EPA::EPAEdge> EPA::buildHorizonEdges(const Coordinate& newVertex)
 
   // Remove visible faces (erase-remove idiom)
   // Mark faces for deletion by setting distance to infinity
-  for (size_t idx : visibleFaceIndices)
+  for (size_t const idx : visibleFaceIndices)
   {
     faces_[idx].offset = std::numeric_limits<double>::infinity();
   }
 
   // Remove marked faces
-  faces_.erase(
-    std::remove_if(faces_.begin(),
-                   faces_.end(),
-                   [](const Facet& face) { return std::isinf(face.offset); }),
-    faces_.end());
+  std::erase_if(faces_,
+                [](const Facet& face) { return std::isinf(face.offset); });
+
 
   return horizon;
 }
@@ -281,12 +284,12 @@ void EPA::addFace(size_t v0, size_t v1, size_t v2)
   const Coordinate& c = vertices_[v2].point;
 
   // Compute normal via cross product
-  Coordinate ab = b - a;
-  Coordinate ac = c - a;
+  Coordinate const ab = b - a;
+  Coordinate const ac = c - a;
   Coordinate normal = ab.cross(ac);
 
   // Normalize
-  double normalLength = normal.norm();
+  double const normalLength = normal.norm();
   if (normalLength < epsilon_)
   {
     // Degenerate face (coplanar vertices) - skip
@@ -295,7 +298,7 @@ void EPA::addFace(size_t v0, size_t v1, size_t v2)
   normal = normal / normalLength;
 
   // Ensure normal points away from origin (outward)
-  Coordinate centroid = (a + b + c) / 3.0;
+  Coordinate const centroid = (a + b + c) / 3.0;
   if (normal.dot(centroid) < 0.0)
   {
     normal = -normal;
@@ -303,12 +306,12 @@ void EPA::addFace(size_t v0, size_t v1, size_t v2)
   }
 
   // Distance from origin to face plane
-  double distance = normal.dot(a);
+  double const distance = normal.dot(a);
 
   faces_.emplace_back(v0, v1, v2, normal, distance);
 }
 
-Coordinate EPA::computeContactPoint(const Facet& face) const
+Coordinate EPA::computeContactPoint(const Facet& face)
 {
   // The closest point on the face to the origin is the projection along the
   // normal closestPoint = origin + normal * distance = normal * offset
@@ -327,7 +330,9 @@ std::vector<Coordinate> clipPolygonAgainstPlane(
   double epsilon)
 {
   if (polygon.empty())
+  {
     return {};
+  }
 
   std::vector<Coordinate> output;
   output.reserve(polygon.size() + 1);
@@ -337,11 +342,11 @@ std::vector<Coordinate> clipPolygonAgainstPlane(
     const Coordinate& current = polygon[i];
     const Coordinate& next = polygon[(i + 1) % polygon.size()];
 
-    double currentDist = planeNormal.dot(current - planePoint);
-    double nextDist = planeNormal.dot(next - planePoint);
+    double const currentDist = planeNormal.dot(current - planePoint);
+    double const nextDist = planeNormal.dot(next - planePoint);
 
-    bool currentInside = currentDist <= epsilon;
-    bool nextInside = nextDist <= epsilon;
+    bool const currentInside = currentDist <= epsilon;
+    bool const nextInside = nextDist <= epsilon;
 
     if (currentInside)
     {
@@ -351,8 +356,8 @@ std::vector<Coordinate> clipPolygonAgainstPlane(
     // If edge crosses the plane, compute intersection
     if (currentInside != nextInside)
     {
-      double t = currentDist / (currentDist - nextDist);
-      Coordinate intersection = current + (next - current) * t;
+      double const t = currentDist / (currentDist - nextDist);
+      Coordinate const intersection = current + (next - current) * t;
       output.push_back(intersection);
     }
   }
@@ -372,7 +377,7 @@ std::vector<Coordinate> buildPolygonFromFacets(
   std::set<size_t> uniqueIndices;
   for (const Facet& facet : facets)
   {
-    for (size_t idx : facet.vertexIndices)
+    for (size_t const idx : facet.vertexIndices)
     {
       uniqueIndices.insert(idx);
     }
@@ -381,7 +386,7 @@ std::vector<Coordinate> buildPolygonFromFacets(
   // 2. Transform vertices to world space
   std::vector<Coordinate> vertices;
   vertices.reserve(uniqueIndices.size());
-  for (size_t idx : uniqueIndices)
+  for (size_t const idx : uniqueIndices)
   {
     vertices.push_back(frame.localToGlobal(hullVertices[idx]));
   }
@@ -402,22 +407,24 @@ std::vector<Coordinate> buildPolygonFromFacets(
 
   // 4. Build a local 2D basis on the face plane
   // Choose an arbitrary vector not parallel to faceNormal
-  Coordinate arbitrary = (std::abs(faceNormal.x()) < 0.9) ? Coordinate{1, 0, 0}
-                                                          : Coordinate{0, 1, 0};
+  Coordinate const arbitrary = (std::abs(faceNormal.x()) < 0.9)
+                                 ? Coordinate{1, 0, 0}
+                                 : Coordinate{0, 1, 0};
   Coordinate basisU = faceNormal.cross(arbitrary).normalized();
   Coordinate basisV = faceNormal.cross(basisU).normalized();
 
   // 5. Sort vertices by angle around centroid (counter-clockwise)
-  std::sort(vertices.begin(),
-            vertices.end(),
-            [&](const Coordinate& a, const Coordinate& b)
-            {
-              Coordinate da = a - centroid;
-              Coordinate db = b - centroid;
-              double angleA = std::atan2(da.dot(basisV), da.dot(basisU));
-              double angleB = std::atan2(db.dot(basisV), db.dot(basisU));
-              return angleA < angleB;
-            });
+  std::ranges::sort(
+    vertices,
+
+    [&](const Coordinate& a, const Coordinate& b)
+    {
+      Coordinate const da = a - centroid;
+      Coordinate const db = b - centroid;
+      double const angleA = std::atan2(da.dot(basisV), da.dot(basisU));
+      double const angleB = std::atan2(db.dot(basisV), db.dot(basisU));
+      return angleA < angleB;
+    });
 
   return vertices;
 }
@@ -436,13 +443,13 @@ size_t EPA::extractContactManifold(size_t faceIndex,
   auto facesA = assetA_.getCollisionHull().getFacetsAlignedWith(normal);
   auto facesB = assetB_.getCollisionHull().getFacetsAlignedWith(-normal);
 
-  double alignA = std::abs(normal.dot(facesA[0].get().normal));
-  double alignB = std::abs(normal.dot(facesB[0].get().normal));
+  double const alignA = std::abs(normal.dot(facesA[0].get().normal));
+  double const alignB = std::abs(normal.dot(facesB[0].get().normal));
 
   // Reference face = more aligned with normal (provides clipping planes)
   // Incident face = less aligned (gets clipped)
   // Track which asset is reference using a bool flag
-  bool refIsA = (alignA > alignB);
+  bool const refIsA = (alignA > alignB);
 
   const AssetPhysical& refAsset = refIsA ? assetA_ : assetB_;
   const AssetPhysical& incAsset = refIsA ? assetB_ : assetA_;
@@ -451,14 +458,14 @@ size_t EPA::extractContactManifold(size_t faceIndex,
 
   // Reference face normal in world space
   const auto& refFrame = refAsset.getReferenceFrame();
-  Eigen::Vector3d refNormalWorld =
+  Eigen::Vector3d const refNormalWorld =
     refFrame.localToGlobal(Eigen::Vector3d{refFaces[0].get().normal.x(),
                                            refFaces[0].get().normal.y(),
                                            refFaces[0].get().normal.z()});
 
   // Build incident polygon from coplanar facets (properly ordered)
   const auto& incFrame = incAsset.getReferenceFrame();
-  Eigen::Vector3d incNormalWorld =
+  Eigen::Vector3d const incNormalWorld =
     incFrame.localToGlobal(Eigen::Vector3d{incFaces[0].get().normal.x(),
                                            incFaces[0].get().normal.y(),
                                            incFaces[0].get().normal.z()});
@@ -478,7 +485,7 @@ size_t EPA::extractContactManifold(size_t faceIndex,
   // Handle degenerate cases
   if (refVerts.size() < 3 || incidentPoly.size() < 3)
   {
-    Coordinate contactPoint = epaFace.normal * epaFace.offset;
+    Coordinate const contactPoint = epaFace.normal * epaFace.offset;
     contacts[0] = ContactPoint{contactPoint, contactPoint};
     return 1;
   }
@@ -488,7 +495,9 @@ size_t EPA::extractContactManifold(size_t faceIndex,
   for (size_t i = 0; i < refVerts.size(); ++i)
   {
     if (incidentPoly.empty())
+    {
       break;
+    }
 
     const Coordinate& edgeStart = refVerts[i];
     const Coordinate& edgeEnd = refVerts[(i + 1) % refVerts.size()];
@@ -496,8 +505,8 @@ size_t EPA::extractContactManifold(size_t faceIndex,
     // Side plane normal: perpendicular to edge and reference face normal,
     // pointing inward (edgeDir × normal points left of edge = inward for CCW
     // winding)
-    Coordinate edgeDir = (edgeEnd - edgeStart).normalized();
-    Eigen::Vector3d sidePlaneNormal =
+    Coordinate const edgeDir = (edgeEnd - edgeStart).normalized();
+    Eigen::Vector3d const sidePlaneNormal =
       edgeDir.cross(refNormalWorld).normalized();
 
     incidentPoly = clipPolygonAgainstPlane(
@@ -506,10 +515,10 @@ size_t EPA::extractContactManifold(size_t faceIndex,
 
   // Keep only points at or below the reference face plane
   std::vector<Coordinate> finalPoints;
-  double refPlaneD = refNormalWorld.dot(refVerts[0]);
+  double const refPlaneD = refNormalWorld.dot(refVerts[0]);
   for (const auto& point : incidentPoly)
   {
-    double dist = refNormalWorld.dot(point) - refPlaneD;
+    double const dist = refNormalWorld.dot(point) - refPlaneD;
     if (dist <= epsilon_)
     {
       finalPoints.push_back(point);
@@ -519,20 +528,20 @@ size_t EPA::extractContactManifold(size_t faceIndex,
   // If no points survived clipping, fall back to EPA centroid contact
   if (finalPoints.empty())
   {
-    Coordinate contactPoint = epaFace.normal * epaFace.offset;
+    Coordinate const contactPoint = epaFace.normal * epaFace.offset;
     contacts[0] = ContactPoint{contactPoint, contactPoint};
     return 1;
   }
 
   // Limit to 4 contact points
-  size_t count = std::min(finalPoints.size(), static_cast<size_t>(4));
+  size_t const count = std::min(finalPoints.size(), static_cast<size_t>(4));
 
   // Build contact pairs: project incident points onto reference plane
   for (size_t i = 0; i < count; ++i)
   {
     const Coordinate& incPoint = finalPoints[i];
-    double dist = refNormalWorld.dot(incPoint) - refPlaneD;
-    Coordinate refPoint = incPoint - refNormalWorld * dist;
+    double const dist = refNormalWorld.dot(incPoint) - refPlaneD;
+    Coordinate const refPoint = incPoint - refNormalWorld * dist;
 
     // Assign based on which asset owns the reference face
     if (refIsA)

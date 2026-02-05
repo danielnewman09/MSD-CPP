@@ -67,7 +67,7 @@ public:
    * @return Const reference to simplex vertices (4 vertices forming
    *         a tetrahedron in Minkowski space that contains the origin)
    */
-  const std::vector<Coordinate>& getSimplex() const { return simplex_; }
+  [[nodiscard]] const std::vector<Coordinate>& getSimplex() const { return simplex_; }
 
 private:
   const AssetPhysical& assetA_;

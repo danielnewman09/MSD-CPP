@@ -1,7 +1,14 @@
 // Ticket: 0030_lagrangian_quaternion_physics
 // Design: docs/designs/0030_lagrangian_quaternion_physics/design.md
 
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+
+#include <cmath>
+#include <cstdlib>
+
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
+
 
 namespace msd_sim
 {
@@ -16,8 +23,9 @@ void InertialState::setAngularVelocity(const AngularRate& omega)
   quaternionRate = omegaToQuaternionRate(omega, orientation);
 }
 
-Eigen::Vector4d InertialState::omegaToQuaternionRate(const AngularRate& omega,
-                                                      const Eigen::Quaterniond& Q)
+Eigen::Vector4d InertialState::omegaToQuaternionRate(
+  const AngularRate& omega,
+  const Eigen::Quaterniond& Q)
 {
   // Q̇ = ½ * Q ⊗ [0, ω]
   // Quaternion multiplication: Q ⊗ [0, ω] where [0, ω] = (0, ωx, ωy, ωz)
@@ -35,30 +43,31 @@ Eigen::Vector4d InertialState::omegaToQuaternionRate(const AngularRate& omega,
   //                 w*ωy - x*ωz + z*ωx,        [y component]
   //                 w*ωz + x*ωy - y*ωx )       [z component]
   //
-  // IMPORTANT: Eigen stores quaternion coeffs as (x, y, z, w), not (w, x, y, z)!
-  // So our Vector4d should store in the same order for consistency.
+  // IMPORTANT: Eigen stores quaternion coeffs as (x, y, z, w), not (w, x, y,
+  // z)! So our Vector4d should store in the same order for consistency.
 
-  double qw = Q.w();
-  double qx = Q.x();
-  double qy = Q.y();
-  double qz = Q.z();
+  double const qw = Q.w();
+  double const qx = Q.x();
+  double const qy = Q.y();
+  double const qz = Q.z();
 
-  double wx = omega.x();
-  double wy = omega.y();
-  double wz = omega.z();
+  double const wx = omega.x();
+  double const wy = omega.y();
+  double const wz = omega.z();
 
   // Result in Eigen's coefficient order: (x, y, z, w)
-  Eigen::Vector4d Qdot;
-  Qdot(0) = 0.5 * (qw * wx + qy * wz - qz * wy);   // x component
-  Qdot(1) = 0.5 * (qw * wy - qx * wz + qz * wx);   // y component
-  Qdot(2) = 0.5 * (qw * wz + qx * wy - qy * wx);   // z component
-  Qdot(3) = 0.5 * (-qx * wx - qy * wy - qz * wz);  // w component
+  Eigen::Vector4d qdot;
+  qdot(0) = 0.5 * (qw * wx + qy * wz - qz * wy);   // x component
+  qdot(1) = 0.5 * (qw * wy - qx * wz + qz * wx);   // y component
+  qdot(2) = 0.5 * (qw * wz + qx * wy - qy * wx);   // z component
+  qdot(3) = 0.5 * (-qx * wx - qy * wy - qz * wz);  // w component
 
-  return Qdot;
+  return qdot;
 }
 
-AngularRate InertialState::quaternionRateToOmega(const Eigen::Vector4d& Qdot,
-                                                  const Eigen::Quaterniond& Q)
+Eigen::Vector3d InertialState::quaternionRateToOmega(
+  const Eigen::Vector4d& Qdot,
+  const Eigen::Quaterniond& Q)
 {
   // ω = 2 * Q̄ ⊗ Q̇
   // where Q̄ is the conjugate quaternion (w, -x, -y, -z)
@@ -75,29 +84,30 @@ AngularRate InertialState::quaternionRateToOmega(const Eigen::Vector4d& Qdot,
   //           w*ẋ + (-x)*ẇ + (-y)*ż - (-z)*ẏ,
   //           w*ẏ - (-x)*ż + (-y)*ẇ + (-z)*ẋ,
   //           w*ż + (-x)*ẏ - (-y)*ẋ + (-z)*ẇ )
-  //       = ( w*ẇ + x*ẋ + y*ẏ + z*ż,     // Scalar part (should be ~0 for valid Q)
+  //       = ( w*ẇ + x*ẋ + y*ẏ + z*ż,     // Scalar part (should be ~0 for valid
+  //       Q)
   //           w*ẋ - x*ẇ - y*ż + z*ẏ,     // ωx
   //           w*ẏ + x*ż - y*ẇ - z*ẋ,     // ωy
   //           w*ż - x*ẏ + y*ẋ - z*ẇ )    // ωz
   //
-  // IMPORTANT: Eigen stores quaternion coeffs as (x, y, z, w), not (w, x, y, z)!
-  // So Qdot is also stored as (x, y, z, w) for consistency.
+  // IMPORTANT: Eigen stores quaternion coeffs as (x, y, z, w), not (w, x, y,
+  // z)! So Qdot is also stored as (x, y, z, w) for consistency.
 
-  double qw = Q.w();
-  double qx = Q.x();
-  double qy = Q.y();
-  double qz = Q.z();
+  double const qw = Q.w();
+  double const qx = Q.x();
+  double const qy = Q.y();
+  double const qz = Q.z();
 
   // Qdot in Eigen's coefficient order: (x, y, z, w)
-  double qdot_x = Qdot(0);
-  double qdot_y = Qdot(1);
-  double qdot_z = Qdot(2);
-  double qdot_w = Qdot(3);
+  double const qdotX = Qdot(0);
+  double const qdotY = Qdot(1);
+  double const qdotZ = Qdot(2);
+  double const qdotW = Qdot(3);
 
   // Extract vector part of Q̄ ⊗ Q̇, then multiply by 2
-  double wx = 2.0 * (qw * qdot_x - qx * qdot_w - qy * qdot_z + qz * qdot_y);
-  double wy = 2.0 * (qw * qdot_y + qx * qdot_z - qy * qdot_w - qz * qdot_x);
-  double wz = 2.0 * (qw * qdot_z - qx * qdot_y + qy * qdot_x - qz * qdot_w);
+  double const wx = 2.0 * (qw * qdotX - qx * qdotW - qy * qdotZ + qz * qdotY);
+  double const wy = 2.0 * (qw * qdotY + qx * qdotZ - qy * qdotW - qz * qdotX);
+  double const wz = 2.0 * (qw * qdotZ - qx * qdotY + qy * qdotX - qz * qdotW);
 
   return AngularRate{wx, wy, wz};
 }

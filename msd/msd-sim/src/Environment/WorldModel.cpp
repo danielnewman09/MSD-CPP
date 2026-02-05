@@ -1,4 +1,5 @@
 
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 
@@ -46,8 +47,9 @@ const AssetEnvironment& WorldModel::spawnEnvironmentObject(
 
 const AssetInertial& WorldModel::getObject(uint32_t instanceId) const
 {
-  auto it = std::find_if(inertialAssets_.begin(),
-                         inertialAssets_.end(),
+  auto it =
+    std::ranges::find_if(inertialAssets_,
+
                          [instanceId](const AssetInertial& asset)
                          { return asset.getInstanceId() == instanceId; });
   if (it == inertialAssets_.end())
@@ -60,8 +62,9 @@ const AssetInertial& WorldModel::getObject(uint32_t instanceId) const
 
 AssetInertial& WorldModel::getObject(uint32_t instanceId)
 {
-  auto it = std::find_if(inertialAssets_.begin(),
-                         inertialAssets_.end(),
+  auto it =
+    std::ranges::find_if(inertialAssets_,
+
                          [instanceId](const AssetInertial& asset)
                          { return asset.getInstanceId() == instanceId; });
   if (it == inertialAssets_.end())
@@ -89,7 +92,8 @@ void WorldModel::addPlatform(Platform&& platform)
 void WorldModel::update(std::chrono::milliseconds simTime)
 {
   // Convert to seconds for physics calculations
-  double dt = (simTime.count() - time_.count()) / 1000.0;
+  double const dt =
+    static_cast<double>(simTime.count() - time_.count()) / 1000.0;
 
   // Update all platforms (agent logic + visual sync)
   for (auto& platform : platforms_)
@@ -121,7 +125,7 @@ void WorldModel::updatePhysics(double dt)
     Coordinate netTorque{0.0, 0.0, 0.0};
 
     InertialState& state = asset.getInertialState();
-    double mass = asset.getMass();
+    double const mass = asset.getMass();
     const Eigen::Matrix3d& inertiaTensor = asset.getInertiaTensor();
 
     for (const auto& potential : potentialEnergies_)
@@ -136,7 +140,7 @@ void WorldModel::updatePhysics(double dt)
 
     // ===== Step 2: Gather Constraints =====
     // Get all constraints attached to this asset
-    std::vector<Constraint*> constraints = asset.getConstraints();
+    std::vector<Constraint*> const constraints = asset.getConstraints();
 
     // ===== Step 3: Delegate Integration to Integrator =====
     // Integrator handles: velocity update, position update, constraint
@@ -208,7 +212,7 @@ void WorldModel::updateCollisions(double dt)
         continue;
       }
 
-      double combinedE = ContactConstraintFactory::combineRestitution(
+      double const combinedE = contact_constraint_factory::combineRestitution(
         inertialAssets_[i].getCoefficientOfRestitution(),
         inertialAssets_[j].getCoefficientOfRestitution());
 
@@ -228,7 +232,7 @@ void WorldModel::updateCollisions(double dt)
         continue;
       }
 
-      double combinedE = ContactConstraintFactory::combineRestitution(
+      double const combinedE = contact_constraint_factory::combineRestitution(
         inertialAssets_[i].getCoefficientOfRestitution(),
         environmentalAssets_[e].getCoefficientOfRestitution());
 
@@ -263,14 +267,14 @@ void WorldModel::updateCollisions(double dt)
     const Coordinate& comB = stateB.position;
 
     auto constraints =
-      ContactConstraintFactory::createFromCollision(pair.bodyAIndex,
-                                                    pair.bodyBIndex,
-                                                    pair.result,
-                                                    stateA,
-                                                    stateB,
-                                                    comA,
-                                                    comB,
-                                                    pair.restitution);
+      contact_constraint_factory::createFromCollision(pair.bodyAIndex,
+                                                      pair.bodyBIndex,
+                                                      pair.result,
+                                                      stateA,
+                                                      stateB,
+                                                      comA,
+                                                      comB,
+                                                      pair.restitution);
 
     for (auto& c : constraints)
     {
@@ -302,9 +306,10 @@ void WorldModel::updateCollisions(double dt)
   for (auto& envAsset : environmentalAssets_)
   {
     states.push_back(std::cref(envAsset.getInertialState()));
-    inverseMasses.push_back(envAsset.getInverseMass());  // 0.0
+    inverseMasses.push_back(
+      msd_sim::AssetEnvironment::getInverseMass());  // 0.0
     inverseInertias.push_back(
-      envAsset.getInverseInertiaTensor());  // Zero matrix
+      msd_sim::AssetEnvironment::getInverseInertiaTensor());  // Zero matrix
   }
 
   // Build non-owning TwoBodyConstraint* vector for solver

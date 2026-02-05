@@ -18,7 +18,7 @@ class ConvexHull;
  *
  * Note: For centroid calculation, use ConvexHull::getCentroid() directly.
  */
-namespace InertialCalculations
+namespace inertial_calculations
 {
 /**
  * @brief Compute the moment of inertia tensor about the centroid.
@@ -46,7 +46,7 @@ namespace InertialCalculations
 Eigen::Matrix3d computeInertiaTensorAboutCentroid(const ConvexHull& hull,
                                                   double density);
 
-}  // namespace InertialCalculations
+}  // namespace inertial_calculations
 
 }  // namespace msd_sim
 

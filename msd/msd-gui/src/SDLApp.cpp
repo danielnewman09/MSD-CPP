@@ -4,15 +4,16 @@
 // Design: docs/designs/0005_camera_controller_sim/design.md
 // Previous tickets: 0002_remove_rotation_from_gpu, 0001_link-gui-sim-object
 
-#include "msd-gui/src/SDLApp.hpp"
-#include "msd-assets/src/GeometryFactory.hpp"
-#include "msd-gui/src/SDLUtils.hpp"
-
 #include <cstdlib>
 #include <format>
 #include <iostream>
+#include <numbers>
 #include <random>
 #include <vector>
+
+#include "msd-assets/src/GeometryFactory.hpp"
+#include "msd-gui/src/SDLApp.hpp"
+#include "msd-gui/src/SDLUtils.hpp"
 
 namespace msd_gui
 {
@@ -29,7 +30,7 @@ SDLApplication::SDLApplication(const std::string& dbPath)
   window_.reset(
     SDL_CreateWindow("MSD Application", 800, 600, SDL_WINDOW_RESIZABLE));
 
-  if (!window_.get())
+  if (window_.get() == nullptr)
   {
     SDL_Log("ERROR: Failed to create SDL window: %s", SDL_GetError());
     throw SDLException("Failed to create SDL window");
@@ -59,7 +60,7 @@ SDLApplication::SDLApplication(const std::string& dbPath)
     }
   }
 
-  if (!cameraFrame)
+  if (cameraFrame != nullptr)
   {
     SDL_Log("ERROR: Failed to get camera reference frame from player platform");
     throw std::runtime_error("Failed to get camera reference frame");
@@ -89,10 +90,10 @@ void SDLApplication::registerAssets()
 
   for (const auto& asset : assetCache)
   {
-    if (asset.hasVisualGeometry())
+    if (auto visualGeometry = asset.getVisualGeometry())
     {
-      gpuManager_->registerGeometry(
-        asset.getId(), asset.getVisualGeometry()->get().getVertices());
+      gpuManager_->registerGeometry(asset.getId(),
+                                    visualGeometry->get().getVertices());
     }
   }
 }
@@ -105,7 +106,7 @@ int SDLApplication::runApp()
   registerAssets();
 
   std::chrono::milliseconds currentTime{0};
-  std::chrono::milliseconds frameDelta{10};
+  const std::chrono::milliseconds frameDelta{10};
 
   // Native: blocking main loop
   while (status_ == Status::Running)
@@ -199,8 +200,9 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
   // Use random device for better randomness than rand()
   static std::random_device rd;
   static std::mt19937 gen{rd()};
-  static std::uniform_real_distribution<double> posDist{-5.0, 5.0};
-  static std::uniform_real_distribution<double> angleDist{-3.14159, 3.14159};
+  const static std::uniform_real_distribution<double> posDist{-5.0, 5.0};
+  const static std::uniform_real_distribution<double> angleDist{
+    -std::numbers::pi, std::numbers::pi};
   static std::uniform_real_distribution<float> colorDist{0.0f, 1.0f};
 
   // Create random transform
@@ -214,14 +216,14 @@ void SDLApplication::spawnRandomObject(const std::string& geometryType)
   //   angleDist(gen)   // yaw (radians)
   // };
 
-  msd_sim::AngularCoordinate randomOrientation{0.1, 0., 0.};
+  const msd_sim::AngularCoordinate randomOrientation{0.1, 0., 0.};
 
   // Random color
-  float r = colorDist(gen);
-  float g = colorDist(gen);
-  float b = colorDist(gen);
+  const float r = colorDist(gen);
+  const float g = colorDist(gen);
+  const float b = colorDist(gen);
 
-  auto& object =
+  const auto& object =
     engine_.spawnInertialObject(geometryType, randomPos, randomOrientation);
   gpuManager_->addObject(object, r, g, b);
 

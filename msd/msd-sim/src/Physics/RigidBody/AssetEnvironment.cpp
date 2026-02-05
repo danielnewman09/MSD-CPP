@@ -7,15 +7,12 @@
 namespace msd_sim
 {
 
-// Static member definition
-const Eigen::Matrix3d AssetEnvironment::kZeroInertia = Eigen::Matrix3d::Zero();
-
 AssetEnvironment::AssetEnvironment(uint32_t assetId,
                                    uint32_t instanceId,
                                    ConvexHull& hull,
                                    const ReferenceFrame& frame)
-  : AssetPhysical{assetId, instanceId, hull, frame},
-    coefficient_of_restitution_{0.5}
+  : AssetPhysical{assetId, instanceId, hull, frame}
+
 {
   // Initialize static state with position from frame, zero velocities
   static_state_.position = frame.getOrigin();
@@ -32,10 +29,11 @@ AssetEnvironment::AssetEnvironment(uint32_t assetId,
     coefficient_of_restitution_{coefficientOfRestitution}
 {
   // Validate restitution
-  if (coefficientOfRestitution < 0.0 || coefficientOfRestitution > 1.0) {
+  if (coefficientOfRestitution < 0.0 || coefficientOfRestitution > 1.0)
+  {
     throw std::invalid_argument(
-        "AssetEnvironment: coefficient of restitution must be in [0, 1] (e = " +
-        std::to_string(coefficientOfRestitution) + ")");
+      "AssetEnvironment: coefficient of restitution must be in [0, 1] (e = " +
+      std::to_string(coefficientOfRestitution) + ")");
   }
 
   // Initialize static state with position from frame, zero velocities
@@ -46,10 +44,11 @@ AssetEnvironment::AssetEnvironment(uint32_t assetId,
 
 void AssetEnvironment::setCoefficientOfRestitution(double e)
 {
-  if (e < 0.0 || e > 1.0) {
+  if (e < 0.0 || e > 1.0)
+  {
     throw std::invalid_argument(
-        "AssetEnvironment: coefficient of restitution must be in [0, 1] (e = " +
-        std::to_string(e) + ")");
+      "AssetEnvironment: coefficient of restitution must be in [0, 1] (e = " +
+      std::to_string(e) + ")");
   }
   coefficient_of_restitution_ = e;
 }

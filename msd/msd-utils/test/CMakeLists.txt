@@ -7,6 +7,8 @@ target_link_libraries(${MSD_UTILS_TEST_NAME}
     msd_utils
 )
 
+target_compile_options(${MSD_UTILS_TEST_NAME} PRIVATE -Wno-unused-result)
+
 
 # Add include directories to support "msd-sim/src/..." includes
 target_include_directories(${MSD_UTILS_TEST_NAME}

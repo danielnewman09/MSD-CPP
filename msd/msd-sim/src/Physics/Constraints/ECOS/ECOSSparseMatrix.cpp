@@ -2,6 +2,12 @@
 // Design: docs/designs/0035b_box_constrained_asm_solver/design.md
 
 #include "msd-sim/src/Physics/Constraints/ECOS/ECOSSparseMatrix.hpp"
+#include <Eigen/src/Core/Matrix.h>
+#include <stdexcept>
+#include <ecos/glblopts.h>
+#include <cstddef>
+#include <cstdlib>
+#include <Eigen/src/SparseCore/SparseMatrix.h>
 
 namespace msd_sim
 {

@@ -84,8 +84,8 @@ struct InertialState
    *
    * Formula: ω = 2 * Q̄ ⊗ Q̇
    */
-  static AngularRate quaternionRateToOmega(const Eigen::Vector4d& Qdot,
-                                           const Eigen::Quaterniond& Q);
+  static Eigen::Vector3d quaternionRateToOmega(const Eigen::Vector4d& Qdot,
+                                               const Eigen::Quaterniond& Q);
 
   /**
    * @brief Get Euler angles from quaternion (deprecated, for backward

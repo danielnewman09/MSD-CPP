@@ -4,6 +4,8 @@
 #ifndef MSD_SIM_PHYSICS_SUPPORT_FUNCTION_HPP
 #define MSD_SIM_PHYSICS_SUPPORT_FUNCTION_HPP
 
+#include <utility>
+
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
@@ -27,8 +29,8 @@ struct SupportResult
   Coordinate witnessB;   // Support point on B's surface (world space)
 
   SupportResult() = default;
-  SupportResult(const Coordinate& m, const Coordinate& wA, const Coordinate& wB)
-    : minkowski{m}, witnessA{wA}, witnessB{wB}
+  SupportResult(Coordinate m, Coordinate wA, Coordinate wB)
+    : minkowski{std::move(m)}, witnessA{std::move(wA)}, witnessB{std::move(wB)}
   {
   }
 };
@@ -43,7 +45,7 @@ struct SupportResult
  * @see GJK for collision detection
  * @see EPA for contact information extraction
  */
-namespace SupportFunction
+namespace support_function
 {
 
 /**
@@ -109,7 +111,7 @@ SupportResult supportMinkowskiWithWitness(const AssetPhysical& assetA,
                                           const AssetPhysical& assetB,
                                           const Eigen::Vector3d& dir);
 
-}  // namespace SupportFunction
+}  // namespace support_function
 
 }  // namespace msd_sim
 

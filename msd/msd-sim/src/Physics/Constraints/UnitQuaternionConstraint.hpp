@@ -46,16 +46,16 @@ public:
   ~UnitQuaternionConstraint() override = default;
 
   // Constraint interface implementation
-  int dimension() const override;
-  Eigen::VectorXd evaluate(const InertialState& state, double time) const override;
-  Eigen::MatrixXd jacobian(const InertialState& state, double time) const override;
-  Eigen::VectorXd partialTimeDerivative(const InertialState& state,
+  [[nodiscard]] int dimension() const override;
+  [[nodiscard]] Eigen::VectorXd evaluate(const InertialState& state, double time) const override;
+  [[nodiscard]] Eigen::MatrixXd jacobian(const InertialState& state, double time) const override;
+  [[nodiscard]] Eigen::VectorXd partialTimeDerivative(const InertialState& state,
                                         double time) const override;
-  std::string typeName() const override;
+  [[nodiscard]] std::string typeName() const override;
 
   // Baumgarte parameters
-  double alpha() const override;
-  double beta() const override;
+  [[nodiscard]] double alpha() const override;
+  [[nodiscard]] double beta() const override;
 
   /**
    * @brief Set position error gain

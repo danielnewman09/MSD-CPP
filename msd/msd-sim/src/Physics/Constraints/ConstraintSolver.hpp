@@ -125,8 +125,8 @@ public:
     Eigen::Vector3d angularTorque;  // Net angular constraint torque [N·m]
 
     BodyForces() = default;
-    BodyForces(Coordinate lf, Coordinate at)
-      : linearForce{std::move(lf)}, angularTorque{std::move(at)}
+    BodyForces(const Coordinate& lf, const Coordinate& at)
+      : linearForce{lf}, angularTorque{at}
     {
     }
   };
@@ -481,6 +481,8 @@ private:
   [[nodiscard]] static FrictionConeSpec buildFrictionConeSpec(
     const std::vector<TwoBodyConstraint*>& contactConstraints,
     int numContacts);
+
+  static constexpr size_t kNumStates{7};
 
   // Active Set Method configuration (Ticket 0034)
   int max_safety_iterations_{

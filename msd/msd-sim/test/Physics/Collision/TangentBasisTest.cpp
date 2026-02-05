@@ -2,9 +2,9 @@
 // Design: docs/designs/0035a_tangent_basis_and_friction_constraint/design.md
 
 #include <gtest/gtest.h>
-#include "msd-sim/src/Physics/Collision/TangentBasis.hpp"
 #include <cmath>
 #include <random>
+#include "msd-sim/src/Physics/Collision/TangentBasis.hpp"
 
 using namespace msd_sim;
 
@@ -22,8 +22,9 @@ TEST(TangentBasis, OrthonormalityForAllCoordinateAxes)
     Coordinate{0.0, 0.0, -1.0}   // -z
   };
 
-  for (const auto& normal : normals) {
-    TangentFrame frame = TangentBasis::computeTangentBasis(normal);
+  for (const auto& normal : normals)
+  {
+    TangentFrame frame = tangent_basis::computeTangentBasis(normal);
 
     // Verify unit length: ||t1|| = 1, ||t2|| = 1
     EXPECT_NEAR(frame.t1.norm(), 1.0, kTolerance);
@@ -43,9 +44,9 @@ TEST(TangentBasis, Determinism_RepeatedCallsProduceIdenticalOutput)
   Coordinate normal{0.577350, 0.577350, 0.577350};  // Normalized (1,1,1)
 
   // Compute tangent basis multiple times
-  TangentFrame frame1 = TangentBasis::computeTangentBasis(normal);
-  TangentFrame frame2 = TangentBasis::computeTangentBasis(normal);
-  TangentFrame frame3 = TangentBasis::computeTangentBasis(normal);
+  TangentFrame frame1 = tangent_basis::computeTangentBasis(normal);
+  TangentFrame frame2 = tangent_basis::computeTangentBasis(normal);
+  TangentFrame frame3 = tangent_basis::computeTangentBasis(normal);
 
   constexpr double kTolerance = 1e-15;  // Machine precision for identical calls
 
@@ -60,13 +61,14 @@ TEST(TangentBasis, Continuity_SmallPerturbationsProduceSmallChanges)
 {
   // Base normal
   Coordinate normal{0.707107, 0.707107, 0.0};  // Normalized (1, 1, 0)
-  TangentFrame frame = TangentBasis::computeTangentBasis(normal);
+  TangentFrame frame = tangent_basis::computeTangentBasis(normal);
 
   // Perturb normal by epsilon = 1e-4
   constexpr double epsilon = 1e-4;
   Coordinate perturbedNormal{normal.x() + epsilon, normal.y(), normal.z()};
   perturbedNormal = perturbedNormal.normalized();
-  TangentFrame perturbedFrame = TangentBasis::computeTangentBasis(perturbedNormal);
+  TangentFrame perturbedFrame =
+    tangent_basis::computeTangentBasis(perturbedNormal);
 
   // Verify changes in tangents are O(epsilon): ||Δt|| < 2ε
   double deltaT1 = (frame.t1 - perturbedFrame.t1).norm();
@@ -76,20 +78,22 @@ TEST(TangentBasis, Continuity_SmallPerturbationsProduceSmallChanges)
   EXPECT_LT(deltaT2, 2.0 * epsilon);
 }
 
-TEST(TangentBasis, Degeneracy_HandlesCoordinateAlignedNormalsWithoutSingularities)
+TEST(TangentBasis,
+     Degeneracy_HandlesCoordinateAlignedNormalsWithoutSingularities)
 {
   constexpr double kTolerance = 1e-6;
 
   // Test exact coordinate alignment (potential singularities)
   std::vector<Coordinate> normals = {
-    Coordinate{1.0, 0.0, 0.0},   // Exactly aligned with +x
-    Coordinate{0.0, 1.0, 0.0},   // Exactly aligned with +y
-    Coordinate{0.0, 0.0, 1.0}    // Exactly aligned with +z
+    Coordinate{1.0, 0.0, 0.0},  // Exactly aligned with +x
+    Coordinate{0.0, 1.0, 0.0},  // Exactly aligned with +y
+    Coordinate{0.0, 0.0, 1.0}   // Exactly aligned with +z
   };
 
-  for (const auto& normal : normals) {
+  for (const auto& normal : normals)
+  {
     // Should not throw or produce NaN/inf
-    TangentFrame frame = TangentBasis::computeTangentBasis(normal);
+    TangentFrame frame = tangent_basis::computeTangentBasis(normal);
 
     // Verify valid outputs (no NaN/inf)
     EXPECT_TRUE(std::isfinite(frame.t1.norm()));
@@ -110,11 +114,13 @@ TEST(TangentBasis, InvalidInput_NonUnitNormalThrowsException)
   Coordinate nonUnitNormal{2.0, 0.0, 0.0};
 
   // Should throw std::invalid_argument
-  EXPECT_THROW(TangentBasis::computeTangentBasis(nonUnitNormal), std::invalid_argument);
+  EXPECT_THROW(tangent_basis::computeTangentBasis(nonUnitNormal),
+               std::invalid_argument);
 
   // Nearly zero normal (length << 1)
   Coordinate nearlyZeroNormal{1e-8, 0.0, 0.0};
-  EXPECT_THROW(TangentBasis::computeTangentBasis(nearlyZeroNormal), std::invalid_argument);
+  EXPECT_THROW(tangent_basis::computeTangentBasis(nearlyZeroNormal),
+               std::invalid_argument);
 }
 
 TEST(TangentBasis, ArbitraryNormals_ValidatesOrthonormalityForRandomVectors)
@@ -125,12 +131,13 @@ TEST(TangentBasis, ArbitraryNormals_ValidatesOrthonormalityForRandomVectors)
   std::mt19937 rng{42};  // Fixed seed for reproducibility
   std::uniform_real_distribution<double> dist{-1.0, 1.0};
 
-  for (int i = 0; i < kNumTests; ++i) {
+  for (int i = 0; i < kNumTests; ++i)
+  {
     // Generate random unit normal
     Coordinate normal{dist(rng), dist(rng), dist(rng)};
     normal = normal.normalized();
 
-    TangentFrame frame = TangentBasis::computeTangentBasis(normal);
+    TangentFrame frame = tangent_basis::computeTangentBasis(normal);
 
     // Verify orthonormality properties
     EXPECT_NEAR(frame.t1.norm(), 1.0, kTolerance);

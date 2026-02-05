@@ -3,6 +3,7 @@
 
 #include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 
 namespace msd_sim
@@ -21,14 +22,15 @@ FrictionConstraint::FrictionConstraint(size_t bodyAIndex,
     friction_coefficient_{frictionCoefficient}
 {
   // Validate friction coefficient
-  if (frictionCoefficient < 0.0) {
+  if (frictionCoefficient < 0.0)
+  {
     throw std::invalid_argument(
       "FrictionConstraint: friction coefficient must be non-negative (got " +
       std::to_string(frictionCoefficient) + ")");
   }
 
   // Compute tangent basis from normal (validates normal unit length internally)
-  TangentFrame frame = TangentBasis::computeTangentBasis(normal);
+  const TangentFrame frame = tangent_basis::computeTangentBasis(normal);
   tangent1_ = frame.t1;
   tangent2_ = frame.t2;
 
@@ -37,10 +39,9 @@ FrictionConstraint::FrictionConstraint(size_t bodyAIndex,
   lever_arm_b_ = contactPointB - comB;
 }
 
-Eigen::VectorXd FrictionConstraint::evaluateTwoBody(
-    const InertialState& stateA,
-    const InertialState& stateB,
-    double /* time */) const
+Eigen::VectorXd FrictionConstraint::evaluateTwoBody(const InertialState& stateA,
+                                                    const InertialState& stateB,
+                                                    double /* time */) const
 {
   // Compute relative velocity at contact point
   // v_rel = (vA + ωA × rA) - (vB + ωB × rB)
@@ -51,26 +52,26 @@ Eigen::VectorXd FrictionConstraint::evaluateTwoBody(
   const Coordinate omegaB = stateB.getAngularVelocity();
 
   // Contact point velocity for body A
-  Coordinate vContactA = vA + omegaA.cross(lever_arm_a_);
+  const Coordinate vContactA = vA + omegaA.cross(lever_arm_a_);
 
   // Contact point velocity for body B
-  Coordinate vContactB = vB + omegaB.cross(lever_arm_b_);
+  const Coordinate vContactB = vB + omegaB.cross(lever_arm_b_);
 
   // Relative velocity (A relative to B)
-  Coordinate vRel = vContactA - vContactB;
+  const Coordinate vRel = vContactA - vContactB;
 
   // Project onto tangent directions
-  Eigen::VectorXd C{2};
-  C(0) = vRel.dot(tangent1_);  // Relative velocity in t1 direction
-  C(1) = vRel.dot(tangent2_);  // Relative velocity in t2 direction
+  Eigen::VectorXd c{2};
+  c(0) = vRel.dot(tangent1_);  // Relative velocity in t1 direction
+  c(1) = vRel.dot(tangent2_);  // Relative velocity in t2 direction
 
-  return C;
+  return c;
 }
 
 Eigen::MatrixXd FrictionConstraint::jacobianTwoBody(
-    const InertialState& /* stateA */,
-    const InertialState& /* stateB */,
-    double /* time */) const
+  const InertialState& /* stateA */,
+  const InertialState& /* stateB */,
+  double /* time */) const
 {
   // Jacobian structure (2×12):
   // Row 0: J_t1 = [t1^T, (rA×t1)^T, -t1^T, -(rB×t1)^T]
@@ -78,69 +79,68 @@ Eigen::MatrixXd FrictionConstraint::jacobianTwoBody(
   //
   // Block structure: [v_A (3), ω_A (3), v_B (3), ω_B (3)]
 
-  Eigen::MatrixXd J = Eigen::MatrixXd::Zero(2, 12);
+  Eigen::MatrixXd j = Eigen::MatrixXd::Zero(2, 12);
 
   // Row 0: t1 direction
   {
     // Lever arm cross products
-    Coordinate rA_cross_t1 = lever_arm_a_.cross(tangent1_);
-    Coordinate rB_cross_t1 = lever_arm_b_.cross(tangent1_);
+    Coordinate rACrossT1 = lever_arm_a_.cross(tangent1_);
+    Coordinate rBCrossT1 = lever_arm_b_.cross(tangent1_);
 
     // Block 1: vA contribution (columns 0-2)
-    J(0, 0) = tangent1_.x();
-    J(0, 1) = tangent1_.y();
-    J(0, 2) = tangent1_.z();
+    j(0, 0) = tangent1_.x();
+    j(0, 1) = tangent1_.y();
+    j(0, 2) = tangent1_.z();
 
     // Block 2: ωA contribution (columns 3-5)
-    J(0, 3) = rA_cross_t1.x();
-    J(0, 4) = rA_cross_t1.y();
-    J(0, 5) = rA_cross_t1.z();
+    j(0, 3) = rACrossT1.x();
+    j(0, 4) = rACrossT1.y();
+    j(0, 5) = rACrossT1.z();
 
     // Block 3: vB contribution (columns 6-8)
-    J(0, 6) = -tangent1_.x();
-    J(0, 7) = -tangent1_.y();
-    J(0, 8) = -tangent1_.z();
+    j(0, 6) = -tangent1_.x();
+    j(0, 7) = -tangent1_.y();
+    j(0, 8) = -tangent1_.z();
 
     // Block 4: ωB contribution (columns 9-11)
-    J(0, 9) = -rB_cross_t1.x();
-    J(0, 10) = -rB_cross_t1.y();
-    J(0, 11) = -rB_cross_t1.z();
+    j(0, 9) = -rBCrossT1.x();
+    j(0, 10) = -rBCrossT1.y();
+    j(0, 11) = -rBCrossT1.z();
   }
 
   // Row 1: t2 direction
   {
     // Lever arm cross products
-    Coordinate rA_cross_t2 = lever_arm_a_.cross(tangent2_);
-    Coordinate rB_cross_t2 = lever_arm_b_.cross(tangent2_);
+    Coordinate rACrossT2 = lever_arm_a_.cross(tangent2_);
+    Coordinate rBCrossT2 = lever_arm_b_.cross(tangent2_);
 
     // Block 1: vA contribution (columns 0-2)
-    J(1, 0) = tangent2_.x();
-    J(1, 1) = tangent2_.y();
-    J(1, 2) = tangent2_.z();
+    j(1, 0) = tangent2_.x();
+    j(1, 1) = tangent2_.y();
+    j(1, 2) = tangent2_.z();
 
     // Block 2: ωA contribution (columns 3-5)
-    J(1, 3) = rA_cross_t2.x();
-    J(1, 4) = rA_cross_t2.y();
-    J(1, 5) = rA_cross_t2.z();
+    j(1, 3) = rACrossT2.x();
+    j(1, 4) = rACrossT2.y();
+    j(1, 5) = rACrossT2.z();
 
     // Block 3: vB contribution (columns 6-8)
-    J(1, 6) = -tangent2_.x();
-    J(1, 7) = -tangent2_.y();
-    J(1, 8) = -tangent2_.z();
+    j(1, 6) = -tangent2_.x();
+    j(1, 7) = -tangent2_.y();
+    j(1, 8) = -tangent2_.z();
 
     // Block 4: ωB contribution (columns 9-11)
-    J(1, 9) = -rB_cross_t2.x();
-    J(1, 10) = -rB_cross_t2.y();
-    J(1, 11) = -rB_cross_t2.z();
+    j(1, 9) = -rBCrossT2.x();
+    j(1, 10) = -rBCrossT2.y();
+    j(1, 11) = -rBCrossT2.z();
   }
 
-  return J;
+  return j;
 }
 
-bool FrictionConstraint::isActiveTwoBody(
-    const InertialState& /* stateA */,
-    const InertialState& /* stateB */,
-    double /* time */) const
+bool FrictionConstraint::isActiveTwoBody(const InertialState& /* stateA */,
+                                         const InertialState& /* stateB */,
+                                         double /* time */) const
 {
   // Friction is active when:
   // 1. Friction coefficient is non-zero (μ > 0)
@@ -159,7 +159,7 @@ std::pair<double, double> FrictionConstraint::getFrictionBounds() const
   // Box constraint approximation (inscribed square): |λ_ti| ≤ μ/√2 · λn
   // See M3-coulomb-cone.md for derivation
 
-  constexpr double kSqrt2 = 1.41421356237309504880;  // √2
+  constexpr double kSqrt2 = std::numbers::sqrt2;  // √2
   const double bound = (friction_coefficient_ / kSqrt2) * normal_lambda_;
 
   return {-bound, bound};

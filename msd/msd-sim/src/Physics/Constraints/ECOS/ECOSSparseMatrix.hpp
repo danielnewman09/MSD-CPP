@@ -47,9 +47,9 @@ namespace msd_sim
  */
 struct ECOSSparseMatrix
 {
-  std::vector<pfloat> data{};           // Non-zero values
-  std::vector<idxint> row_indices{};    // Row index for each non-zero
-  std::vector<idxint> col_ptrs{};       // Column pointers (size: ncol+1)
+  std::vector<pfloat> data;           // Non-zero values
+  std::vector<idxint> row_indices;    // Row index for each non-zero
+  std::vector<idxint> col_ptrs;       // Column pointers (size: ncol+1)
   idxint nrows{0};                      // Number of rows
   idxint ncols{0};                      // Number of columns
   idxint nnz{0};                        // Number of non-zeros

@@ -1,8 +1,9 @@
+#include <cstddef>
+#include <vector>
+
+#include <Eigen/Dense>
+
 #include "msd-assets/src/Geometry.hpp"
-#include <algorithm>
-#include <cmath>
-#include <limits>
-#include <stdexcept>
 
 namespace msd_assets
 {

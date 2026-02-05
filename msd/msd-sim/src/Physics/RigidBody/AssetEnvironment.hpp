@@ -1,8 +1,8 @@
 #ifndef MSD_SIM_PHYSICS_ENVIRONMENT_ASSET_HPP
 #define MSD_SIM_PHYSICS_ENVIRONMENT_ASSET_HPP
 
-#include <memory>
 #include <Eigen/Dense>
+#include <memory>
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
@@ -81,7 +81,7 @@ public:
                    const ReferenceFrame& frame,
                    double coefficientOfRestitution);
 
-  ~AssetEnvironment() = default;
+  ~AssetEnvironment() override = default;
 
   // ===== Mass properties for unified solver path (Ticket 0032) =====
 
@@ -89,19 +89,28 @@ public:
    * @brief Get inverse mass (infinite mass representation)
    * @return 0.0 (infinite mass)
    */
-  double getInverseMass() const { return 0.0; }
+  static double getInverseMass()
+  {
+    return 0.0;
+  }
 
   /**
    * @brief Get inverse inertia tensor (infinite inertia representation)
    * @return Zero matrix (infinite inertia)
    */
-  const Eigen::Matrix3d& getInverseInertiaTensor() const { return kZeroInertia; }
+  static const Eigen::Matrix3d& getInverseInertiaTensor()
+  {
+    return kZeroInertia;
+  }
 
   /**
    * @brief Get static inertial state (zero velocity)
    * @return Static state with position from frame, zero velocities
    */
-  const InertialState& getInertialState() const { return static_state_; }
+  const InertialState& getInertialState() const
+  {
+    return static_state_;
+  }
 
   // ===== Restitution for collision response =====
 
@@ -109,7 +118,10 @@ public:
    * @brief Get coefficient of restitution
    * @return Coefficient of restitution [0, 1]
    */
-  double getCoefficientOfRestitution() const { return coefficient_of_restitution_; }
+  double getCoefficientOfRestitution() const
+  {
+    return coefficient_of_restitution_;
+  }
 
   /**
    * @brief Set coefficient of restitution
@@ -125,7 +137,9 @@ public:
   AssetEnvironment& operator=(AssetEnvironment&&) noexcept = delete;
 
 private:
-  static const Eigen::Matrix3d kZeroInertia;
+  // NOLINTNEXTLINE(cert-err58-cpp)
+  static inline const Eigen::Matrix3d kZeroInertia{Eigen::Matrix3d::Zero()};
+
   InertialState static_state_;  // Zero velocity, position from frame
   double coefficient_of_restitution_{0.5};
 };

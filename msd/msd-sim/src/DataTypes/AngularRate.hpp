@@ -4,9 +4,9 @@
 #ifndef ANGULAR_RATE_HPP
 #define ANGULAR_RATE_HPP
 
-#include "Vec3FormatterBase.hpp"
-
 #include <Eigen/Dense>
+
+#include "msd-sim/src/DataTypes/Vec3FormatterBase.hpp"
 
 namespace msd_sim
 {
@@ -47,14 +47,16 @@ public:
   }
 
   // Constructor from Eigen::Vector3d
-  AngularRate(const Eigen::Vector3d& vec)  // NOLINT(google-explicit-constructor)
-    : Eigen::Vector3d{vec}
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  AngularRate(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec}
   {
   }
 
   // Template constructor for Eigen expressions
   template <typename OtherDerived>
-  AngularRate(const Eigen::MatrixBase<OtherDerived>& other)  // NOLINT(google-explicit-constructor)
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  AngularRate(const Eigen::MatrixBase<OtherDerived>&
+                other)  // NOLINT(google-explicit-constructor)
     : Eigen::Vector3d{other}
   {
   }
@@ -113,13 +115,11 @@ template <>
 struct std::formatter<msd_sim::AngularRate>
   : msd_sim::detail::Vec3FormatterBase<msd_sim::AngularRate>
 {
-  auto format(const msd_sim::AngularRate& rate,
-              std::format_context& ctx) const
+  auto format(const msd_sim::AngularRate& rate, std::format_context& ctx) const
   {
     return formatComponents(
       rate,
-      [](const auto& r)
-      { return std::tuple{r.pitch(), r.roll(), r.yaw()}; },
+      [](const auto& r) { return std::tuple{r.pitch(), r.roll(), r.yaw()}; },
       ctx);
   }
 };

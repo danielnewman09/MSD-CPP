@@ -11,18 +11,20 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 #include <Eigen/Dense>
+
 #include <msd-assets/src/Geometry.hpp>
 #include <msd-gui/src/Camera3D.hpp>
 #include <msd-gui/src/GPUInstanceManager.hpp>
 #include <msd-gui/src/SDLUtils.hpp>
 #include <msd-gui/src/ShaderPolicy.hpp>
-#include <msd-sim/src/Environment/ReferenceFrame.hpp>
 #include <msd-sim/src/Engine.hpp>
+#include <msd-sim/src/Environment/ReferenceFrame.hpp>
 
 namespace msd_gui
 {
@@ -60,8 +62,8 @@ public:
    */
   explicit GPUManager(SDL_Window& window,
                       msd_sim::ReferenceFrame& cameraFrame,
-                      const std::string& basePath)
-    : window_{window}, basePath_{basePath}, camera_{cameraFrame}
+                      std::string basePath)
+    : window_{window}, basePath_{std::move(basePath)}, camera_{cameraFrame}
   {
     SDL_Log("GPUManager: Starting initialization, basePath=%s",
             basePath_.c_str());
@@ -71,7 +73,7 @@ public:
                                         SDL_GPU_SHADERFORMAT_DXIL |
                                         SDL_GPU_SHADERFORMAT_SPIRV,
                                       true,
-                                      NULL));
+                                      nullptr));
 
     if (!device_.get())
     {
@@ -117,7 +119,7 @@ public:
     SDL_Log("Successfully loaded fragment shader: %s",
             shaderPolicy_.getFragmentShaderFile().c_str());
 
-    SDL_GPUBufferCreateInfo uniformBufferCreateInfo = {
+    const SDL_GPUBufferCreateInfo uniformBufferCreateInfo = {
       .usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
       .size = sizeof(Eigen::Matrix4f)};
 
@@ -131,11 +133,11 @@ public:
     }
 
     // Create the pipelines
-    SDL_GPUColorTargetDescription colorTargetDesc = {
+    const SDL_GPUColorTargetDescription colorTargetDesc = {
       .format = SDL_GetGPUSwapchainTextureFormat(device_.get(), &window)};
 
     // Get vertex input state from shader policy
-    SDL_GPUVertexInputState vertexInputState =
+    const SDL_GPUVertexInputState vertexInputState =
       shaderPolicy_.getVertexInputState();
 
     SDL_GPUGraphicsPipelineCreateInfo pipelineCreateInfo = {
@@ -181,7 +183,7 @@ public:
   void updateGeometryBuffer()
   {
     // Create unified vertex buffer
-    SDL_GPUBufferCreateInfo vertexBufferCreateInfo = {
+    const SDL_GPUBufferCreateInfo vertexBufferCreateInfo = {
       .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
       .size = static_cast<uint32_t>(allVertices_.size() *
                                     sizeof(msd_assets::Vertex))};
@@ -196,14 +198,14 @@ public:
     }
 
     // Upload unified vertex data to GPU
-    SDL_GPUTransferBufferCreateInfo vertexTransferCreateInfo = {
+    const SDL_GPUTransferBufferCreateInfo vertexTransferCreateInfo = {
       .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
       .size = vertexBufferCreateInfo.size};
 
     SDL_GPUTransferBuffer* vertexTransferBuffer =
       SDL_CreateGPUTransferBuffer(device_.get(), &vertexTransferCreateInfo);
 
-    if (!vertexTransferBuffer)
+    if (vertexTransferBuffer == nullptr)
     {
       throw SDLException("Failed to create vertex transfer buffer!");
     }
@@ -218,10 +220,10 @@ public:
       SDL_AcquireGPUCommandBuffer(device_.get());
     SDL_GPUCopyPass* vertexCopyPass = SDL_BeginGPUCopyPass(vertexUploadCmd);
 
-    SDL_GPUTransferBufferLocation vertexTransferLocation = {
+    SDL_GPUTransferBufferLocation const vertexTransferLocation = {
       .transfer_buffer = vertexTransferBuffer, .offset = 0};
 
-    SDL_GPUBufferRegion vertexBufferRegion = {
+    const SDL_GPUBufferRegion vertexBufferRegion = {
       .buffer = vertexBuffer_.get(),
       .offset = 0,
       .size = vertexBufferCreateInfo.size};
@@ -239,7 +241,7 @@ public:
 
     // Create instance buffer (pre-allocate space for many instances)
     const size_t maxInstances = 1000;
-    SDL_GPUBufferCreateInfo instanceBufferCreateInfo = {
+    const SDL_GPUBufferCreateInfo instanceBufferCreateInfo = {
       .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
       .size = static_cast<uint32_t>(maxInstances *
                                     shaderPolicy_.getInstanceDataSize())};
@@ -261,7 +263,7 @@ public:
     info.baseVertex = static_cast<uint32_t>(totalVertexCount_);
     info.vertexCount = static_cast<uint32_t>(vertices.size());
 
-    uint32_t index = static_cast<uint32_t>(geometryRegistry_.size());
+    auto index = static_cast<uint32_t>(geometryRegistry_.size());
     geometryRegistry_.push_back(info);
     assetIdToGeometryIndex_[assetId] = index;
 
@@ -293,7 +295,7 @@ public:
                  float g,
                  float b)
   {
-    uint32_t geometryId;
+    uint32_t geometryId = 0;
     auto it = assetIdToGeometryIndex_.find(object.getAssetId());
     if (it != assetIdToGeometryIndex_.end())
     {
@@ -349,7 +351,8 @@ public:
   {
     {
       // Update camera aspect ratio based on current window size
-      int width, height;
+      int width = 0;
+      int height = 0;
       SDL_GetWindowSize(&window_, &width, &height);
       if (height > 0)
       {
@@ -361,7 +364,7 @@ public:
     SDL_GPUCommandBuffer* commandBuffer{
       SDL_AcquireGPUCommandBuffer(device_.get())};
 
-    if (!commandBuffer)
+    if (commandBuffer == nullptr)
     {
       throw SDLException("Couldn't acquire command buffer");
     }
@@ -374,16 +377,17 @@ public:
     SDL_PushGPUVertexUniformData(
       commandBuffer, 0, viewProjectionMatrix.data(), sizeof(Eigen::Matrix4f));
 
-    SDL_GPUTexture* swapchainTexture;
-    uint32_t width, height;
+    SDL_GPUTexture* swapchainTexture = nullptr;
+    uint32_t width = 0;
+    uint32_t height = 0;
 
     SDL_WaitAndAcquireGPUSwapchainTexture(
       commandBuffer, &window_, &swapchainTexture, &width, &height);
 
-    if (swapchainTexture)
+    if (swapchainTexture != nullptr)
     {
       // Create depth texture
-      SDL_GPUTextureCreateInfo depthTextureInfo = {
+      const SDL_GPUTextureCreateInfo depthTextureInfo = {
         .type = SDL_GPU_TEXTURETYPE_2D,
         .format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
         .usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
@@ -448,7 +452,7 @@ public:
                 instances[i].geometryIndex != currentGeomIndex)
             {
               // Draw the current range
-              uint32_t rangeCount = i - rangeStart;
+              uint32_t const rangeCount = i - rangeStart;
               const auto& geomInfo = geometryRegistry_[currentGeomIndex];
 
               SDL_DrawGPUPrimitives(

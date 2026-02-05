@@ -1,16 +1,17 @@
 #include "msd-assets/src/GeometryFactory.hpp"
-#include <algorithm>
+#include <Eigen/src/Core/Matrix.h>
 #include <array>
-#include <cmath>
 #include <cstring>
-#include <limits>
+#include "msd-transfer/src/MeshRecord.hpp"
+#include <vector>
+#include "msd-assets/src/Geometry.hpp"
 
 namespace msd_assets
 {
 
 std::array<Eigen::Vector3d, 8> GeometryFactory::getCubeCorners(double size)
 {
-  double half = size / 2.0;
+  double const half = size / 2.0;
 
   // Define 8 corners of the cube
   // Naming: (Front/Back)(Top/Bottom)(Left/Right)
@@ -34,7 +35,7 @@ msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
   // Create VisualGeometry from raw coordinates
   // - Computes normals via computeVertexData()
   // - Stores result in cachedVertices_ as vector<Vertex>
-  CollisionGeometry geometry{vertices, 0};
+  CollisionGeometry const geometry{vertices, 0};
 
   // Serialize using existing populateMeshRecord()
   // - Correctly serializes vector<Vertex> to BLOB
@@ -105,49 +106,49 @@ msd_transfer::MeshRecord GeometryFactory::createCube(double size)
 msd_transfer::MeshRecord GeometryFactory::createPyramid(double baseSize,
                                                         double height)
 {
-  double half = baseSize / 2.0;
-  double halfHeight = height / 2.0;
+  double const half = baseSize / 2.0;
+  double const halfHeight = height / 2.0;
   std::vector<Eigen::Vector3d> vertices;
   vertices.reserve(
     18);  // 4 side faces (triangles) + 2 base triangles = 6 triangles
 
   // Base corners (y = -height/2)
-  Eigen::Vector3d base_fl{-half, -halfHeight, -half};  // front-left
-  Eigen::Vector3d base_fr{half, -halfHeight, -half};   // front-right
-  Eigen::Vector3d base_br{half, -halfHeight, half};    // back-right
-  Eigen::Vector3d base_bl{-half, -halfHeight, half};   // back-left
+  Eigen::Vector3d const baseFl{-half, -halfHeight, -half};  // front-left
+  Eigen::Vector3d const baseFr{half, -halfHeight, -half};   // front-right
+  Eigen::Vector3d const baseBr{half, -halfHeight, half};    // back-right
+  Eigen::Vector3d const baseBl{-half, -halfHeight, half};   // back-left
 
   // Apex (top of pyramid)
-  Eigen::Vector3d apex{0.0, halfHeight, 0.0};
+  Eigen::Vector3d const apex{0.0, halfHeight, 0.0};
 
   // Front face
-  vertices.push_back(base_fl);
-  vertices.push_back(base_fr);
+  vertices.push_back(baseFl);
+  vertices.push_back(baseFr);
   vertices.push_back(apex);
 
   // Right face
-  vertices.push_back(base_fr);
-  vertices.push_back(base_br);
+  vertices.push_back(baseFr);
+  vertices.push_back(baseBr);
   vertices.push_back(apex);
 
   // Back face
-  vertices.push_back(base_br);
-  vertices.push_back(base_bl);
+  vertices.push_back(baseBr);
+  vertices.push_back(baseBl);
   vertices.push_back(apex);
 
   // Left face
-  vertices.push_back(base_bl);
-  vertices.push_back(base_fl);
+  vertices.push_back(baseBl);
+  vertices.push_back(baseFl);
   vertices.push_back(apex);
 
   // Base bottom (2 triangles)
-  vertices.push_back(base_fl);
-  vertices.push_back(base_br);
-  vertices.push_back(base_fr);
+  vertices.push_back(baseFl);
+  vertices.push_back(baseBr);
+  vertices.push_back(baseFr);
 
-  vertices.push_back(base_fl);
-  vertices.push_back(base_bl);
-  vertices.push_back(base_br);
+  vertices.push_back(baseFl);
+  vertices.push_back(baseBl);
+  vertices.push_back(baseBr);
 
   return verticesToMeshRecord(vertices);
 }

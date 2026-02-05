@@ -20,8 +20,7 @@ AssetInertial::AssetInertial(uint32_t assetId,
     inertiaTensor_{Eigen::Matrix3d::Zero()},
     inverseInertiaTensor_{Eigen::Matrix3d::Zero()},
     centerOfMass_{Coordinate{0, 0, 0}},
-    dynamicState_{},
-    coefficientOfRestitution_{0.5}  // Default: moderate elasticity
+    dynamicState_{}
 {
   if (mass <= 0.0)
   {
@@ -30,7 +29,7 @@ AssetInertial::AssetInertial(uint32_t assetId,
   }
 
   // Compute inertia tensor about the centroid
-  inertiaTensor_ = InertialCalculations::computeInertiaTensorAboutCentroid(
+  inertiaTensor_ = inertial_calculations::computeInertiaTensorAboutCentroid(
     getCollisionHull(), mass);
 
   // Compute inverse inertia tensor for physics calculations
@@ -76,7 +75,7 @@ AssetInertial::AssetInertial(uint32_t assetId,
   }
 
   // Compute inertia tensor about the centroid
-  inertiaTensor_ = InertialCalculations::computeInertiaTensorAboutCentroid(
+  inertiaTensor_ = inertial_calculations::computeInertiaTensorAboutCentroid(
     getCollisionHull(), mass);
 
   // Compute inverse inertia tensor for physics calculations
@@ -128,8 +127,8 @@ const Eigen::Matrix3d& AssetInertial::getInverseInertiaTensor() const
 
 Eigen::Matrix3d AssetInertial::getInverseInertiaTensorWorld() const
 {
-  Eigen::Matrix3d R = dynamicState_.orientation.toRotationMatrix();
-  return R * inverseInertiaTensor_ * R.transpose();
+  Eigen::Matrix3d r = dynamicState_.orientation.toRotationMatrix();
+  return r * inverseInertiaTensor_ * r.transpose();
 }
 
 // ========== Force Application API (ticket 0023a) ==========
@@ -148,8 +147,8 @@ void AssetInertial::applyForceAtPoint(const Eigen::Vector3d& force,
 
   // Compute torque: τ = r × F
   // r is the vector from center of mass to application point
-  Coordinate r = worldPoint - getReferenceFrame().getOrigin();
-  Coordinate torque = r.cross(force);
+  Coordinate const r = worldPoint - getReferenceFrame().getOrigin();
+  Coordinate const torque = r.cross(force);
 
   // Accumulate torque
   accumulatedTorque_ += torque;
@@ -234,7 +233,7 @@ void AssetInertial::removeConstraint(size_t index)
       "Constraint index out of range: " + std::to_string(index) +
       " >= " + std::to_string(constraints_.size()));
   }
-  constraints_.erase(constraints_.begin() + static_cast<long>(index));
+  constraints_.erase(constraints_.begin() + static_cast<std::ptrdiff_t>(index));
 }
 
 std::vector<Constraint*> AssetInertial::getConstraints()

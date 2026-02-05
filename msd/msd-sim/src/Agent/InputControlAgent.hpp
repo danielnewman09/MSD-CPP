@@ -45,7 +45,7 @@ public:
    * Translates boolean commands into velocity updates. Commands are directional
    * (agent converts to velocity in object's local frame).
    */
-  InertialState updateState(const InertialState& currentState);
+  [[nodiscard]] InertialState updateState(const InertialState& currentState) const;
 
   /**
    * @brief Set current input commands
@@ -63,7 +63,7 @@ public:
    * @brief Get current input commands
    * @return Const reference to input commands
    */
-  const InputCommands& getInputCommands() const
+  [[nodiscard]] const InputCommands& getInputCommands() const
   {
     return inputCommands_;
   }
@@ -90,7 +90,7 @@ public:
    * @brief Get maximum linear speed
    * @return Maximum speed in m/s
    */
-  double getMaxSpeed() const
+  [[nodiscard]] double getMaxSpeed() const
   {
     return maxSpeed_;
   }
@@ -99,7 +99,7 @@ public:
    * @brief Get maximum angular speed
    * @return Maximum angular speed in rad/s
    */
-  double getMaxAngularSpeed() const
+  [[nodiscard]] double getMaxAngularSpeed() const
   {
     return maxAngularSpeed_;
   }

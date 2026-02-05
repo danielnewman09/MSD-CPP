@@ -6,11 +6,11 @@ namespace msd_sim
 AssetPhysical::AssetPhysical(uint32_t assetId,
                              uint32_t instanceId,
                              ConvexHull& hull,
-                             const ReferenceFrame& frame)
+                             ReferenceFrame frame)
   : referenceAssetId_{assetId},
     instanceId_{instanceId},
     collisionHull_{hull},
-    referenceFrame_(frame)
+    referenceFrame_{std::move(frame)}
 {
 }
 

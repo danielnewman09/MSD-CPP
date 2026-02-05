@@ -82,7 +82,7 @@ public:
                      const Coordinate& comB,
                      double frictionCoefficient);
 
-  ~FrictionConstraint() = default;
+  ~FrictionConstraint() override = default;
 
   // ===== TwoBodyConstraint interface =====
 
@@ -90,7 +90,7 @@ public:
    * @brief Number of scalar constraint equations (always 2 for friction)
    * @return 2 (one row for t1 direction, one row for t2 direction)
    */
-  int dimension() const override
+  [[nodiscard]] int dimension() const override
   {
     return 2;
   }
@@ -109,7 +109,7 @@ public:
    * @param time Simulation time [s] (unused for friction)
    * @return 2×1 vector of tangential relative velocities [m/s]
    */
-  Eigen::VectorXd evaluateTwoBody(const InertialState& stateA,
+  [[nodiscard]] Eigen::VectorXd evaluateTwoBody(const InertialState& stateA,
                                   const InertialState& stateB,
                                   double time) const override;
 
@@ -127,7 +127,7 @@ public:
    * @param time Simulation time [s] (unused for friction)
    * @return 2×12 Jacobian matrix
    */
-  Eigen::MatrixXd jacobianTwoBody(const InertialState& stateA,
+  [[nodiscard]] Eigen::MatrixXd jacobianTwoBody(const InertialState& stateA,
                                   const InertialState& stateB,
                                   double time) const override;
 
@@ -143,11 +143,11 @@ public:
    * @param time Simulation time [s] (unused for activation check)
    * @return true if friction should be enforced
    */
-  bool isActiveTwoBody(const InertialState& stateA,
+  [[nodiscard]] bool isActiveTwoBody(const InertialState& stateA,
                        const InertialState& stateB,
                        double time) const override;
 
-  std::string typeName() const override
+  [[nodiscard]] std::string typeName() const override
   {
     return "FrictionConstraint";
   }
@@ -156,7 +156,7 @@ public:
    * @brief No position-level Baumgarte stabilization for friction
    * @return 0.0 (friction is velocity-level constraint)
    */
-  double alpha() const override
+  [[nodiscard]] double alpha() const override
   {
     return 0.0;
   }
@@ -165,7 +165,7 @@ public:
    * @brief No velocity-level Baumgarte stabilization for friction
    * @return 0.0 (friction is velocity-level constraint)
    */
-  double beta() const override
+  [[nodiscard]] double beta() const override
   {
     return 0.0;
   }
@@ -199,13 +199,13 @@ public:
    * Thread safety: Not thread-safe if setNormalLambda() called concurrently
    * Precondition: setNormalLambda() must have been called with valid λn
    */
-  std::pair<double, double> getFrictionBounds() const;
+  [[nodiscard]] std::pair<double, double> getFrictionBounds() const;
 
   /**
    * @brief Get first tangent direction (world space)
    * @return Unit tangent vector t1
    */
-  const Coordinate& getTangent1() const
+  [[nodiscard]] const Coordinate& getTangent1() const
   {
     return tangent1_;
   }
@@ -214,7 +214,7 @@ public:
    * @brief Get second tangent direction (world space)
    * @return Unit tangent vector t2
    */
-  const Coordinate& getTangent2() const
+  [[nodiscard]] const Coordinate& getTangent2() const
   {
     return tangent2_;
   }
@@ -223,7 +223,7 @@ public:
    * @brief Get friction coefficient
    * @return Combined friction coefficient μ
    */
-  double getFrictionCoefficient() const
+  [[nodiscard]] double getFrictionCoefficient() const
   {
     return friction_coefficient_;
   }

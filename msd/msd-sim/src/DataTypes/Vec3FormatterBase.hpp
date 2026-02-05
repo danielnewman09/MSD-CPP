@@ -22,8 +22,8 @@ struct Vec3FormatterBase
 
   constexpr auto parse(std::format_parse_context& ctx)
   {
-    auto it = ctx.begin();
-    auto end = ctx.end();
+    const auto* it = ctx.begin();
+    const auto* end = ctx.end();
 
     if (it == end || *it == '}')
     {
@@ -36,7 +36,7 @@ struct Vec3FormatterBase
       width = 0;
       while (it != end && *it >= '0' && *it <= '9')
       {
-        width = width * 10 + (*it - '0');
+        width = (width * 10) + (*it - '0');
         ++it;
       }
     }
@@ -48,7 +48,7 @@ struct Vec3FormatterBase
       precision = 0;
       while (it != end && *it >= '0' && *it <= '9')
       {
-        precision = precision * 10 + (*it - '0');
+        precision = (precision * 10) + (*it - '0');
         ++it;
       }
     }
@@ -64,7 +64,7 @@ struct Vec3FormatterBase
   }
 
 protected:
-  std::string buildComponentFormat() const
+  [[nodiscard]] std::string buildComponentFormat() const
   {
     std::string componentFmt = "{:";
     if (width > 0)
@@ -79,10 +79,11 @@ protected:
   }
 
   template <typename F>
-  auto formatComponents(const T& vec, F&& accessor,
+  auto formatComponents(const T& vec,
+                        F&& accessor,
                         std::format_context& ctx) const
   {
-    auto [c0, c1, c2] = accessor(vec);
+    auto [c0, c1, c2] = std::forward<F>(accessor)(vec);
     const std::string componentFmt = buildComponentFormat();
     return std::format_to(
       ctx.out(),

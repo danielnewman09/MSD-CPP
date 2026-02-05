@@ -5,6 +5,7 @@
 #define MSD_SIM_PHYSICS_EPA_HPP
 
 #include <array>
+#include <utility>
 #include <vector>
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Facet.hpp"
@@ -31,10 +32,8 @@ struct MinkowskiVertex
   Coordinate witnessB;  // Support point on B that contributed
 
   MinkowskiVertex() = default;
-  MinkowskiVertex(const Coordinate& p,
-                  const Coordinate& wA,
-                  const Coordinate& wB)
-    : point{p}, witnessA{wA}, witnessB{wB}
+  MinkowskiVertex(Coordinate p, Coordinate wA, Coordinate wB)
+    : point{std::move(p)}, witnessA{std::move(wA)}, witnessB{std::move(wB)}
   {
   }
 };
@@ -123,15 +122,16 @@ public:
 
   // Core algorithm
   bool expandPolytope(int maxIterations);
-  size_t findClosestFace() const;
+  [[nodiscard]] size_t findClosestFace() const;
 
   // Topology management
-  bool isVisible(const Facet& face, const Coordinate& point) const;
+  [[nodiscard]] bool isVisible(const Facet& face,
+                               const Coordinate& point) const;
   std::vector<EPAEdge> buildHorizonEdges(const Coordinate& newVertex);
   void addFace(size_t v0, size_t v1, size_t v2);
 
   // Contact extraction
-  Coordinate computeContactPoint(const Facet& face) const;
+  static Coordinate computeContactPoint(const Facet& face);
   // Contact manifold extraction (Ticket: 0029_contact_manifold_generation)
   size_t extractContactManifold(size_t faceIndex,
                                 std::array<ContactPoint, 4>& contacts) const;

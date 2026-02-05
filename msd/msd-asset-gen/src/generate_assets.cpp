@@ -21,7 +21,7 @@
 
 void createCubeAsset(cpp_sqlite::Database& db)
 {
-  std::cout << "Creating cube asset..." << std::endl;
+  std::cout << "Creating cube asset..." << "\n";
 
   // Create MeshRecord directly from factory
   auto meshRecord = msd_assets::GeometryFactory::createCube(1.0);
@@ -29,8 +29,8 @@ void createCubeAsset(cpp_sqlite::Database& db)
   // Insert MeshRecord into database
   auto& meshDAO = db.getDAO<msd_transfer::MeshRecord>();
   meshDAO.insert(meshRecord);
-  uint32_t meshId = meshRecord.id;
-  std::cout << "  Visual mesh inserted with ID: " << meshId << std::endl;
+  const uint32_t meshId = meshRecord.id;
+  std::cout << "  Visual mesh inserted with ID: " << meshId << "\n";
 
   // Create CollisionMeshRecord directly from factory
   auto collisionRecord = msd_assets::GeometryFactory::createCube(1.0);
@@ -38,9 +38,8 @@ void createCubeAsset(cpp_sqlite::Database& db)
   // Insert CollisionMeshRecord into database
   auto& collisionDAO = db.getDAO<msd_transfer::MeshRecord>();
   collisionDAO.insert(collisionRecord);
-  uint32_t collisionId = collisionRecord.id;
-  std::cout << "  Collision mesh inserted with ID: " << collisionId
-            << std::endl;
+  const uint32_t collisionId = collisionRecord.id;
+  std::cout << "  Collision mesh inserted with ID: " << collisionId << "\n";
 
   // Create ObjectRecord
   msd_transfer::ObjectRecord objectRecord;
@@ -52,7 +51,7 @@ void createCubeAsset(cpp_sqlite::Database& db)
   // Insert ObjectRecord into database
   auto& objectDAO = db.getDAO<msd_transfer::ObjectRecord>();
   auto objectId = objectDAO.insert(objectRecord);
-  std::cout << "  Object record inserted with ID: " << objectId << std::endl;
+  std::cout << "  Object record inserted with ID: " << objectId << "\n";
 
   // Optional: Reconstruct geometry objects from records for verification
   // auto visualGeometry =
@@ -63,7 +62,7 @@ void createCubeAsset(cpp_sqlite::Database& db)
 
 void createPyramidAsset(cpp_sqlite::Database& db)
 {
-  std::cout << "Creating pyramid asset..." << std::endl;
+  std::cout << "Creating pyramid asset..." << "\n";
 
   // Create MeshRecord directly from factory
   auto meshRecord = msd_assets::GeometryFactory::createPyramid(1.0, 1.0);
@@ -71,8 +70,8 @@ void createPyramidAsset(cpp_sqlite::Database& db)
   // Insert MeshRecord into database
   auto& meshDAO = db.getDAO<msd_transfer::MeshRecord>();
   meshDAO.insert(meshRecord);
-  uint32_t meshId = meshRecord.id;
-  std::cout << "  Visual mesh inserted with ID: " << meshId << std::endl;
+  const uint32_t meshId = meshRecord.id;
+  std::cout << "  Visual mesh inserted with ID: " << meshId << "\n";
 
   // Create CollisionMeshRecord directly from factory
   auto collisionRecord = msd_assets::GeometryFactory::createPyramid(1.0, 1.0);
@@ -80,9 +79,8 @@ void createPyramidAsset(cpp_sqlite::Database& db)
   // Insert CollisionMeshRecord into database
   auto& collisionDAO = db.getDAO<msd_transfer::MeshRecord>();
   collisionDAO.insert(collisionRecord);
-  uint32_t collisionId = collisionRecord.id;
-  std::cout << "  Collision mesh inserted with ID: " << collisionId
-            << std::endl;
+  const uint32_t collisionId = collisionRecord.id;
+  std::cout << "  Collision mesh inserted with ID: " << collisionId << "\n";
 
   // Create ObjectRecord
   msd_transfer::ObjectRecord objectRecord;
@@ -94,7 +92,7 @@ void createPyramidAsset(cpp_sqlite::Database& db)
   // Insert ObjectRecord into database
   auto& objectDAO = db.getDAO<msd_transfer::ObjectRecord>();
   auto objectId = objectDAO.insert(objectRecord);
-  std::cout << "  Object record inserted with ID: " << objectId << std::endl;
+  std::cout << "  Object record inserted with ID: " << objectId << "\n";
 
   // Optional: Reconstruct geometry objects from records for verification
   // auto visualGeometry =
@@ -108,16 +106,16 @@ int main(int argc, char* argv[])
   // Check command line arguments
   if (argc != 2)
   {
-    std::cerr << "Usage: " << argv[0] << " <output_database_path>" << std::endl;
-    std::cerr << "Example: " << argv[0] << " assets.db" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " <output_database_path>" << "\n";
+    std::cerr << "Example: " << argv[0] << " assets.db" << "\n";
     return 1;
   }
 
-  std::string dbPath = argv[1];
+  const std::string dbPath = argv[1];
 
   try
   {
-    std::cout << "Creating asset database: " << dbPath << std::endl;
+    std::cout << "Creating asset database: " << dbPath << "\n";
 
     // Create logger
     auto& logger = cpp_sqlite::Logger::getInstance();
@@ -129,14 +127,14 @@ int main(int argc, char* argv[])
     createCubeAsset(db);
     createPyramidAsset(db);
 
-    std::cout << "\nAsset database created successfully!" << std::endl;
-    std::cout << "Database location: " << dbPath << std::endl;
+    std::cout << "\nAsset database created successfully!" << "\n";
+    std::cout << "Database location: " << dbPath << "\n";
 
     return 0;
   }
   catch (const std::exception& e)
   {
-    std::cerr << "Error: " << e.what() << std::endl;
+    std::cerr << "Error: " << e.what() << "\n";
     return 1;
   }
 }

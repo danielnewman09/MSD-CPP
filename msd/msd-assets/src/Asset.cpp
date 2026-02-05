@@ -1,6 +1,7 @@
-#include "msd-assets/src/Asset.hpp"
 #include <cpp_sqlite/src/cpp_sqlite/DBDataAccessObject.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBDatabase.hpp>
+
+#include "msd-assets/src/Asset.hpp"
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
 

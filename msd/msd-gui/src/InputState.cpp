@@ -1,6 +1,8 @@
 // Ticket: 0004_gui_framerate
 // Design: docs/designs/input-state-management/design.md
 
+#include <SDL3/SDL_keycode.h>
+
 #include "msd-gui/src/InputState.hpp"
 
 namespace msd_gui

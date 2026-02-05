@@ -15,6 +15,8 @@ target_link_libraries(${MSD_GUI_TEST_NAME}
         msd_gui
 )
 
+target_compile_options(${MSD_GUI_TEST_NAME} PRIVATE -Wno-unused-result)
+
 target_include_directories(${MSD_GUI_TEST_NAME}
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/..

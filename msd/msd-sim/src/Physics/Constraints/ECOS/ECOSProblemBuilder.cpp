@@ -2,8 +2,13 @@
 // Design: docs/designs/0035b_box_constrained_asm_solver/design.md
 
 #include "msd-sim/src/Physics/Constraints/ECOS/ECOSProblemBuilder.hpp"
+#include <Eigen/src/Core/Matrix.h>
+#include <ecos/glblopts.h>
+#include <cstddef>
 #include <stdexcept>
 #include <sstream>
+#include "msd-sim/src/Physics/Constraints/ECOS/ECOSData.hpp"
+#include "msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp"
 
 namespace msd_sim
 {
@@ -92,21 +97,21 @@ ECOSSparseMatrix ECOSProblemBuilder::buildGMatrix(
   const idxint ncols = 3 * numContacts;
   const idxint nnz = 3 * numContacts;
 
-  ECOSSparseMatrix G{};
-  G.nrows = nrows;
-  G.ncols = ncols;
-  G.nnz = nnz;
+  ECOSSparseMatrix g{};
+  g.nrows = nrows;
+  g.ncols = ncols;
+  g.nnz = nnz;
 
-  G.data.reserve(static_cast<size_t>(nnz));
-  G.row_indices.reserve(static_cast<size_t>(nnz));
-  G.col_ptrs.reserve(static_cast<size_t>(ncols + 1));
+  g.data.reserve(static_cast<size_t>(nnz));
+  g.row_indices.reserve(static_cast<size_t>(nnz));
+  g.col_ptrs.reserve(static_cast<size_t>(ncols + 1));
 
   // Build CSC format column-by-column
   idxint currentNnz = 0;
 
   for (idxint col = 0; col < ncols; ++col)
   {
-    G.col_ptrs.push_back(currentNnz);
+    g.col_ptrs.push_back(currentNnz);
 
     // Determine which contact this column belongs to
     const idxint contactIdx = col / 3;
@@ -119,22 +124,22 @@ ECOSSparseMatrix ECOSProblemBuilder::buildGMatrix(
     {
       // Normal component: -μ_i
       const double mu = coneSpec.getFrictionCoefficient(static_cast<int>(contactIdx));
-      G.data.push_back(static_cast<pfloat>(-mu));
+      g.data.push_back(static_cast<pfloat>(-mu));
     }
     else
     {
       // Tangent components: -1
-      G.data.push_back(static_cast<pfloat>(-1.0));
+      g.data.push_back(static_cast<pfloat>(-1.0));
     }
 
-    G.row_indices.push_back(row);
+    g.row_indices.push_back(row);
     ++currentNnz;
   }
 
   // Final column pointer (points to end of data)
-  G.col_ptrs.push_back(currentNnz);
+  g.col_ptrs.push_back(currentNnz);
 
-  return G;
+  return g;
 }
 
 }  // namespace msd_sim

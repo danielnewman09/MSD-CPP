@@ -2,6 +2,7 @@
 #define FACET_HPP
 
 #include <array>
+#include <utility>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 
@@ -17,23 +18,23 @@ namespace msd_sim
  */
 struct Facet
 {
-  static inline constexpr size_t facetSize = 3;
+  static constexpr size_t kFacetSize = 3;
 
   static size_t vertexSize()
   {
-    return facetSize;
+    return kFacetSize;
   }
 
   std::array<size_t,
-             facetSize>
-    vertexIndices;    // Indices of
+             kFacetSize>
+    vertexIndices{};    // Indices of
                       // triangle vertices
   Coordinate normal;  // Outward-facing unit normal
-  double offset;      // Distance from origin (for half-space)
+  double offset{};      // Distance from origin (for half-space)
 
   Facet() = default;
-  Facet(size_t v0, size_t v1, size_t v2, const Coordinate& n, double d)
-    : vertexIndices{v0, v1, v2}, normal{n}, offset{d}
+  Facet(size_t v0, size_t v1, size_t v2, Coordinate  n, double d)
+    : vertexIndices{v0, v1, v2}, normal{std::move(n)}, offset{d}
   {
   }
 };

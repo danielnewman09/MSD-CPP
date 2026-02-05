@@ -1,9 +1,14 @@
 #include "msd-utils/src/PathUtils.hpp"
+#include <filesystem>
+#include <string>
+#include <sys/syslimits.h>
+#include <cstdint>
+#include <_stdlib.h>
 
 #ifdef _WIN32
 #include <windows.h>
 #elif defined(__APPLE__)
-#include <limits.h>
+#include <climits>
 #include <mach-o/dyld.h>
 #elif defined(__linux__)
 #include <limits.h>
@@ -61,10 +66,10 @@ std::filesystem::path absolutePath(const std::string& relativePath)
 #endif
 
   // Get the directory containing the executable
-  std::filesystem::path executableDir = executablePath.parent_path();
+  std::filesystem::path const executableDir = executablePath.parent_path();
 
   // Construct the full path and normalize it
-  std::filesystem::path fullPath = executableDir / relativePath;
+  std::filesystem::path const fullPath = executableDir / relativePath;
 
   // Return the canonical (absolute, normalized) path
   // Note: canonical() requires the path to exist; use absolute() if you want

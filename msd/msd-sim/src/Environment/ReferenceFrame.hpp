@@ -42,14 +42,14 @@ public:
    * @brief Constructor with translation only
    * @param origin The origin of this frame in global coordinates
    */
-  explicit ReferenceFrame(const Coordinate& origin);
+  explicit ReferenceFrame(Coordinate  origin);
 
   /**
    * @brief Constructor with translation and rotation
    * @param origin The origin of this frame in global coordinates
    * @param angular The angular coordinate defining the rotation
    */
-  ReferenceFrame(const Coordinate& origin, const AngularCoordinate& angular);
+  ReferenceFrame(Coordinate  origin, AngularCoordinate  angular);
 
   /**
    * @brief Constructor from local X and Z axes (right-hand rule)
@@ -73,7 +73,7 @@ public:
    * @throws std::invalid_argument if either vector is zero or if vectors are
    *         parallel
    */
-  ReferenceFrame(const Coordinate& origin,
+  ReferenceFrame(Coordinate  origin,
                  const Coordinate& xDirection,
                  const Coordinate& zDirection);
 
@@ -86,7 +86,7 @@ public:
    * @param origin The origin of this frame in global coordinates
    * @param quaternion The orientation as a unit quaternion (will be normalized)
    */
-  ReferenceFrame(const Coordinate& origin,
+  ReferenceFrame(Coordinate  origin,
                  const Eigen::Quaterniond& quaternion);
 
   /**

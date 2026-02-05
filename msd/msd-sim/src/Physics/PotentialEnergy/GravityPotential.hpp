@@ -27,19 +27,19 @@ public:
    * @brief Construct gravitational field with specified acceleration vector
    * @param gravityVector Gravitational acceleration [m/s²], e.g. (0, 0, -9.81)
    */
-  explicit GravityPotential(const Coordinate& gravityVector);
+  explicit GravityPotential(Coordinate  gravityVector);
 
   ~GravityPotential() override = default;
 
   // PotentialEnergy interface implementation
-  Coordinate computeForce(const InertialState& state, double mass) const override;
-  Coordinate computeTorque(const InertialState& state,
+  [[nodiscard]] Coordinate computeForce(const InertialState& state, double mass) const override;
+  [[nodiscard]] Coordinate computeTorque(const InertialState& state,
                            const Eigen::Matrix3d& inertia) const override;
-  double computeEnergy(const InertialState& state, double mass) const override;
+  [[nodiscard]] double computeEnergy(const InertialState& state, double mass) const override;
 
   // Gravity configuration
   void setGravity(const Coordinate& gravityVector);
-  const Coordinate& getGravity() const;
+  [[nodiscard]] const Coordinate& getGravity() const;
 
   // Rule of Five
   GravityPotential(const GravityPotential&) = default;

@@ -1,14 +1,16 @@
 #ifndef MSD_ASSETS_ASSET_REGISTRY_HPP
 #define MSD_ASSETS_ASSET_REGISTRY_HPP
 
-#include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
-#include <cpp_sqlite/src/cpp_sqlite/DBDatabase.hpp>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
+#include <cpp_sqlite/src/cpp_sqlite/DBDatabase.hpp>
+
 #include "msd-assets/src/Asset.hpp"
 
 namespace msd_assets
@@ -28,7 +30,17 @@ class AssetRegistry
 {
 public:
   // Singleton pattern: private constructor
-  AssetRegistry(const std::string& dbPath);
+  explicit AssetRegistry(const std::string& dbPath);
+
+  // Delete copy constructor and assignment operator
+  AssetRegistry(const AssetRegistry&) = delete;
+  AssetRegistry& operator=(const AssetRegistry&) = delete;
+
+  // Rule of 5
+  AssetRegistry(AssetRegistry&&) = delete;
+  AssetRegistry& operator=(AssetRegistry&&) = delete;
+
+  ~AssetRegistry() = default;
 
   /**
    * @brief Load asset from database (lazy-loaded and cached)
@@ -45,7 +57,7 @@ public:
    * found
    */
   std::optional<std::reference_wrapper<const Asset>> getAsset(
-    std::string assetName);
+    const std::string& assetName);
 
 
   /**
@@ -80,11 +92,6 @@ private:
    * @param dbPath Path to SQLite database file
    */
   void loadFromDatabase();
-
-
-  // Delete copy constructor and assignment operator
-  AssetRegistry(const AssetRegistry&) = delete;
-  AssetRegistry& operator=(const AssetRegistry&) = delete;
 
   // Database connection
   std::unique_ptr<cpp_sqlite::Database> database_;

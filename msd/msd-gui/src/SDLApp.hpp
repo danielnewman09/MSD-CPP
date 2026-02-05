@@ -45,6 +45,8 @@ public:
   SDLApplication(SDLApplication&&) = delete;
   SDLApplication& operator=(SDLApplication&&) = delete;
 
+  ~SDLApplication() = default;
+
   int runApp();
 
   Status getStatus() const;

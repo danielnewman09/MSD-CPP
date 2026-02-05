@@ -1,8 +1,10 @@
+#include <filesystem>
+#include <memory>
+
 #include <gtest/gtest.h>
 #include <cpp_sqlite/src/cpp_sqlite/DBDataAccessObject.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBDatabase.hpp>
-#include <filesystem>
-#include <memory>
+
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-assets/src/GeometryFactory.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
@@ -87,7 +89,7 @@ std::vector<Eigen::Vector3d> generateCubeVertices(double size)
 }
 
 std::vector<Eigen::Vector3d> generatePyramidVertices(double baseSize,
-                                                      double height)
+                                                     double height)
 {
   double half = baseSize / 2.0;
   double halfHeight = height / 2.0;
@@ -192,7 +194,7 @@ TEST_F(GeometryDatabaseTest, VisualGeometry_CreateAndStore_Cube)
   // Verify record fields
   EXPECT_EQ(meshRecord.vertex_count, 36);
   EXPECT_FALSE(meshRecord.vertex_data.empty());
-  EXPECT_EQ(meshRecord.vertex_data.size(), 36 * sizeof(msd_assets::Vertex));
+  EXPECT_EQ(meshRecord.vertex_data.size(), 36 * sizeof(Eigen::Vector3d));
 
   auto& meshDAO = db_->getDAO<msd_transfer::MeshRecord>();
 

@@ -54,7 +54,7 @@ public:
    * @param Q Quaternion to constrain (modified in place)
    * @param Qdot Quaternion rate (modified in place)
    */
-  void enforceConstraint(Eigen::Quaterniond& Q, Eigen::Vector4d& Qdot);
+  void enforceConstraint(Eigen::Quaterniond& Q, Eigen::Vector4d& Qdot) const;
 
   /**
    * @brief Compute constraint force for dynamics integration
@@ -62,19 +62,19 @@ public:
    * @param Qdot Current quaternion rate
    * @return Constraint force F_c = G^T * λ where G = ∂g/∂Q
    */
-  Eigen::Vector4d computeConstraintForce(const Eigen::Quaterniond& Q,
+  [[nodiscard]] Eigen::Vector4d computeConstraintForce(const Eigen::Quaterniond& Q,
                                          const Eigen::Vector4d& Qdot) const;
 
   // Parameter configuration
   void setAlpha(double alpha);
   void setBeta(double beta);
-  double getAlpha() const;
-  double getBeta() const;
+  [[nodiscard]] double getAlpha() const;
+  [[nodiscard]] double getBeta() const;
 
   // Constraint violation queries (for diagnostics)
-  double positionViolation(const Eigen::Quaterniond& Q) const;
-  double velocityViolation(const Eigen::Quaterniond& Q,
-                           const Eigen::Vector4d& Qdot) const;
+  [[nodiscard]] static double positionViolation(const Eigen::Quaterniond& Q) ;
+  [[nodiscard]] static double velocityViolation(const Eigen::Quaterniond& Q,
+                           const Eigen::Vector4d& Qdot) ;
 
   // Rule of Five
   QuaternionConstraint(const QuaternionConstraint&) = default;

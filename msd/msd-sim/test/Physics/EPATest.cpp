@@ -362,7 +362,7 @@ TEST(SupportFunctionTest, supportMinkowskiWithWitness_IdentityTransform)
   Eigen::Vector3d dir{1.0, 0.0, 0.0};
 
   SupportResult result =
-    SupportFunction::supportMinkowskiWithWitness(assetA, assetB, dir);
+    support_function::supportMinkowskiWithWitness(assetA, assetB, dir);
 
   // Minkowski should equal witnessA - witnessB
   Coordinate expectedMinkowski = result.witnessA - result.witnessB;
@@ -393,7 +393,7 @@ TEST(SupportFunctionTest, supportMinkowskiWithWitness_TranslatedObjects)
   Eigen::Vector3d dir{1.0, 0.0, 0.0};
 
   SupportResult result =
-    SupportFunction::supportMinkowskiWithWitness(assetA, assetB, dir);
+    support_function::supportMinkowskiWithWitness(assetA, assetB, dir);
 
   // Witness points should be in world space
   // Asset A at +5, cube half-size 0.5 → witnessA.x() ≈ 5.5

@@ -63,19 +63,19 @@ struct ECOSData
   idxint num_equality_{0};        // Number of equality constraints (Ticket 0035b4)
 
   // Owned sparse matrix storage (CSC format for G)
-  ECOSSparseMatrix G_{};
+  ECOSSparseMatrix G_;
 
   // Owned sparse matrix storage for equality constraints (CSC format for A_eq)
   // Ticket: 0035b4_ecos_solve_integration
-  ECOSSparseMatrix A_eq_{};
+  ECOSSparseMatrix A_eq_;
 
   // Owned constraint vectors
-  std::vector<pfloat> h_{};      // RHS for inequality constraints
-  std::vector<pfloat> c_{};      // Linear objective
-  std::vector<pfloat> b_eq_{};   // RHS for equality constraints (Ticket 0035b4)
+  std::vector<pfloat> h_;      // RHS for inequality constraints
+  std::vector<pfloat> c_;      // Linear objective
+  std::vector<pfloat> b_eq_;   // RHS for equality constraints (Ticket 0035b4)
 
   // Owned cone dimensions
-  std::vector<idxint> cone_sizes_{};
+  std::vector<idxint> cone_sizes_;
 
   // ECOS workspace (owned via unique_ptr with custom deleter)
   // IMPORTANT: Declared last so it is destroyed first. ECOS_cleanup() (called
@@ -171,7 +171,7 @@ struct ECOSData
    *
    * @return true if setup() has been called successfully, false otherwise
    */
-  bool isSetup() const
+  [[nodiscard]] bool isSetup() const
   {
     return workspace_ != nullptr;
   }

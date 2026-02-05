@@ -1,8 +1,13 @@
 // Ticket: 0005_camera_controller_sim
 // Design: docs/designs/0005_camera_controller_sim/design.md
 
-#include "msd-gui/src/Camera3D.hpp"
 #include <cmath>
+
+#include <Eigen/Dense>
+
+#include "msd-gui/src/Camera3D.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Environment/ReferenceFrame.hpp"
 
 namespace msd_gui
 {
@@ -13,7 +18,8 @@ Camera3D::Camera3D(msd_sim::ReferenceFrame& referenceFrame,
                    float nearPlane,
                    float farPlane)
   : frame_{referenceFrame},
-    fovRadians_{static_cast<float>(static_cast<double>(fovDegrees) * M_PI / 180.0)},
+    fovRadians_{
+      static_cast<float>(static_cast<double>(fovDegrees) * M_PI / 180.0)},
     aspectRatio_{aspectRatio},
     nearPlane_{nearPlane},
     farPlane_{farPlane}
@@ -27,7 +33,8 @@ void Camera3D::setAspectRatio(float aspectRatio)
 
 void Camera3D::setFieldOfView(float fovDegrees)
 {
-  fovRadians_ = static_cast<float>(static_cast<double>(fovDegrees) * M_PI / 180.0);
+  fovRadians_ =
+    static_cast<float>(static_cast<double>(fovDegrees) * M_PI / 180.0);
 }
 
 void Camera3D::setClippingPlanes(float nearPlane, float farPlane)
@@ -51,10 +58,11 @@ Eigen::Matrix4f Camera3D::getViewMatrix() const
   const msd_sim::Coordinate& origin = frame_.get().getOrigin();
 
   // Transpose the rotation (inverse for rotation matrices)
-  Eigen::Matrix3f rotationTranspose = rotation.transpose().cast<float>();
+  Eigen::Matrix3f const rotationTranspose = rotation.transpose().cast<float>();
 
   // Calculate -R^T × origin (rotated negative origin)
-  Eigen::Vector3f translatedOrigin = -rotationTranspose * origin.cast<float>();
+  Eigen::Vector3f const translatedOrigin =
+    -rotationTranspose * origin.cast<float>();
 
   // Build the 4x4 view matrix
   Eigen::Matrix4f viewMatrix = Eigen::Matrix4f::Identity();

@@ -9,6 +9,7 @@
 #include <array>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 
@@ -32,8 +33,8 @@ struct ContactPoint
 
   ContactPoint() = default;
 
-  ContactPoint(const Coordinate& pA, const Coordinate& pB)
-    : pointA{pA}, pointB{pB}
+  ContactPoint(Coordinate  pA, Coordinate  pB)
+    : pointA{std::move(pA)}, pointB{std::move(pB)}
   {
   }
 
@@ -89,11 +90,11 @@ struct CollisionResult
   CollisionResult() = default;
 
   // Manifold constructor
-  CollisionResult(const Coordinate& n,
+  CollisionResult(Coordinate  n,
                   double depth,
                   const std::array<ContactPoint, 4>& contactsArray,
                   size_t count)
-    : normal{n},
+    : normal{std::move(n)},
       penetrationDepth{depth},
       contacts{contactsArray},
       contactCount{count}
@@ -105,11 +106,11 @@ struct CollisionResult
   }
 
   // Single-contact convenience constructor
-  CollisionResult(const Coordinate& n,
+  CollisionResult(Coordinate  n,
                   double depth,
                   const Coordinate& pointA,
                   const Coordinate& pointB)
-    : normal{n},
+    : normal{std::move(n)},
       penetrationDepth{depth},
       contacts{ContactPoint{pointA, pointB}},
       contactCount{1}

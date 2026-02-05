@@ -1,13 +1,16 @@
-#include "msd-assets/src/AssetRegistry.hpp"
+
 #include <algorithm>
-#include <cpp_sqlite/src/cpp_sqlite/DBDataAccessObject.hpp>
+#include <ranges>
 #include <stdexcept>
+
+#include <cpp_sqlite/src/cpp_sqlite/DBDataAccessObject.hpp>
+
+#include "msd-assets/src/AssetRegistry.hpp"
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
 
 namespace msd_assets
 {
-
 
 AssetRegistry::AssetRegistry(const std::string& dbPath)
   : database_{std::make_unique<cpp_sqlite::Database>(
@@ -21,7 +24,7 @@ AssetRegistry::AssetRegistry(const std::string& dbPath)
 
 void AssetRegistry::loadFromDatabase()
 {
-  std::lock_guard<std::mutex> lock(cacheMutex_);
+  const std::scoped_lock<std::mutex> lock(cacheMutex_);
 
   // Load all object records and create Asset instances
   auto& objectDAO = database_->getDAO<msd_transfer::ObjectRecord>();
@@ -40,7 +43,7 @@ void AssetRegistry::loadFromDatabase()
 std::optional<std::reference_wrapper<const Asset>> AssetRegistry::getAsset(
   uint32_t assetId)
 {
-  std::lock_guard<std::mutex> lock(cacheMutex_);
+  const std::scoped_lock<std::mutex> lock(cacheMutex_);
 
   auto assetIt = findAssetById(assetId);
   if (assetIt != assetCache_.end())
@@ -53,9 +56,9 @@ std::optional<std::reference_wrapper<const Asset>> AssetRegistry::getAsset(
 
 
 std::optional<std::reference_wrapper<const Asset>> AssetRegistry::getAsset(
-  std::string assetName)
+  const std::string& assetName)
 {
-  std::lock_guard<std::mutex> lock(cacheMutex_);
+  const std::scoped_lock<std::mutex> lock(cacheMutex_);
 
   auto assetIt = findAssetByName(assetName);
   if (assetIt != assetCache_.end())
@@ -70,7 +73,7 @@ std::optional<std::reference_wrapper<const Asset>> AssetRegistry::getAsset(
 std::optional<std::reference_wrapper<const VisualGeometry>>
 AssetRegistry::loadVisualGeometry(uint32_t assetId)
 {
-  std::lock_guard<std::mutex> lock(cacheMutex_);
+  const std::scoped_lock<std::mutex> lock(cacheMutex_);
 
   auto assetIt = findAssetById(assetId);
   if (assetIt == assetCache_.end())
@@ -84,7 +87,7 @@ AssetRegistry::loadVisualGeometry(uint32_t assetId)
 std::optional<std::reference_wrapper<const CollisionGeometry>>
 AssetRegistry::loadCollisionGeometry(uint32_t assetId)
 {
-  std::lock_guard<std::mutex> lock(cacheMutex_);
+  const std::scoped_lock<std::mutex> lock(cacheMutex_);
 
   auto assetIt = findAssetById(assetId);
   if (assetIt == assetCache_.end())
@@ -97,7 +100,7 @@ AssetRegistry::loadCollisionGeometry(uint32_t assetId)
 
 size_t AssetRegistry::getCacheMemoryUsage() const
 {
-  std::lock_guard<std::mutex> lock(cacheMutex_);
+  const std::scoped_lock<std::mutex> lock(cacheMutex_);
 
   size_t totalBytes = 0;
 
@@ -140,37 +143,33 @@ const std::vector<Asset>& AssetRegistry::getAssetCache() const
 
 std::vector<Asset>::iterator AssetRegistry::findAssetById(uint32_t assetId)
 {
-  return std::find_if(
-    assetCache_.begin(),
-    assetCache_.end(),
-    [assetId](const Asset& asset) { return asset.getId() == assetId; });
+  return std::ranges::find_if(assetCache_,
+                              [assetId](const Asset& asset)
+                              { return asset.getId() == assetId; });
 }
 
 std::vector<Asset>::const_iterator AssetRegistry::findAssetById(
   uint32_t assetId) const
 {
-  return std::find_if(
-    assetCache_.cbegin(),
-    assetCache_.cend(),
-    [assetId](const Asset& asset) { return asset.getId() == assetId; });
+  return std::ranges::find_if(assetCache_,
+                              [assetId](const Asset& asset)
+                              { return asset.getId() == assetId; });
 }
 
 std::vector<Asset>::iterator AssetRegistry::findAssetByName(
   const std::string& assetName)
 {
-  return std::find_if(
-    assetCache_.begin(),
-    assetCache_.end(),
-    [&assetName](const Asset& asset) { return asset.getName() == assetName; });
+  return std::ranges::find_if(assetCache_,
+                              [&assetName](const Asset& asset)
+                              { return asset.getName() == assetName; });
 }
 
 std::vector<Asset>::const_iterator AssetRegistry::findAssetByName(
   const std::string& assetName) const
 {
-  return std::find_if(
-    assetCache_.cbegin(),
-    assetCache_.cend(),
-    [&assetName](const Asset& asset) { return asset.getName() == assetName; });
+  return std::ranges::find_if(assetCache_,
+                              [&assetName](const Asset& asset)
+                              { return asset.getName() == assetName; });
 }
 
 }  // namespace msd_assets

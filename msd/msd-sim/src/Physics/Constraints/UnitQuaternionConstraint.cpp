@@ -2,6 +2,9 @@
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 
 #include "msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp"
+#include <Eigen/src/Core/Matrix.h>
+#include <Eigen/src/Geometry/Quaternion.h>
+#include <string>
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -21,16 +24,16 @@ Eigen::VectorXd UnitQuaternionConstraint::evaluate(const InertialState& state,
                                                      double /* time */) const
 {
   // Constraint: C(Q) = Q^T·Q - 1 = 0
-  const Eigen::Quaterniond& Q = state.orientation;
+  const Eigen::Quaterniond& q = state.orientation;
 
   // Compute Q^T·Q (dot product of quaternion with itself)
-  double Q_dot_Q = Q.w() * Q.w() + Q.x() * Q.x() + Q.y() * Q.y() + Q.z() * Q.z();
+  double const qDotQ = (q.w() * q.w()) + (q.x() * q.x()) + (q.y() * q.y()) + (q.z() * q.z());
 
   // Constraint violation: Q^T·Q - 1
-  Eigen::VectorXd C(1);
-  C(0) = Q_dot_Q - 1.0;
+  Eigen::VectorXd c(1);
+  c(0) = qDotQ - 1.0;
 
-  return C;
+  return c;
 }
 
 Eigen::MatrixXd UnitQuaternionConstraint::jacobian(const InertialState& state,
@@ -44,10 +47,10 @@ Eigen::MatrixXd UnitQuaternionConstraint::jacobian(const InertialState& state,
   //
   // Since the constraint only depends on orientation, ∂C/∂X = 0
 
-  const Eigen::Quaterniond& Q = state.orientation;
+  const Eigen::Quaterniond& q = state.orientation;
 
-  Eigen::MatrixXd J(1, 7);
-  J.setZero();
+  Eigen::MatrixXd j(1, 7);
+  j.setZero();
 
   // ∂C/∂X = 0 (constraint doesn't depend on position)
   // J(0, 0) = 0;  // Already zero from setZero()
@@ -55,12 +58,12 @@ Eigen::MatrixXd UnitQuaternionConstraint::jacobian(const InertialState& state,
   // J(0, 2) = 0;
 
   // ∂C/∂Q = 2·Q^T
-  J(0, 3) = 2.0 * Q.w();  // ∂C/∂q_w
-  J(0, 4) = 2.0 * Q.x();  // ∂C/∂q_x
-  J(0, 5) = 2.0 * Q.y();  // ∂C/∂q_y
-  J(0, 6) = 2.0 * Q.z();  // ∂C/∂q_z
+  j(0, 3) = 2.0 * q.w();  // ∂C/∂q_w
+  j(0, 4) = 2.0 * q.x();  // ∂C/∂q_x
+  j(0, 5) = 2.0 * q.y();  // ∂C/∂q_y
+  j(0, 6) = 2.0 * q.z();  // ∂C/∂q_z
 
-  return J;
+  return j;
 }
 
 Eigen::VectorXd UnitQuaternionConstraint::partialTimeDerivative(

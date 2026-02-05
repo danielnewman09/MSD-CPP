@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <ranges>
 #include <unordered_map>
 
 extern "C"
@@ -48,11 +49,11 @@ const std::vector<Facet>& ConvexHull::getFacets() const
 const Facet& ConvexHull::getFacetAlignedWith(
   const Eigen::Vector3d& normal) const
 {
-  auto it =
-    std::max_element(facets_.begin(),
-                     facets_.end(),
-                     [&normal](const Facet& a, const Facet& b)
-                     { return a.normal.dot(normal) < b.normal.dot(normal); });
+  auto it = std::ranges::max_element(
+    facets_,
+
+    [&normal](const Facet& a, const Facet& b)
+    { return a.normal.dot(normal) < b.normal.dot(normal); });
   return *it;
 }
 
@@ -61,11 +62,12 @@ ConvexHull::getFacetsAlignedWith(const Eigen::Vector3d& normal,
                                  double tolerance) const
 {
   // First pass: find maximum alignment
-  double maxDot =
-    std::max_element(facets_.begin(),
-                     facets_.end(),
-                     [&normal](const Facet& a, const Facet& b)
-                     { return a.normal.dot(normal) < b.normal.dot(normal); })
+  double const maxDot =
+    std::ranges::max_element(
+      facets_,
+
+      [&normal](const Facet& a, const Facet& b)
+      { return a.normal.dot(normal) < b.normal.dot(normal); })
       ->normal.dot(normal);
 
   // Second pass: collect all facets within tolerance of the maximum
@@ -110,21 +112,16 @@ bool ConvexHull::contains(const Coordinate& point, double epsilon) const
 {
   // A point is inside the convex hull if it's on the negative side
   // (or within epsilon) of all half-space planes defined by the facets
-  for (const auto& facet : facets_)
-  {
-    const Coordinate& v0 = vertices_[facet.vertexIndices[0]];
-
-    // Distance from point to plane: d = normal · (point - v0)
-    double distance = facet.normal.dot(point - v0);
-
-    // If point is on the positive side (outside), it's not contained
-    if (distance > epsilon)
+  return std::ranges::all_of(
+    facets_,
+    [&](const auto& facet)
     {
-      return false;
-    }
-  }
-
-  return true;
+      const Coordinate& v0 = vertices_[facet.vertexIndices[0]];
+      // Distance from point to plane: d = normal · (point - v0)
+      const double distance = facet.normal.dot(point - v0);
+      // Point must be on negative side (inside) or within epsilon
+      return distance <= epsilon;
+    });
 }
 
 double ConvexHull::signedDistance(const Coordinate& point) const
@@ -141,7 +138,7 @@ double ConvexHull::signedDistance(const Coordinate& point) const
   for (const auto& facet : facets_)
   {
     const Coordinate& v0 = vertices_[facet.vertexIndices[0]];
-    double distance = facet.normal.dot(point - v0);
+    double const distance = facet.normal.dot(point - v0);
     maxDistance = std::max(maxDistance, distance);
   }
 
@@ -152,15 +149,13 @@ ConvexHull::BoundingBox ConvexHull::getBoundingBox() const
 {
   // Bounding box is computed directly by Qhull during computeHull()
   // No need to recalculate - Qhull provides accurate bounding box
-  return BoundingBox{boundingBoxMin_, boundingBoxMax_};
+  return BoundingBox{.min = boundingBoxMin_, .max = boundingBoxMax_};
 }
 
 bool ConvexHull::isValid() const
 {
   return !vertices_.empty() && !facets_.empty();
 }
-
-// computeHull is now a template defined in the header file
 
 void ConvexHull::extractHullData(qhT* qh)
 {
@@ -171,7 +166,8 @@ void ConvexHull::extractHullData(qhT* qh)
   std::unordered_map<int, size_t> vertexIdMap;
 
   // Extract vertices
-  vertexT* vertex;
+  // NOLINTNEXTLINE(misc-const-correctness)
+  vertexT* vertex = nullptr;
   size_t vertexIndex = 0;
 
   FORALLvertices
@@ -182,16 +178,18 @@ void ConvexHull::extractHullData(qhT* qh)
   }
 
   // Extract facets (triangulated by Qt option)
-  facetT* facet;
+  const facetT* facet = nullptr;
 
   FORALLfacets
   {
     if (!facet->upperdelaunay && facet->simplicial)
     {
       // Count vertices in this facet
-      vertexT** vertexp;
+      // NOLINTNEXTLINE(misc-const-correctness)
+      vertexT** vertexp = nullptr;
       int vertexCount = 0;
 
+      // NOLINTNEXTLINE(clang-analyzer-security.ArrayBound)
       FOREACHvertex_(facet->vertices)
       {
         vertexCount++;
@@ -208,7 +206,7 @@ void ConvexHull::extractHullData(qhT* qh)
 
       FOREACHvertex_(facet->vertices)
       {
-        int pointId = qh_pointid(qh, vertex->point);
+        int const pointId = qh_pointid(qh, vertex->point);
         hullFacet.vertexIndices[idx++] = vertexIdMap[pointId];
       }
 
@@ -217,7 +215,7 @@ void ConvexHull::extractHullData(qhT* qh)
         Coordinate{facet->normal[0], facet->normal[1], facet->normal[2]};
 
       // Normalize the normal vector
-      double normalLength = hullFacet.normal.norm();
+      double const normalLength = hullFacet.normal.norm();
       if (normalLength > 1e-8)
       {
         hullFacet.normal /= normalLength;
@@ -250,11 +248,11 @@ void ConvexHull::computeCentroid()
     const Coordinate& v2 = vertices_[facet.vertexIndices[2]];
 
     // Volume of tetrahedron (with origin as 4th vertex)
-    double tetVol = std::abs(v0.dot(v1.cross(v2))) / 6.0;
+    double const tetVol = std::abs(v0.dot(v1.cross(v2))) / 6.0;
 
     // Centroid of tetrahedron is average of 4 vertices (origin + 3 triangle
     // vertices)
-    Coordinate tetCentroid = (v0 + v1 + v2) / 4.0;
+    Coordinate const tetCentroid = (v0 + v1 + v2) / 4.0;
 
     centroidSum += tetVol * tetCentroid;
     totalVolume += tetVol;

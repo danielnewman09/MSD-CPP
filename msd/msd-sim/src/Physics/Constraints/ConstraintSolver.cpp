@@ -117,17 +117,17 @@ Eigen::MatrixXd ConstraintSolver::assembleConstraintMatrix(
   }
 
   // Assemble stacked Jacobian J (totalDim × 7)
-  Eigen::MatrixXd j(totalDim, 7);
+  Eigen::MatrixXd j(totalDim, kNumStates);
   int rowOffset = 0;
   for (const auto* constraint : constraints)
   {
     int const dim = constraint->dimension();
-    j.block(rowOffset, 0, dim, 7) = constraint->jacobian(state, time);
+    j.block(rowOffset, 0, dim, kNumStates) = constraint->jacobian(state, time);
     rowOffset += dim;
   }
 
   // Construct mass matrix inverse M^-1 (7 × 7 block diagonal)
-  Eigen::MatrixXd mInv = Eigen::MatrixXd::Zero(7, 7);
+  Eigen::MatrixXd mInv = Eigen::MatrixXd::Zero(kNumStates, kNumStates);
 
   // Linear mass inverse: (1/m)·I₃
   mInv.block<3, 3>(0, 0) = (1.0 / mass) * Eigen::Matrix3d::Identity();
@@ -167,23 +167,23 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
   }
 
   // Assemble stacked Jacobian J (totalDim × 7)
-  Eigen::MatrixXd j(totalDim, 7);
+  Eigen::MatrixXd j(totalDim, kNumStates);
   int rowOffset = 0;
   for (const auto* constraint : constraints)
   {
     int const dim = constraint->dimension();
-    j.block(rowOffset, 0, dim, 7) = constraint->jacobian(state, time);
+    j.block(rowOffset, 0, dim, kNumStates) = constraint->jacobian(state, time);
     rowOffset += dim;
   }
 
   // Construct mass matrix inverse M^-1 (7 × 7 block diagonal)
-  Eigen::MatrixXd mInv = Eigen::MatrixXd::Zero(7, 7);
+  Eigen::MatrixXd mInv = Eigen::MatrixXd::Zero(kNumStates, kNumStates);
   mInv.block<3, 3>(0, 0) = (1.0 / mass) * Eigen::Matrix3d::Identity();
   mInv.block<3, 3>(3, 3) = inverseInertia;
-  mInv(6, 6) = 1.0;
+  mInv(kNumStates - 1, kNumStates - 1) = 1.0;
 
   // External forces in generalized coordinates (7 × 1)
-  Eigen::VectorXd fExt(7);
+  Eigen::VectorXd fExt(kNumStates);
   fExt.segment<3>(0) =
     Eigen::Vector3d{externalForce.x(), externalForce.y(), externalForce.z()};
   fExt.segment<3>(3) =
@@ -216,7 +216,7 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
   // Compute velocity-level constraint violation Ċ = J·q̇
   // For holonomic constraints, Ċ = J·q̇ + ∂C/∂t
   // State velocity vector (7 × 1)
-  Eigen::VectorXd qDot(7);
+  Eigen::VectorXd qDot(kNumStates);
   qDot.segment<3>(0) =
     Eigen::Vector3d{state.velocity.x(), state.velocity.y(), state.velocity.z()};
 
@@ -247,12 +247,12 @@ std::pair<Coordinate, Coordinate> ConstraintSolver::extractConstraintForces(
   }
 
   // Assemble stacked Jacobian J (totalDim × 7)
-  Eigen::MatrixXd j(totalDim, 7);
+  Eigen::MatrixXd j(totalDim, kNumStates);
   int rowOffset = 0;
   for (const auto* constraint : constraints)
   {
     int const dim = constraint->dimension();
-    j.block(rowOffset, 0, dim, 7) = constraint->jacobian(state, time);
+    j.block(rowOffset, 0, dim, kNumStates) = constraint->jacobian(state, time);
     rowOffset += dim;
   }
 
@@ -625,9 +625,7 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
     if (minLambda < 0.0)
     {
       // Remove most negative lambda from active set (Bland's rule for ties)
-      activeIndices.erase(
-        std::remove(activeIndices.begin(), activeIndices.end(), minIndex),
-        activeIndices.end());
+      std::erase(activeIndices, minIndex);
       continue;
     }
 

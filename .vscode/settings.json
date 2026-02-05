@@ -27,6 +27,78 @@
                 }
             }
         },
+        {
+            "pattern": "{build,Build,BUILD,out,Out,OUT}/Debug/**/msd_gui_test",
+            "cwd": "${absDirpath}",
+            "env": {
+                "ExampleENV1": "You can use variables here too, like ${relPath}",
+                "PATH": "${os_env:PATH}${osPathEnvSep}/adding/new/item/to/PATH/env"
+            },
+            "runTask": {
+                "before": [
+                    "CMake Build"
+                ]
+            },
+            "testGrouping": {
+                "groupByExecutable": {
+                    "label": "MSD-GUI",
+                    "groupByLabel": {
+                        "label": "${sourceRelPath[3]}",
+                        "groupByLabel": {
+                            "label": "${sourceRelPath[4]}",
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "pattern": "{build,Build,BUILD,out,Out,OUT}/Debug/**/msd_assets_test",
+            "cwd": "${absDirpath}",
+            "env": {
+                "ExampleENV1": "You can use variables here too, like ${relPath}",
+                "PATH": "${os_env:PATH}${osPathEnvSep}/adding/new/item/to/PATH/env"
+            },
+            "runTask": {
+                "before": [
+                    "CMake Build"
+                ]
+            },
+            "testGrouping": {
+                "groupByExecutable": {
+                    "label": "MSD-Assets",
+                    "groupByLabel": {
+                        "label": "${sourceRelPath[3]}",
+                        "groupByLabel": {
+                            "label": "${sourceRelPath[4]}",
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "pattern": "{build,Build,BUILD,out,Out,OUT}/Debug/**/msd_utils_test",
+            "cwd": "${absDirpath}",
+            "env": {
+                "ExampleENV1": "You can use variables here too, like ${relPath}",
+                "PATH": "${os_env:PATH}${osPathEnvSep}/adding/new/item/to/PATH/env"
+            },
+            "runTask": {
+                "before": [
+                    "CMake Build"
+                ]
+            },
+            "testGrouping": {
+                "groupByExecutable": {
+                    "label": "MSD-Utils",
+                    "groupByLabel": {
+                        "label": "${sourceRelPath[3]}",
+                        "groupByLabel": {
+                            "label": "${sourceRelPath[4]}",
+                        }
+                    }
+                }
+            }
+        },
     ],
     "testMate.cpp.log.logpanel": true,
     "testMate.cpp.debug.configTemplate": {

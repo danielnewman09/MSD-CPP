@@ -1,12 +1,14 @@
 #ifndef GEOMETRY_HPP
 #define GEOMETRY_HPP
 
-#include <Eigen/Dense>
 #include <cstdint>
 #include <cstring>
 #include <memory>
 #include <optional>
 #include <vector>
+
+#include <Eigen/Dense>
+
 #include "msd-transfer/src/MeshRecord.hpp"
 
 namespace msd_assets

@@ -17,13 +17,14 @@ namespace msd_sim
 class Engine
 {
 public:
-  Engine(const std::string& dbPath);
+  explicit Engine(const std::string& dbPath);
 
   void update(std::chrono::milliseconds simTime);
 
-  const AssetInertial& spawnInertialObject(const std::string assetName,
-                                           const Coordinate& position,
-                                           const AngularCoordinate& orientation);
+  const AssetInertial& spawnInertialObject(
+    const std::string& assetName,
+    const Coordinate& position,
+    const AngularCoordinate& orientation);
 
   /**
    * @brief Spawn a static environment object from an asset
@@ -36,9 +37,9 @@ public:
    * detection. Dynamic objects will bounce off them.
    */
   const AssetEnvironment& spawnEnvironmentObject(
-      const std::string& assetName,
-      const Coordinate& position,
-      const AngularCoordinate& orientation);
+    const std::string& assetName,
+    const Coordinate& position,
+    const AngularCoordinate& orientation);
 
   /**
    * @brief Spawn a player-controlled platform with visual object

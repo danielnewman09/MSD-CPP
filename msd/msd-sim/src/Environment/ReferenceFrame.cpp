@@ -4,58 +4,59 @@
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include <cmath>
 #include <stdexcept>
+#include <utility>
 
 namespace msd_sim
 {
 
 ReferenceFrame::ReferenceFrame()
   : origin_{0.0, 0.0, 0.0},
-    angular_{},
+    
     rotation_{Eigen::Matrix3d::Identity()},
     updated_{false}
 {
   updateRotationMatrix();
 }
 
-ReferenceFrame::ReferenceFrame(const Coordinate& origin)
-  : origin_{origin},
-    angular_{},
+ReferenceFrame::ReferenceFrame(Coordinate  origin)
+  : origin_{std::move(origin)},
+    
     rotation_{Eigen::Matrix3d::Identity()},
     updated_{false}
 {
   updateRotationMatrix();
 }
 
-ReferenceFrame::ReferenceFrame(const Coordinate& origin,
-                               const AngularCoordinate& angular)
-  : origin_{origin},
-    angular_{angular},
+ReferenceFrame::ReferenceFrame(Coordinate  origin,
+                               AngularCoordinate  angular)
+  : origin_{std::move(origin)},
+    angular_{std::move(angular)},
     rotation_{Eigen::Matrix3d::Identity()},
     updated_{false}
 {
   updateRotationMatrix();
 }
 
-ReferenceFrame::ReferenceFrame(const Coordinate& origin,
+ReferenceFrame::ReferenceFrame(Coordinate  origin,
                                const Eigen::Quaterniond& quaternion)
-  : origin_{origin},
-    angular_{},
+  : origin_{std::move(origin)},
+    
     rotation_{Eigen::Matrix3d::Identity()},
-    updated_{false}
+    updated_{true}
 {
   // Normalize the quaternion for robustness and convert to rotation matrix
   rotation_ = quaternion.normalized().toRotationMatrix();
 
   // Extract Euler angles for consistency with class design
   angular_ = extractEulerAngles(rotation_);
-  updated_ = true;
+  
 }
 
-ReferenceFrame::ReferenceFrame(const Coordinate& origin,
+ReferenceFrame::ReferenceFrame(Coordinate  origin,
                                const Coordinate& xDirection,
                                const Coordinate& zDirection)
-  : origin_{origin},
-    angular_{},
+  : origin_{std::move(origin)},
+    
     rotation_{Eigen::Matrix3d::Identity()},
     updated_{false}
 {
@@ -75,10 +76,10 @@ ReferenceFrame::ReferenceFrame(const Coordinate& origin,
   }
 
   // Normalize Z first (primary direction / normal)
-  Eigen::Vector3d zAxis = zDirection.normalized();
+  Eigen::Vector3d const zAxis = zDirection.normalized();
 
   // Orthogonalize X against Z: remove component of X parallel to Z
-  Eigen::Vector3d xProjection = xDirection - xDirection.dot(zAxis) * zAxis;
+  Eigen::Vector3d const xProjection = xDirection - xDirection.dot(zAxis) * zAxis;
   const double xProjectionNorm = xProjection.norm();
 
   if (xProjectionNorm < 1e-10)
@@ -87,10 +88,10 @@ ReferenceFrame::ReferenceFrame(const Coordinate& origin,
       "ReferenceFrame: xDirection and zDirection are parallel");
   }
 
-  Eigen::Vector3d xAxis = xProjection.normalized();
+  Eigen::Vector3d const xAxis = xProjection.normalized();
 
   // Compute Y using right-hand rule: Y = Z × X
-  Eigen::Vector3d yAxis = zAxis.cross(xAxis);
+  Eigen::Vector3d const yAxis = zAxis.cross(xAxis);
 
   // Build rotation matrix from unit vectors (columns are local axes in world
   // coords)
@@ -204,14 +205,14 @@ AngularRate ReferenceFrame::localToGlobal(const AngularRate& localVector) const
 Coordinate ReferenceFrame::globalToLocal(const Coordinate& globalPoint) const
 {
   // Translate to frame origin, then rotate to local orientation
-  Coordinate translated = globalPoint - origin_;
+  Coordinate const translated = globalPoint - origin_;
   return rotation_.transpose() * translated;
 }
 
 Coordinate ReferenceFrame::localToGlobal(const Coordinate& localPoint) const
 {
   // Rotate to global orientation, then translate to global position
-  Coordinate rotated = rotation_ * localPoint;
+  Coordinate const rotated = rotation_ * localPoint;
   return rotated + origin_;
 }
 
@@ -261,12 +262,12 @@ void ReferenceFrame::updateRotationMatrix() const
 {
   // Create rotation matrix using ZYX Euler angle convention
   // Using Eigen's AngleAxis for clarity and efficiency
-  Eigen::AngleAxisd rollAngle{angular_.roll(), Eigen::Vector3d::UnitX()};
-  Eigen::AngleAxisd pitchAngle{angular_.pitch(), Eigen::Vector3d::UnitY()};
-  Eigen::AngleAxisd yawAngle{angular_.yaw(), Eigen::Vector3d::UnitZ()};
+  Eigen::AngleAxisd const rollAngle{angular_.roll(), Eigen::Vector3d::UnitX()};
+  Eigen::AngleAxisd const pitchAngle{angular_.pitch(), Eigen::Vector3d::UnitY()};
+  Eigen::AngleAxisd const yawAngle{angular_.yaw(), Eigen::Vector3d::UnitZ()};
 
   // Combine rotations: R = Rz(yaw) * Ry(pitch) * Rx(roll)
-  Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
+  Eigen::Quaterniond const q = yawAngle * pitchAngle * rollAngle;
   rotation_ = q.matrix();
   updated_ = true;
 }

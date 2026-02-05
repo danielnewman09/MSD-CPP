@@ -84,7 +84,7 @@ TEST(ContactConstraintFactoryTest, CreateFromCollision_SingleContact_0032a)
   Coordinate comA{0, 0, -0.5};
   Coordinate comB{0, 0, 0.5};
 
-  auto constraints = ContactConstraintFactory::createFromCollision(
+  auto constraints = contact_constraint_factory::createFromCollision(
     0, 1, result, stateA, stateB, comA, comB, 0.8);
 
   ASSERT_EQ(1, constraints.size());
@@ -115,7 +115,7 @@ TEST(ContactConstraintFactoryTest,
   Coordinate comA{0, 0, -0.5};
   Coordinate comB{0, 0, 0.5};
 
-  auto constraints = ContactConstraintFactory::createFromCollision(
+  auto constraints = contact_constraint_factory::createFromCollision(
     0, 1, result, stateA, stateB, comA, comB, 0.5);
 
   ASSERT_EQ(4, constraints.size());
@@ -132,7 +132,7 @@ TEST(ContactConstraintFactoryTest, CombineRestitution_GeometricMean_0032a)
   double eB = 0.5;
   double expected = std::sqrt(0.8 * 0.5);
 
-  double combined = ContactConstraintFactory::combineRestitution(eA, eB);
+  double combined = contact_constraint_factory::combineRestitution(eA, eB);
 
   EXPECT_NEAR(expected, combined, 1e-10);
 }
@@ -141,11 +141,11 @@ TEST(ContactConstraintFactoryTest, CombineRestitution_ZeroValues_0032a)
 {
   // Test: Returns zero when either coefficient is zero
   EXPECT_NEAR(
-    0.0, ContactConstraintFactory::combineRestitution(0.0, 0.8), 1e-10);
+    0.0, contact_constraint_factory::combineRestitution(0.0, 0.8), 1e-10);
   EXPECT_NEAR(
-    0.0, ContactConstraintFactory::combineRestitution(0.8, 0.0), 1e-10);
+    0.0, contact_constraint_factory::combineRestitution(0.8, 0.0), 1e-10);
   EXPECT_NEAR(
-    0.0, ContactConstraintFactory::combineRestitution(0.0, 0.0), 1e-10);
+    0.0, contact_constraint_factory::combineRestitution(0.0, 0.0), 1e-10);
 }
 
 TEST(ContactConstraintFactoryTest, ComputeRelativeNormalVelocity_HeadOn_0032a)
@@ -161,8 +161,9 @@ TEST(ContactConstraintFactoryTest, ComputeRelativeNormalVelocity_HeadOn_0032a)
   InertialState stateB =
     createMovingState(Coordinate{0, 0, 1}, Coordinate{0, 0, -2});
 
-  double relVelNormal = ContactConstraintFactory::computeRelativeNormalVelocity(
-    stateA, stateB, leverArmA, leverArmB, normal);
+  double relVelNormal =
+    contact_constraint_factory::computeRelativeNormalVelocity(
+      stateA, stateB, leverArmA, leverArmB, normal);
 
   // v_rel = v_B - v_A = (-2) - (2) = -4
   // Approaching collision: negative relative velocity
@@ -184,8 +185,9 @@ TEST(ContactConstraintFactoryTest,
     createRotatingState(Coordinate{0, 0, -1}, AngularRate{0, 0, 1});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 1});
 
-  double relVelNormal = ContactConstraintFactory::computeRelativeNormalVelocity(
-    stateA, stateB, leverArmA, leverArmB, normal);
+  double relVelNormal =
+    contact_constraint_factory::computeRelativeNormalVelocity(
+      stateA, stateB, leverArmA, leverArmB, normal);
 
   // v_A at contact = v_A + ω_A × r_A = (0, 0, 0) + (0, 1, 0) = (0, 1, 0)
   // v_B at contact = (0, 0, 0)
@@ -213,7 +215,7 @@ TEST(ContactConstraintFactoryTest,
   Coordinate comA{0, 0, -0.5};
   Coordinate comB{0, 0, 0.5};
 
-  auto constraints = ContactConstraintFactory::createFromCollision(
+  auto constraints = contact_constraint_factory::createFromCollision(
     0, 1, result, stateA, stateB, comA, comB, 0.8);
 
   ASSERT_EQ(1, constraints.size());
@@ -235,7 +237,7 @@ TEST(ContactConstraintFactoryTest,
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 0};
 
-  auto constraints = ContactConstraintFactory::createFromCollision(
+  auto constraints = contact_constraint_factory::createFromCollision(
     0, 1, result, stateA, stateB, comA, comB, 0.5);
 
   EXPECT_EQ(0, constraints.size());

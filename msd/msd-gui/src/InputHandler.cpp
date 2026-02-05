@@ -1,7 +1,18 @@
 // Ticket: 0004_gui_framerate
 // Design: docs/designs/input-state-management/design.md
 
+
+#include <algorithm>
+#include <chrono>
+#include <functional>
+#include <utility>
+
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_keycode.h>
+
 #include "msd-gui/src/InputHandler.hpp"
+#include "msd-gui/src/InputState.hpp"
+
 
 namespace msd_gui
 {
@@ -20,45 +31,42 @@ InputBinding::InputBinding(SDL_Keycode key,
 
 bool InputBinding::shouldTrigger(const InputState& state)
 {
+  bool returnStatus = false;
+
   switch (mode_)
   {
     case InputMode::Continuous:
       // Trigger every frame while key is held
-      return state.isKeyPressed(key_);
-
+      returnStatus = state.isKeyPressed(key_);
+      break;
     case InputMode::TriggerOnce:
       // Trigger only on initial press
-      return state.isKeyJustPressed(key_);
-
+      returnStatus = state.isKeyJustPressed(key_);
+      break;
     case InputMode::Interval:
     {
-      // Trigger at fixed intervals while key is held
-      if (!state.isKeyPressed(key_))
-      {
-        return false;
-      }
-
       auto holdDuration = state.getKeyHoldDuration(key_);
       auto timeSinceLastTrigger = holdDuration - lastExecuteTime_;
 
       if (timeSinceLastTrigger >= intervalMs_)
       {
         lastExecuteTime_ = holdDuration;
-        return true;
+        returnStatus = true;
       }
-      return false;
     }
+    break;
 
     case InputMode::PressAndHold:
       // Trigger on key release
       // Note: Current InputState doesn't track "just released" flag
       // This mode is documented but not fully implemented
       // TODO: Add "justReleased" tracking to InputState for PressAndHold mode
-      return false;
+      break;
 
     default:
-      return false;
+      break;
   }
+  return returnStatus;
 }
 
 void InputBinding::execute()
@@ -73,10 +81,6 @@ void InputBinding::execute()
 // InputHandler Implementation
 //------------------------------------------------------------------------------
 
-InputHandler::InputHandler() : inputState_{}, bindings_{}
-{
-}
-
 void InputHandler::addBinding(InputBinding binding)
 {
   bindings_.push_back(std::move(binding));
@@ -85,10 +89,10 @@ void InputHandler::addBinding(InputBinding binding)
 void InputHandler::removeBinding(SDL_Keycode key)
 {
   // Remove first binding matching the key
-  auto it = std::find_if(bindings_.begin(),
-                         bindings_.end(),
-                         [key](const InputBinding& binding)
-                         { return binding.getKey() == key; });
+  auto it = std::ranges::find_if(bindings_,
+
+                                 [key](const InputBinding& binding)
+                                 { return binding.getKey() == key; });
 
   if (it != bindings_.end())
   {
@@ -107,14 +111,15 @@ void InputHandler::handleSDLEvent(const SDL_Event& event)
   {
     case SDL_EVENT_KEY_DOWN:
     {
-      SDL_Keycode key = event.key.key;
+      SDL_Keycode const key = event.key.key;
       inputState_.updateKey(key, true);
 
       // Check TriggerOnce bindings immediately on key down
       // This ensures they fire before update() clears justPressed
       for (auto& binding : bindings_)
       {
-        if (binding.getKey() == key && binding.getMode() == InputMode::TriggerOnce)
+        if (binding.getKey() == key &&
+            binding.getMode() == InputMode::TriggerOnce)
         {
           binding.execute();
         }

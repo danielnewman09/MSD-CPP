@@ -19,6 +19,7 @@ target_link_libraries(${MSD_ASSETS_TEST_NAME}
         GTest::Main)
 
 target_compile_features(${MSD_ASSETS_TEST_NAME} PRIVATE cxx_std_20)
+target_compile_options(${MSD_ASSETS_TEST_NAME} PRIVATE -Wno-unused-result)
 
 target_include_directories(${MSD_ASSETS_TEST_NAME} PUBLIC
     ${GTEST_INCLUDE_DIRS}

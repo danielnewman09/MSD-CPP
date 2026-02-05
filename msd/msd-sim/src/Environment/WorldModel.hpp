@@ -153,7 +153,7 @@ public:
    *
    * @param deltaTime Time step for integration
    */
-  void update(std::chrono::milliseconds deltaTime);
+  void update(std::chrono::milliseconds simTime);
 
   /**
    * @brief Get current simulation time

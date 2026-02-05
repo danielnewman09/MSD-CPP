@@ -31,7 +31,7 @@ namespace msd_sim
 class BilateralConstraint : public Constraint
 {
 public:
-  virtual ~BilateralConstraint() = default;
+  ~BilateralConstraint() override = default;
 
   // No additional interface beyond Constraint
   // Semantic marker for bilateral (equality) constraints

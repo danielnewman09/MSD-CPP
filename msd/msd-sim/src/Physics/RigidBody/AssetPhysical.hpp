@@ -2,6 +2,7 @@
 #define MSD_SIM_PHYSICS_PHYSICAL_ASSET_HPP
 
 #include <memory>
+
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
@@ -51,7 +52,7 @@ public:
   AssetPhysical(uint32_t assetId,
                 uint32_t instanceId,
                 ConvexHull& hull,
-                const ReferenceFrame& frame);
+                ReferenceFrame frame);
 
   /**
    * @brief Virtual destructor for proper cleanup of derived classes.

@@ -34,8 +34,9 @@ enum class InputMode : uint8_t
 /**
  * @brief Binds a key to an action with specified input mode
  *
- * Encapsulates the binding logic separate from state tracking. The shouldTrigger()
- * method implements mode-specific logic (continuous, once, interval).
+ * Encapsulates the binding logic separate from state tracking. The
+ * shouldTrigger() method implements mode-specific logic (continuous, once,
+ * interval).
  *
  * Thread safety: Not thread-safe (assumes single-threaded execution)
  */
@@ -52,25 +53,26 @@ public:
   InputBinding(SDL_Keycode key,
                InputMode mode,
                std::function<void()> action,
-               std::chrono::milliseconds interval = std::chrono::milliseconds{0});
-
-  InputBinding(const InputBinding&) = default;
-  InputBinding& operator=(const InputBinding&) = default;
-  InputBinding(InputBinding&&) noexcept = default;
-  InputBinding& operator=(InputBinding&&) noexcept = default;
-  ~InputBinding() = default;
+               std::chrono::milliseconds interval = std::chrono::milliseconds{
+                 0});
 
   /**
    * @brief Get the bound key
    * @return SDL keycode
    */
-  [[nodiscard]] SDL_Keycode getKey() const { return key_; }
+  [[nodiscard]] SDL_Keycode getKey() const
+  {
+    return key_;
+  }
 
   /**
    * @brief Get the input mode
    * @return Input mode enum
    */
-  [[nodiscard]] InputMode getMode() const { return mode_; }
+  [[nodiscard]] InputMode getMode() const
+  {
+    return mode_;
+  }
 
   /**
    * @brief Check if binding should trigger given current input state
@@ -101,17 +103,18 @@ private:
 };
 
 /**
- * @brief Manages collection of input bindings and processes them based on InputState
+ * @brief Manages collection of input bindings and processes them based on
+ * InputState
  *
- * Central coordination point for input processing. Owns InputState (single source of truth)
- * and evaluates all bindings to execute triggered actions.
+ * Central coordination point for input processing. Owns InputState (single
+ * source of truth) and evaluates all bindings to execute triggered actions.
  *
  * Thread safety: Not thread-safe
  */
 class InputHandler
 {
 public:
-  InputHandler();
+  InputHandler() = default;
   ~InputHandler() = default;
 
   // Delete copy (owns unique state)
@@ -172,7 +175,10 @@ public:
    * @brief Get read-only access to the input state
    * @return Const reference to InputState
    */
-  [[nodiscard]] const InputState& getInputState() const { return inputState_; }
+  [[nodiscard]] const InputState& getInputState() const
+  {
+    return inputState_;
+  }
 
 private:
   InputState inputState_;

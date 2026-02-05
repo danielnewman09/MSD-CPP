@@ -1,10 +1,12 @@
 #ifndef STLLOADER_HPP
 #define STLLOADER_HPP
 
-#include <Eigen/Dense>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include <Eigen/Dense>
+
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
 

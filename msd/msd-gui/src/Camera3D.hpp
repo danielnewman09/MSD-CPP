@@ -4,9 +4,11 @@
 #ifndef CAMERA_3D_HPP
 #define CAMERA_3D_HPP
 
-#include <Eigen/Dense>
 #include <functional>
-#include <msd-sim/src/Environment/ReferenceFrame.hpp>
+
+#include <Eigen/Dense>
+
+#include "msd-sim/src/Environment/ReferenceFrame.hpp"
 
 namespace msd_gui
 {
@@ -60,8 +62,7 @@ public:
    * @brief Get the underlying reference frame (const version)
    * @return Const reference to the camera's reference frame
    */
-  [[nodiscard]] const msd_sim::ReferenceFrame& getReferenceFrame()
-    const
+  [[nodiscard]] const msd_sim::ReferenceFrame& getReferenceFrame() const
   {
     return frame_.get();
   }

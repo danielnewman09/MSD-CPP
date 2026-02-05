@@ -4,9 +4,8 @@
 #include "msd-sim/src/Physics/SupportFunction.hpp"
 #include <limits>
 
-namespace msd_sim
-{
-namespace SupportFunction
+
+namespace msd_sim::support_function
 {
 
 Coordinate support(const ConvexHull& hull, const Coordinate& dir)
@@ -18,7 +17,7 @@ Coordinate support(const ConvexHull& hull, const Coordinate& dir)
 
   for (const auto& vertex : vertices)
   {
-    double dotProduct = vertex.dot(dir);
+    double const dotProduct = vertex.dot(dir);
     if (dotProduct > maxDot)
     {
       maxDot = dotProduct;
@@ -40,22 +39,22 @@ Coordinate supportMinkowski(const AssetPhysical& assetA,
 
   // Transform search direction from world space to local space for asset A
   // (rotation only - direction vectors don't translate)
-  Coordinate dirA_local = frameA.globalToLocal(dir);
+  Coordinate const dirALocal = frameA.globalToLocal(dir);
 
   // Get support vertex in local space for asset A
-  Coordinate supportA_local = support(hullA, dirA_local);
+  Coordinate const supportALocal = support(hullA, dirALocal);
 
   // Transform support vertex from local space to world space
   // (rotation + translation - positions transform fully)
-  Coordinate supportA_world = frameA.localToGlobal(supportA_local);
+  Coordinate const supportAWorld = frameA.localToGlobal(supportALocal);
 
   // Same process for asset B with negated direction
-  Coordinate dirB_local = frameB.globalToLocal(Eigen::Vector3d{-dir});
-  Coordinate supportB_local = support(hullB, dirB_local);
-  Coordinate supportB_world = frameB.localToGlobal(supportB_local);
+  Coordinate const dirBLocal = frameB.globalToLocal(Eigen::Vector3d{-dir});
+  Coordinate const supportBLocal = support(hullB, dirBLocal);
+  Coordinate const supportBWorld = frameB.localToGlobal(supportBLocal);
 
   // Return Minkowski difference in world space
-  return supportA_world - supportB_world;
+  return supportAWorld - supportBWorld;
 }
 
 SupportResult supportMinkowskiWithWitness(const AssetPhysical& assetA,
@@ -69,25 +68,24 @@ SupportResult supportMinkowskiWithWitness(const AssetPhysical& assetA,
 
   // Transform search direction from world space to local space for asset A
   // (rotation only - direction vectors don't translate)
-  Coordinate dirA_local = frameA.globalToLocal(dir);
+  Coordinate const dirALocal = frameA.globalToLocal(dir);
 
   // Get support vertex in local space for asset A
-  Coordinate supportA_local = support(hullA, dirA_local);
+  Coordinate const supportALocal = support(hullA, dirALocal);
 
   // Transform support vertex from local space to world space
   // (rotation + translation - positions transform fully)
-  Coordinate supportA_world = frameA.localToGlobal(supportA_local);
+  Coordinate const supportAWorld = frameA.localToGlobal(supportALocal);
 
   // Same process for asset B with negated direction
-  Coordinate dirB_local = frameB.globalToLocal(Eigen::Vector3d{-dir});
-  Coordinate supportB_local = support(hullB, dirB_local);
-  Coordinate supportB_world = frameB.localToGlobal(supportB_local);
+  Coordinate const dirBLocal = frameB.globalToLocal(Eigen::Vector3d{-dir});
+  Coordinate const supportBLocal = support(hullB, dirBLocal);
+  Coordinate const supportBWorld = frameB.localToGlobal(supportBLocal);
 
   // Return Minkowski difference with witness points
-  return SupportResult{supportA_world - supportB_world,  // Minkowski
-                       supportA_world,                   // Witness A
-                       supportB_world};                  // Witness B
+  return SupportResult{supportAWorld - supportBWorld,  // Minkowski
+                       supportAWorld,                  // Witness A
+                       supportBWorld};                 // Witness B
 }
 
-}  // namespace SupportFunction
-}  // namespace msd_sim
+}  // namespace msd_sim::support_function

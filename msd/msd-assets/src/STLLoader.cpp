@@ -1,9 +1,18 @@
-#include "msd-assets/src/STLLoader.hpp"
-#include <Eigen/Dense>
+#include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
+#include <string>
+#include <vector>
+
+#include <Eigen/Dense>
+
+#include "msd-assets/src/Geometry.hpp"
+#include "msd-assets/src/STLLoader.hpp"
+#include "msd-transfer/src/MeshRecord.hpp"
 
 namespace msd_assets
 {
@@ -15,20 +24,18 @@ std::unique_ptr<msd_transfer::MeshRecord> STLLoader::loadSTL(
   {
     return loadBinarySTL(filename);
   }
-  else
-  {
-    return loadASCIISTL(filename);
-  }
+
+  return loadASCIISTL(filename);
 }
 
 std::unique_ptr<msd_transfer::MeshRecord> STLLoader::loadBinarySTL(
   const std::string& filename)
 {
-  std::vector<STLTriangle> triangles = readBinarySTLTriangles(filename);
+  std::vector<STLTriangle> const triangles = readBinarySTLTriangles(filename);
 
   if (triangles.empty())
   {
-    std::cerr << "Failed to read binary STL file: " << filename << std::endl;
+    std::cerr << "Failed to read binary STL file: " << filename << '\n';
     return nullptr;
   }
 
@@ -39,11 +46,11 @@ std::unique_ptr<msd_transfer::MeshRecord> STLLoader::loadBinarySTL(
 std::unique_ptr<msd_transfer::MeshRecord> STLLoader::loadASCIISTL(
   const std::string& filename)
 {
-  std::vector<STLTriangle> triangles = readASCIISTLTriangles(filename);
+  std::vector<STLTriangle> const triangles = readASCIISTLTriangles(filename);
 
   if (triangles.empty())
   {
-    std::cerr << "Failed to read ASCII STL file: " << filename << std::endl;
+    std::cerr << "Failed to read ASCII STL file: " << filename << '\n';
     return nullptr;
   }
 
@@ -60,7 +67,7 @@ std::vector<STLTriangle> STLLoader::readBinarySTLTriangles(
   std::ifstream file(filename, std::ios::binary);
   if (!file.is_open())
   {
-    std::cerr << "Cannot open file: " << filename << std::endl;
+    std::cerr << "Cannot open file: " << filename << '\n';
     return triangles;
   }
 
@@ -69,26 +76,26 @@ std::vector<STLTriangle> STLLoader::readBinarySTLTriangles(
   file.read(header, 80);
 
   // Read number of triangles (4 bytes, unsigned int, little-endian)
-  uint32_t triangleCount;
+  uint32_t triangleCount = 0;
   file.read(reinterpret_cast<char*>(&triangleCount), sizeof(uint32_t));
 
   // Get file size for validation
   file.seekg(0, std::ios::end);
-  std::streamoff fileSizeOffset = file.tellg();
+  std::streamoff const fileSizeOffset = file.tellg();
   if (fileSizeOffset < 0)
   {
-    std::cerr << "Failed to determine file size for: " << filename << std::endl;
+    std::cerr << "Failed to determine file size for: " << filename << '\n';
     return triangles;
   }
-  size_t fileSize = static_cast<size_t>(fileSizeOffset);
+  auto const fileSize = static_cast<size_t>(fileSizeOffset);
   file.seekg(84);  // Back to position after header and count
 
   // Validate file size
   if (!validateBinarySTLSize(fileSize, triangleCount))
   {
-    std::cerr << "Invalid binary STL file size for: " << filename << std::endl;
-    std::cerr << "Expected: " << (80 + 4 + triangleCount * 50)
-              << " bytes, got: " << fileSize << " bytes" << std::endl;
+    std::cerr << "Invalid binary STL file size for: " << filename << '\n';
+    std::cerr << "Expected: " << (80 + 4 + (triangleCount * 50))
+              << " bytes, got: " << fileSize << " bytes" << '\n';
     return triangles;
   }
 
@@ -120,7 +127,7 @@ std::vector<STLTriangle> STLLoader::readBinarySTLTriangles(
     triangle.vertex3 = Eigen::Vector3f(v3[0], v3[1], v3[2]);
 
     // Read attribute byte count (2 bytes, usually 0)
-    uint16_t attributeByteCount;
+    uint16_t attributeByteCount = 0;
     file.read(reinterpret_cast<char*>(&attributeByteCount), sizeof(uint16_t));
 
     triangles.push_back(triangle);
@@ -129,7 +136,7 @@ std::vector<STLTriangle> STLLoader::readBinarySTLTriangles(
   file.close();
 
   std::cout << "Loaded " << triangles.size()
-            << " triangles from binary STL: " << filename << std::endl;
+            << " triangles from binary STL: " << filename << '\n';
 
   return triangles;
 }
@@ -142,7 +149,7 @@ std::vector<STLTriangle> STLLoader::readASCIISTLTriangles(
   std::ifstream file(filename);
   if (!file.is_open())
   {
-    std::cerr << "Cannot open file: " << filename << std::endl;
+    std::cerr << "Cannot open file: " << filename << '\n';
     return triangles;
   }
 
@@ -160,7 +167,9 @@ std::vector<STLTriangle> STLLoader::readASCIISTLTriangles(
     {
       // facet normal nx ny nz
       std::string normalKeyword;
-      float nx, ny, nz;
+      float nx = NAN;
+      float ny = NAN;
+      float nz = NAN;
       iss >> normalKeyword >> nx >> ny >> nz;
       currentTriangle.normal = Eigen::Vector3f(nx, ny, nz);
       vertexIndex = 0;
@@ -168,7 +177,9 @@ std::vector<STLTriangle> STLLoader::readASCIISTLTriangles(
     else if (keyword == "vertex")
     {
       // vertex x y z
-      float x, y, z;
+      float x = NAN;
+      float y = NAN;
+      float z = NAN;
       iss >> x >> y >> z;
 
       if (vertexIndex == 0)
@@ -194,7 +205,7 @@ std::vector<STLTriangle> STLLoader::readASCIISTLTriangles(
   file.close();
 
   std::cout << "Loaded " << triangles.size()
-            << " triangles from ASCII STL: " << filename << std::endl;
+            << " triangles from ASCII STL: " << filename << '\n';
 
   return triangles;
 }
@@ -214,19 +225,19 @@ bool STLLoader::isBinarySTL(const std::string& filename)
   // ASCII STL files typically start with "solid " (note the space)
   // Binary STL files can have anything in the header, but usually don't
   // start with "solid "
-  std::string headerStr(header);
+  std::string const headerStr(header);
 
   // If it starts with "solid ", might be ASCII (but not guaranteed)
   // Read the triangle count to validate
-  if (headerStr.find("solid ") == 0)
+  if (headerStr.starts_with("solid "))
   {
     // Could be ASCII, but some binary files also start with "solid"
     // Check file size to determine
-    uint32_t triangleCount;
+    uint32_t triangleCount = 0;
     file.read(reinterpret_cast<char*>(&triangleCount), sizeof(uint32_t));
 
     file.seekg(0, std::ios::end);
-    std::streamoff fileSizeOffset = file.tellg();
+    std::streamoff const fileSizeOffset = file.tellg();
     file.close();
 
     // If tellg() failed, assume ASCII format
@@ -234,16 +245,10 @@ bool STLLoader::isBinarySTL(const std::string& filename)
     {
       return false;
     }
-    size_t fileSize = static_cast<size_t>(fileSizeOffset);
+    auto const fileSize = static_cast<size_t>(fileSizeOffset);
 
     // If file size matches binary format exactly, it's binary
-    if (validateBinarySTLSize(fileSize, triangleCount))
-    {
-      return true;
-    }
-
-    // Otherwise, assume ASCII
-    return false;
+    return validateBinarySTLSize(fileSize, triangleCount);
   }
 
   file.close();
@@ -266,7 +271,7 @@ msd_transfer::MeshRecord STLLoader::trianglesToMeshRecord(
   record.vertex_data.resize(blobSize);
 
   // Get pointer to BLOB data for writing
-  Vertex* vertexData = reinterpret_cast<Vertex*>(record.vertex_data.data());
+  auto* vertexData = reinterpret_cast<Vertex*>(record.vertex_data.data());
 
   // Convert each triangle to 3 vertices with normals and default white color
   size_t vertexIndex = 0;
@@ -274,21 +279,30 @@ msd_transfer::MeshRecord STLLoader::trianglesToMeshRecord(
   {
     // Vertex 1
     vertexData[vertexIndex++] = {
-      {triangle.vertex1.x(), triangle.vertex1.y(), triangle.vertex1.z()},
-      {1.0f, 1.0f, 1.0f},  // Default white color
-      {triangle.normal.x(), triangle.normal.y(), triangle.normal.z()}};
+      .position = {triangle.vertex1.x(),
+                   triangle.vertex1.y(),
+                   triangle.vertex1.z()},
+      .color = {1.0f, 1.0f, 1.0f},  // Default white color
+      .normal = {
+        triangle.normal.x(), triangle.normal.y(), triangle.normal.z()}};
 
     // Vertex 2
     vertexData[vertexIndex++] = {
-      {triangle.vertex2.x(), triangle.vertex2.y(), triangle.vertex2.z()},
-      {1.0f, 1.0f, 1.0f},  // Default white color
-      {triangle.normal.x(), triangle.normal.y(), triangle.normal.z()}};
+      .position = {triangle.vertex2.x(),
+                   triangle.vertex2.y(),
+                   triangle.vertex2.z()},
+      .color = {1.0f, 1.0f, 1.0f},  // Default white color
+      .normal = {
+        triangle.normal.x(), triangle.normal.y(), triangle.normal.z()}};
 
     // Vertex 3
     vertexData[vertexIndex++] = {
-      {triangle.vertex3.x(), triangle.vertex3.y(), triangle.vertex3.z()},
-      {1.0f, 1.0f, 1.0f},  // Default white color
-      {triangle.normal.x(), triangle.normal.y(), triangle.normal.z()}};
+      .position = {triangle.vertex3.x(),
+                   triangle.vertex3.y(),
+                   triangle.vertex3.z()},
+      .color = {1.0f, 1.0f, 1.0f},  // Default white color
+      .normal = {
+        triangle.normal.x(), triangle.normal.y(), triangle.normal.z()}};
   }
 
   return record;
@@ -297,7 +311,7 @@ msd_transfer::MeshRecord STLLoader::trianglesToMeshRecord(
 bool STLLoader::validateBinarySTLSize(size_t fileSize, uint32_t triangleCount)
 {
   // Binary STL file size = 80 (header) + 4 (count) + count * 50 (triangles)
-  size_t expectedSize = 80 + 4 + (triangleCount * 50);
+  size_t const expectedSize = 80 + 4 + (triangleCount * 50);
   return fileSize == expectedSize;
 }
 

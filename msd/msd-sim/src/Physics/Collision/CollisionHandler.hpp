@@ -48,7 +48,7 @@ public:
    * @param assetB Second physical asset
    * @return std::nullopt if no collision, CollisionResult if collision
    */
-  std::optional<CollisionResult> checkCollision(
+  [[nodiscard]] std::optional<CollisionResult> checkCollision(
     const AssetPhysical& assetA,
     const AssetPhysical& assetB) const;
 

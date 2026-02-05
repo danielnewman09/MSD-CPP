@@ -1,6 +1,16 @@
-#include "msd-gui/src/SDLUtils.hpp"
 
+#include <cstdint>
 #include <fstream>
+#include <ios>
+#include <iterator>
+#include <string>
+#include <vector>
+
+#include <SDL3/SDL_gpu.h>
+#include <SDL3/SDL_log.h>
+#include <SDL3/SDL_stdinc.h>
+
+#include "msd-gui/src/SDLUtils.hpp"
 
 namespace msd_gui
 {
@@ -13,7 +23,7 @@ UniqueShader loadShader(const std::string& shaderFilename,
                         uint32_t storageTextureCount)
 {
   // Auto-detect the shader stage from the file name for convenience
-  SDL_GPUShaderStage stage;
+  SDL_GPUShaderStage stage{};
   if (SDL_strstr(shaderFilename.c_str(), ".vert"))
   {
     stage = SDL_GPU_SHADERSTAGE_VERTEX;
@@ -29,25 +39,25 @@ UniqueShader loadShader(const std::string& shaderFilename,
   }
 
   std::string fullPath;
-  SDL_GPUShaderFormat backendFormats = SDL_GetGPUShaderFormats(&device);
+  SDL_GPUShaderFormat const backendFormats = SDL_GetGPUShaderFormats(&device);
   SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_INVALID;
   std::string entrypoint;
 
-  if (backendFormats & SDL_GPU_SHADERFORMAT_SPIRV)
+  if ((backendFormats & SDL_GPU_SHADERFORMAT_SPIRV) != 0u)
   {
     fullPath =
       basePath + "Content/Shaders/Compiled/SPIRV/" + shaderFilename + ".spv";
     format = SDL_GPU_SHADERFORMAT_SPIRV;
     entrypoint = "main";
   }
-  else if (backendFormats & SDL_GPU_SHADERFORMAT_MSL)
+  else if ((backendFormats & SDL_GPU_SHADERFORMAT_MSL) != 0u)
   {
     fullPath =
       basePath + "Content/Shaders/Compiled/MSL/" + shaderFilename + ".msl";
     format = SDL_GPU_SHADERFORMAT_MSL;
     entrypoint = "main0";
   }
-  else if (backendFormats & SDL_GPU_SHADERFORMAT_DXIL)
+  else if ((backendFormats & SDL_GPU_SHADERFORMAT_DXIL) != 0u)
   {
     fullPath =
       basePath + "Content/Shaders/Compiled/DXIL/" + shaderFilename + ".dxil";
@@ -70,7 +80,7 @@ UniqueShader loadShader(const std::string& shaderFilename,
   std::vector<uint8_t> code{std::istreambuf_iterator<char>(file),
                             std::istreambuf_iterator<char>()};
 
-  SDL_GPUShaderCreateInfo shaderInfo = {
+  SDL_GPUShaderCreateInfo const shaderInfo = {
     .code = code.data(),
     .code_size = code.size(),
     .entrypoint = entrypoint.c_str(),

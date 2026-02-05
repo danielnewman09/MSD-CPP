@@ -8,9 +8,8 @@
 namespace msd_sim
 {
 
-SemiImplicitEulerIntegrator::SemiImplicitEulerIntegrator() : solver_{}
-{
-}
+SemiImplicitEulerIntegrator::SemiImplicitEulerIntegrator()  
+= default;
 
 SemiImplicitEulerIntegrator::SemiImplicitEulerIntegrator(
   ConstraintSolver solver)
@@ -29,12 +28,12 @@ void SemiImplicitEulerIntegrator::step(
 {
   // ===== Compute Unconstrained Accelerations =====
 
-  Coordinate linearAccelFree = force / mass;
-  AngularRate angularAccelFree{inverseInertiaWorld * torque};
+  const Coordinate linearAccelFree = force / mass;
+  const AngularRate angularAccelFree{inverseInertiaWorld * torque};
 
   // ===== Solve Constraint System =====
 
-  ConstraintSolver::SolveResult result = solver_.solve(
+  const ConstraintSolver::SolveResult result = msd_sim::ConstraintSolver::solve(
     constraints, state, force, torque, mass, inverseInertiaWorld, dt);
 
   // If solver didn't converge, proceed without constraint forces (graceful
@@ -49,9 +48,9 @@ void SemiImplicitEulerIntegrator::step(
 
   // ===== Apply Constraint Forces =====
 
-  Coordinate linearAccelTotal =
+  Coordinate const linearAccelTotal =
     linearAccelFree + (constraintLinearForce / mass);
-  AngularRate angularAccelTotal{
+  AngularRate const angularAccelTotal{
     angularAccelFree + (inverseInertiaWorld * constraintAngularTorque)};
 
   state.acceleration = linearAccelTotal;
@@ -71,9 +70,9 @@ void SemiImplicitEulerIntegrator::step(
   state.setAngularVelocity(omega);
 
   // Integrate quaternion: Q_new = Q_old + Q̇ * dt
-  Eigen::Vector4d Q_vec = state.orientation.coeffs();
-  Q_vec += state.quaternionRate * dt;
-  state.orientation.coeffs() = Q_vec;
+  Eigen::Vector4d qVec = state.orientation.coeffs();
+  qVec += state.quaternionRate * dt;
+  state.orientation.coeffs() = qVec;
 
   // ===== Implicit Constraint Enforcement =====
   // Normalize quaternion to maintain |Q|=1 within machine precision

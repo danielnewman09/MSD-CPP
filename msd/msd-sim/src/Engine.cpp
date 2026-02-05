@@ -17,7 +17,7 @@ namespace
 // Helper to create cube vertices
 std::vector<Coordinate> createCubeVertices(double size)
 {
-  double half = size / 2.0;
+  const double half = size / 2.0;
   return {Coordinate{-half, -half, -half},
           Coordinate{half, -half, -half},
           Coordinate{half, half, -half},
@@ -30,10 +30,10 @@ std::vector<Coordinate> createCubeVertices(double size)
 }  // namespace
 
 Engine::Engine(const std::string& dbPath)
-  : assetRegistry_{dbPath}, floorHull_{createCubeVertices(100.0)}, worldModel_{}
+  : assetRegistry_{dbPath}, floorHull_{createCubeVertices(100.0)}
 {
   // Spawn floor environment object at origin
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -60.0}};
+  const ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -60.0}};
   worldModel_.spawnEnvironmentObject(0, floorHull_, floorFrame);
 }
 
@@ -44,11 +44,11 @@ msd_assets::AssetRegistry& Engine::getAssetRegistry()
 
 
 const AssetInertial& Engine::spawnInertialObject(
-  const std::string assetName,
+  const std::string& assetName,
   const Coordinate& position,
   const AngularCoordinate& orientation)
 {
-  ReferenceFrame objectFrame{position, orientation};
+  const ReferenceFrame objectFrame{position, orientation};
 
   const auto& asset = assetRegistry_.getAsset(assetName);
 
@@ -61,9 +61,14 @@ const AssetInertial& Engine::spawnInertialObject(
   // Cache asset reference to avoid repeated accessor calls
   const auto& assetRef = asset->get();
 
+  if (!assetRef.getCollisionGeometry().has_value())
+  {
+    throw std::runtime_error("Asset does not have collision geometry");
+  }
+
   // try_emplace only constructs the ConvexHull if key doesn't exist
   // Returns iterator to existing or newly inserted element
-  auto [hullIt, inserted] = registryHullMap_.try_emplace(
+  auto [hullIt, inserted] = registryHullMap_.emplace(
     assetRef.getId(), assetRef.getCollisionGeometry()->get().getVertices());
 
   return worldModel_.spawnObject(assetRef.getId(), hullIt->second, objectFrame);
@@ -74,7 +79,7 @@ const AssetEnvironment& Engine::spawnEnvironmentObject(
   const Coordinate& position,
   const AngularCoordinate& orientation)
 {
-  ReferenceFrame objectFrame{position, orientation};
+  const ReferenceFrame objectFrame{position, orientation};
 
   const auto& asset = assetRegistry_.getAsset(assetName);
 
@@ -87,7 +92,12 @@ const AssetEnvironment& Engine::spawnEnvironmentObject(
 
   const auto& assetRef = asset->get();
 
-  auto [hullIt, inserted] = registryHullMap_.try_emplace(
+  if (!assetRef.getCollisionGeometry().has_value())
+  {
+    throw std::runtime_error("Asset does not have collision geometry");
+  }
+
+  auto [hullIt, inserted] = registryHullMap_.emplace(
     assetRef.getId(), assetRef.getCollisionGeometry()->get().getVertices());
 
   return worldModel_.spawnEnvironmentObject(
@@ -98,7 +108,7 @@ uint32_t Engine::spawnPlayerPlatform(const std::string& assetName,
                                      const Coordinate& position,
                                      const AngularCoordinate& orientation)
 {
-  ReferenceFrame objectFrame{position, orientation};
+  const ReferenceFrame objectFrame{position, orientation};
 
   const auto& asset = assetRegistry_.getAsset(assetName);
 
@@ -111,9 +121,14 @@ uint32_t Engine::spawnPlayerPlatform(const std::string& assetName,
   // Cache asset reference to avoid repeated accessor calls
   const auto& assetRef = asset->get();
 
+  if (!assetRef.getCollisionGeometry().has_value())
+  {
+    throw std::runtime_error("Asset does not have collision geometry");
+  }
+
   // try_emplace only constructs the ConvexHull if key doesn't exist
   // Returns iterator to existing or newly inserted element
-  auto [hullIt, inserted] = registryHullMap_.try_emplace(
+  auto [hullIt, inserted] = registryHullMap_.emplace(
     assetRef.getId(), assetRef.getCollisionGeometry()->get().getVertices());
 
   // Create Platform with InputControlAgent
@@ -151,7 +166,7 @@ void Engine::setPlayerInputCommands(const InputCommands& commands)
       // Calculate deltaTime since last update (assume 16ms for now - should
       // be passed from update loop)
       // TODO: Pass deltaTime from the update loop instead of hardcoding
-      std::chrono::milliseconds deltaTime{16};
+      const std::chrono::milliseconds deltaTime{16};
 
       motionController.updateTransform(
         inertialAsset.getReferenceFrame(), commands, deltaTime);

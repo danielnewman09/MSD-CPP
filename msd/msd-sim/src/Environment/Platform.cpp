@@ -18,8 +18,7 @@ Platform::Platform(uint32_t platformId,
                    const ReferenceFrame& frame)
   : id_{platformId},
     inertialAsset_{assetId, assetInstanceId, hull, mass, frame},
-    lastUpdateTime_{std::chrono::milliseconds{0}},
-    motionController_{}  // Initialize with default parameters
+    lastUpdateTime_{std::chrono::milliseconds{0}}
 {
   std::cout << "Platform " << id_ << " created.\n";
 }

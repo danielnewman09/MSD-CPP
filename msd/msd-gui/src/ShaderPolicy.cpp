@@ -15,7 +15,7 @@ namespace msd_gui
 //=============================================================================
 
 std::vector<SDL_GPUVertexAttribute>
-PositionOnlyShaderPolicy::getVertexAttributes() const
+PositionOnlyShaderPolicy::getVertexAttributes()
 {
   return {
     // Per-vertex attributes (buffer slot 0)
@@ -49,7 +49,7 @@ PositionOnlyShaderPolicy::getVertexAttributes() const
 }
 
 std::vector<SDL_GPUVertexBufferDescription>
-PositionOnlyShaderPolicy::getVertexBufferDescriptions() const
+PositionOnlyShaderPolicy::getVertexBufferDescriptions()
 {
   return {
     // Slot 0: Per-vertex data
@@ -93,7 +93,7 @@ std::vector<uint8_t> PositionOnlyShaderPolicy::buildInstanceData(
   const msd_sim::AssetInertial& object,
   float r,
   float g,
-  float b) const
+  float b)
 {
   PositionOnlyInstanceData data{};
 
@@ -121,7 +121,7 @@ std::vector<uint8_t> PositionOnlyShaderPolicy::buildInstanceData(
 //=============================================================================
 
 std::vector<SDL_GPUVertexAttribute>
-FullTransformShaderPolicy::getVertexAttributes() const
+FullTransformShaderPolicy::getVertexAttributes()
 {
   return {
     // Per-vertex attributes (buffer slot 0)
@@ -176,7 +176,7 @@ FullTransformShaderPolicy::getVertexAttributes() const
 }
 
 std::vector<SDL_GPUVertexBufferDescription>
-FullTransformShaderPolicy::getVertexBufferDescriptions() const
+FullTransformShaderPolicy::getVertexBufferDescriptions()
 {
   return {
     // Slot 0: Per-vertex data
@@ -217,7 +217,7 @@ SDL_GPUVertexInputState FullTransformShaderPolicy::getVertexInputState() const
 }
 
 Eigen::Matrix4f FullTransformShaderPolicy::createModelMatrix(
-  const msd_sim::ReferenceFrame& transform) const
+  const msd_sim::ReferenceFrame& transform)
 {
   // Start with identity matrix
   Eigen::Matrix4f modelMatrix{Eigen::Matrix4f::Identity()};
@@ -243,7 +243,7 @@ std::vector<uint8_t> FullTransformShaderPolicy::buildInstanceData(
   float r,
   float g,
   float b,
-  uint32_t geometryIndex) const
+  uint32_t geometryIndex)
 {
   FullTransformInstanceData data{};
 

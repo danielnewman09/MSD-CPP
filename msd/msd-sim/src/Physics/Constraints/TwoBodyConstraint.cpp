@@ -2,7 +2,9 @@
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 
 #include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
+#include <Eigen/src/Core/Matrix.h>
 #include <stdexcept>
+#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
 {

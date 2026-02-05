@@ -12,7 +12,7 @@
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
-namespace msd_sim
+namespace msd_sim::contact_constraint_factory
 {
 
 /**
@@ -36,8 +36,6 @@ namespace msd_sim
  * prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
  * @ticket 0032_contact_constraint_refactor
  */
-namespace ContactConstraintFactory
-{
 
 /**
  * @brief Rest velocity threshold [m/s]
@@ -121,8 +119,7 @@ double computeRelativeNormalVelocity(const InertialState& stateA,
                                      const Coordinate& leverArmB,
                                      const Coordinate& normal);
 
-}  // namespace ContactConstraintFactory
 
-}  // namespace msd_sim
+}  // namespace msd_sim::contact_constraint_factory
 
 #endif  // MSD_SIM_PHYSICS_CONTACT_CONSTRAINT_FACTORY_HPP

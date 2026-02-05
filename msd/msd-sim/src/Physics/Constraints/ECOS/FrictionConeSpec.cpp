@@ -2,6 +2,13 @@
 // Design: docs/designs/0035b_box_constrained_asm_solver/design.md
 
 #include "msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp"
+#include <stdexcept>
+#include <string>
+#include <cstddef>
+
+#include <utility>
+#include <vector>
+#include <ecos/glblopts.h>
 
 namespace msd_sim
 {
@@ -37,12 +44,12 @@ void FrictionConeSpec::setFriction(int contactIndex, double mu, int normalConstr
   }
 
   // Ensure vectors are sized appropriately
-  if (static_cast<int>(frictionCoefficients.size()) <= contactIndex)
+  if (std::cmp_less_equal(frictionCoefficients.size(), contactIndex))
   {
     frictionCoefficients.resize(static_cast<size_t>(contactIndex) + 1, 0.0);
   }
 
-  if (static_cast<int>(normalIndices.size()) <= contactIndex)
+  if (std::cmp_less_equal(normalIndices.size(), contactIndex))
   {
     normalIndices.resize(static_cast<size_t>(contactIndex) + 1, -1);
   }
@@ -74,7 +81,7 @@ double FrictionConeSpec::getFrictionCoefficient(int contactIndex) const
         std::to_string(numContacts) + ") (got " + std::to_string(contactIndex) + ")");
   }
 
-  if (static_cast<int>(frictionCoefficients.size()) <= contactIndex)
+  if (std::cmp_less_equal(frictionCoefficients.size(), contactIndex))
   {
     // Not yet set, return 0.0 as default
     return 0.0;

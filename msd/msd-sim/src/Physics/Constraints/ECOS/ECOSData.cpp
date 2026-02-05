@@ -2,7 +2,12 @@
 // Design: docs/designs/0035b2_ecos_data_wrapper/design.md
 
 #include "msd-sim/src/Physics/Constraints/ECOS/ECOSData.hpp"
+#include <ecos/ecos.h>
+#include <ecos/glblopts.h>
+#include <cstddef>
 #include <stdexcept>
+#include <string>
+#include <utility>
 
 namespace msd_sim
 {
@@ -19,12 +24,7 @@ ECOSData::ECOSData(idxint numVariables, idxint numCones, idxint numEquality)
   : num_variables_{numVariables},
     num_cones_{numCones},
     num_equality_{numEquality},
-    G_{},
-    A_eq_{},
-    h_{},
-    c_{},
-    b_eq_{},
-    cone_sizes_{},
+
     workspace_{nullptr}
 {
   // Reserve storage for vectors to avoid reallocation
@@ -92,21 +92,21 @@ void ECOSData::setup()
     throw std::runtime_error("ECOSData::setup: G matrix is empty (nnz == 0)");
   }
 
-  if (static_cast<idxint>(h_.size()) != num_variables_)
+  if (std::cmp_not_equal(h_.size(), num_variables_))
   {
     throw std::runtime_error("ECOSData::setup: h size mismatch (expected " +
                              std::to_string(num_variables_) + ", got " +
                              std::to_string(h_.size()) + ")");
   }
 
-  if (static_cast<idxint>(c_.size()) != num_variables_)
+  if (std::cmp_not_equal(c_.size(), num_variables_))
   {
     throw std::runtime_error("ECOSData::setup: c size mismatch (expected " +
                              std::to_string(num_variables_) + ", got " +
                              std::to_string(c_.size()) + ")");
   }
 
-  if (static_cast<idxint>(cone_sizes_.size()) != num_cones_)
+  if (std::cmp_not_equal(cone_sizes_.size(), num_cones_))
   {
     throw std::runtime_error(
       "ECOSData::setup: cone_sizes size mismatch (expected " +
@@ -123,7 +123,7 @@ void ECOSData::setup()
         "ECOSData::setup: A_eq matrix is empty but num_equality_ = " +
         std::to_string(num_equality_));
     }
-    if (static_cast<idxint>(b_eq_.size()) != num_equality_)
+    if (std::cmp_not_equal(b_eq_.size(), num_equality_))
     {
       throw std::runtime_error(
         "ECOSData::setup: b_eq size mismatch (expected " +
@@ -134,9 +134,9 @@ void ECOSData::setup()
 
   // Determine equality constraint pointers
   // If num_equality_ > 0, pass A_eq and b_eq; otherwise pass nullptr
-  pfloat* Apr = (num_equality_ > 0) ? A_eq_.data.data() : nullptr;
-  idxint* Ajc = (num_equality_ > 0) ? A_eq_.col_ptrs.data() : nullptr;
-  idxint* Air = (num_equality_ > 0) ? A_eq_.row_indices.data() : nullptr;
+  pfloat* apr = (num_equality_ > 0) ? A_eq_.data.data() : nullptr;
+  idxint* ajc = (num_equality_ > 0) ? A_eq_.col_ptrs.data() : nullptr;
+  idxint* air = (num_equality_ > 0) ? A_eq_.row_indices.data() : nullptr;
   pfloat* beq = (num_equality_ > 0) ? b_eq_.data() : nullptr;
 
   // Call ECOS_setup() with owned data arrays
@@ -144,16 +144,16 @@ void ECOSData::setup()
     ECOS_setup(num_variables_,  // n (number of variables)
                num_variables_,  // m (number of inequality constraints)
                num_equality_,   // p (number of equality constraints)
-               0,  // l (dimension of positive orthant, 0 for SOC-only)
-               num_cones_,             // ncones (number of second-order cones)
+               0,           // l (dimension of positive orthant, 0 for SOC-only)
+               num_cones_,  // ncones (number of second-order cones)
                cone_sizes_.data(),     // q (array of cone dimensions)
                0,                      // e (exponent cone dimensions, 0)
                G_.data.data(),         // Gpr (CSC sparse matrix data)
                G_.col_ptrs.data(),     // Gjc (CSC column pointers)
                G_.row_indices.data(),  // Gir (CSC row indices)
-               Apr,                    // Apr (equality constraint matrix)
-               Ajc,                    // Ajc (equality column pointers)
-               Air,                    // Air (equality row indices)
+               apr,                    // Apr (equality constraint matrix)
+               ajc,                    // Ajc (equality column pointers)
+               air,                    // Air (equality row indices)
                c_.data(),              // c (linear objective)
                h_.data(),              // h (RHS for cone constraints)
                beq                     // b (RHS for equality constraints)

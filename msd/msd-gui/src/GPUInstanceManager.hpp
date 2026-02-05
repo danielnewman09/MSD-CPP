@@ -53,7 +53,7 @@ public:
       return;
     }
 
-    size_t removedIdx = it->second;
+    size_t const removedIdx = it->second;
     indexMap_.erase(it);
     instances_.erase(instances_.begin() + static_cast<ptrdiff_t>(removedIdx));
 
@@ -87,9 +87,9 @@ public:
     {
       // FullTransform: create model matrix and extract geometry index
       // Use the shader policy's createModelMatrix method
-      FullTransformShaderPolicy tempPolicy;
-      auto instanceBytes =
-        tempPolicy.buildInstanceData(object, r, g, b, geometryId);
+      FullTransformShaderPolicy const tempPolicy;
+      auto instanceBytes = FullTransformShaderPolicy::buildInstanceData(
+        object, r, g, b, geometryId);
       std::memcpy(&data, instanceBytes.data(), sizeof(InstanceDataType));
     }
 
@@ -198,7 +198,7 @@ public:
     SDL_GPUTransferBuffer* transferBuffer =
       SDL_CreateGPUTransferBuffer(&device, &transferCreateInfo);
 
-    if (!transferBuffer)
+    if (transferBuffer == nullptr)
     {
       throw SDLException("Failed to create instance transfer buffer!");
     }
@@ -211,10 +211,10 @@ public:
     SDL_GPUCommandBuffer* uploadCmd = SDL_AcquireGPUCommandBuffer(&device);
     SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(uploadCmd);
 
-    SDL_GPUTransferBufferLocation transferLocation = {
+    SDL_GPUTransferBufferLocation const transferLocation = {
       .transfer_buffer = transferBuffer, .offset = 0};
 
-    SDL_GPUBufferRegion bufferRegion = {
+    SDL_GPUBufferRegion const bufferRegion = {
       .buffer = &instanceBuffer, .offset = 0, .size = transferCreateInfo.size};
 
     SDL_UploadToGPUBuffer(copyPass, &transferLocation, &bufferRegion, false);
