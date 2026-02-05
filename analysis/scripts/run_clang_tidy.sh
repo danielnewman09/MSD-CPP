@@ -45,12 +45,15 @@ echo "Using: $("$CLANG_TIDY" --version | head -1)"
 
 # --- Parse arguments ---
 FIX_FLAG=""
+STRICT_MODE=""
 for arg in "$@"; do
     case "$arg" in
         --fix) FIX_FLAG="-fix" ;;
+        --strict) STRICT_MODE="1" ;;
         --help|-h)
-            echo "Usage: $0 [--fix]"
-            echo "  --fix    Apply clang-tidy automatic fixes"
+            echo "Usage: $0 [--fix] [--strict]"
+            echo "  --fix     Apply clang-tidy automatic fixes"
+            echo "  --strict  Exit with error code 1 if any warnings are found"
             exit 0
             ;;
         *)
@@ -124,3 +127,21 @@ fi
 
 echo "---"
 echo "Report written to: $REPORT_FILE"
+
+# --- Strict mode: fail if any warnings found in user code ---
+if [ -n "$STRICT_MODE" ]; then
+    # Count warnings in user code (exclude "in non-user code" and "Suppressed" lines)
+    # Look for lines matching: "file.cpp:line:col: warning:" pattern
+    WARNING_COUNT=$(grep -E '^/.*\.(cpp|hpp):[0-9]+:[0-9]+: warning:' "$REPORT_FILE" 2>/dev/null | wc -l | tr -d ' ')
+    ERROR_COUNT=$(grep -E '^/.*\.(cpp|hpp):[0-9]+:[0-9]+: error:' "$REPORT_FILE" 2>/dev/null | wc -l | tr -d ' ')
+
+    echo "Strict mode: $WARNING_COUNT warning(s), $ERROR_COUNT error(s) in user code"
+
+    if [ "$WARNING_COUNT" -gt 0 ] || [ "$ERROR_COUNT" -gt 0 ]; then
+        echo "FAILED: clang-tidy found issues in user code"
+        exit 1
+    else
+        echo "PASSED: No clang-tidy issues in user code"
+        exit 0
+    fi
+fi

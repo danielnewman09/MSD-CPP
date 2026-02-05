@@ -1,6 +1,6 @@
 ---
 name: code-quality-gate
-description: Use this agent to run automated code quality checks after implementation is complete. This agent executes build verification (warnings as errors), test suites, and benchmark regression detection. It produces a quality gate report that the implementation-reviewer uses to assess readiness. Use between implementation and implementation review phases.
+description: Use this agent to run automated code quality checks after implementation is complete. This agent executes build verification (warnings as errors), test suites, clang-tidy static analysis, and benchmark regression detection. It produces a quality gate report that the implementation-reviewer uses to assess readiness. Use between implementation and implementation review phases.
 
 <example>
 Context: Implementer has finished writing code and needs quality verification before review.
@@ -87,7 +87,23 @@ ctest --preset conan-release --output-on-failure 2>&1
 
 **Pass Criteria:** All tests pass
 
-### Gate 3: Benchmark Regression Detection (Conditional)
+### Gate 3: Static Analysis (clang-tidy)
+
+**Execute:**
+```bash
+# Run clang-tidy on all source files
+./analysis/scripts/run_clang_tidy.sh --strict 2>&1
+```
+
+**Capture:**
+- Exit code (0 = pass, non-zero = fail)
+- Any warnings or errors from clang-tidy
+- Which files/lines triggered warnings
+- Total warning count
+
+**Pass Criteria:** Exit code 0, no warnings, no errors in user code
+
+### Gate 4: Benchmark Regression Detection (Conditional)
 
 **Check if applicable:**
 1. Read design document at `docs/designs/{feature-name}/design.md`
@@ -146,7 +162,19 @@ Create quality gate report at `docs/designs/{feature-name}/quality-gate-report.m
 
 ---
 
-## Gate 3: Benchmark Regression Detection
+## Gate 3: Static Analysis (clang-tidy)
+
+**Status**: PASSED / FAILED
+**Warnings**: {N}
+**Errors**: {N}
+
+### Issues Found
+{If any, list each with file:line and message}
+{If none: "No issues found"}
+
+---
+
+## Gate 4: Benchmark Regression Detection
 
 **Status**: PASSED / FAILED / N/A
 **Reason for N/A**: {If N/A, explain: "No benchmarks specified in design"}
@@ -170,6 +198,7 @@ Create quality gate report at `docs/designs/{feature-name}/quality-gate-report.m
 |------|--------|-------|
 | Build | {PASSED/FAILED} | {brief note} |
 | Tests | {PASSED/FAILED} | {N} passed, {N} failed |
+| Static Analysis | {PASSED/FAILED} | {N} warnings, {N} errors |
 | Benchmarks | {PASSED/FAILED/N/A} | {brief note} |
 
 **Overall**: {PASSED/FAILED}
@@ -240,4 +269,10 @@ ctest --preset conan-release -R {test_name}
 
 # Benchmark comparison with custom threshold
 ./analysis/scripts/compare_benchmarks.py --threshold 5.0 --strict
+
+# Run clang-tidy static analysis
+./analysis/scripts/run_clang_tidy.sh
+
+# Run clang-tidy with strict mode (fails on warnings)
+./analysis/scripts/run_clang_tidy.sh --strict
 ```
