@@ -10,7 +10,7 @@ namespace msd_assets
 
 
 std::vector<Vertex> computeVertexData(
-  const std::vector<Eigen::Vector3d>& vertices)
+  const std::vector<msd_sim::Vector3D>& vertices)
 {
   std::vector<Vertex> result;
   result.reserve(vertices.size());

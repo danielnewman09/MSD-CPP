@@ -1,0 +1,125 @@
+@startuml
+
+package "msd-sim" {
+    package "Environment" {
+        class WorldModel {
+            -dataRecorder_: std::unique_ptr<DataRecorder>
+            +enableRecording(dbPath): void
+            +disableRecording(): void
+            -recordCurrentFrame(): void
+        }
+
+        class InertialState {
+            +toRecord(): InertialStateRecord
+        }
+    }
+
+    package "DataRecorder" {
+        class DataRecorder {
+            -database_: std::unique_ptr<cpp_sqlite::Database>
+            -recorderThread_: std::jthread
+            -flushInterval_: std::chrono::milliseconds
+            -flushMutex_: std::mutex
+            -nextFrameId_: std::atomic<uint32_t>
+            +DataRecorder(config: Config)
+            +~DataRecorder()
+            +recordFrame(simTime: double): uint32_t
+            +getDAO<T>(): DataAccessObject<T>&
+            +flush(): void
+            +getDatabase(): const Database&
+            -recorderThreadMain(stopToken): void
+        }
+
+        note right of DataRecorder
+            Recorder thread:
+            - Wakes every flushInterval_
+            - Acquires flushMutex_
+            - Calls database_->withTransaction([&] {
+                database_->flushAllDAOs();
+              })
+            - Exits on stop_token signaled
+
+            Main thread:
+            - recordFrame() pre-assigns ID via nextFrameId_
+            - Returns frame ID for FK assignment
+            - Calls getDAO<T>().addToBuffer(record)
+            - DAOs created on first access via Database
+        end note
+    }
+}
+
+package "msd-transfer" {
+    class SimulationFrameRecord {
+        +id: uint32_t
+        +simulation_time: double
+        +wall_clock_time: double
+    }
+
+    note right of SimulationFrameRecord
+        Primary key table for timestamping.
+        All per-frame records reference
+        this via ForeignKey<SimulationFrameRecord>.
+    end note
+
+    class InertialStateRecord {
+        +position: CoordinateRecord
+        +velocity: Vector3DRecord
+        +frame: ForeignKey<SimulationFrameRecord>
+    }
+
+    InertialStateRecord ..> SimulationFrameRecord : FK reference
+}
+
+package "cpp_sqlite" {
+    class Database {
+        +Database(url, allowWrite)
+        +getDAO<T>(): DataAccessObject<T>&
+        +flushAllDAOs(): void
+        +withTransaction(func): void
+        +isInTransaction(): bool
+        -daoCreationOrder_: std::vector<DAOBase*>
+    }
+
+    class DataAccessObject<T> {
+        +addToBuffer(record): void
+        +insert(): void
+        +insert(data): bool
+        +selectById(id): std::optional<T>
+        -writeBuffer_: std::vector<T>
+        -flushBuffer_: std::vector<T>
+        -bufferMutex_: std::mutex
+    }
+
+    class DAOBase {
+        +{abstract} insert(): void
+        +{abstract} clearBuffer(): void
+        +{abstract} isInitialized(): bool
+    }
+
+    class Transaction {
+        +Transaction(db: Database&)
+        +~Transaction()
+        +commit(): void
+        +rollback(): void
+        +isActive(): bool
+    }
+
+    class "ForeignKey<T>" as ForeignKey {
+        +id: uint32_t
+        +resolve(db): std::optional<T&>
+        +isSet(): bool
+    }
+
+    DataAccessObject --|> DAOBase
+    Database "1" *-- "many" DataAccessObject
+    Database ..> Transaction : creates
+}
+
+' Relationships
+DataRecorder *-- Database : owns
+WorldModel *-- DataRecorder : optional ownership
+InertialState ..> InertialStateRecord : toRecord()
+DataRecorder ..> SimulationFrameRecord : records frames
+InertialStateRecord ..> ForeignKey : uses for frame reference
+
+@enduml

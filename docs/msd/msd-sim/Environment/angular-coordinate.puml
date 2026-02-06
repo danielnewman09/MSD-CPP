@@ -26,7 +26,7 @@ skinparam note {
 package "msd_sim" {
 
     class AngularCoordinate {
-        ' Inherits from Eigen::Vector3d
+        ' Inherits from msd_sim::Vector3D
         ..
         ' Static constant
         +{static} kNormalizationThreshold: double
@@ -34,7 +34,7 @@ package "msd_sim" {
         ' Construction
         +AngularCoordinate()
         +AngularCoordinate(pitch, roll, yaw: double)
-        +AngularCoordinate(vec: Eigen::Vector3d)
+        +AngularCoordinate(vec: msd_sim::Vector3D)
         +AngularCoordinate(other: Eigen::MatrixBase<OtherDerived>)
         ..
         ' Semantic accessors (no normalization on read)
@@ -65,12 +65,12 @@ package "msd_sim" {
     }
 
     class AngularRate {
-        ' Inherits from Eigen::Vector3d
+        ' Inherits from msd_sim::Vector3D
         ..
         ' Construction
         +AngularRate()
         +AngularRate(pitchRate, rollRate, yawRate: double)
-        +AngularRate(vec: Eigen::Vector3d)
+        +AngularRate(vec: msd_sim::Vector3D)
         +AngularRate(other: Eigen::MatrixBase<OtherDerived>)
         ..
         ' Semantic accessors (NO normalization)
@@ -126,11 +126,11 @@ package "msd_sim" {
 }
 
 package "Eigen" {
-    class "Eigen::Vector3d" as EigenVector3d {
+    class "msd_sim::Vector3D" as EigenVector3d {
         +operator[](index): double&
-        +operator+(other): Eigen::Vector3d
-        +operator*(scalar): Eigen::Vector3d
-        +cross(other): Eigen::Vector3d
+        +operator+(other): msd_sim::Vector3D
+        +operator*(scalar): msd_sim::Vector3D
+        +cross(other): msd_sim::Vector3D
         +dot(other): double
         +norm(): double
     }
@@ -170,7 +170,7 @@ note right of AngularCoordinate
 
     **Thread safety:** Immutable after creation
 
-    **Memory:** 24 bytes (same as Eigen::Vector3d)
+    **Memory:** 24 bytes (same as msd_sim::Vector3D)
 
     **Axis convention (ZYX rotation):**
     - pitch: Y-axis rotation (component 0)
@@ -200,13 +200,13 @@ note right of AngularRate
 
     **Thread safety:** Immutable after creation
 
-    **Memory:** 24 bytes (same as Eigen::Vector3d)
+    **Memory:** 24 bytes (same as msd_sim::Vector3D)
 
     **Units:**
     - Angular velocity: rad/s
     - Angular acceleration: rad/s²
 
-    **Performance:** Same as raw Eigen::Vector3d
+    **Performance:** Same as raw msd_sim::Vector3D
     (0% overhead)
 
     **Supports std::format:**

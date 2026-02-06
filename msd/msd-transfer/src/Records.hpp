@@ -9,9 +9,16 @@
  * Use this when you need access to the complete database schema.
  */
 
+#include "msd-transfer/src/AngularCoordinateRecord.hpp"
+#include "msd-transfer/src/AngularRateRecord.hpp"
+#include "msd-transfer/src/CoordinateRecord.hpp"
+#include "msd-transfer/src/InertialStateRecord.hpp"
 #include "msd-transfer/src/MaterialRecord.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
 #include "msd-transfer/src/PhysicsTemplateRecord.hpp"
+#include "msd-transfer/src/SimulationFrameRecord.hpp"
+#include "msd-transfer/src/Vector3DRecord.hpp"
+#include "msd-transfer/src/Vector4DRecord.hpp"
 
 namespace msd_transfer
 {

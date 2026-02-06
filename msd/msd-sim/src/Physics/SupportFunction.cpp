@@ -30,7 +30,7 @@ Coordinate support(const ConvexHull& hull, const Coordinate& dir)
 
 Coordinate supportMinkowski(const AssetPhysical& assetA,
                             const AssetPhysical& assetB,
-                            const Eigen::Vector3d& dir)
+                            const msd_sim::Vector3D& dir)
 {
   const ConvexHull& hullA = assetA.getCollisionHull();
   const ConvexHull& hullB = assetB.getCollisionHull();
@@ -49,7 +49,7 @@ Coordinate supportMinkowski(const AssetPhysical& assetA,
   Coordinate const supportAWorld = frameA.localToGlobal(supportALocal);
 
   // Same process for asset B with negated direction
-  Coordinate const dirBLocal = frameB.globalToLocal(Eigen::Vector3d{-dir});
+  Coordinate const dirBLocal = frameB.globalToLocal(msd_sim::Vector3D{-dir});
   Coordinate const supportBLocal = support(hullB, dirBLocal);
   Coordinate const supportBWorld = frameB.localToGlobal(supportBLocal);
 
@@ -59,7 +59,7 @@ Coordinate supportMinkowski(const AssetPhysical& assetA,
 
 SupportResult supportMinkowskiWithWitness(const AssetPhysical& assetA,
                                           const AssetPhysical& assetB,
-                                          const Eigen::Vector3d& dir)
+                                          const msd_sim::Vector3D& dir)
 {
   const ConvexHull& hullA = assetA.getCollisionHull();
   const ConvexHull& hullB = assetB.getCollisionHull();
@@ -78,7 +78,7 @@ SupportResult supportMinkowskiWithWitness(const AssetPhysical& assetA,
   Coordinate const supportAWorld = frameA.localToGlobal(supportALocal);
 
   // Same process for asset B with negated direction
-  Coordinate const dirBLocal = frameB.globalToLocal(Eigen::Vector3d{-dir});
+  Coordinate const dirBLocal = frameB.globalToLocal(msd_sim::Vector3D{-dir});
   Coordinate const supportBLocal = support(hullB, dirBLocal);
   Coordinate const supportBWorld = frameB.localToGlobal(supportBLocal);
 

@@ -97,7 +97,7 @@ void WorldModel::updatePhysics(double dt) {
     const Coordinate& netTorque = asset.getAccumulatedTorque();
 
     // Compute angular acceleration: α = I⁻¹ * τ
-    Eigen::Vector3d angularAccel = asset.getInverseInertiaTensor() * netTorque;
+    msd_sim::Vector3D angularAccel = asset.getInverseInertiaTensor() * netTorque;
 
     // Update angular velocity: ω_new = ω_old + α * dt
     AngularRate& omega = state.angularVelocity;

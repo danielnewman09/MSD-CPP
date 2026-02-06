@@ -21,14 +21,14 @@
 ---
 
 ## Summary
-The `GeometryFactory` class produces `MeshRecord` blobs that contain `Vertex` structs (36 bytes: position + color + normal), but the `BaseGeometry` constructor incorrectly interprets these blobs as `Eigen::Vector3d` arrays (24 bytes each). This type mismatch causes rendering issues where objects appear extremely small and with incorrect shapes.
+The `GeometryFactory` class produces `MeshRecord` blobs that contain `Vertex` structs (36 bytes: position + color + normal), but the `BaseGeometry` constructor incorrectly interprets these blobs as `msd_sim::Vector3D` arrays (24 bytes each). This type mismatch causes rendering issues where objects appear extremely small and with incorrect shapes.
 
 ## Motivation
 This bug is blocking the GUI rendering functionality. Objects spawned in the msd-exe application appear at <1% of expected size and render as corrupted geometry (flat triangular surfaces instead of closed convex shapes). The root cause is a fundamental type mismatch in the serialization/deserialization pipeline between `GeometryFactory` and `BaseGeometry`.
 
 ### Root Cause Analysis
 1. `GeometryFactory::verticesToMeshRecord()` stores complete `Vertex` structs (36 bytes each) into `MeshRecord::vertex_data`
-2. `BaseGeometry` constructor casts the blob to `Eigen::Vector3d*` (24 bytes each) regardless of template type
+2. `BaseGeometry` constructor casts the blob to `msd_sim::Vector3D*` (24 bytes each) regardless of template type
 3. This causes:
    - Type size mismatch: 36-byte Vertex structs read as 24-byte Vector3d
    - Precision mismatch: float data (4 bytes per component) interpreted as double (8 bytes)
@@ -38,7 +38,7 @@ This bug is blocking the GUI rendering functionality. Objects spawned in the msd
 
 ### Functional Requirements
 1. The system shall correctly serialize `VisualGeometry` (containing `Vertex` structs) to `MeshRecord` blobs
-2. The system shall correctly serialize `CollisionGeometry` (containing `Eigen::Vector3d`) to `MeshRecord` blobs
+2. The system shall correctly serialize `CollisionGeometry` (containing `msd_sim::Vector3D`) to `MeshRecord` blobs
 3. The system shall correctly deserialize `MeshRecord` blobs back to the appropriate geometry type
 4. `GeometryFactory` shall provide clear APIs that produce the correct blob format for each geometry type
 
@@ -50,7 +50,7 @@ This bug is blocking the GUI rendering functionality. Objects spawned in the msd
 
 ## Constraints
 - `Vertex` struct is 36 bytes (3 floats position + 3 floats color + 3 floats normal)
-- `Eigen::Vector3d` is 24 bytes (3 doubles)
+- `msd_sim::Vector3D` is 24 bytes (3 doubles)
 - Both types use the same `MeshRecord::vertex_data` blob field
 - Tests exist that expect `GeometryFactory` output to work with both `VisualGeometry` and `CollisionGeometry`
 
@@ -67,7 +67,7 @@ This bug is blocking the GUI rendering functionality. Objects spawned in the msd
 
 ### Preferred Approaches
 - Consider templating `GeometryFactory` methods to produce the correct blob format based on target geometry type
-- The `BaseGeometry` class already has a constructor that takes raw `std::vector<Eigen::Vector3d>` — this could be leveraged
+- The `BaseGeometry` class already has a constructor that takes raw `std::vector<msd_sim::Vector3D>` — this could be leveraged
 - `BaseGeometry::populateMeshRecord()` already exists and serializes the correct type
 
 ### Things to Avoid

@@ -2,8 +2,8 @@
 // Ticket: 0024_angular_coordinate
 // Purpose: Test lazy normalization with early-exit and writeback optimizations
 
-#include <Eigen/Dense>
 #include <benchmark/benchmark.h>
+#include <Eigen/Dense>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -38,27 +38,28 @@ inline double normalizeAngle_EarlyExit(double rad)
 // Strategy 1: Lazy Always (current implementation)
 // =============================================================================
 
-class AngularCoordinate_LazyAlways : public Eigen::Vector3d
+class AngularCoordinate_LazyAlways : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_LazyAlways() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_LazyAlways() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
   AngularCoordinate_LazyAlways(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw}
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_LazyAlways(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_LazyAlways& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_LazyAlways& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -81,27 +82,28 @@ public:
 // Strategy 2: Lazy with Early Exit (check bounds first)
 // =============================================================================
 
-class AngularCoordinate_LazyEarlyExit : public Eigen::Vector3d
+class AngularCoordinate_LazyEarlyExit : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_LazyEarlyExit() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_LazyEarlyExit() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
   AngularCoordinate_LazyEarlyExit(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw}
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_LazyEarlyExit(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_LazyEarlyExit& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_LazyEarlyExit& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -124,27 +126,28 @@ public:
 // Strategy 3: Lazy with Writeback (normalize and store on first access)
 // =============================================================================
 
-class AngularCoordinate_LazyWriteback : public Eigen::Vector3d
+class AngularCoordinate_LazyWriteback : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_LazyWriteback() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_LazyWriteback() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
   AngularCoordinate_LazyWriteback(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw}
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_LazyWriteback(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_LazyWriteback& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_LazyWriteback& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -157,7 +160,8 @@ public:
       return val;  // Already normalized
     }
     double normalized = normalizeAngle_Always(val);
-    const_cast<AngularCoordinate_LazyWriteback*>(this)->operator[](0) = normalized;
+    const_cast<AngularCoordinate_LazyWriteback*>(this)->operator[](0) =
+      normalized;
     return normalized;
   }
 
@@ -169,7 +173,8 @@ public:
       return val;
     }
     double normalized = normalizeAngle_Always(val);
-    const_cast<AngularCoordinate_LazyWriteback*>(this)->operator[](1) = normalized;
+    const_cast<AngularCoordinate_LazyWriteback*>(this)->operator[](1) =
+      normalized;
     return normalized;
   }
 
@@ -181,7 +186,8 @@ public:
       return val;
     }
     double normalized = normalizeAngle_Always(val);
-    const_cast<AngularCoordinate_LazyWriteback*>(this)->operator[](2) = normalized;
+    const_cast<AngularCoordinate_LazyWriteback*>(this)->operator[](2) =
+      normalized;
     return normalized;
   }
 };
@@ -190,30 +196,32 @@ public:
 // Strategy 4: Eager (baseline for comparison)
 // =============================================================================
 
-class AngularCoordinate_Eager : public Eigen::Vector3d
+class AngularCoordinate_Eager : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_Eager() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_Eager() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
   AngularCoordinate_Eager(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{normalizeAngle_Always(pitch), normalizeAngle_Always(roll),
-                      normalizeAngle_Always(yaw)}
+    : msd_sim::Vector3D{normalizeAngle_Always(pitch),
+                        normalizeAngle_Always(roll),
+                        normalizeAngle_Always(yaw)}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_Eager(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
     normalizeInPlace();
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_Eager& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Eager& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     normalizeInPlace();
     return *this;
   }
@@ -267,7 +275,8 @@ template <typename T>
 std::vector<T> generateInRangeData()
 {
   std::mt19937 gen(42);
-  std::uniform_real_distribution<> dis(-M_PI + 0.01, M_PI - 0.01);  // Inside (-pi, pi)
+  std::uniform_real_distribution<> dis(-M_PI + 0.01,
+                                       M_PI - 0.01);  // Inside (-pi, pi)
 
   std::vector<T> data;
   data.reserve(kDataSize);
@@ -279,15 +288,22 @@ std::vector<T> generateInRangeData()
 }
 
 // Out of range data
-static auto gDataLazyAlways_OutOfRange = generateOutOfRangeData<AngularCoordinate_LazyAlways>();
-static auto gDataLazyEarlyExit_OutOfRange = generateOutOfRangeData<AngularCoordinate_LazyEarlyExit>();
-static auto gDataLazyWriteback_OutOfRange = generateOutOfRangeData<AngularCoordinate_LazyWriteback>();
-static auto gDataEager_OutOfRange = generateOutOfRangeData<AngularCoordinate_Eager>();
+static auto gDataLazyAlways_OutOfRange =
+  generateOutOfRangeData<AngularCoordinate_LazyAlways>();
+static auto gDataLazyEarlyExit_OutOfRange =
+  generateOutOfRangeData<AngularCoordinate_LazyEarlyExit>();
+static auto gDataLazyWriteback_OutOfRange =
+  generateOutOfRangeData<AngularCoordinate_LazyWriteback>();
+static auto gDataEager_OutOfRange =
+  generateOutOfRangeData<AngularCoordinate_Eager>();
 
 // In range data
-static auto gDataLazyAlways_InRange = generateInRangeData<AngularCoordinate_LazyAlways>();
-static auto gDataLazyEarlyExit_InRange = generateInRangeData<AngularCoordinate_LazyEarlyExit>();
-static auto gDataLazyWriteback_InRange = generateInRangeData<AngularCoordinate_LazyWriteback>();
+static auto gDataLazyAlways_InRange =
+  generateInRangeData<AngularCoordinate_LazyAlways>();
+static auto gDataLazyEarlyExit_InRange =
+  generateInRangeData<AngularCoordinate_LazyEarlyExit>();
+static auto gDataLazyWriteback_InRange =
+  generateInRangeData<AngularCoordinate_LazyWriteback>();
 static auto gDataEager_InRange = generateInRangeData<AngularCoordinate_Eager>();
 
 // =============================================================================

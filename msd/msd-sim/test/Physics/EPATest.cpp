@@ -359,7 +359,7 @@ TEST(SupportFunctionTest, supportMinkowskiWithWitness_IdentityTransform)
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
 
-  Eigen::Vector3d dir{1.0, 0.0, 0.0};
+  msd_sim::Vector3D dir{1.0, 0.0, 0.0};
 
   SupportResult result =
     support_function::supportMinkowskiWithWitness(assetA, assetB, dir);
@@ -390,7 +390,7 @@ TEST(SupportFunctionTest, supportMinkowskiWithWitness_TranslatedObjects)
   AssetPhysical assetA{0, 0, hullA, frameA};
   AssetPhysical assetB{0, 1, hullB, frameB};
 
-  Eigen::Vector3d dir{1.0, 0.0, 0.0};
+  msd_sim::Vector3D dir{1.0, 0.0, 0.0};
 
   SupportResult result =
     support_function::supportMinkowskiWithWitness(assetA, assetB, dir);

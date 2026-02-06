@@ -184,9 +184,9 @@ package "Eigen" {
         +norm(): double
     }
 
-    class "Eigen::Vector3d" as EigenVector3d {
+    class "msd_sim::Vector3D" as EigenVector3d {
         +operator[](index): double&
-        +cross(other): Eigen::Vector3d
+        +cross(other): msd_sim::Vector3D
         +dot(other): double
     }
 }

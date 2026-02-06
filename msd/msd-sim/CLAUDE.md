@@ -33,6 +33,7 @@ Engine (Top-level orchestrator)
 | Agent | `src/Agent/` | Autonomous control interface | [`Agent/CLAUDE.md`](src/Agent/CLAUDE.md) |
 | Environment | `src/Environment/` | Mathematical primitives & world model | [`Environment/CLAUDE.md`](src/Environment/CLAUDE.md) |
 | Physics | `src/Physics/` | Rigid body dynamics & collision | [`Physics/CLAUDE.md`](src/Physics/CLAUDE.md) |
+| DataRecorder | `src/DataRecorder/` | Background thread simulation data recording | This document |
 | Utils | `src/Utils/` | Common helper functions | [`Utils/CLAUDE.md`](src/Utils/CLAUDE.md) |
 
 ---
@@ -84,6 +85,18 @@ Force-based rigid body dynamics and collision detection. Provides rigid body rep
 - **Constraints** — Lagrange multiplier constraint system (see [`src/Physics/Constraints/CLAUDE.md`](src/Physics/Constraints/CLAUDE.md))
 - `WorldModel` — Physics integration with gravity and constraint enforcement
 
+### DataRecorder Module
+
+**Location**: `src/DataRecorder/`
+**Diagram**: [`docs/msd/msd-sim/DataRecorder/data-recorder.puml`](../../docs/msd/msd-sim/DataRecorder/data-recorder.puml)
+
+Background thread-based simulation data recording system that captures simulation state to SQLite database. Provides write-only persistence mechanism with minimal impact on simulation performance using cpp_sqlite double-buffered DAOs and periodic transactional flushing.
+
+**Key Components**:
+- `DataRecorder` — Background thread orchestrator with configurable flush interval
+- Frame-based timestamping via `SimulationFrameRecord` foreign key pattern
+- WorldModel integration for opt-in recording
+
 ### Utils Module
 
 **Location**: `src/Utils/`
@@ -94,6 +107,179 @@ Common helper functions for numerical operations.
 **Key Components**:
 - `almostEqual()` — Floating-point comparison with tolerance
 - `TOLERANCE` — Default comparison tolerance (1e-10)
+
+---
+
+## DataRecorder Component
+
+**Location**: `src/DataRecorder/DataRecorder.hpp`, `src/DataRecorder/DataRecorder.cpp`
+**Diagram**: [`data-recorder.puml`](../../docs/msd/msd-sim/DataRecorder/data-recorder.puml)
+**Introduced**: [Ticket: 0038_simulation_data_recorder](../../tickets/0038_simulation_data_recorder.md)
+
+### Purpose
+
+Orchestrates background recording of simulation data to SQLite database with minimal impact on simulation thread performance. Uses cpp_sqlite's double-buffered DAOs for thread-safe record submission and periodic transactional flushing on a dedicated background thread.
+
+### Key Classes
+
+| Class | Header | Responsibility |
+|-------|--------|----------------|
+| `DataRecorder` | `DataRecorder.hpp` | Background thread orchestrator with configurable flush interval |
+| `SimulationFrameRecord` | `msd-transfer/SimulationFrameRecord.hpp` | Frame timestamping record for temporal association |
+
+### Key Interfaces
+
+```cpp
+namespace msd_sim {
+
+class DataRecorder {
+public:
+  struct Config {
+    std::chrono::milliseconds flushInterval{100};  // Flush every 100ms
+    std::string databasePath;
+  };
+
+  explicit DataRecorder(const Config& config);
+  ~DataRecorder();
+
+  // Create new simulation frame with timestamp (adds to buffer)
+  // Returns the pre-assigned frame ID for FK references in child records
+  uint32_t recordFrame(double simulationTime);
+
+  // Get DAO for adding records (thread-safe addToBuffer)
+  template<typename T>
+  cpp_sqlite::DataAccessObject<T>& getDAO();
+
+  // Explicit flush (e.g., before shutdown)
+  void flush();
+
+  // Access database for queries (const only)
+  const cpp_sqlite::Database& getDatabase() const;
+
+private:
+  void recorderThreadMain(std::stop_token stopToken);
+
+  std::unique_ptr<cpp_sqlite::Database> database_;
+  std::chrono::milliseconds flushInterval_;
+  std::mutex flushMutex_;
+  std::atomic<uint32_t> nextFrameId_{1};
+  std::jthread recorderThread_;  // LAST member - ensures initialization order
+};
+
+}  // namespace msd_sim
+```
+
+### Usage Example
+
+```cpp
+#include "msd-sim/src/DataRecorder/DataRecorder.hpp"
+
+// Enable recording in WorldModel
+WorldModel worldModel;
+worldModel.enableRecording("simulation.db", std::chrono::milliseconds{100});
+
+// Recording happens automatically during worldModel.update()
+// ...
+
+// Disable recording (flushes pending records)
+worldModel.disableRecording();
+```
+
+### Architecture
+
+#### Thread Model
+
+**Simulation Thread**:
+1. Calls `recordFrame(simTime)` to create timestamped frame
+2. Pre-assigned frame ID returned atomically via `nextFrameId_`
+3. Calls `state.toRecord()` for each object
+4. Sets `record.frame.id = frameId` for temporal association
+5. Calls `getDAO<T>().addToBuffer(record)` (thread-safe, mutex-protected)
+
+**Recorder Thread**:
+1. Sleeps for `flushInterval_` in 10ms chunks (responsive shutdown)
+2. Wakes and acquires `flushMutex_`
+3. Calls `database_->withTransaction([&] { database_->flushAllDAOs(); })`
+4. Releases mutex and repeats until `stop_token` signaled
+5. Final flush in thread exit before joining
+
+#### Frame-Based Timestamping
+
+Uses foreign key pattern for normalized timestamp storage:
+- `SimulationFrameRecord` table has `simulation_time` and `wall_clock_time`
+- All per-frame records (e.g., `InertialStateRecord`) include `ForeignKey<SimulationFrameRecord> frame`
+- Enables efficient queries ("all states at time T")
+- Single source of truth for temporal data
+
+#### DAO Flush Ordering
+
+Frame DAO initialized first in constructor to ensure correct flush order:
+```cpp
+DataRecorder::DataRecorder(const Config& config) {
+  database_ = std::make_unique<cpp_sqlite::Database>(config.databasePath, true);
+  database_->getDAO<SimulationFrameRecord>();  // MUST be first for FK integrity
+  // ... start thread
+}
+```
+
+`Database::flushAllDAOs()` flushes DAOs in creation order, ensuring frame records are committed before state records that reference them.
+
+### Thread Safety
+
+- **Constructor/Destructor**: Not thread-safe (single-threaded initialization/teardown)
+- **recordFrame()**: Thread-safe (atomic `nextFrameId_` + mutex-protected `addToBuffer()`)
+- **getDAO()**: Thread-safe (returns reference to thread-safe DAO)
+- **flush()**: Thread-safe (acquires `flushMutex_` to prevent concurrent flushes)
+- **getDatabase()**: Thread-safe (const access only)
+
+### Error Handling
+
+- Constructor throws `std::runtime_error` if database path is invalid or cannot be opened
+- `getDAO<T>()` creates DAO on first access (no failure mode)
+- Database write errors logged but do not crash recorder thread
+- Final flush in destructor ensures no data loss on shutdown
+
+### Memory Management
+
+- Owns `cpp_sqlite::Database` via `std::unique_ptr` (exclusive ownership)
+- DAOs managed internally by Database (no manual tracking)
+- Thread ownership via `std::jthread` (automatic join on destruction)
+- Buffered records cleared after each flush (bounded memory usage)
+
+**Member initialization order**: `recorderThread_` declared LAST to ensure all other members (database, mutexes, atomics) are initialized before thread starts and destroyed after thread joins.
+
+### Dependencies
+
+- `cpp_sqlite::Database` — Database connection, DAO management, bulk flushing
+- `cpp_sqlite::DataAccessObject<T>` — Thread-safe buffered record insertion
+- `cpp_sqlite::Transaction` — RAII transaction management for batch writes
+- `msd-transfer::SimulationFrameRecord` — Frame timestamping record
+- C++20 threading primitives — `std::jthread`, `std::stop_token`, `std::atomic`, `std::mutex`
+
+### Performance Characteristics
+
+- **Record submission**: < 1μs typical (push to buffer, no I/O)
+- **Flush throughput**: > 10,000 records/sec with transactions
+- **Memory overhead**: Bounded by flush interval × record rate
+- **Simulation impact**: < 5% overhead for typical workloads (60 FPS, 10-100 objects)
+
+### WorldModel Integration
+
+Recording is opt-in via `std::unique_ptr<DataRecorder>`:
+
+```cpp
+class WorldModel {
+  void enableRecording(const std::string& dbPath,
+                       std::chrono::milliseconds flushInterval);
+  void disableRecording();
+
+private:
+  void recordCurrentFrame();
+  std::unique_ptr<DataRecorder> dataRecorder_;  // nullptr = recording disabled
+};
+```
+
+Backward compatible: existing code unaffected if recording not enabled.
 
 ---
 
@@ -266,10 +452,56 @@ ctest --preset debug
 | [`generalized-constraints.puml`](../../docs/msd/msd-sim/Physics/generalized-constraints.puml) | Generalized Lagrange multiplier constraint system with extensible constraint library | `docs/msd/msd-sim/Physics/` |
 | [`two-body-constraints.puml`](../../docs/msd/msd-sim/Physics/two-body-constraints.puml) | Two-body constraint infrastructure with ContactConstraint for collision response | `docs/msd/msd-sim/Physics/` |
 | [`0034_active_set_method_contact_solver.puml`](../../docs/designs/0034_active_set_method_contact_solver/0034_active_set_method_contact_solver.puml) | Active Set Method contact solver replacing PGS with exact LCP solution | `docs/designs/0034_active_set_method_contact_solver/` |
+| [`data-recorder.puml`](../../docs/msd/msd-sim/DataRecorder/data-recorder.puml) | Background thread simulation data recording with frame-based timestamping | `docs/msd/msd-sim/DataRecorder/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Simulation Data Recorder — 2026-02-06
+**Ticket**: [0038_simulation_data_recorder](../../tickets/0038_simulation_data_recorder.md)
+**Diagram**: [`data-recorder.puml`](../../docs/msd/msd-sim/DataRecorder/data-recorder.puml)
+**Type**: Feature Enhancement (Additive)
+
+Added DataRecorder subsystem for background thread-based recording of simulation state to SQLite database. The recorder operates on a dedicated thread with configurable flush interval, using cpp_sqlite's double-buffered DAOs for thread-safe record submission. A new `SimulationFrameRecord` table provides frame-based timestamping via foreign key pattern, allowing all per-frame records to reference a single simulation time.
+
+**Key components**:
+- **DataRecorder** — Background thread orchestrator with `recordFrame()` for frame creation, `getDAO<T>()` for DAO access, and `flush()` for explicit writes
+- **SimulationFrameRecord** — Frame timestamping record with `simulation_time` and `wall_clock_time` fields
+- **InertialStateRecord modification** — Added `ForeignKey<SimulationFrameRecord> frame` for temporal association
+- **WorldModel integration** — Opt-in recording via `enableRecording(dbPath, flushInterval)` and `disableRecording()` methods
+
+**Architecture**:
+- Push model: Simulation thread calls `recordFrame()` to get frame ID, then `getDAO<T>().addToBuffer(record)` for each object
+- Frame ID pre-assigned atomically via `std::atomic<uint32_t> nextFrameId_` before buffering
+- Recorder thread wakes every `flushInterval_` (default 100ms), acquires `flushMutex_`, and calls `database_->withTransaction([&] { database_->flushAllDAOs(); })`
+- DAO flush ordering enforced: `SimulationFrameRecord` DAO created first in constructor, ensuring frame records flush before state records (FK integrity)
+- Chunked 10ms sleep for responsive shutdown via C++20 `std::stop_token`
+- Final flush in thread exit before joining ensures no data loss
+
+**Performance**:
+- Record submission: < 1μs (thread-safe buffer push)
+- Flush throughput: > 10,000 records/sec with transactions
+- Simulation overhead: < 5% for typical workloads (60 FPS, 10-100 objects)
+
+**Thread safety**:
+- `recordFrame()`: Thread-safe via atomic counter and mutex-protected DAO buffer
+- `flush()`: Thread-safe via `flushMutex_` preventing concurrent flushes
+- `getDAO<T>()`: Thread-safe, returns reference to thread-safe DAO
+
+**Memory management**:
+- DataRecorder owns `cpp_sqlite::Database` via `std::unique_ptr`
+- WorldModel owns DataRecorder via `std::unique_ptr` (nullable for opt-in pattern)
+- `recorderThread_` declared LAST to ensure all members initialized before thread starts
+
+**Key files**:
+- `src/DataRecorder/DataRecorder.hpp`, `DataRecorder.cpp` — DataRecorder implementation
+- `msd-transfer/src/SimulationFrameRecord.hpp` — Frame timestamping record
+- `msd-transfer/src/InertialStateRecord.hpp` — Modified to include frame FK
+- `src/Environment/WorldModel.hpp`, `WorldModel.cpp` — Recording integration with `enableRecording()`, `disableRecording()`, and `recordCurrentFrame()`
+- `test/DataRecorder/DataRecorderTest.cpp` — 10 unit tests covering construction, frame recording, DAO access, flush, background thread, and integration
+
+---
 
 ### Active Set Method Contact Solver — 2026-01-31
 **Ticket**: [0034_active_set_method_contact_solver](../../tickets/0034_active_set_method_contact_solver.md)
@@ -655,7 +887,7 @@ Implemented a complete force application system for rigid body physics, enabling
 **Diagram**: [`angular-coordinate.puml`](../../docs/msd/msd-sim/Environment/angular-coordinate.puml)
 **Type**: Breaking Change
 
-Introduced two type-safe classes for angular quantity representation: `AngularCoordinate` for orientation with deferred normalization, and `AngularRate` for angular velocity/acceleration without normalization. Both inherit from `Eigen::Vector3d` for full matrix operations while providing semantic pitch/roll/yaw accessors.
+Introduced two type-safe classes for angular quantity representation: `AngularCoordinate` for orientation with deferred normalization, and `AngularRate` for angular velocity/acceleration without normalization. Both inherit from `msd_sim::Vector3D` for full matrix operations while providing semantic pitch/roll/yaw accessors.
 
 **Breaking changes**:
 - Removed `EulerAngles` class entirely
@@ -669,7 +901,7 @@ Introduced two type-safe classes for angular quantity representation: `AngularCo
 - **Type safety**: Prevents accidental assignment of rates to orientations (compile-time error)
 - **Performance**: Deferred normalization with 100π threshold is 10x faster than eager normalization (validated by prototypes)
 - **Semantic clarity**: `orientation.yaw()` vs `angularVelocity.yaw()` makes intent explicit
-- **Memory efficiency**: 24 bytes per instance (same as `Eigen::Vector3d`)
+- **Memory efficiency**: 24 bytes per instance (same as `msd_sim::Vector3D`)
 
 **Migration**:
 ```cpp

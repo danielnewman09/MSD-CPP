@@ -35,32 +35,32 @@ void MotionController::updateTransform(
   if (commands.moveForward)
   {
     // Move forward in local Z direction
-    newOrigin -= frame.localToGlobal(Eigen::Vector3d{0, 0, scaledMoveSpeed});
+    newOrigin -= frame.localToGlobal(msd_sim::Vector3D{0, 0, scaledMoveSpeed});
   }
   if (commands.moveBackward)
   {
     // Move backward in local Z direction
-    newOrigin += frame.localToGlobal(Eigen::Vector3d{0, 0, scaledMoveSpeed});
+    newOrigin += frame.localToGlobal(msd_sim::Vector3D{0, 0, scaledMoveSpeed});
   }
   if (commands.moveLeft)
   {
     // Move left in local X direction
-    newOrigin -= frame.localToGlobal(Eigen::Vector3d{scaledMoveSpeed, 0, 0});
+    newOrigin -= frame.localToGlobal(msd_sim::Vector3D{scaledMoveSpeed, 0, 0});
   }
   if (commands.moveRight)
   {
     // Move right in local X direction
-    newOrigin += frame.localToGlobal(Eigen::Vector3d{scaledMoveSpeed, 0, 0});
+    newOrigin += frame.localToGlobal(msd_sim::Vector3D{scaledMoveSpeed, 0, 0});
   }
   if (commands.moveUp)
   {
     // Move up in local Y direction
-    newOrigin += frame.localToGlobal(Eigen::Vector3d{0, scaledMoveSpeed, 0});
+    newOrigin += frame.localToGlobal(msd_sim::Vector3D{0, scaledMoveSpeed, 0});
   }
   if (commands.moveDown)
   {
     // Move down in local Y direction
-    newOrigin -= frame.localToGlobal(Eigen::Vector3d{0, scaledMoveSpeed, 0});
+    newOrigin -= frame.localToGlobal(msd_sim::Vector3D{0, scaledMoveSpeed, 0});
   }
 
   // Apply movement
@@ -90,9 +90,9 @@ void MotionController::updateTransform(
 
   // Update rotation from Euler angles via quaternion (ZYX convention)
   Eigen::Quaterniond const q =
-    Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
-    Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
-    Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
+    Eigen::AngleAxisd{angular.yaw(), msd_sim::Vector3D::UnitZ()} *
+    Eigen::AngleAxisd{angular.pitch(), msd_sim::Vector3D::UnitY()} *
+    Eigen::AngleAxisd{angular.roll(), msd_sim::Vector3D::UnitX()};
   frame.setQuaternion(q);
 }
 

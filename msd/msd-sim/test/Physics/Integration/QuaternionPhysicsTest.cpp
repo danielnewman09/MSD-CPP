@@ -6,11 +6,11 @@
 #include <numbers>
 
 #include "msd-sim/src/Environment/WorldModel.hpp"
+#include "msd-sim/src/Physics/Constraints/QuaternionConstraint.hpp"
+#include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
-#include "msd-sim/src/Physics/Constraints/QuaternionConstraint.hpp"
-#include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
 
 using namespace msd_sim;
 
@@ -20,12 +20,14 @@ namespace
 // Helper: Create unit cube for testing
 ConvexHull createUnitCube()
 {
-  std::vector<Coordinate> points = {
-    {-0.5, -0.5, -0.5}, {0.5, -0.5, -0.5},
-    {0.5, 0.5, -0.5}, {-0.5, 0.5, -0.5},
-    {-0.5, -0.5, 0.5}, {0.5, -0.5, 0.5},
-    {0.5, 0.5, 0.5}, {-0.5, 0.5, 0.5}
-  };
+  std::vector<Coordinate> points = {{-0.5, -0.5, -0.5},
+                                    {0.5, -0.5, -0.5},
+                                    {0.5, 0.5, -0.5},
+                                    {-0.5, 0.5, -0.5},
+                                    {-0.5, -0.5, 0.5},
+                                    {0.5, -0.5, 0.5},
+                                    {0.5, 0.5, 0.5},
+                                    {-0.5, 0.5, 0.5}};
   return ConvexHull{points};
 }
 
@@ -53,7 +55,7 @@ TEST(QuaternionPhysicsAC1, OmegaToQdotRoundTrip_Identity)
 TEST(QuaternionPhysicsAC1, OmegaToQdotRoundTrip_RotatedQuaternion)
 {
   // Test with 45° rotation about Z-axis
-  Eigen::Quaterniond Q{Eigen::AngleAxisd{M_PI / 4, Eigen::Vector3d::UnitZ()}};
+  Eigen::Quaterniond Q{Eigen::AngleAxisd{M_PI / 4, msd_sim::Vector3D::UnitZ()}};
   AngularRate omega{0.5, -1.5, 2.5};
 
   // Convert ω → Q̇ → ω
@@ -68,7 +70,8 @@ TEST(QuaternionPhysicsAC1, OmegaToQdotRoundTrip_RotatedQuaternion)
 TEST(QuaternionPhysicsAC1, OmegaToQdotRoundTrip_ArbitraryQuaternion)
 {
   // Test with arbitrary rotation
-  Eigen::Quaterniond Q{Eigen::AngleAxisd{1.2, Eigen::Vector3d{1, 2, 3}.normalized()}};
+  Eigen::Quaterniond Q{
+    Eigen::AngleAxisd{1.2, msd_sim::Vector3D{1, 2, 3}.normalized()}};
   AngularRate omega{-2.0, 3.0, -1.0};
 
   // Convert ω → Q̇ → ω
@@ -83,7 +86,7 @@ TEST(QuaternionPhysicsAC1, OmegaToQdotRoundTrip_ArbitraryQuaternion)
 TEST(QuaternionPhysicsAC1, QdotToOmegaRoundTrip)
 {
   // Test reverse direction: Q̇ → ω → Q̇
-  Eigen::Quaterniond Q{Eigen::AngleAxisd{0.5, Eigen::Vector3d::UnitY()}};
+  Eigen::Quaterniond Q{Eigen::AngleAxisd{0.5, msd_sim::Vector3D::UnitY()}};
 
   // Valid Q̇ must be perpendicular to Q: Q · Q̇ = 0
   // For rotation about Z with Q at 30° about Y
@@ -92,7 +95,8 @@ TEST(QuaternionPhysicsAC1, QdotToOmegaRoundTrip)
 
   // Now recover
   AngularRate omega_recovered = InertialState::quaternionRateToOmega(Qdot, Q);
-  Eigen::Vector4d Qdot_recovered = InertialState::omegaToQuaternionRate(omega_recovered, Q);
+  Eigen::Vector4d Qdot_recovered =
+    InertialState::omegaToQuaternionRate(omega_recovered, Q);
 
   EXPECT_NEAR(Qdot_recovered(0), Qdot(0), 1e-10);
   EXPECT_NEAR(Qdot_recovered(1), Qdot(1), 1e-10);
@@ -103,7 +107,8 @@ TEST(QuaternionPhysicsAC1, QdotToOmegaRoundTrip)
 TEST(QuaternionPhysicsAC1, InertialStateGetSetAngularVelocity)
 {
   InertialState state;
-  state.orientation = Eigen::Quaterniond{Eigen::AngleAxisd{0.3, Eigen::Vector3d::UnitX()}};
+  state.orientation =
+    Eigen::Quaterniond{Eigen::AngleAxisd{0.3, msd_sim::Vector3D::UnitX()}};
 
   AngularRate omega{1.5, -0.5, 2.0};
   state.setAngularVelocity(omega);
@@ -142,7 +147,7 @@ TEST(QuaternionPhysicsAC2, ConstraintMaintainsUnitQuaternion_10000Steps)
     world.update(simTime);
 
     // Check constraint violation
-    const Eigen::Quaterniond& Q = mutableAsset.getInertialState().orientation;
+    const auto& Q = mutableAsset.getInertialState().orientation;
     double violation = std::abs(Q.squaredNorm() - 1.0);
     maxViolation = std::max(maxViolation, violation);
 
@@ -150,7 +155,8 @@ TEST(QuaternionPhysicsAC2, ConstraintMaintainsUnitQuaternion_10000Steps)
     mutableAsset.applyTorque(Coordinate{0, 0, 5.0});
   }
 
-  EXPECT_LT(maxViolation, 1e-10) << "Maximum constraint violation: " << maxViolation;
+  EXPECT_LT(maxViolation, 1e-10)
+    << "Maximum constraint violation: " << maxViolation;
 }
 
 TEST(QuaternionPhysicsAC2, ConstraintEnforcementNormalizesQuaternion)
@@ -213,8 +219,8 @@ TEST(QuaternionPhysicsAC3, FreeFallMatchesAnalyticalSolution)
   double g = 9.81;
   double z_analytical = z0 - 0.5 * g * t * t;
 
-  // Semi-implicit Euler has some deviation, but should be within 1e-6 relative error
-  // Actually for larger simulations, use absolute tolerance
+  // Semi-implicit Euler has some deviation, but should be within 1e-6 relative
+  // error Actually for larger simulations, use absolute tolerance
   double z_actual = mutableAsset.getInertialState().position.z();
 
   // Allow 1% tolerance for numerical integration
@@ -263,7 +269,7 @@ TEST(QuaternionPhysicsAC4, NoGimbalLockAt90Pitch)
 
   // Set orientation to 90° pitch (gimbal lock for Euler angles)
   mutableAsset.getInertialState().orientation =
-    Eigen::Quaterniond{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitY()}};
+    Eigen::Quaterniond{Eigen::AngleAxisd{M_PI / 2, msd_sim::Vector3D::UnitY()}};
 
   // Apply torque about all axes
   mutableAsset.applyTorque(Coordinate{5.0, 5.0, 5.0});
@@ -343,7 +349,8 @@ TEST(QuaternionPhysicsAC5, GravityTorqueIsZero)
   GravityPotential gravity{Coordinate{0, 0, -9.81}};
 
   InertialState state;
-  state.orientation = Eigen::Quaterniond{Eigen::AngleAxisd{0.5, Eigen::Vector3d::UnitX()}};
+  state.orientation =
+    Eigen::Quaterniond{Eigen::AngleAxisd{0.5, msd_sim::Vector3D::UnitX()}};
 
   Eigen::Matrix3d inertia = Eigen::Matrix3d::Identity() * 10.0;
   Coordinate torque = gravity.computeTorque(state, inertia);
@@ -363,9 +370,9 @@ TEST(QuaternionPhysicsAC5, GravityEnergyCorrect)
   double mass = 2.0;
   double energy = gravity.computeEnergy(state, mass);
 
-  // V = m * g * z (with g pointing down, energy = -m * (-9.81) * 10 = m * 9.81 * 10)
-  // Actually V = -m * g · r where g = (0, 0, -9.81) and r = (0, 0, 10)
-  // V = -m * (0*0 + 0*0 + (-9.81)*10) = -m * (-98.1) = 98.1 * m
+  // V = m * g * z (with g pointing down, energy = -m * (-9.81) * 10 = m * 9.81
+  // * 10) Actually V = -m * g · r where g = (0, 0, -9.81) and r = (0, 0, 10) V
+  // = -m * (0*0 + 0*0 + (-9.81)*10) = -m * (-98.1) = 98.1 * m
   EXPECT_NEAR(energy, 9.81 * 10.0 * mass, 1e-10);
 }
 
@@ -377,7 +384,8 @@ TEST(QuaternionPhysicsAC5, GravityForceIndependentOfOrientation)
   state1.position = Coordinate{0, 0, 0};
   state2.position = Coordinate{0, 0, 0};
   state1.orientation = Eigen::Quaterniond::Identity();
-  state2.orientation = Eigen::Quaterniond{Eigen::AngleAxisd{1.5, Eigen::Vector3d{1, 1, 1}.normalized()}};
+  state2.orientation = Eigen::Quaterniond{
+    Eigen::AngleAxisd{1.5, msd_sim::Vector3D{1, 1, 1}.normalized()}};
 
   double mass = 3.0;
   Coordinate force1 = gravity.computeForce(state1, mass);

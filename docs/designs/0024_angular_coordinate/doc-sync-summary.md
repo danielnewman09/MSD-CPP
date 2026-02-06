@@ -113,7 +113,7 @@ Clear migration guidance provided in three locations:
 ### Performance Documentation
 Prototype validation results documented:
 - Deferred normalization: 10x faster than eager
-- Accessor overhead: 0% (same as raw Eigen::Vector3d)
+- Accessor overhead: 0% (same as raw msd_sim::Vector3D)
 - Memory footprint: 24 bytes (validated by tests)
 
 ### Observations

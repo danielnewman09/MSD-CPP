@@ -245,7 +245,7 @@ TEST(InertialCalculationsTest, PositiveDefinite_Ticket0026)
 
   // Assert: All eigenvalues > 0 (positive definite)
   Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(I);
-  Eigen::Vector3d eigenvalues = solver.eigenvalues();
+  msd_sim::Vector3D eigenvalues = solver.eigenvalues();
 
   EXPECT_GT(eigenvalues(0), 0.0);
   EXPECT_GT(eigenvalues(1), 0.0);
@@ -327,7 +327,7 @@ TEST(InertialCalculationsTest, SingleTetrahedron_Ticket0026)
 
   // Assert: Positive definite
   Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(I);
-  Eigen::Vector3d eigenvalues = solver.eigenvalues();
+  msd_sim::Vector3D eigenvalues = solver.eigenvalues();
   EXPECT_GT(eigenvalues(0), 0.0);
   EXPECT_GT(eigenvalues(1), 0.0);
   EXPECT_GT(eigenvalues(2), 0.0);

@@ -13,15 +13,15 @@
 Nine prototypes were executed to determine the optimal normalization strategy. Key findings:
 
 1. **P1-P1e (Normalization Strategy)**: **Deferred normalization with large threshold** is optimal — normalize only when values exceed ±100π, with checks in all modifying operations.
-2. **P2 (Internal Storage)**: Raw `double` storage (Eigen::Vector3d) is **43x faster** for arithmetic and **50% smaller** memory.
+2. **P2 (Internal Storage)**: Raw `double` storage (msd_sim::Vector3D) is **43x faster** for arithmetic and **50% smaller** memory.
 3. **P3 (Numerical Stability)**: Normalization prevents unbounded growth over long simulations.
-4. **P4 (Eigen Integration)**: Inheritance from Eigen::Vector3d preserves SIMD with **zero overhead**.
+4. **P4 (Eigen Integration)**: Inheritance from msd_sim::Vector3D preserves SIMD with **zero overhead**.
 5. **P5 (Shared Interface Pattern)**: **Explicit duplication** — 24-byte footprint, simplest code.
 
 **Final Recommendation**:
 - **Deferred normalization** with 100π threshold
 - **Override compound operators** (`+=`, `-=`, `*=`, `/=`) for complete coverage
-- **Inherit from Eigen::Vector3d** for SIMD and expression templates
+- **Inherit from msd_sim::Vector3D** for SIMD and expression templates
 - **Accept gap**: Direct `operator[]` access bypasses normalization (documented limitation)
 
 ---
@@ -89,7 +89,7 @@ Override `+=`, `-=`, `*=`, `/=` to include normalization:
 ### Final P1 Decision: Deferred + Override
 
 ```cpp
-class AngularCoordinate : public Eigen::Vector3d {
+class AngularCoordinate : public msd_sim::Vector3D {
   static constexpr double kThreshold = 100.0 * M_PI;  // ~50 revolutions
 
   // Normalize only when |value| > threshold
@@ -113,7 +113,7 @@ class AngularCoordinate : public Eigen::Vector3d {
 
 ## P2: Internal Storage Comparison
 
-**Purpose**: Compare Angle objects vs raw double (Eigen::Vector3d).
+**Purpose**: Compare Angle objects vs raw double (msd_sim::Vector3D).
 
 | Operation | Angle Storage | Double Storage | Speedup |
 |-----------|---------------|----------------|---------|
@@ -122,7 +122,7 @@ class AngularCoordinate : public Eigen::Vector3d {
 | **Cross Product** | 13.0 ns | 0.60 ns | **22x faster** |
 | **Memory** | 48 bytes | 24 bytes | **50% smaller** |
 
-**Decision**: Use raw double storage (inherit from Eigen::Vector3d).
+**Decision**: Use raw double storage (inherit from msd_sim::Vector3D).
 
 ---
 
@@ -141,16 +141,16 @@ class AngularCoordinate : public Eigen::Vector3d {
 
 ## P4: Eigen Integration
 
-**Purpose**: Verify SIMD preserved when inheriting from Eigen::Vector3d.
+**Purpose**: Verify SIMD preserved when inheriting from msd_sim::Vector3D.
 
-| Operation | Eigen::Vector3d | AngularCoordinate | Overhead |
+| Operation | msd_sim::Vector3D | AngularCoordinate | Overhead |
 |-----------|-----------------|-------------------|----------|
 | **Addition** | 1.14 ns | 1.14 ns | **0%** |
 | **Cross Product** | 1.37 ns | 1.37 ns | **0%** |
 | **Matrix Multiply** | 1.83 ns | 1.83 ns | **0%** |
 | **Memory** | 24 B | 24 B | **0%** |
 
-**Decision**: Inheritance from Eigen::Vector3d preserves SIMD with zero overhead.
+**Decision**: Inheritance from msd_sim::Vector3D preserves SIMD with zero overhead.
 
 ---
 
@@ -175,14 +175,14 @@ class AngularCoordinate : public Eigen::Vector3d {
 |--------|----------|-----------|
 | **Normalization** | Deferred (100π threshold) | 10x faster than eager-always |
 | **Coverage** | Override `+=`, `-=`, `*=`, `/=` | Complete coverage for compound ops |
-| **Storage** | Inherit Eigen::Vector3d | 43x faster, SIMD preserved |
+| **Storage** | Inherit msd_sim::Vector3D | 43x faster, SIMD preserved |
 | **Interface** | Explicit duplication | Simplest, no overhead |
 | **Gap** | Accept `operator[]` bypass | Documented limitation |
 
 ### Final API
 
 ```cpp
-class AngularCoordinate : public Eigen::Vector3d {
+class AngularCoordinate : public msd_sim::Vector3D {
 public:
   static constexpr double kNormalizationThreshold = 100.0 * M_PI;
 
@@ -222,7 +222,7 @@ private:
 };
 
 // AngularRate: No normalization (rates can exceed ±π)
-class AngularRate : public Eigen::Vector3d {
+class AngularRate : public msd_sim::Vector3D {
 public:
   AngularRate();
   AngularRate(double pitch, double roll, double yaw);
@@ -270,8 +270,8 @@ The prototype series evolved the design from simple eager/lazy comparison to a s
 1. **10x faster** than eager-always for typical workloads
 2. **Correct** — all modifying operations trigger normalization check
 3. **Fast accessors** — no overhead (0.7 ns)
-4. **SIMD preserved** — inherits Eigen::Vector3d optimizations
-5. **Minimal memory** — 24 bytes (same as raw Eigen::Vector3d)
+4. **SIMD preserved** — inherits msd_sim::Vector3D optimizations
+5. **Minimal memory** — 24 bytes (same as raw msd_sim::Vector3D)
 
 **Accepted limitation**: Direct `operator[]` access bypasses normalization. This is documented and acceptable since semantic accessors (`pitch()`, `roll()`, `yaw()`) and setters are the intended API.
 

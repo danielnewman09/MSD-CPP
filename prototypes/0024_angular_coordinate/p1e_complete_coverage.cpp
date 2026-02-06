@@ -2,8 +2,8 @@
 // Ticket: 0024_angular_coordinate
 // Purpose: Test designs that normalize on ALL modifying operations
 
-#include <Eigen/Dense>
 #include <benchmark/benchmark.h>
+#include <Eigen/Dense>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -31,15 +31,15 @@ inline bool needsNormalization(double val)
 // Override +=, -=, *= to include normalization
 // =============================================================================
 
-class AngularCoordinate_Override : public Eigen::Vector3d
+class AngularCoordinate_Override : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_Override() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_Override() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
   AngularCoordinate_Override(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw}
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
     normalizeIfNeeded();
   }
@@ -47,47 +47,50 @@ public:
   // Constructor from Eigen expression
   template <typename OtherDerived>
   AngularCoordinate_Override(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
     normalizeIfNeeded();
   }
 
   // Assignment from Eigen expression
   template <typename OtherDerived>
-  AngularCoordinate_Override& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Override& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     normalizeIfNeeded();
     return *this;
   }
 
   // Override compound assignment operators
   template <typename OtherDerived>
-  AngularCoordinate_Override& operator+=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Override& operator+=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator+=(other);
+    this->msd_sim::Vector3D::operator+=(other);
     normalizeIfNeeded();
     return *this;
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_Override& operator-=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Override& operator-=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator-=(other);
+    this->msd_sim::Vector3D::operator-=(other);
     normalizeIfNeeded();
     return *this;
   }
 
   AngularCoordinate_Override& operator*=(double scalar)
   {
-    this->Eigen::Vector3d::operator*=(scalar);
+    this->msd_sim::Vector3D::operator*=(scalar);
     normalizeIfNeeded();
     return *this;
   }
 
   AngularCoordinate_Override& operator/=(double scalar)
   {
-    this->Eigen::Vector3d::operator/=(scalar);
+    this->msd_sim::Vector3D::operator/=(scalar);
     normalizeIfNeeded();
     return *this;
   }
@@ -144,7 +147,8 @@ public:
   {
   }
 
-  AngularCoordinate_Composition(double pitch, double roll, double yaw) : data_{pitch, roll, yaw}
+  AngularCoordinate_Composition(double pitch, double roll, double yaw)
+    : data_{pitch, roll, yaw}
   {
     normalizeIfNeeded();
   }
@@ -178,32 +182,39 @@ public:
   }
 
   // Arithmetic operators (return new object)
-  AngularCoordinate_Composition operator+(const AngularCoordinate_Composition& other) const
+  AngularCoordinate_Composition operator+(
+    const AngularCoordinate_Composition& other) const
   {
-    return AngularCoordinate_Composition{data_[0] + other.data_[0], data_[1] + other.data_[1],
+    return AngularCoordinate_Composition{data_[0] + other.data_[0],
+                                         data_[1] + other.data_[1],
                                          data_[2] + other.data_[2]};
   }
 
-  AngularCoordinate_Composition operator-(const AngularCoordinate_Composition& other) const
+  AngularCoordinate_Composition operator-(
+    const AngularCoordinate_Composition& other) const
   {
-    return AngularCoordinate_Composition{data_[0] - other.data_[0], data_[1] - other.data_[1],
+    return AngularCoordinate_Composition{data_[0] - other.data_[0],
+                                         data_[1] - other.data_[1],
                                          data_[2] - other.data_[2]};
   }
 
   AngularCoordinate_Composition operator*(double scalar) const
   {
-    return AngularCoordinate_Composition{data_[0] * scalar, data_[1] * scalar, data_[2] * scalar};
+    return AngularCoordinate_Composition{
+      data_[0] * scalar, data_[1] * scalar, data_[2] * scalar};
   }
 
   // Compound assignment with normalization
-  AngularCoordinate_Composition& operator+=(const AngularCoordinate_Composition& other)
+  AngularCoordinate_Composition& operator+=(
+    const AngularCoordinate_Composition& other)
   {
     data_ += other.data_;
     normalizeIfNeeded();
     return *this;
   }
 
-  AngularCoordinate_Composition& operator-=(const AngularCoordinate_Composition& other)
+  AngularCoordinate_Composition& operator-=(
+    const AngularCoordinate_Composition& other)
   {
     data_ -= other.data_;
     normalizeIfNeeded();
@@ -217,14 +228,14 @@ public:
     return *this;
   }
 
-  // Allow addition with Eigen::Vector3d (common in physics)
-  AngularCoordinate_Composition operator+(const Eigen::Vector3d& other) const
+  // Allow addition with msd_sim::Vector3D (common in physics)
+  AngularCoordinate_Composition operator+(const msd_sim::Vector3D& other) const
   {
-    return AngularCoordinate_Composition{data_[0] + other[0], data_[1] + other[1],
-                                         data_[2] + other[2]};
+    return AngularCoordinate_Composition{
+      data_[0] + other[0], data_[1] + other[1], data_[2] + other[2]};
   }
 
-  AngularCoordinate_Composition& operator+=(const Eigen::Vector3d& other)
+  AngularCoordinate_Composition& operator+=(const msd_sim::Vector3D& other)
   {
     data_ += other;
     normalizeIfNeeded();
@@ -232,9 +243,10 @@ public:
   }
 
   // Cross product
-  AngularCoordinate_Composition cross(const AngularCoordinate_Composition& other) const
+  AngularCoordinate_Composition cross(
+    const AngularCoordinate_Composition& other) const
   {
-    Eigen::Vector3d result = data_.cross(other.data_);
+    msd_sim::Vector3D result = data_.cross(other.data_);
     return AngularCoordinate_Composition{result[0], result[1], result[2]};
   }
 
@@ -251,13 +263,13 @@ public:
   }
 
   // Access underlying Eigen vector (const only - prevents modification)
-  const Eigen::Vector3d& asEigen() const
+  const msd_sim::Vector3D& asEigen() const
   {
     return data_;
   }
 
 private:
-  Eigen::Vector3d data_;
+  msd_sim::Vector3D data_;
 
   void normalizeIfNeeded()
   {
@@ -274,27 +286,29 @@ private:
 // Strategy 3: Never (baseline)
 // =============================================================================
 
-class AngularCoordinate_Never : public Eigen::Vector3d
+class AngularCoordinate_Never : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_Never() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_Never() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
-  AngularCoordinate_Never(double pitch, double roll, double yaw) : Eigen::Vector3d{pitch, roll, yaw}
+  AngularCoordinate_Never(double pitch, double roll, double yaw)
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_Never(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_Never& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Never& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -387,7 +401,7 @@ BENCHMARK(BM_Accessor_Never);
 static void BM_CompoundAdd_Override(benchmark::State& state)
 {
   AngularCoordinate_Override a{0, 0, 0};
-  Eigen::Vector3d delta{0.001, 0.0005, 0.0015};
+  msd_sim::Vector3D delta{0.001, 0.0005, 0.0015};
 
   for (auto _ : state)
   {
@@ -400,7 +414,7 @@ BENCHMARK(BM_CompoundAdd_Override);
 static void BM_CompoundAdd_Composition(benchmark::State& state)
 {
   AngularCoordinate_Composition a{0, 0, 0};
-  Eigen::Vector3d delta{0.001, 0.0005, 0.0015};
+  msd_sim::Vector3D delta{0.001, 0.0005, 0.0015};
 
   for (auto _ : state)
   {
@@ -413,7 +427,7 @@ BENCHMARK(BM_CompoundAdd_Composition);
 static void BM_CompoundAdd_Never(benchmark::State& state)
 {
   AngularCoordinate_Never a{0, 0, 0};
-  Eigen::Vector3d delta{0.001, 0.0005, 0.0015};
+  msd_sim::Vector3D delta{0.001, 0.0005, 0.0015};
 
   for (auto _ : state)
   {
@@ -430,7 +444,7 @@ BENCHMARK(BM_CompoundAdd_Never);
 static void BM_AssignAdd_Override(benchmark::State& state)
 {
   AngularCoordinate_Override a{0, 0, 0};
-  Eigen::Vector3d delta{0.001, 0.0005, 0.0015};
+  msd_sim::Vector3D delta{0.001, 0.0005, 0.0015};
 
   for (auto _ : state)
   {
@@ -443,7 +457,7 @@ BENCHMARK(BM_AssignAdd_Override);
 static void BM_AssignAdd_Composition(benchmark::State& state)
 {
   AngularCoordinate_Composition a{0, 0, 0};
-  Eigen::Vector3d delta{0.001, 0.0005, 0.0015};
+  msd_sim::Vector3D delta{0.001, 0.0005, 0.0015};
 
   for (auto _ : state)
   {
@@ -456,7 +470,7 @@ BENCHMARK(BM_AssignAdd_Composition);
 static void BM_AssignAdd_Never(benchmark::State& state)
 {
   AngularCoordinate_Never a{0, 0, 0};
-  Eigen::Vector3d delta{0.001, 0.0005, 0.0015};
+  msd_sim::Vector3D delta{0.001, 0.0005, 0.0015};
 
   for (auto _ : state)
   {
@@ -473,7 +487,7 @@ BENCHMARK(BM_AssignAdd_Never);
 static void BM_PhysicsViaCompound_Override(benchmark::State& state)
 {
   AngularCoordinate_Override orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
   double dt = 0.01;
 
   for (auto _ : state)
@@ -487,7 +501,7 @@ BENCHMARK(BM_PhysicsViaCompound_Override);
 static void BM_PhysicsViaCompound_Composition(benchmark::State& state)
 {
   AngularCoordinate_Composition orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
   double dt = 0.01;
 
   for (auto _ : state)
@@ -501,7 +515,7 @@ BENCHMARK(BM_PhysicsViaCompound_Composition);
 static void BM_PhysicsViaCompound_Never(benchmark::State& state)
 {
   AngularCoordinate_Never orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
   double dt = 0.01;
 
   for (auto _ : state)
@@ -521,7 +535,7 @@ static void BM_LongSimCompound_Override(benchmark::State& state)
   for (auto _ : state)
   {
     AngularCoordinate_Override orientation{0.0, 0.0, 0.0};
-    Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+    msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
     double dt = 0.01;
 
     for (int i = 0; i < 1000; ++i)
@@ -538,7 +552,7 @@ static void BM_LongSimCompound_Composition(benchmark::State& state)
   for (auto _ : state)
   {
     AngularCoordinate_Composition orientation{0.0, 0.0, 0.0};
-    Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+    msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
     double dt = 0.01;
 
     for (int i = 0; i < 1000; ++i)
@@ -555,7 +569,7 @@ static void BM_LongSimCompound_Never(benchmark::State& state)
   for (auto _ : state)
   {
     AngularCoordinate_Never orientation{0.0, 0.0, 0.0};
-    Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+    msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
     double dt = 0.01;
 
     for (int i = 0; i < 1000; ++i)
@@ -631,9 +645,10 @@ static void BM_MemorySize(benchmark::State& state)
     benchmark::DoNotOptimize(sizeof(AngularCoordinate_Composition));
     benchmark::DoNotOptimize(sizeof(AngularCoordinate_Never));
   }
-  state.SetLabel("Override=" + std::to_string(sizeof(AngularCoordinate_Override)) +
-                 "B, Composition=" + std::to_string(sizeof(AngularCoordinate_Composition)) +
-                 "B, Never=" + std::to_string(sizeof(AngularCoordinate_Never)) + "B");
+  state.SetLabel(
+    "Override=" + std::to_string(sizeof(AngularCoordinate_Override)) +
+    "B, Composition=" + std::to_string(sizeof(AngularCoordinate_Composition)) +
+    "B, Never=" + std::to_string(sizeof(AngularCoordinate_Never)) + "B");
 }
 BENCHMARK(BM_MemorySize);
 

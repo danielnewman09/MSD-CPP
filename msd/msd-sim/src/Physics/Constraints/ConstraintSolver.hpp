@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp"
 #include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
@@ -121,8 +122,8 @@ public:
    */
   struct BodyForces
   {
-    Eigen::Vector3d linearForce;    // Net linear constraint force [N]
-    Eigen::Vector3d angularTorque;  // Net angular constraint torque [N·m]
+    Vector3D linearForce;    // Net linear constraint force [N]
+    Vector3D angularTorque;  // Net angular constraint torque [N·m]
 
     BodyForces() = default;
     BodyForces(const Coordinate& lf, const Coordinate& at)

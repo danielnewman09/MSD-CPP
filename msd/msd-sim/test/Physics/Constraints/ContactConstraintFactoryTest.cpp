@@ -1,9 +1,11 @@
 // Ticket: 0032a_two_body_constraint_infrastructure
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 
-#include <gtest/gtest.h>
 #include <cmath>
 #include <memory>
+
+#include <gtest/gtest.h>
+
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
@@ -28,7 +30,7 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
   state.position = position;
   state.velocity = Coordinate{0.0, 0.0, 0.0};
   state.acceleration = Coordinate{0.0, 0.0, 0.0};
-  state.orientation = Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};
+  state.orientation = QuaternionD{1.0, 0.0, 0.0, 0.0};
   state.quaternionRate = Eigen::Vector4d::Zero();
   state.angularAcceleration = AngularRate{0.0, 0.0, 0.0};
   return state;
@@ -51,10 +53,10 @@ InertialState createRotatingState(const Coordinate& position,
 
   // Convert angular velocity to quaternion rate
   // Q̇ = 0.5 * Q ⊗ [0, ω]
-  Eigen::Quaterniond Q = state.orientation;
-  Eigen::Quaterniond omega_quat{
+  QuaternionD Q = state.orientation;
+  QuaternionD omega_quat{
     0.0, angularVelocity.x(), angularVelocity.y(), angularVelocity.z()};
-  Eigen::Quaterniond Qdot_quat = Q * omega_quat;
+  QuaternionD Qdot_quat = Q * omega_quat;
 
   state.quaternionRate << Qdot_quat.x(), Qdot_quat.y(), Qdot_quat.z(),
     Qdot_quat.w();

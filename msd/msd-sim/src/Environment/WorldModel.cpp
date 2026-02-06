@@ -3,10 +3,12 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "msd-sim/src/DataRecorder/DataRecorder.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
+#include "msd-transfer/src/InertialStateRecord.hpp"
 
 namespace msd_sim
 {
@@ -22,6 +24,10 @@ WorldModel::WorldModel()
     std::make_unique<GravityPotential>(Coordinate{0.0, 0.0, -9.81}));
   // Ticket: 0030_lagrangian_quaternion_physics
 }
+
+// Destructor defined in .cpp where DataRecorder type is complete
+// Required for std::unique_ptr<DataRecorder> forward declaration pattern
+WorldModel::~WorldModel() = default;
 
 
 // ========== Object Management ==========
@@ -112,6 +118,13 @@ void WorldModel::update(std::chrono::milliseconds simTime)
 
   // Update simulation time
   time_ = simTime;
+
+  // Record current frame if recording is enabled
+  // Ticket: 0038_simulation_data_recorder
+  if (dataRecorder_)
+  {
+    recordCurrentFrame();
+  }
 }
 
 // ========== Private Methods ==========
@@ -375,6 +388,38 @@ void WorldModel::setIntegrator(std::unique_ptr<Integrator> integrator)
 const Coordinate& WorldModel::getGravity() const
 {
   return gravity_;
+}
+
+// ========== Data Recording (ticket 0038) ==========
+
+void WorldModel::enableRecording(const std::string& dbPath,
+                                 std::chrono::milliseconds flushInterval)
+{
+  DataRecorder::Config config{};
+  config.databasePath = dbPath;
+  config.flushInterval = flushInterval;
+  dataRecorder_ = std::make_unique<DataRecorder>(config);
+}
+
+void WorldModel::disableRecording()
+{
+  dataRecorder_.reset();  // Triggers flush and thread join via RAII
+}
+
+void WorldModel::recordCurrentFrame()
+{
+  // Get pre-assigned frame ID from recorder
+  double const simulationTime = std::chrono::duration<double>(time_).count();
+  const uint32_t frameId = dataRecorder_->recordFrame(simulationTime);
+
+  // Record all inertial states with FK to this frame
+  auto& stateDAO = dataRecorder_->getDAO<msd_transfer::InertialStateRecord>();
+  for (const auto& asset : inertialAssets_)
+  {
+    auto record = asset.getInertialState().toRecord();
+    record.frame.id = frameId;  // Explicit FK assignment
+    stateDAO.addToBuffer(record);
+  }
 }
 
 }  // namespace msd_sim

@@ -72,7 +72,7 @@ private:
    * @param size Side length of the cube
    * @return Array of 8 corner coordinates
    */
-  static std::array<Eigen::Vector3d, 8> getCubeCorners(double size);
+  static std::array<msd_sim::Vector3D, 8> getCubeCorners(double size);
 
   /**
    * @brief Convert vertices to CollisionMeshRecord
@@ -84,7 +84,7 @@ private:
    * @return CollisionMeshRecord with populated hull_data and bounding volume
    */
   static msd_transfer::MeshRecord verticesToMeshRecord(
-    const std::vector<Eigen::Vector3d>& vertices);
+    const std::vector<msd_sim::Vector3D>& vertices);
 };
 
 }  // namespace msd_assets

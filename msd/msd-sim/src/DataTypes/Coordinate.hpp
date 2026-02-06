@@ -1,65 +1,54 @@
 #ifndef COORDINATE_HPP
 #define COORDINATE_HPP
 
-// NOLINTBEGIN(bugprone-crtp-constructor-accessibility)
+#include "msd-sim/src/DataTypes/Vec3DBase.hpp"
+#include "msd-sim/src/DataTypes/Vec3FormatterBase.hpp"
 
-#include "Vec3FormatterBase.hpp"
-
-#include <Eigen/Dense>
+#include "msd-transfer/src/CoordinateRecord.hpp"
 
 namespace msd_sim
 {
-namespace detail
+
+/**
+ * @brief 3D spatial coordinate (position in space)
+ *
+ * Inherits from msd_sim::Vector3D via Vec3DBase for full matrix operation
+ * support. Provides semantic x/y/z accessors and transfer object support.
+ *
+ * Memory footprint: 24 bytes (same as msd_sim::Vector3D)
+ */
+struct Coordinate final : detail::Vec3DBase<Coordinate>
 {
-
-template <typename Derived>
-class Vec3Base : public Eigen::Vector3d
-{
-public:
-  static constexpr Eigen::Index X = 0;
-  static constexpr Eigen::Index Y = 1;
-  static constexpr Eigen::Index Z = 2;
-
-  Vec3Base() : Eigen::Vector3d{0.0, 0.0, 0.0}
-  {
-  }
-
-  Vec3Base(double x, double y, double z) : Eigen::Vector3d{x, y, z}
-  {
-  }
-
-  // NOLINTNEXTLINE(google-explicit-constructor)
-  Vec3Base(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec}
-  {
-  }
+  using Vec3DBase::Vec3DBase;
+  using Vec3DBase::operator=;
 
   template <typename OtherDerived>
   // NOLINTNEXTLINE(google-explicit-constructor)
-  Vec3Base(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+  Coordinate(const Eigen::MatrixBase<OtherDerived>& other) : Vec3DBase{other}
   {
   }
 
-  template <typename OtherDerived>
-  Vec3Base& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  // Transfer methods
+  static Coordinate fromRecord(const msd_transfer::CoordinateRecord& record)
   {
-    this->Eigen::Vector3d::operator=(other);
-    return *this;
+    return Coordinate{record.x, record.y, record.z};
   }
-};
 
-}  // namespace detail
-
-struct Coordinate final : detail::Vec3Base<Coordinate>
-{
-  using Vec3Base::Vec3Base;
-  using Vec3Base::operator=;
-
-  template <typename OtherDerived>
-  // NOLINTNEXTLINE(google-explicit-constructor)
-  Coordinate(const Eigen::MatrixBase<OtherDerived>& other) : Vec3Base{other}
+  [[nodiscard]] msd_transfer::CoordinateRecord toRecord() const
   {
+    msd_transfer::CoordinateRecord record;
+    record.x = x();
+    record.y = y();
+    record.z = z();
+    return record;
   }
+
+  // Rule of Zero
+  Coordinate(const Coordinate&) = default;
+  Coordinate(Coordinate&&) noexcept = default;
+  Coordinate& operator=(const Coordinate&) = default;
+  Coordinate& operator=(Coordinate&&) noexcept = default;
+  ~Coordinate() = default;
 };
 
 }  // namespace msd_sim
@@ -77,7 +66,5 @@ struct std::formatter<msd_sim::Coordinate>
       ctx);
   }
 };
-
-// NOLINTEND(bugprone-crtp-constructor-accessibility)
 
 #endif  // COORDINATE_HPP

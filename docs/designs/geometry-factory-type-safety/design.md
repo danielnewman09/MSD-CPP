@@ -21,7 +21,7 @@ Vertex* vertexData = reinterpret_cast<Vertex*>(record.vertex_data.data());
 // Stores FULL Vertex structs with position + color + normal
 ```
 
-The factory always produces Vertex blobs (36 bytes per vertex), which is correct for `VisualGeometry` but incorrect if someone expects to use the output for `CollisionGeometry` (which expects `Eigen::Vector3d` at 24 bytes per vertex).
+The factory always produces Vertex blobs (36 bytes per vertex), which is correct for `VisualGeometry` but incorrect if someone expects to use the output for `CollisionGeometry` (which expects `msd_sim::Vector3D` at 24 bytes per vertex).
 
 **Key Insight: Existing Infrastructure Already Solves This**
 
@@ -29,7 +29,7 @@ The `BaseGeometry<T>` template already provides:
 
 1. **Raw coordinates constructor** that handles type conversion:
    ```cpp
-   explicit BaseGeometry(const std::vector<Eigen::Vector3d>& rawVertices, uint32_t objectId = 0)
+   explicit BaseGeometry(const std::vector<msd_sim::Vector3D>& rawVertices, uint32_t objectId = 0)
    ```
    - For `VisualGeometry` (T=Vertex): Calls `computeVertexData()` to compute normals and convert to Vertex format
    - For `CollisionGeometry` (T=Vector3d): Stores raw coordinates directly
@@ -54,7 +54,7 @@ The fix requires updating `GeometryFactory::verticesToMeshRecord()` to use the e
 **Updated Implementation:**
 ```cpp
 msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
-  const std::vector<Eigen::Vector3d>& vertices)
+  const std::vector<msd_sim::Vector3D>& vertices)
 {
   // Create VisualGeometry from raw coordinates
   // This computes normals and converts to Vertex format
@@ -92,7 +92,7 @@ msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
   VisualGeometry visual{meshRecord, objectId};  // Works correctly
 
   // For collision geometry (construct directly from coordinates)
-  std::vector<Eigen::Vector3d> cubeVertices = generateCubeVertices(1.0);
+  std::vector<msd_sim::Vector3D> cubeVertices = generateCubeVertices(1.0);
   CollisionGeometry collision{cubeVertices, objectId};  // Works correctly
   auto collisionRecord = collision.populateMeshRecord();  // For database storage
   ```
@@ -113,7 +113,7 @@ msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
 **Current Implementation (WORKS but duplicates logic):**
 ```cpp
 msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
-  const std::vector<Eigen::Vector3d>& vertices)
+  const std::vector<msd_sim::Vector3D>& vertices)
 {
   msd_transfer::MeshRecord record;
   const size_t vertexCount = vertices.size();
@@ -138,7 +138,7 @@ msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
 **New Implementation (leverages existing infrastructure):**
 ```cpp
 msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
-  const std::vector<Eigen::Vector3d>& vertices)
+  const std::vector<msd_sim::Vector3D>& vertices)
 {
   // Create VisualGeometry from raw coordinates
   // - Computes normals via computeVertexData()
@@ -171,7 +171,7 @@ The factory class documentation should be updated to clarify intent:
  * for visual rendering (Vertex structs with position, color, and normal).
  *
  * For collision geometry, construct CollisionGeometry directly from raw
- * vertex coordinates using the BaseGeometry<Eigen::Vector3d> constructor.
+ * vertex coordinates using the BaseGeometry<msd_sim::Vector3D> constructor.
  *
  * Usage:
  *   // Visual geometry (for rendering)
@@ -179,7 +179,7 @@ The factory class documentation should be updated to clarify intent:
  *   VisualGeometry visual{cubeMesh, objectId};
  *
  *   // Collision geometry (for physics)
- *   std::vector<Eigen::Vector3d> vertices = getCubeVertices(1.0);
+ *   std::vector<msd_sim::Vector3D> vertices = getCubeVertices(1.0);
  *   CollisionGeometry collision{vertices, objectId};
  */
 class GeometryFactory { ... };

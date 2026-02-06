@@ -20,7 +20,7 @@ TEST(GeometrySerializationTest, VisualGeometry_Cube_PopulateMeshRecord)
   // Verify record fields
   EXPECT_EQ(vertex_count, 36);
   EXPECT_FALSE(vertex_data_empty);
-  EXPECT_EQ(vertex_data_size, 36 * sizeof(Eigen::Vector3d));
+  EXPECT_EQ(vertex_data_size, 36 * sizeof(msd_sim::Vector3D));
 }
 
 TEST(GeometrySerializationTest, CreateCube)

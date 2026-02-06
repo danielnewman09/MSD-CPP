@@ -23,9 +23,8 @@ void InertialState::setAngularVelocity(const AngularRate& omega)
   quaternionRate = omegaToQuaternionRate(omega, orientation);
 }
 
-Eigen::Vector4d InertialState::omegaToQuaternionRate(
-  const AngularRate& omega,
-  const Eigen::Quaterniond& Q)
+Vector4D InertialState::omegaToQuaternionRate(const AngularRate& omega,
+                                              const QuaternionD& Q)
 {
   // Q̇ = ½ * Q ⊗ [0, ω]
   // Quaternion multiplication: Q ⊗ [0, ω] where [0, ω] = (0, ωx, ωy, ωz)
@@ -65,9 +64,8 @@ Eigen::Vector4d InertialState::omegaToQuaternionRate(
   return qdot;
 }
 
-Eigen::Vector3d InertialState::quaternionRateToOmega(
-  const Eigen::Vector4d& Qdot,
-  const Eigen::Quaterniond& Q)
+AngularRate InertialState::quaternionRateToOmega(const Vector4D& Qdot,
+                                                 const QuaternionD& Q)
 {
   // ω = 2 * Q̄ ⊗ Q̇
   // where Q̄ is the conjugate quaternion (w, -x, -y, -z)
@@ -146,6 +144,31 @@ AngularCoordinate InertialState::getEulerAngles() const
   }
 
   return AngularCoordinate{pitch, roll, yaw};
+}
+
+InertialState InertialState::fromRecord(
+  const msd_transfer::InertialStateRecord& record)
+{
+  InertialState state;
+  state.position = Coordinate::fromRecord(record.position);
+  state.velocity = Vector3D::fromRecord(record.velocity);
+  state.acceleration = Vector3D::fromRecord(record.acceleration);
+  state.orientation = QuaternionD::fromRecord(record.orientation);
+  state.quaternionRate = Vector4D::fromRecord(record.quaternionRate);
+  state.angularAcceleration = AngularRate::fromRecord(record.angularAcceleration);
+  return state;
+}
+
+msd_transfer::InertialStateRecord InertialState::toRecord() const
+{
+  msd_transfer::InertialStateRecord record;
+  record.position = position.toRecord();
+  record.velocity = velocity.toRecord();
+  record.acceleration = acceleration.toRecord();
+  record.orientation = orientation.toRecord();
+  record.quaternionRate = quaternionRate.toRecord();
+  record.angularAcceleration = angularAcceleration.toRecord();
+  return record;
 }
 
 }  // namespace msd_sim

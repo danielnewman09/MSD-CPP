@@ -82,7 +82,7 @@ Coordinate support(const ConvexHull& hull, const Coordinate& dir);
  */
 Coordinate supportMinkowski(const AssetPhysical& assetA,
                             const AssetPhysical& assetB,
-                            const Eigen::Vector3d& dir);
+                            const msd_sim::Vector3D& dir);
 
 /**
  * @brief Minkowski difference support with witness point tracking.
@@ -109,7 +109,7 @@ Coordinate supportMinkowski(const AssetPhysical& assetA,
  */
 SupportResult supportMinkowskiWithWitness(const AssetPhysical& assetA,
                                           const AssetPhysical& assetB,
-                                          const Eigen::Vector3d& dir);
+                                          const msd_sim::Vector3D& dir);
 
 }  // namespace support_function
 

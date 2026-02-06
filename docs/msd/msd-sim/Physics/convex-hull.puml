@@ -98,7 +98,7 @@ package "msd_assets" {
 package "msd_sim::Environment" {
     class Coordinate {
         <<external>>
-        ' Eigen::Vector3d wrapper
+        ' msd_sim::Vector3D wrapper
     }
 }
 

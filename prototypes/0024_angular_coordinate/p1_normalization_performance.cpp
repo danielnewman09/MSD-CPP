@@ -1,9 +1,10 @@
 // Prototype P1: Normalization Performance
 // Ticket: 0024_angular_coordinate
-// Purpose: Compare normalization strategies (lazy, eager, never) using Google Benchmark
+// Purpose: Compare normalization strategies (lazy, eager, never) using Google
+// Benchmark
 
-#include <Eigen/Dense>
 #include <benchmark/benchmark.h>
+#include <Eigen/Dense>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -17,27 +18,28 @@ inline double normalizeAngle(double rad)
 }
 
 // Strategy 1: Lazy Normalization (normalize on access)
-class AngularCoordinate_Lazy : public Eigen::Vector3d
+class AngularCoordinate_Lazy : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_Lazy() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_Lazy() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
   AngularCoordinate_Lazy(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw}
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_Lazy(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_Lazy& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Lazy& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -57,29 +59,32 @@ public:
 };
 
 // Strategy 2: Eager Normalization (normalize on construction/assignment)
-class AngularCoordinate_Eager : public Eigen::Vector3d
+class AngularCoordinate_Eager : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_Eager() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_Eager() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
   AngularCoordinate_Eager(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{normalizeAngle(pitch), normalizeAngle(roll), normalizeAngle(yaw)}
+    : msd_sim::Vector3D{normalizeAngle(pitch),
+                        normalizeAngle(roll),
+                        normalizeAngle(yaw)}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_Eager(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
     normalizeInPlace();
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_Eager& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Eager& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     normalizeInPlace();
     return *this;
   }
@@ -108,27 +113,28 @@ private:
 };
 
 // Strategy 3: Never Normalize (baseline for comparison)
-class AngularCoordinate_Never : public Eigen::Vector3d
+class AngularCoordinate_Never : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_Never() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_Never() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
   AngularCoordinate_Never(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw}
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_Never(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_Never& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Never& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -378,7 +384,7 @@ static void BM_Assignment_Never(benchmark::State& state)
 {
   size_t idx = 0;
   AngularCoordinate_Never result{0, 0, 0};
-  Eigen::Vector3d source{1.5, 2.5, 3.5};
+  msd_sim::Vector3D source{1.5, 2.5, 3.5};
 
   for (auto _ : state)
   {
@@ -394,7 +400,7 @@ static void BM_Assignment_Lazy(benchmark::State& state)
 {
   size_t idx = 0;
   AngularCoordinate_Lazy result{0, 0, 0};
-  Eigen::Vector3d source{1.5, 2.5, 3.5};
+  msd_sim::Vector3D source{1.5, 2.5, 3.5};
 
   for (auto _ : state)
   {
@@ -410,7 +416,7 @@ static void BM_Assignment_Eager(benchmark::State& state)
 {
   size_t idx = 0;
   AngularCoordinate_Eager result{0, 0, 0};
-  Eigen::Vector3d source{1.5, 2.5, 3.5};
+  msd_sim::Vector3D source{1.5, 2.5, 3.5};
 
   for (auto _ : state)
   {

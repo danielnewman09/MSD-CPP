@@ -1,6 +1,4 @@
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
-    AngularCoordinateTest.cpp
-    AngularRateTest.cpp
     EnvironmentTest.cpp
     MotionControllerTest.cpp
     ReferenceFrameTest.cpp

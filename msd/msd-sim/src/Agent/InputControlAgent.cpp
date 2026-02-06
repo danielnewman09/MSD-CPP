@@ -2,8 +2,8 @@
 // Design: docs/designs/input-state-management/design.md
 
 #include "msd-sim/src/Agent/InputControlAgent.hpp"
-#include <Eigen/src/Core/Matrix.h>
 #include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -14,12 +14,13 @@ InputControlAgent::InputControlAgent(double maxSpeed, double maxAngularSpeed)
 {
 }
 
-InertialState InputControlAgent::updateState(const InertialState& currentState) const
+InertialState InputControlAgent::updateState(
+  const InertialState& currentState) const
 {
   InertialState newState = currentState;
 
   // Calculate linear velocity based on input commands
-  Eigen::Vector3d velocity{0, 0, 0};
+  Vector3D velocity{0, 0, 0};
 
   if (inputCommands_.moveForward)
   {

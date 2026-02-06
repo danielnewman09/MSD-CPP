@@ -21,7 +21,7 @@
 ---
 
 ## Summary
-Fix 217 compiler warnings triggered by `-Wdouble-promotion` flag across multiple files. The warnings occur when `float` values are implicitly converted to `double`, typically when constructing `Eigen::Vector3d` objects or calling functions that expect `double` parameters.
+Fix 217 compiler warnings triggered by `-Wdouble-promotion` flag across multiple files. The warnings occur when `float` values are implicitly converted to `double`, typically when constructing `msd_sim::Vector3D` objects or calling functions that expect `double` parameters.
 
 ## Motivation
 The `-Wdouble-promotion` warning catches implicit float-to-double conversions that may indicate:
@@ -44,7 +44,7 @@ Fixing these warnings ensures intentional type usage and prevents subtle precisi
 - **Backward Compatibility**: No API changes
 
 ## Constraints
-- `Eigen::Vector3d` uses `double` as its scalar type
+- `msd_sim::Vector3D` uses `double` as its scalar type
 - Current code passes `float` values (e.g., `half` variable) to `Vector3d` constructor
 
 ## Acceptance Criteria
@@ -132,7 +132,7 @@ Fixing these warnings ensures intentional type usage and prevents subtle precisi
   - `msd/msd-gui/src/SDLApp.cpp`
   - `msd/msd-gui/src/Camera3D.cpp`
 - **Artifacts**: None
-- **Notes**: Changed `float` to `double` for variables used with `Eigen::Vector3d`/`Coordinate`. Changed `MotionController` API from `float` to `double` for `moveSpeed` and `sensitivity` parameters. Used explicit `static_cast<double>()` for float→double conversions in printf-style calls and FOV calculations.
+- **Notes**: Changed `float` to `double` for variables used with `msd_sim::Vector3D`/`Coordinate`. Changed `MotionController` API from `float` to `double` for `moveSpeed` and `sensitivity` parameters. Used explicit `static_cast<double>()` for float→double conversions in printf-style calls and FOV calculations.
 
 ### Implementation Review Phase
 - **Started**:

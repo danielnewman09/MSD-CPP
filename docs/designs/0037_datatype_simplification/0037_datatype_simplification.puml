@@ -6,7 +6,7 @@ skinparam class {
 }
 
 package "Eigen3 (External)" {
-    class "Eigen::Vector3d" as EigenVector {
+    class "msd_sim::Vector3D" as EigenVector {
         +double x()
         +double y()
         +double z()
@@ -31,18 +31,18 @@ package "msd_sim::detail (Internal)" {
         --
         + Vec3Base()
         + Vec3Base(double x, double y, double z)
-        # Vec3Base(const Eigen::Vector3d&)
+        # Vec3Base(const msd_sim::Vector3D&)
         # Vec3Base(const Eigen::MatrixBase<OtherDerived>&)
         # operator=(const Eigen::MatrixBase<OtherDerived>&)
         --
-        - using Eigen::Vector3d::operator[]
-        - using Eigen::Vector3d::x
-        - using Eigen::Vector3d::y
-        - using Eigen::Vector3d::z
-        - using Eigen::Vector3d::norm
-        - using Eigen::Vector3d::squaredNorm
-        - using Eigen::Vector3d::dot
-        - using Eigen::Vector3d::cross
+        - using msd_sim::Vector3D::operator[]
+        - using msd_sim::Vector3D::x
+        - using msd_sim::Vector3D::y
+        - using msd_sim::Vector3D::z
+        - using msd_sim::Vector3D::norm
+        - using msd_sim::Vector3D::squaredNorm
+        - using msd_sim::Vector3D::dot
+        - using msd_sim::Vector3D::cross
         --
         + static constexpr Eigen::Index X = 0
         + static constexpr Eigen::Index Y = 1
@@ -105,7 +105,7 @@ package "msd_sim (Public API)" {
         --
         + AngularRate()
         + AngularRate(double pitchRate, double rollRate, double yawRate)
-        # AngularRate(const Eigen::Vector3d&)
+        # AngularRate(const msd_sim::Vector3D&)
         # AngularRate(const Eigen::MatrixBase<OtherDerived>&)
         # operator=(const Eigen::MatrixBase<OtherDerived>&)
         --
@@ -173,60 +173,60 @@ package "std (Formatting Support)" {
 package "Usage Examples (Phase C Impact)" {
     class "Facet" as Facet <<modified>> {
         - std::array<size_t, 3> vertexIndices
-        - Eigen::Vector3d normal
+        - msd_sim::Vector3D normal
         - double offset
     }
 
     class "CollisionResult" as CollisionResult <<modified>> {
-        - Eigen::Vector3d normal
+        - msd_sim::Vector3D normal
         - double penetrationDepth
         - std::array<ContactPoint, 4> contacts
         - size_t contactCount
     }
 
     class "TangentFrame" as TangentFrame <<modified>> {
-        - Eigen::Vector3d t1
-        - Eigen::Vector3d t2
+        - msd_sim::Vector3D t1
+        - msd_sim::Vector3D t2
     }
 
     class "ContactConstraint" as ContactConstraint <<modified>> {
-        - Eigen::Vector3d contactNormal_
+        - msd_sim::Vector3D contactNormal_
         - Coordinate leverArmA_
         - Coordinate leverArmB_
     }
 
     class "FrictionConstraint" as FrictionConstraint <<modified>> {
-        - Eigen::Vector3d tangent1_
-        - Eigen::Vector3d tangent2_
+        - msd_sim::Vector3D tangent1_
+        - msd_sim::Vector3D tangent2_
     }
 
     note bottom of Facet
         **Phase C Change:**
-        CoordinateRate normal → Eigen::Vector3d normal
+        CoordinateRate normal → msd_sim::Vector3D normal
         (Normal vector is not a velocity)
     end note
 
     note bottom of CollisionResult
         **Phase C Change:**
-        CoordinateRate normal → Eigen::Vector3d normal
+        CoordinateRate normal → msd_sim::Vector3D normal
         (Normal vector is not a velocity)
     end note
 
     note bottom of TangentFrame
         **Phase C Change:**
-        Coordinate t1/t2 → Eigen::Vector3d t1/t2
+        Coordinate t1/t2 → msd_sim::Vector3D t1/t2
         (Tangent vectors are not positions)
     end note
 
     note bottom of ContactConstraint
         **Phase C Change:**
-        contactNormal_: CoordinateRate → Eigen::Vector3d
+        contactNormal_: CoordinateRate → msd_sim::Vector3D
         (Keep leverArms as Coordinate - semantically positions)
     end note
 
     note bottom of FrictionConstraint
         **Phase C Change:**
-        tangent1_/tangent2_: Coordinate → Eigen::Vector3d
+        tangent1_/tangent2_: Coordinate → msd_sim::Vector3D
         (Tangent vectors are not positions)
     end note
 }

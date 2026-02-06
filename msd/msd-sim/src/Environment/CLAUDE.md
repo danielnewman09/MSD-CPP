@@ -52,16 +52,16 @@ Platform (Legacy entity type)
 **Type**: Header-only, value type
 
 #### Purpose
-3D coordinate wrapper inheriting from `Eigen::Vector3d`. Provides convenient construction and full access to Eigen's optimized linear algebra operations with double precision for numerical stability.
+3D coordinate wrapper inheriting from `msd_sim::Vector3D`. Provides convenient construction and full access to Eigen's optimized linear algebra operations with double precision for numerical stability.
 
 #### Key Interfaces
 ```cpp
-class Coordinate : public Eigen::Vector3d {
+class Coordinate : public msd_sim::Vector3D {
   Coordinate();                                    // Default: (0, 0, 0)
   Coordinate(double x, double y, double z);        // Direct construction
-  Coordinate(const Eigen::Vector3d& vec);          // From Eigen vector
+  Coordinate(const msd_sim::Vector3D& vec);          // From Eigen vector
 
-  // Inherits all Eigen::Vector3d operations
+  // Inherits all msd_sim::Vector3D operations
   double x(), y(), z();
   double norm(), normalized();
   double dot(other);
@@ -157,7 +157,7 @@ azimuth.getRad();  // Returns 330° equivalent in radians
 **Introduced**: [Ticket: 0024_angular_coordinate](../../../../../tickets/0024_angular_coordinate.md)
 
 #### Purpose
-Represents orientation angles with deferred normalization to (-π, π]. Inherits from `Eigen::Vector3d` for full matrix operation support while providing semantic pitch/roll/yaw accessors. Normalization is checked only when values exceed 100π threshold (~50 revolutions), making it 10x faster than eager normalization while maintaining correctness.
+Represents orientation angles with deferred normalization to (-π, π]. Inherits from `msd_sim::Vector3D` for full matrix operation support while providing semantic pitch/roll/yaw accessors. Normalization is checked only when values exceed 100π threshold (~50 revolutions), making it 10x faster than eager normalization while maintaining correctness.
 
 #### Key Classes
 
@@ -167,14 +167,14 @@ Represents orientation angles with deferred normalization to (-π, π]. Inherits
 
 #### Key Interfaces
 ```cpp
-class AngularCoordinate : public Eigen::Vector3d {
+class AngularCoordinate : public msd_sim::Vector3D {
 public:
   static constexpr double kNormalizationThreshold = 100.0 * M_PI;
 
   // Construction
   AngularCoordinate();
   AngularCoordinate(double pitch, double roll, double yaw);
-  AngularCoordinate(const Eigen::Vector3d& vec);
+  AngularCoordinate(const msd_sim::Vector3D& vec);
   template <typename OtherDerived>
   AngularCoordinate(const Eigen::MatrixBase<OtherDerived>& other);
 
@@ -252,7 +252,7 @@ ZYX intrinsic rotation convention:
 No exceptions thrown. Normalization handles all input ranges via `std::fmod`.
 
 #### Memory Management
-Pure value type inheriting from `Eigen::Vector3d`. Memory footprint: 24 bytes (same as `Eigen::Vector3d`). No dynamic allocation.
+Pure value type inheriting from `msd_sim::Vector3D`. Memory footprint: 24 bytes (same as `msd_sim::Vector3D`). No dynamic allocation.
 
 #### Dependencies
 - `Eigen3` — Base class and linear algebra operations
@@ -275,7 +275,7 @@ Pure value type inheriting from `Eigen::Vector3d`. Memory footprint: 24 bytes (s
 **Introduced**: [Ticket: 0024_angular_coordinate](../../../../../tickets/0024_angular_coordinate.md)
 
 #### Purpose
-Represents angular velocity or acceleration without normalization. Inherits from `Eigen::Vector3d` for full matrix operation support. Angular rates can exceed 2π rad/s and should NOT be normalized (e.g., 720°/s is distinct from 0°/s).
+Represents angular velocity or acceleration without normalization. Inherits from `msd_sim::Vector3D` for full matrix operation support. Angular rates can exceed 2π rad/s and should NOT be normalized (e.g., 720°/s is distinct from 0°/s).
 
 #### Key Classes
 
@@ -285,12 +285,12 @@ Represents angular velocity or acceleration without normalization. Inherits from
 
 #### Key Interfaces
 ```cpp
-class AngularRate : public Eigen::Vector3d {
+class AngularRate : public msd_sim::Vector3D {
 public:
   // Construction
   AngularRate();
   AngularRate(double pitchRate, double rollRate, double yawRate);
-  AngularRate(const Eigen::Vector3d& vec);
+  AngularRate(const msd_sim::Vector3D& vec);
   template <typename OtherDerived>
   AngularRate(const Eigen::MatrixBase<OtherDerived>& other);
 
@@ -333,7 +333,7 @@ std::cout << std::format("Angular velocity: {:.2f}", angularVelocity);
 No exceptions thrown. No normalization means no invalid input.
 
 #### Memory Management
-Pure value type inheriting from `Eigen::Vector3d`. Memory footprint: 24 bytes (same as `Eigen::Vector3d`). No dynamic allocation.
+Pure value type inheriting from `msd_sim::Vector3D`. Memory footprint: 24 bytes (same as `msd_sim::Vector3D`). No dynamic allocation.
 
 #### Dependencies
 - `Eigen3` — Base class and linear algebra operations
@@ -342,7 +342,7 @@ Pure value type inheriting from `Eigen::Vector3d`. Memory footprint: 24 bytes (s
 #### Design Decisions
 - **Type Safety**: Separate type from AngularCoordinate prevents accidental assignment of rates to orientations (compile-time error)
 - **No Normalization**: Rates should never be normalized - 720°/s is a valid rate distinct from 0°/s
-- **Performance**: 0% overhead compared to raw `Eigen::Vector3d` (validated by prototypes)
+- **Performance**: 0% overhead compared to raw `msd_sim::Vector3D` (validated by prototypes)
 
 ---
 
@@ -437,7 +437,7 @@ The quaternion representation prevents gimbal lock:
 AngularCoordinate euler{M_PI/2, 0.0, 0.0};  // Gimbal lock!
 
 // Quaternions have no singularities
-Eigen::Quaterniond quat = Eigen::AngleAxisd{M_PI/2, Eigen::Vector3d::UnitX()};
+Eigen::Quaterniond quat = Eigen::AngleAxisd{M_PI/2, msd_sim::Vector3D::UnitX()};
 // Remains valid, no numerical instability
 ```
 
@@ -512,7 +512,7 @@ ReferenceFrame localFrame;
 localFrame.setOrigin(Coordinate{10, 20, 30});
 
 // Set rotation using quaternion (no gimbal lock)
-Eigen::Quaterniond rotation = Eigen::AngleAxisd{M_PI/2, Eigen::Vector3d::UnitZ()};
+Eigen::Quaterniond rotation = Eigen::AngleAxisd{M_PI/2, msd_sim::Vector3D::UnitZ()};
 localFrame.setQuaternion(rotation);
 
 // Single coordinate transform
@@ -543,7 +543,7 @@ frame.setRotation(angles);
 
 New code:
 ```cpp
-Eigen::Quaterniond quat = Eigen::AngleAxisd{M_PI/2, Eigen::Vector3d::UnitZ()};
+Eigen::Quaterniond quat = Eigen::AngleAxisd{M_PI/2, msd_sim::Vector3D::UnitZ()};
 frame.setQuaternion(quat);
 ```
 

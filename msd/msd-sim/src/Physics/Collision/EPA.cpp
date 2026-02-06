@@ -38,10 +38,10 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
     for (const auto& point : simplex)
     {
       double const norm = point.norm();
-      Eigen::Vector3d const dir =
+      msd_sim::Vector3D const dir =
         (norm < epsilon_)
-          ? Eigen::Vector3d{1, 0, 0}
-          : Eigen::Vector3d{
+          ? msd_sim::Vector3D{1, 0, 0}
+          : msd_sim::Vector3D{
               point.x() / norm, point.y() / norm, point.z() / norm};
       SupportResult const support =
         support_function::supportMinkowskiWithWitness(assetA_, assetB_, dir);
@@ -59,13 +59,13 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
     }
 
     // Add support points in cardinal directions until we have 4 vertices
-    std::vector<Eigen::Vector3d> const directions = {
-      Eigen::Vector3d{1.0, 0.0, 0.0},
-      Eigen::Vector3d{0.0, 1.0, 0.0},
-      Eigen::Vector3d{0.0, 0.0, 1.0},
-      Eigen::Vector3d{-1.0, 0.0, 0.0},
-      Eigen::Vector3d{0.0, -1.0, 0.0},
-      Eigen::Vector3d{0.0, 0.0, -1.0}};
+    std::vector<msd_sim::Vector3D> const directions = {
+      msd_sim::Vector3D{1.0, 0.0, 0.0},
+      msd_sim::Vector3D{0.0, 1.0, 0.0},
+      msd_sim::Vector3D{0.0, 0.0, 1.0},
+      msd_sim::Vector3D{-1.0, 0.0, 0.0},
+      msd_sim::Vector3D{0.0, -1.0, 0.0},
+      msd_sim::Vector3D{0.0, 0.0, -1.0}};
 
     for (const auto& dir : directions)
     {
@@ -117,10 +117,10 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
     for (const auto& point : simplex)
     {
       double const norm = point.norm();
-      Eigen::Vector3d const dir =
+      msd_sim::Vector3D const dir =
         (norm < epsilon_)
-          ? Eigen::Vector3d{1, 0, 0}
-          : Eigen::Vector3d{
+          ? msd_sim::Vector3D{1, 0, 0}
+          : msd_sim::Vector3D{
               point.x() / norm, point.y() / norm, point.z() / norm};
       SupportResult const support =
         support_function::supportMinkowskiWithWitness(assetA_, assetB_, dir);
@@ -326,7 +326,7 @@ namespace
 std::vector<Coordinate> clipPolygonAgainstPlane(
   const std::vector<Coordinate>& polygon,
   const Coordinate& planePoint,
-  const Eigen::Vector3d& planeNormal,
+  const msd_sim::Vector3D& planeNormal,
   double epsilon)
 {
   if (polygon.empty())
@@ -371,7 +371,7 @@ std::vector<Coordinate> buildPolygonFromFacets(
   const std::vector<std::reference_wrapper<const Facet>>& facets,
   const std::vector<Coordinate>& hullVertices,
   const ReferenceFrame& frame,
-  const Eigen::Vector3d& faceNormal)
+  const msd_sim::Vector3D& faceNormal)
 {
   // 1. Collect unique vertices (use a set to deduplicate)
   std::set<size_t> uniqueIndices;
@@ -458,17 +458,17 @@ size_t EPA::extractContactManifold(size_t faceIndex,
 
   // Reference face normal in world space
   const auto& refFrame = refAsset.getReferenceFrame();
-  Eigen::Vector3d const refNormalWorld =
-    refFrame.localToGlobal(Eigen::Vector3d{refFaces[0].get().normal.x(),
-                                           refFaces[0].get().normal.y(),
-                                           refFaces[0].get().normal.z()});
+  msd_sim::Vector3D const refNormalWorld =
+    refFrame.localToGlobal(msd_sim::Vector3D{refFaces[0].get().normal.x(),
+                                             refFaces[0].get().normal.y(),
+                                             refFaces[0].get().normal.z()});
 
   // Build incident polygon from coplanar facets (properly ordered)
   const auto& incFrame = incAsset.getReferenceFrame();
-  Eigen::Vector3d const incNormalWorld =
-    incFrame.localToGlobal(Eigen::Vector3d{incFaces[0].get().normal.x(),
-                                           incFaces[0].get().normal.y(),
-                                           incFaces[0].get().normal.z()});
+  msd_sim::Vector3D const incNormalWorld =
+    incFrame.localToGlobal(msd_sim::Vector3D{incFaces[0].get().normal.x(),
+                                             incFaces[0].get().normal.y(),
+                                             incFaces[0].get().normal.z()});
   std::vector<Coordinate> incidentPoly =
     buildPolygonFromFacets(incFaces,
                            incAsset.getCollisionHull().getVertices(),
@@ -506,7 +506,7 @@ size_t EPA::extractContactManifold(size_t faceIndex,
     // pointing inward (edgeDir × normal points left of edge = inward for CCW
     // winding)
     Coordinate const edgeDir = (edgeEnd - edgeStart).normalized();
-    Eigen::Vector3d const sidePlaneNormal =
+    msd_sim::Vector3D const sidePlaneNormal =
       edgeDir.cross(refNormalWorld).normalized();
 
     incidentPoly = clipPolygonAgainstPlane(

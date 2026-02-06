@@ -279,7 +279,7 @@ TEST(ForceApplicationScaffolding, orientation_isQuaternionType)
 
   // Set to 90° rotation about Z-axis
   state.orientation =
-    Eigen::Quaterniond{Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
+    Eigen::Quaterniond{Eigen::AngleAxisd{M_PI / 2, msd_sim::Vector3D::UnitZ()}};
   EXPECT_NEAR(state.orientation.norm(), 1.0, 1e-10);
 
 // Deprecated getEulerAngles() is available for backward compatibility
@@ -594,14 +594,14 @@ TEST(PhysicsIntegration, updatePhysics_angularIntegration)
   world.update(std::chrono::milliseconds{16});
 
   // Angular acceleration: α = I⁻¹ * τ
-  Eigen::Vector3d expectedAngularAccel =
+  msd_sim::Vector3D expectedAngularAccel =
     mutableAsset.getInverseInertiaTensor() * torque;
 
   // Angular velocity: ω = α * dt
-  Eigen::Vector3d expectedAngularVel = expectedAngularAccel * dt;
+  msd_sim::Vector3D expectedAngularVel = expectedAngularAccel * dt;
 
   // Orientation: θ = ω * dt
-  Eigen::Vector3d expectedOrientation = expectedAngularVel * dt;
+  msd_sim::Vector3D expectedOrientation = expectedAngularVel * dt;
 
   const InertialState& state = mutableAsset.getInertialState();
 

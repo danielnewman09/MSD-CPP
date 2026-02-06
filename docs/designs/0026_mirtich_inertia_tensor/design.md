@@ -133,7 +133,7 @@ Eigen::Matrix3d computeInertiaTensorAboutCentroid(const ConvexHull& hull,
   Eigen::Matrix3d I_origin = computeInertiaAboutOrigin(density, T2, TP);
 
   // 5. Compute center of mass
-  Eigen::Vector3d centerOfMass{T1[0]/T0, T1[1]/T0, T1[2]/T0};
+  msd_sim::Vector3D centerOfMass{T1[0]/T0, T1[1]/T0, T1[2]/T0};
 
   // 6. Apply parallel axis theorem to shift to centroid
   Eigen::Matrix3d I_centroid = applyParallelAxisTheorem(I_origin, centerOfMass, mass);
@@ -490,7 +490,7 @@ Steps:
 
 2. **Helper Function Scope**: Helper functions (selectProjectionPlane, computeProjectionIntegrals, etc.) should be static functions in InertialCalculations.cpp anonymous namespace to avoid polluting header.
 
-3. **Numerical Precision**: Use double precision throughout (consistent with current implementation). The design correctly uses Eigen::Matrix3d and Eigen::Vector3d.
+3. **Numerical Precision**: Use double precision throughout (consistent with current implementation). The design correctly uses Eigen::Matrix3d and msd_sim::Vector3D.
 
 4. **Ticket Reference**: Design correctly notes updating ticket reference from 0025 to 0026 in implementation.
 

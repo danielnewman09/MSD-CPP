@@ -47,7 +47,7 @@ const std::vector<Facet>& ConvexHull::getFacets() const
 }
 
 const Facet& ConvexHull::getFacetAlignedWith(
-  const Eigen::Vector3d& normal) const
+  const msd_sim::Vector3D& normal) const
 {
   auto it = std::ranges::max_element(
     facets_,
@@ -58,7 +58,7 @@ const Facet& ConvexHull::getFacetAlignedWith(
 }
 
 std::vector<std::reference_wrapper<const Facet>>
-ConvexHull::getFacetsAlignedWith(const Eigen::Vector3d& normal,
+ConvexHull::getFacetsAlignedWith(const msd_sim::Vector3D& normal,
                                  double tolerance) const
 {
   // First pass: find maximum alignment

@@ -23,27 +23,27 @@ using namespace msd_sim;
 namespace
 {
 
-// Create cube vertices as raw Eigen::Vector3d for collision geometry
-std::vector<Eigen::Vector3d> createCubeCollisionVertices(double size)
+// Create cube vertices as raw msd_sim::Vector3D for collision geometry
+std::vector<msd_sim::Vector3D> createCubeCollisionVertices(double size)
 {
   double half = size / 2.0;
-  return {Eigen::Vector3d{-half, -half, -half},
-          Eigen::Vector3d{half, -half, -half},
-          Eigen::Vector3d{half, half, -half},
-          Eigen::Vector3d{-half, half, -half},
-          Eigen::Vector3d{-half, -half, half},
-          Eigen::Vector3d{half, -half, half},
-          Eigen::Vector3d{half, half, half},
-          Eigen::Vector3d{-half, half, half}};
+  return {msd_sim::Vector3D{-half, -half, -half},
+          msd_sim::Vector3D{half, -half, -half},
+          msd_sim::Vector3D{half, half, -half},
+          msd_sim::Vector3D{-half, half, -half},
+          msd_sim::Vector3D{-half, -half, half},
+          msd_sim::Vector3D{half, -half, half},
+          msd_sim::Vector3D{half, half, half},
+          msd_sim::Vector3D{-half, half, half}};
 }
 
 // Serialize collision vertices to BLOB format
 std::vector<uint8_t> serializeCollisionVertices(
-  const std::vector<Eigen::Vector3d>& vertices)
+  const std::vector<msd_sim::Vector3D>& vertices)
 {
-  std::vector<uint8_t> blob(vertices.size() * sizeof(Eigen::Vector3d));
+  std::vector<uint8_t> blob(vertices.size() * sizeof(msd_sim::Vector3D));
   std::memcpy(
-    blob.data(), vertices.data(), vertices.size() * sizeof(Eigen::Vector3d));
+    blob.data(), vertices.data(), vertices.size() * sizeof(msd_sim::Vector3D));
   return blob;
 }
 

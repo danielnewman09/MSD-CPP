@@ -1,10 +1,12 @@
 // Ticket: 0031_generalized_lagrange_constraints
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 
-#include "msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp"
-#include <Eigen/src/Core/Matrix.h>
-#include <Eigen/src/Geometry/Quaternion.h>
 #include <string>
+
+#include <Eigen/Dense>
+
+#include "msd-sim/src/DataTypes/Quaternion.hpp"
+#include "msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -21,13 +23,14 @@ int UnitQuaternionConstraint::dimension() const
 }
 
 Eigen::VectorXd UnitQuaternionConstraint::evaluate(const InertialState& state,
-                                                     double /* time */) const
+                                                   double /* time */) const
 {
   // Constraint: C(Q) = Q^T·Q - 1 = 0
-  const Eigen::Quaterniond& q = state.orientation;
+  const QuaternionD& q = state.orientation;
 
   // Compute Q^T·Q (dot product of quaternion with itself)
-  double const qDotQ = (q.w() * q.w()) + (q.x() * q.x()) + (q.y() * q.y()) + (q.z() * q.z());
+  double const qDotQ =
+    (q.w() * q.w()) + (q.x() * q.x()) + (q.y() * q.y()) + (q.z() * q.z());
 
   // Constraint violation: Q^T·Q - 1
   Eigen::VectorXd c(1);
@@ -37,7 +40,7 @@ Eigen::VectorXd UnitQuaternionConstraint::evaluate(const InertialState& state,
 }
 
 Eigen::MatrixXd UnitQuaternionConstraint::jacobian(const InertialState& state,
-                                                     double /* time */) const
+                                                   double /* time */) const
 {
   // Jacobian: J = ∂C/∂q where C = Q^T·Q - 1
   // ∂C/∂Q = 2·Q^T
@@ -47,7 +50,7 @@ Eigen::MatrixXd UnitQuaternionConstraint::jacobian(const InertialState& state,
   //
   // Since the constraint only depends on orientation, ∂C/∂X = 0
 
-  const Eigen::Quaterniond& q = state.orientation;
+  const QuaternionD& q = state.orientation;
 
   Eigen::MatrixXd j(1, 7);
   j.setZero();
@@ -67,8 +70,8 @@ Eigen::MatrixXd UnitQuaternionConstraint::jacobian(const InertialState& state,
 }
 
 Eigen::VectorXd UnitQuaternionConstraint::partialTimeDerivative(
-    const InertialState& /* state */,
-    double /* time */) const
+  const InertialState& /* state */,
+  double /* time */) const
 {
   // Time derivative: ∂C/∂t = 0 (time-independent constraint)
   Eigen::VectorXd result(1);

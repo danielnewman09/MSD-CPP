@@ -124,7 +124,7 @@ This is a scaffolding ticket with no prototype phase. All technical decisions we
 
 3. **Type consistency**:
    - `Coordinate` used uniformly for angular velocity/acceleration
-   - No mixing of `Eigen::Vector3d` and `Coordinate` types
+   - No mixing of `msd_sim::Vector3D` and `Coordinate` types
    - EulerAngles conversion methods properly use `Coordinate`
 
 4. **Memory management**:

@@ -227,8 +227,8 @@ TEST(ReferenceFrameTest, ConstructorFromAxes_CollisionResponseUseCase)
     2.0, 3.0, -5.0};  // Moving with some downward component
 
   // Transform to contact frame
-  Eigen::Vector3d localVelocity =
-    contactFrame.globalToLocal(Eigen::Vector3d{worldVelocity});
+  msd_sim::Vector3D localVelocity =
+    contactFrame.globalToLocal(msd_sim::Vector3D{worldVelocity});
 
   // In contact frame:
   // - Z component should be the normal component (penetrating = negative)
@@ -354,9 +354,9 @@ TEST(ReferenceFrameTest, SetRotation)
   AngularCoordinate angular{M_PI / 6, M_PI / 4, M_PI / 3};  // pitch, roll, yaw
 
   Eigen::Quaterniond q =
-    Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
-    Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
-    Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
+    Eigen::AngleAxisd{angular.yaw(), msd_sim::Vector3D::UnitZ()} *
+    Eigen::AngleAxisd{angular.pitch(), msd_sim::Vector3D::UnitY()} *
+    Eigen::AngleAxisd{angular.roll(), msd_sim::Vector3D::UnitX()};
   frame.setQuaternion(q);
 
   AngularCoordinate frameAngular = frame.getAngularCoordinate();
@@ -373,9 +373,9 @@ TEST(ReferenceFrameTest, SetRotationGimbalLock)
   AngularCoordinate angular{M_PI / 2, M_PI / 4, M_PI / 6};  // pitch, roll, yaw
 
   Eigen::Quaterniond q =
-    Eigen::AngleAxisd{angular.yaw(), Eigen::Vector3d::UnitZ()} *
-    Eigen::AngleAxisd{angular.pitch(), Eigen::Vector3d::UnitY()} *
-    Eigen::AngleAxisd{angular.roll(), Eigen::Vector3d::UnitX()};
+    Eigen::AngleAxisd{angular.yaw(), msd_sim::Vector3D::UnitZ()} *
+    Eigen::AngleAxisd{angular.pitch(), msd_sim::Vector3D::UnitY()} *
+    Eigen::AngleAxisd{angular.roll(), msd_sim::Vector3D::UnitX()};
   Eigen::Matrix3d expectedRotation = q.toRotationMatrix();
 
   frame.setQuaternion(q);
@@ -789,7 +789,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_90DegYaw)
   // 90 degree rotation about Z-axis (yaw)
   Coordinate origin{0.0, 0.0, 0.0};
   Eigen::Quaterniond quat{
-    Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
+    Eigen::AngleAxisd{M_PI / 2, msd_sim::Vector3D::UnitZ()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -807,7 +807,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_90DegPitch)
   // 90 degree rotation about Y-axis (pitch)
   Coordinate origin{0.0, 0.0, 0.0};
   Eigen::Quaterniond quat{
-    Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitY()}};
+    Eigen::AngleAxisd{M_PI / 2, msd_sim::Vector3D::UnitY()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -825,7 +825,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_90DegRoll)
   // 90 degree rotation about X-axis (roll)
   Coordinate origin{0.0, 0.0, 0.0};
   Eigen::Quaterniond quat{
-    Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitX()}};
+    Eigen::AngleAxisd{M_PI / 2, msd_sim::Vector3D::UnitX()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -844,9 +844,9 @@ TEST(ReferenceFrameTest, QuaternionConstructor_ArbitraryRotation)
   Coordinate origin{5.0, 10.0, 15.0};
 
   // Create quaternion from combined rotations
-  Eigen::Quaterniond qRoll{Eigen::AngleAxisd{0.3, Eigen::Vector3d::UnitX()}};
-  Eigen::Quaterniond qPitch{Eigen::AngleAxisd{0.5, Eigen::Vector3d::UnitY()}};
-  Eigen::Quaterniond qYaw{Eigen::AngleAxisd{0.7, Eigen::Vector3d::UnitZ()}};
+  Eigen::Quaterniond qRoll{Eigen::AngleAxisd{0.3, msd_sim::Vector3D::UnitX()}};
+  Eigen::Quaterniond qPitch{Eigen::AngleAxisd{0.5, msd_sim::Vector3D::UnitY()}};
+  Eigen::Quaterniond qYaw{Eigen::AngleAxisd{0.7, msd_sim::Vector3D::UnitZ()}};
   Eigen::Quaterniond quat = qYaw * qPitch * qRoll;  // ZYX order
 
   ReferenceFrame frame{origin, quat};
@@ -870,7 +870,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_RoundTrip)
   // Create frame from quaternion, transform point, transform back
   Coordinate origin{5.0, 10.0, 15.0};
   Eigen::Quaterniond quat{
-    Eigen::AngleAxisd{M_PI / 3, Eigen::Vector3d{1, 1, 1}.normalized()}};
+    Eigen::AngleAxisd{M_PI / 3, msd_sim::Vector3D{1, 1, 1}.normalized()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -888,7 +888,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_UnnormalizedInput)
 
   // Create an unnormalized quaternion (scaled by 3)
   Eigen::Quaterniond normalizedQuat{
-    Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitZ()}};
+    Eigen::AngleAxisd{M_PI / 2, msd_sim::Vector3D::UnitZ()}};
   Eigen::Quaterniond unnormalizedQuat{normalizedQuat.w() * 3.0,
                                       normalizedQuat.x() * 3.0,
                                       normalizedQuat.y() * 3.0,
@@ -950,7 +950,7 @@ TEST(ReferenceFrameTest, QuaternionRoundTrip)
   // Create frame from quaternion, get quaternion back, verify equivalence
   Coordinate origin{5.0, 10.0, 15.0};
   Eigen::Quaterniond originalQuat{
-    Eigen::AngleAxisd{M_PI / 3, Eigen::Vector3d{1, 2, 3}.normalized()}};
+    Eigen::AngleAxisd{M_PI / 3, msd_sim::Vector3D{1, 2, 3}.normalized()}};
 
   ReferenceFrame frame{origin, originalQuat};
   Eigen::Quaterniond retrievedQuat = frame.getQuaternion();
@@ -979,7 +979,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_GimbalLockPitchPositive)
 
   // Create quaternion for pitch = +90 degrees
   Eigen::Quaterniond quat{
-    Eigen::AngleAxisd{M_PI / 2, Eigen::Vector3d::UnitY()}};
+    Eigen::AngleAxisd{M_PI / 2, msd_sim::Vector3D::UnitY()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -1012,7 +1012,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_GimbalLockPitchNegative)
 
   // Create quaternion for pitch = -90 degrees
   Eigen::Quaterniond quat{
-    Eigen::AngleAxisd{-M_PI / 2, Eigen::Vector3d::UnitY()}};
+    Eigen::AngleAxisd{-M_PI / 2, msd_sim::Vector3D::UnitY()}};
 
   ReferenceFrame frame{origin, quat};
 
@@ -1052,9 +1052,10 @@ TEST(ReferenceFrameTest, EulerQuaternionConsistency)
   ReferenceFrame frameFromEuler{origin, angular};
 
   // Equivalent quaternion (ZYX convention: yaw * pitch * roll)
-  Eigen::Quaterniond qRoll{Eigen::AngleAxisd{roll, Eigen::Vector3d::UnitX()}};
-  Eigen::Quaterniond qPitch{Eigen::AngleAxisd{pitch, Eigen::Vector3d::UnitY()}};
-  Eigen::Quaterniond qYaw{Eigen::AngleAxisd{yaw, Eigen::Vector3d::UnitZ()}};
+  Eigen::Quaterniond qRoll{Eigen::AngleAxisd{roll, msd_sim::Vector3D::UnitX()}};
+  Eigen::Quaterniond qPitch{
+    Eigen::AngleAxisd{pitch, msd_sim::Vector3D::UnitY()}};
+  Eigen::Quaterniond qYaw{Eigen::AngleAxisd{yaw, msd_sim::Vector3D::UnitZ()}};
   Eigen::Quaterniond quat = qYaw * qPitch * qRoll;
   ReferenceFrame frameFromQuat{origin, quat};
 

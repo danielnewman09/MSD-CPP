@@ -4,10 +4,10 @@
 #include <benchmark/benchmark.h>
 #include <random>
 #include <vector>
+#include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
-#include "msd-sim/src/Environment/AngularCoordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Physics/GJK.hpp"
+#include "msd-sim/src/Physics/Collision/GJK.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 

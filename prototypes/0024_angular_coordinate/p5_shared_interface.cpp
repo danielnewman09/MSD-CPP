@@ -1,9 +1,10 @@
 // Prototype P5: Shared Interface Pattern
 // Ticket: 0024_angular_coordinate
-// Purpose: Compare implementation approaches for sharing code between AngularCoordinate and AngularRate
+// Purpose: Compare implementation approaches for sharing code between
+// AngularCoordinate and AngularRate
 
-#include <Eigen/Dense>
 #include <benchmark/benchmark.h>
+#include <Eigen/Dense>
 #include <cmath>
 #include <random>
 #include <type_traits>
@@ -43,27 +44,29 @@ struct NoNormalize
 };
 
 template <typename NormalizationPolicy>
-class AngularVector : public Eigen::Vector3d
+class AngularVector : public msd_sim::Vector3D
 {
 public:
   using Policy = NormalizationPolicy;
 
-  AngularVector() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularVector() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
-  AngularVector(double pitch, double roll, double yaw) : Eigen::Vector3d{pitch, roll, yaw}
+  AngularVector(double pitch, double roll, double yaw)
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
-  AngularVector(const Eigen::MatrixBase<OtherDerived>& other) : Eigen::Vector3d{other}
+  AngularVector(const Eigen::MatrixBase<OtherDerived>& other)
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
   AngularVector& operator=(const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -94,25 +97,27 @@ namespace crtp_approach
 {
 
 template <typename Derived>
-class AngularBase : public Eigen::Vector3d
+class AngularBase : public msd_sim::Vector3D
 {
 public:
-  AngularBase() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularBase() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
-  AngularBase(double pitch, double roll, double yaw) : Eigen::Vector3d{pitch, roll, yaw}
+  AngularBase(double pitch, double roll, double yaw)
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
-  AngularBase(const Eigen::MatrixBase<OtherDerived>& other) : Eigen::Vector3d{other}
+  AngularBase(const Eigen::MatrixBase<OtherDerived>& other)
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
   AngularBase& operator=(const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -161,25 +166,27 @@ public:
 namespace virtual_approach
 {
 
-class AngularBase : public Eigen::Vector3d
+class AngularBase : public msd_sim::Vector3D
 {
 public:
-  AngularBase() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularBase() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
-  AngularBase(double pitch, double roll, double yaw) : Eigen::Vector3d{pitch, roll, yaw}
+  AngularBase(double pitch, double roll, double yaw)
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
-  AngularBase(const Eigen::MatrixBase<OtherDerived>& other) : Eigen::Vector3d{other}
+  AngularBase(const Eigen::MatrixBase<OtherDerived>& other)
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
   AngularBase& operator=(const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -237,25 +244,27 @@ public:
 namespace duplicate_approach
 {
 
-class AngularCoordinate : public Eigen::Vector3d
+class AngularCoordinate : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
-  AngularCoordinate(double pitch, double roll, double yaw) : Eigen::Vector3d{pitch, roll, yaw}
+  AngularCoordinate(double pitch, double roll, double yaw)
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
-  AngularCoordinate(const Eigen::MatrixBase<OtherDerived>& other) : Eigen::Vector3d{other}
+  AngularCoordinate(const Eigen::MatrixBase<OtherDerived>& other)
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate& operator=(const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -273,25 +282,27 @@ public:
   }
 };
 
-class AngularRate : public Eigen::Vector3d
+class AngularRate : public msd_sim::Vector3D
 {
 public:
-  AngularRate() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularRate() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
-  AngularRate(double pitch, double roll, double yaw) : Eigen::Vector3d{pitch, roll, yaw}
+  AngularRate(double pitch, double roll, double yaw)
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
-  AngularRate(const Eigen::MatrixBase<OtherDerived>& other) : Eigen::Vector3d{other}
+  AngularRate(const Eigen::MatrixBase<OtherDerived>& other)
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
   AngularRate& operator=(const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -318,7 +329,8 @@ public:
 constexpr size_t kDataSize = 1024;
 
 // Policy approach data
-static std::vector<policy_approach::AngularCoordinate> gDataPolicy = []() {
+static std::vector<policy_approach::AngularCoordinate> gDataPolicy = []()
+{
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
   std::vector<policy_approach::AngularCoordinate> data;
@@ -329,7 +341,8 @@ static std::vector<policy_approach::AngularCoordinate> gDataPolicy = []() {
 }();
 
 // CRTP approach data
-static std::vector<crtp_approach::AngularCoordinate> gDataCRTP = []() {
+static std::vector<crtp_approach::AngularCoordinate> gDataCRTP = []()
+{
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
   std::vector<crtp_approach::AngularCoordinate> data;
@@ -340,7 +353,8 @@ static std::vector<crtp_approach::AngularCoordinate> gDataCRTP = []() {
 }();
 
 // Virtual approach data
-static std::vector<virtual_approach::AngularCoordinate> gDataVirtual = []() {
+static std::vector<virtual_approach::AngularCoordinate> gDataVirtual = []()
+{
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
   std::vector<virtual_approach::AngularCoordinate> data;
@@ -351,7 +365,8 @@ static std::vector<virtual_approach::AngularCoordinate> gDataVirtual = []() {
 }();
 
 // Duplicate approach data
-static std::vector<duplicate_approach::AngularCoordinate> gDataDuplicate = []() {
+static std::vector<duplicate_approach::AngularCoordinate> gDataDuplicate = []()
+{
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
   std::vector<duplicate_approach::AngularCoordinate> data;
@@ -563,9 +578,11 @@ static void BM_MemorySize_Report(benchmark::State& state)
     benchmark::DoNotOptimize(sizeof(duplicate_approach::AngularCoordinate));
   }
   state.SetLabel(
-      "Policy=" + std::to_string(sizeof(policy_approach::AngularCoordinate)) +
-      "B, CRTP=" + std::to_string(sizeof(crtp_approach::AngularCoordinate)) +
-      "B, Virtual=" + std::to_string(sizeof(virtual_approach::AngularCoordinate)) +
-      "B, Duplicate=" + std::to_string(sizeof(duplicate_approach::AngularCoordinate)) + "B");
+    "Policy=" + std::to_string(sizeof(policy_approach::AngularCoordinate)) +
+    "B, CRTP=" + std::to_string(sizeof(crtp_approach::AngularCoordinate)) +
+    "B, Virtual=" +
+    std::to_string(sizeof(virtual_approach::AngularCoordinate)) +
+    "B, Duplicate=" +
+    std::to_string(sizeof(duplicate_approach::AngularCoordinate)) + "B");
 }
 BENCHMARK(BM_MemorySize_Report);

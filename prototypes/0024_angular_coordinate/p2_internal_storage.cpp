@@ -2,8 +2,8 @@
 // Ticket: 0024_angular_coordinate
 // Purpose: Compare Angle objects vs raw double storage using Google Benchmark
 
-#include <Eigen/Dense>
 #include <benchmark/benchmark.h>
+#include <Eigen/Dense>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -25,7 +25,8 @@ public:
   {
   }
 
-  explicit Angle(double radians, Norm norm = Norm::PI) : rad_{radians}, normalization_{norm}
+  explicit Angle(double radians, Norm norm = Norm::PI)
+    : rad_{radians}, normalization_{norm}
   {
   }
 
@@ -132,32 +133,40 @@ public:
   }
 
   // Manual arithmetic (no Eigen)
-  AngularCoordinate_AngleStorage operator+(const AngularCoordinate_AngleStorage& other) const
+  AngularCoordinate_AngleStorage operator+(
+    const AngularCoordinate_AngleStorage& other) const
   {
-    return AngularCoordinate_AngleStorage{pitch_.getRad() + other.pitch_.getRad(),
-                                          roll_.getRad() + other.roll_.getRad(),
-                                          yaw_.getRad() + other.yaw_.getRad()};
+    return AngularCoordinate_AngleStorage{
+      pitch_.getRad() + other.pitch_.getRad(),
+      roll_.getRad() + other.roll_.getRad(),
+      yaw_.getRad() + other.yaw_.getRad()};
   }
 
-  AngularCoordinate_AngleStorage operator-(const AngularCoordinate_AngleStorage& other) const
+  AngularCoordinate_AngleStorage operator-(
+    const AngularCoordinate_AngleStorage& other) const
   {
-    return AngularCoordinate_AngleStorage{pitch_.getRad() - other.pitch_.getRad(),
-                                          roll_.getRad() - other.roll_.getRad(),
-                                          yaw_.getRad() - other.yaw_.getRad()};
+    return AngularCoordinate_AngleStorage{
+      pitch_.getRad() - other.pitch_.getRad(),
+      roll_.getRad() - other.roll_.getRad(),
+      yaw_.getRad() - other.yaw_.getRad()};
   }
 
   AngularCoordinate_AngleStorage operator*(double scalar) const
   {
-    return AngularCoordinate_AngleStorage{
-        pitch_.getRad() * scalar, roll_.getRad() * scalar, yaw_.getRad() * scalar};
+    return AngularCoordinate_AngleStorage{pitch_.getRad() * scalar,
+                                          roll_.getRad() * scalar,
+                                          yaw_.getRad() * scalar};
   }
 
   // Manual cross product
-  AngularCoordinate_AngleStorage cross(const AngularCoordinate_AngleStorage& other) const
+  AngularCoordinate_AngleStorage cross(
+    const AngularCoordinate_AngleStorage& other) const
   {
     double p1 = pitch_.getRad(), r1 = roll_.getRad(), y1 = yaw_.getRad();
-    double p2 = other.pitch_.getRad(), r2 = other.roll_.getRad(), y2 = other.yaw_.getRad();
-    return AngularCoordinate_AngleStorage{r1 * y2 - y1 * r2, y1 * p2 - p1 * y2, p1 * r2 - r1 * p2};
+    double p2 = other.pitch_.getRad(), r2 = other.roll_.getRad(),
+           y2 = other.yaw_.getRad();
+    return AngularCoordinate_AngleStorage{
+      r1 * y2 - y1 * r2, y1 * p2 - p1 * y2, p1 * r2 - r1 * p2};
   }
 
   double norm() const
@@ -173,7 +182,7 @@ private:
 };
 
 // =============================================================================
-// Strategy 2: Raw double storage (Eigen::Vector3d) with eager normalization
+// Strategy 2: Raw double storage (msd_sim::Vector3D) with eager normalization
 // =============================================================================
 
 inline double normalizeAngle(double rad)
@@ -183,28 +192,31 @@ inline double normalizeAngle(double rad)
   return result <= 0.0 ? result + M_PI : result - M_PI;
 }
 
-class AngularCoordinate_DoubleStorage : public Eigen::Vector3d
+class AngularCoordinate_DoubleStorage : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_DoubleStorage() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_DoubleStorage() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
   AngularCoordinate_DoubleStorage(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{normalizeAngle(pitch), normalizeAngle(roll), normalizeAngle(yaw)}
+    : msd_sim::Vector3D{normalizeAngle(pitch),
+                        normalizeAngle(roll),
+                        normalizeAngle(yaw)}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_DoubleStorage(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_DoubleStorage& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_DoubleStorage& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -229,7 +241,8 @@ public:
 
 constexpr size_t kDataSize = 1024;
 
-static std::vector<AngularCoordinate_AngleStorage> gDataAngle = []() {
+static std::vector<AngularCoordinate_AngleStorage> gDataAngle = []()
+{
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
   std::vector<AngularCoordinate_AngleStorage> data;
@@ -241,7 +254,8 @@ static std::vector<AngularCoordinate_AngleStorage> gDataAngle = []() {
   return data;
 }();
 
-static std::vector<AngularCoordinate_DoubleStorage> gDataDouble = []() {
+static std::vector<AngularCoordinate_DoubleStorage> gDataDouble = []()
+{
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
   std::vector<AngularCoordinate_DoubleStorage> data;
@@ -394,8 +408,9 @@ static void BM_MemorySize_Report(benchmark::State& state)
     benchmark::DoNotOptimize(sizeof(AngularCoordinate_AngleStorage));
     benchmark::DoNotOptimize(sizeof(AngularCoordinate_DoubleStorage));
   }
-  state.SetLabel("AngleStorage=" + std::to_string(sizeof(AngularCoordinate_AngleStorage)) +
-                 "B, DoubleStorage=" + std::to_string(sizeof(AngularCoordinate_DoubleStorage)) +
-                 "B");
+  state.SetLabel(
+    "AngleStorage=" + std::to_string(sizeof(AngularCoordinate_AngleStorage)) +
+    "B, DoubleStorage=" +
+    std::to_string(sizeof(AngularCoordinate_DoubleStorage)) + "B");
 }
 BENCHMARK(BM_MemorySize_Report);

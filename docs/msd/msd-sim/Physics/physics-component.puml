@@ -79,7 +79,7 @@ package "Eigen" {
         ' 3x3 inertia tensor
     }
 
-    class "Eigen::Vector3d" as Vector3d {
+    class "msd_sim::Vector3D" as Vector3d {
         ' Angular quantities
     }
 }

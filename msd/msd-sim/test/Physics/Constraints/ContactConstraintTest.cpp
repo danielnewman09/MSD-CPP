@@ -5,6 +5,7 @@
 #include <cmath>
 #include <memory>
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
@@ -67,14 +68,14 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
   {
     stateA_perturbed = stateA;
     // Small rotation: theta = epsilon * e_i
-    Eigen::Vector3d axis = Eigen::Vector3d::Zero();
+    msd_sim::Vector3D axis = msd_sim::Vector3D::Zero();
     axis(i) = 1.0;
     double angle = epsilon;
     Eigen::AngleAxisd rotation(angle, axis);
 
     // Apply rotation to position offset from COM
     stateA_perturbed.position =
-      stateA.position + rotation * Eigen::Vector3d::Zero();
+      stateA.position + rotation * msd_sim::Vector3D::Zero();
     Eigen::VectorXd C_plus =
       constraint.evaluateTwoBody(stateA_perturbed, stateB, time + epsilon);
     J_numerical(0, 3 + i) = (C_plus(0) - C0(0)) / epsilon;
@@ -94,13 +95,13 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
   for (int i = 0; i < 3; ++i)
   {
     stateB_perturbed = stateB;
-    Eigen::Vector3d axis = Eigen::Vector3d::Zero();
+    msd_sim::Vector3D axis = msd_sim::Vector3D::Zero();
     axis(i) = 1.0;
     double angle = epsilon;
     Eigen::AngleAxisd rotation(angle, axis);
 
     stateB_perturbed.position =
-      stateB.position + rotation * Eigen::Vector3d::Zero();
+      stateB.position + rotation * msd_sim::Vector3D::Zero();
     Eigen::VectorXd C_plus =
       constraint.evaluateTwoBody(stateA, stateB_perturbed, time + epsilon);
     J_numerical(0, 9 + i) = (C_plus(0) - C0(0)) / epsilon;

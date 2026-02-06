@@ -121,7 +121,7 @@ All key findings from prototype validation are correctly applied in production i
 | No unsafe casts | ✓ | | All types explicit |
 | Const correctness | ✓ | | ConvexHull passed as const&, vertices/facets accessed as const& |
 | No narrowing conversions | ✓ | | All double precision maintained |
-| Strong types | ✓ | | Uses Coordinate, Eigen::Matrix3d, Eigen::Vector3d |
+| Strong types | ✓ | | Uses Coordinate, Eigen::Matrix3d, msd_sim::Vector3D |
 
 ### Error Handling
 
