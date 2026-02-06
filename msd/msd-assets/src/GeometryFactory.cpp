@@ -2,34 +2,34 @@
 #include <Eigen/src/Core/Matrix.h>
 #include <array>
 #include <cstring>
-#include "msd-transfer/src/MeshRecord.hpp"
 #include <vector>
 #include "msd-assets/src/Geometry.hpp"
+#include "msd-transfer/src/MeshRecord.hpp"
 
 namespace msd_assets
 {
 
-std::array<Eigen::Vector3d, 8> GeometryFactory::getCubeCorners(double size)
+std::array<msd_sim::Vector3D, 8> GeometryFactory::getCubeCorners(double size)
 {
   double const half = size / 2.0;
 
   // Define 8 corners of the cube
   // Naming: (Front/Back)(Top/Bottom)(Left/Right)
   return {
-    Eigen::Vector3d{-half, -half, -half},  // 0: FTL (Front Top Left)
-    Eigen::Vector3d{half, -half, -half},   // 1: FTR (Front Top Right)
-    Eigen::Vector3d{half, half, -half},    // 2: FBR (Front Bottom Right)
-    Eigen::Vector3d{-half, half, -half},   // 3: FBL (Front Bottom Left)
-    Eigen::Vector3d{-half, -half, half},   // 4: BTL (Back Top Left)
-    Eigen::Vector3d{half, -half, half},    // 5: BTR (Back Top Right)
-    Eigen::Vector3d{half, half, half},     // 6: BBR (Back Bottom Right)
-    Eigen::Vector3d{-half, half, half}     // 7: BBL (Back Bottom Left)
+    msd_sim::Vector3D{-half, -half, -half},  // 0: FTL (Front Top Left)
+    msd_sim::Vector3D{half, -half, -half},   // 1: FTR (Front Top Right)
+    msd_sim::Vector3D{half, half, -half},    // 2: FBR (Front Bottom Right)
+    msd_sim::Vector3D{-half, half, -half},   // 3: FBL (Front Bottom Left)
+    msd_sim::Vector3D{-half, -half, half},   // 4: BTL (Back Top Left)
+    msd_sim::Vector3D{half, -half, half},    // 5: BTR (Back Top Right)
+    msd_sim::Vector3D{half, half, half},     // 6: BBR (Back Bottom Right)
+    msd_sim::Vector3D{-half, half, half}     // 7: BBL (Back Bottom Left)
   };
 }
 
 
 msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
-  const std::vector<Eigen::Vector3d>& vertices)
+  const std::vector<msd_sim::Vector3D>& vertices)
 {
   // Ticket: 0003_geometry-factory-type-safety
   // Create VisualGeometry from raw coordinates
@@ -46,7 +46,7 @@ msd_transfer::MeshRecord GeometryFactory::verticesToMeshRecord(
 msd_transfer::MeshRecord GeometryFactory::createCube(double size)
 {
   auto corners = getCubeCorners(size);
-  std::vector<Eigen::Vector3d> vertices;
+  std::vector<msd_sim::Vector3D> vertices;
   vertices.reserve(36);  // 6 faces × 2 triangles × 3 vertices
 
   // Each face is composed of 2 triangles
@@ -108,18 +108,18 @@ msd_transfer::MeshRecord GeometryFactory::createPyramid(double baseSize,
 {
   double const half = baseSize / 2.0;
   double const halfHeight = height / 2.0;
-  std::vector<Eigen::Vector3d> vertices;
+  std::vector<msd_sim::Vector3D> vertices;
   vertices.reserve(
     18);  // 4 side faces (triangles) + 2 base triangles = 6 triangles
 
   // Base corners (y = -height/2)
-  Eigen::Vector3d const baseFl{-half, -halfHeight, -half};  // front-left
-  Eigen::Vector3d const baseFr{half, -halfHeight, -half};   // front-right
-  Eigen::Vector3d const baseBr{half, -halfHeight, half};    // back-right
-  Eigen::Vector3d const baseBl{-half, -halfHeight, half};   // back-left
+  msd_sim::Vector3D const baseFl{-half, -halfHeight, -half};  // front-left
+  msd_sim::Vector3D const baseFr{half, -halfHeight, -half};   // front-right
+  msd_sim::Vector3D const baseBr{half, -halfHeight, half};    // back-right
+  msd_sim::Vector3D const baseBl{-half, -halfHeight, half};   // back-left
 
   // Apex (top of pyramid)
-  Eigen::Vector3d const apex{0.0, halfHeight, 0.0};
+  msd_sim::Vector3D const apex{0.0, halfHeight, 0.0};
 
   // Front face
   vertices.push_back(baseFl);
@@ -157,7 +157,7 @@ msd_transfer::MeshRecord GeometryFactory::createPyramid(double baseSize,
 msd_transfer::MeshRecord GeometryFactory::createCubeWireframe(double size)
 {
   auto corners = GeometryFactory::getCubeCorners(size);
-  std::vector<Eigen::Vector3d> vertices;
+  std::vector<msd_sim::Vector3D> vertices;
   vertices.reserve(24);  // 12 edges × 2 vertices
 
   // Front face edges

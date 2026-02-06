@@ -4,7 +4,7 @@
 #include <filesystem>
 #include <memory>
 
-#include "msd-sim/src/Environment/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-transfer/src/CoordinateRecord.hpp"
 
 namespace fs = std::filesystem;

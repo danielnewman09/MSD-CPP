@@ -7,6 +7,7 @@
 #include <format>
 
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 
 using namespace msd_sim;
 
@@ -132,7 +133,7 @@ TEST(AngularCoordinateTest, SetterLargeValueExceedingThreshold)
 
 TEST(AngularCoordinateTest, EigenExpressionTemplateConstructor)
 {
-  Eigen::Vector3d vec{M_PI / 4, M_PI / 6, M_PI / 3};
+  msd_sim::Vector3D vec{M_PI / 4, M_PI / 6, M_PI / 3};
   AngularCoordinate angular{vec};
   EXPECT_DOUBLE_EQ(angular.pitch(), M_PI / 4);
   EXPECT_DOUBLE_EQ(angular.roll(), M_PI / 6);
@@ -142,7 +143,7 @@ TEST(AngularCoordinateTest, EigenExpressionTemplateConstructor)
 TEST(AngularCoordinateTest, EigenExpressionAssignment)
 {
   AngularCoordinate angular{};
-  Eigen::Vector3d vec{M_PI / 4, M_PI / 6, M_PI / 3};
+  msd_sim::Vector3D vec{M_PI / 4, M_PI / 6, M_PI / 3};
   angular = vec;
   EXPECT_DOUBLE_EQ(angular.pitch(), M_PI / 4);
   EXPECT_DOUBLE_EQ(angular.roll(), M_PI / 6);
@@ -305,7 +306,7 @@ TEST(AngularCoordinateTest, FormatCustomPrecision)
 
 TEST(AngularCoordinateTest, MemoryFootprint)
 {
-  // Should be same size as Eigen::Vector3d (24 bytes)
-  EXPECT_EQ(sizeof(AngularCoordinate), sizeof(Eigen::Vector3d));
+  // Should be same size as msd_sim::Vector3D (24 bytes)
+  EXPECT_EQ(sizeof(AngularCoordinate), sizeof(msd_sim::Vector3D));
   EXPECT_EQ(sizeof(AngularCoordinate), 24);
 }

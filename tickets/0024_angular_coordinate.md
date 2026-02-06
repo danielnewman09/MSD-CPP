@@ -26,15 +26,15 @@ Create two complementary classes for angular quantity representation:
 1. **`AngularCoordinate`** — For orientation angles with automatic normalization (replacing `EulerAngles`)
 2. **`AngularRate`** — For angular velocity/acceleration without normalization (replacing `Coordinate` usage)
 
-Both classes wrap `Eigen::Vector3d` with semantic pitch/roll/yaw accessors while providing full Eigen matrix operations. This type-safe approach prevents accidental misuse (e.g., assigning a rate to an orientation) while maintaining the distinct semantic requirements of each quantity type.
+Both classes wrap `msd_sim::Vector3D` with semantic pitch/roll/yaw accessors while providing full Eigen matrix operations. This type-safe approach prevents accidental misuse (e.g., assigning a rate to an orientation) while maintaining the distinct semantic requirements of each quantity type.
 
 ## Motivation
 Ticket 0023a_force_application_scaffolding exposed a fundamental design issue with angular quantity representation:
 
 1. **Type Inconsistency**: `InertialState` now uses different types for angular quantities:
    - `orientation`: `EulerAngles` (struct of three `Angle` objects)
-   - `angularVelocity`: `Coordinate` (wraps `Eigen::Vector3d`)
-   - `angularAcceleration`: `Coordinate` (wraps `Eigen::Vector3d`)
+   - `angularVelocity`: `Coordinate` (wraps `msd_sim::Vector3D`)
+   - `angularAcceleration`: `Coordinate` (wraps `msd_sim::Vector3D`)
 
 2. **Semantic Mismatch**: Using `Coordinate` for angular quantities loses semantic meaning - `x()`, `y()`, `z()` don't convey that these represent pitch, roll, yaw components.
 
@@ -56,19 +56,19 @@ The two-class approach solves these issues by:
 ### Functional Requirements
 
 #### AngularCoordinate (Orientation)
-1. The system shall provide an `AngularCoordinate` class that inherits from `Eigen::Vector3d`
+1. The system shall provide an `AngularCoordinate` class that inherits from `msd_sim::Vector3D`
 2. The system shall provide semantic accessors: `pitch()`, `roll()`, `yaw()` (read/write)
 3. The system shall support all Eigen vector operations (arithmetic, cross, dot, norm, etc.)
-4. The system shall support construction from three doubles, from `Eigen::Vector3d`, and from Eigen expressions
+4. The system shall support construction from three doubles, from `msd_sim::Vector3D`, and from Eigen expressions
 5. The system shall provide automatic normalization to (-π, π] on access (lazy, like `Angle`)
 6. The system shall provide helper methods matching `Angle`: `getRad()`, `toDeg()` for each component
 7. The system shall provide `std::format` support matching `Coordinate`'s formatter style
 
 #### AngularRate (Velocity/Acceleration)
-8. The system shall provide an `AngularRate` class that inherits from `Eigen::Vector3d`
+8. The system shall provide an `AngularRate` class that inherits from `msd_sim::Vector3D`
 9. The system shall provide semantic accessors: `pitch()`, `roll()`, `yaw()` (read/write)
 10. The system shall support all Eigen vector operations without any normalization
-11. The system shall support construction from three doubles, from `Eigen::Vector3d`, and from Eigen expressions
+11. The system shall support construction from three doubles, from `msd_sim::Vector3D`, and from Eigen expressions
 12. The system shall provide `std::format` support matching `Coordinate`'s formatter style
 
 #### Interoperability
@@ -79,13 +79,13 @@ The two-class approach solves these issues by:
 
 ### Non-Functional Requirements
 - **Performance**: Prototype required to validate overhead (see Prototype Requirements below)
-- **Memory**: Same memory footprint as `Eigen::Vector3d` (24 bytes) for both classes
+- **Memory**: Same memory footprint as `msd_sim::Vector3D` (24 bytes) for both classes
 - **Thread Safety**: Value types - safe to copy across threads
 - **Backward Compatibility**: Breaking change - `EulerAngles` will be deprecated/removed
 - **Numerical Stability**: Normalization strategy must prevent drift in long-running simulations
 
 ## Constraints
-- Must inherit from `Eigen::Vector3d` to leverage Eigen's SIMD optimizations
+- Must inherit from `msd_sim::Vector3D` to leverage Eigen's SIMD optimizations
 - Must follow the same pattern as `Coordinate` for consistency
 - `AngularRate` must not introduce any normalization overhead
 - `AngularCoordinate` uses deferred normalization (100π threshold, check in modifying operations)
@@ -110,8 +110,8 @@ Given the fundamental nature of angular math in this project, prototypes are req
 - Determine optimal normalization strategy for stability
 
 ### P4: Eigen Integration
-- Verify SIMD optimizations are preserved when inheriting from `Eigen::Vector3d`
-- Benchmark against raw `Eigen::Vector3d` operations
+- Verify SIMD optimizations are preserved when inheriting from `msd_sim::Vector3D`
+- Benchmark against raw `msd_sim::Vector3D` operations
 - Test cross product, dot product, matrix multiplication performance
 
 ### P5: Shared Interface Pattern
@@ -130,10 +130,10 @@ Given the fundamental nature of angular math in this project, prototypes are req
 ## Acceptance Criteria
 
 ### AngularCoordinate Class (Orientation)
-- [ ] `AngularCoordinate` class inherits from `Eigen::Vector3d`
+- [ ] `AngularCoordinate` class inherits from `msd_sim::Vector3D`
 - [ ] Default constructor initializes to (0, 0, 0)
 - [ ] Constructor accepts (pitch, roll, yaw) as doubles (radians)
-- [ ] Constructor accepts `Eigen::Vector3d`
+- [ ] Constructor accepts `msd_sim::Vector3D`
 - [ ] Template constructor accepts Eigen expressions
 - [ ] Template assignment operator accepts Eigen expressions
 
@@ -145,10 +145,10 @@ Given the fundamental nature of angular math in this project, prototypes are req
 - [ ] `setPitch()`, `setRoll()`, `setYaw()` for direct assignment
 
 ### AngularRate Class (Velocity/Acceleration)
-- [ ] `AngularRate` class inherits from `Eigen::Vector3d`
+- [ ] `AngularRate` class inherits from `msd_sim::Vector3D`
 - [ ] Default constructor initializes to (0, 0, 0)
 - [ ] Constructor accepts (pitch, roll, yaw) as doubles (rad/s or rad/s²)
-- [ ] Constructor accepts `Eigen::Vector3d`
+- [ ] Constructor accepts `msd_sim::Vector3D`
 - [ ] Template constructor accepts Eigen expressions
 - [ ] Template assignment operator accepts Eigen expressions
 
@@ -160,8 +160,8 @@ Given the fundamental nature of angular math in this project, prototypes are req
 - [ ] Accessors work correctly with Eigen operations
 
 ### Interoperability
-- [ ] Implicit conversion to `Eigen::Vector3d` (inherited)
-- [ ] Can construct from `Eigen::Vector3d` and Eigen expressions
+- [ ] Implicit conversion to `msd_sim::Vector3D` (inherited)
+- [ ] Can construct from `msd_sim::Vector3D` and Eigen expressions
 
 ### Formatting
 - [ ] `std::format` support for both classes with same syntax as `Coordinate`
@@ -226,7 +226,7 @@ Given the fundamental nature of angular math in this project, prototypes are req
    - **Semantic Clarity**: Clear intent — `AngularCoordinate` IS an angle, `AngularRate` is a rate vector
    - **Correct Behavior**: Auto-normalization for orientation, no normalization for rates
    - **API Compatibility**: `AngularCoordinate` can preserve `EulerAngles`-like interface (getRad, toDeg)
-   - **Minimal Overhead**: Both inherit from `Eigen::Vector3d`, same memory footprint
+   - **Minimal Overhead**: Both inherit from `msd_sim::Vector3D`, same memory footprint
 
    The ticket has been updated to reflect this two-class design.
 
@@ -281,7 +281,7 @@ namespace msd_sim {
 /**
  * @brief Orientation angles with automatic normalization to (-π, π]
  *
- * Inherits from Eigen::Vector3d for full matrix operation support.
+ * Inherits from msd_sim::Vector3D for full matrix operation support.
  * Provides semantic pitch/roll/yaw accessors with lazy normalization.
  *
  * Axis convention (ZYX intrinsic rotation):
@@ -289,27 +289,27 @@ namespace msd_sim {
  * - roll:  Rotation around X-axis (component 1)
  * - yaw:   Rotation around Z-axis (component 2)
  */
-class AngularCoordinate : public Eigen::Vector3d {
+class AngularCoordinate : public msd_sim::Vector3D {
 public:
   // Default constructor - initializes to (0, 0, 0)
-  AngularCoordinate() : Eigen::Vector3d{0.0, 0.0, 0.0} {}
+  AngularCoordinate() : msd_sim::Vector3D{0.0, 0.0, 0.0} {}
 
   // Constructor with pitch, roll, yaw values (in radians)
   AngularCoordinate(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw} {}
+    : msd_sim::Vector3D{pitch, roll, yaw} {}
 
-  // Constructor from Eigen::Vector3d
-  AngularCoordinate(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec} {}
+  // Constructor from msd_sim::Vector3D
+  AngularCoordinate(const msd_sim::Vector3D& vec) : msd_sim::Vector3D{vec} {}
 
   // Template constructor for Eigen expressions
   template <typename OtherDerived>
   AngularCoordinate(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other} {}
+    : msd_sim::Vector3D{other} {}
 
   // Template assignment for Eigen expressions
   template <typename OtherDerived>
   AngularCoordinate& operator=(const Eigen::MatrixBase<OtherDerived>& other) {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -359,7 +359,7 @@ namespace msd_sim {
 /**
  * @brief Angular rate vector (velocity or acceleration) without normalization
  *
- * Inherits from Eigen::Vector3d for full matrix operation support.
+ * Inherits from msd_sim::Vector3D for full matrix operation support.
  * Provides semantic pitch/roll/yaw accessors without any normalization.
  * Rates can exceed 2π rad/s and should not be normalized.
  *
@@ -367,27 +367,27 @@ namespace msd_sim {
  * - Angular velocity: rad/s
  * - Angular acceleration: rad/s²
  */
-class AngularRate : public Eigen::Vector3d {
+class AngularRate : public msd_sim::Vector3D {
 public:
   // Default constructor - initializes to (0, 0, 0)
-  AngularRate() : Eigen::Vector3d{0.0, 0.0, 0.0} {}
+  AngularRate() : msd_sim::Vector3D{0.0, 0.0, 0.0} {}
 
   // Constructor with pitch, roll, yaw rates
   AngularRate(double pitchRate, double rollRate, double yawRate)
-    : Eigen::Vector3d{pitchRate, rollRate, yawRate} {}
+    : msd_sim::Vector3D{pitchRate, rollRate, yawRate} {}
 
-  // Constructor from Eigen::Vector3d
-  AngularRate(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec} {}
+  // Constructor from msd_sim::Vector3D
+  AngularRate(const msd_sim::Vector3D& vec) : msd_sim::Vector3D{vec} {}
 
   // Template constructor for Eigen expressions
   template <typename OtherDerived>
   AngularRate(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other} {}
+    : msd_sim::Vector3D{other} {}
 
   // Template assignment for Eigen expressions
   template <typename OtherDerived>
   AngularRate& operator=(const Eigen::MatrixBase<OtherDerived>& other) {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -446,29 +446,29 @@ struct NoNormalize {
  * @brief Template base for angular vectors with configurable normalization
  */
 template <typename NormalizationPolicy>
-class AngularVector : public Eigen::Vector3d {
+class AngularVector : public msd_sim::Vector3D {
 public:
   using Policy = NormalizationPolicy;
 
   // Default constructor
-  AngularVector() : Eigen::Vector3d{0.0, 0.0, 0.0} {}
+  AngularVector() : msd_sim::Vector3D{0.0, 0.0, 0.0} {}
 
   // Constructor with pitch, roll, yaw
   AngularVector(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw} {}
+    : msd_sim::Vector3D{pitch, roll, yaw} {}
 
-  // Constructor from Eigen::Vector3d
-  AngularVector(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec} {}
+  // Constructor from msd_sim::Vector3D
+  AngularVector(const msd_sim::Vector3D& vec) : msd_sim::Vector3D{vec} {}
 
   // Template constructor for Eigen expressions
   template <typename OtherDerived>
   AngularVector(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other} {}
+    : msd_sim::Vector3D{other} {}
 
   // Template assignment for Eigen expressions
   template <typename OtherDerived>
   AngularVector& operator=(const Eigen::MatrixBase<OtherDerived>& other) {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -564,9 +564,9 @@ std::cout << std::format("Orientation: {:.2f}", orientation);
   - `docs/designs/0024_angular_coordinate/0024_angular_coordinate.puml`
 - **Notes**:
   - Designed two-class approach: `AngularCoordinate` (auto-normalizing) and `AngularRate` (non-normalizing)
-  - Both inherit from `Eigen::Vector3d` for full matrix operation support
+  - Both inherit from `msd_sim::Vector3D` for full matrix operation support
   - Lazy normalization strategy for `AngularCoordinate` (on access via `pitch()`, `roll()`, `yaw()`)
-  - Raw `double` internal storage (24 bytes, same as `Eigen::Vector3d`)
+  - Raw `double` internal storage (24 bytes, same as `msd_sim::Vector3D`)
   - Breaking change to `InertialState` for type safety
   - Deprecation path for `EulerAngles` and `ReferenceFrame` methods
   - Five prototypes (P1-P5) required to validate performance and design approach

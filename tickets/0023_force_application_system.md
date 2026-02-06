@@ -43,7 +43,7 @@ The current physics simulation has infrastructure for rigid body dynamics (`Asse
 - **Performance**: Force accumulation should be O(1) per force application
 - **Memory**: No heap allocations during force application or integration
 - **Numerical Stability**: Semi-implicit Euler provides better stability than explicit Euler for oscillatory systems
-- **Breaking Change**: ~~`InertialState` will change angular velocity/acceleration from `EulerAngles` to `Eigen::Vector3d`~~ **COMPLETE** (ticket 0024): Now uses `AngularRate` which inherits from `Eigen::Vector3d`
+- **Breaking Change**: ~~`InertialState` will change angular velocity/acceleration from `EulerAngles` to `msd_sim::Vector3D`~~ **COMPLETE** (ticket 0024): Now uses `AngularRate` which inherits from `msd_sim::Vector3D`
 
 ## Constraints
 - Must use existing `AssetInertial` class for physics objects
@@ -55,7 +55,7 @@ The current physics simulation has infrastructure for rigid body dynamics (`Asse
 ## Acceptance Criteria
 
 ### Completed (via tickets 0023a and 0024)
-- [x] `InertialState::angularVelocity` and `angularAcceleration` are `AngularRate` (inherits from `Eigen::Vector3d`) — ticket 0024
+- [x] `InertialState::angularVelocity` and `angularAcceleration` are `AngularRate` (inherits from `msd_sim::Vector3D`) — ticket 0024
 - [x] `AssetInertial::applyForce(const Coordinate& force)` declared and accumulates force — ticket 0023a
 - [x] `AssetInertial::applyForceAtPoint(const Coordinate& force, const Coordinate& worldPoint)` declared (torque computation TODO) — ticket 0023a
 - [x] `AssetInertial::applyTorque(const Coordinate& torque)` declared and accumulates torque — ticket 0023a
@@ -78,7 +78,7 @@ The current physics simulation has infrastructure for rigid body dynamics (`Asse
 
 ### Preferred Approaches
 - Store accumulated force and torque as members of `AssetInertial` (keeps physics data together) ✅ Done (0023a)
-- Use `AngularRate` for angular velocity (inherits from `Eigen::Vector3d`, provides semantic accessors) ✅ Done (0024)
+- Use `AngularRate` for angular velocity (inherits from `msd_sim::Vector3D`, provides semantic accessors) ✅ Done (0024)
 - Apply gravity as acceleration in `updatePhysics()` rather than per-object force (more efficient)
 - Use semi-implicit Euler: update velocity first, then use new velocity for position update
 

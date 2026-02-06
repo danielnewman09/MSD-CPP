@@ -48,7 +48,7 @@
 /**
  * @brief 3D vector for positions, velocities, forces
  *
- * Production equivalent: Eigen::Vector3d
+ * Production equivalent: msd_sim::Vector3D
  * Simplified for tutorial: no SIMD, no expression templates
  */
 struct Vec3
@@ -58,7 +58,9 @@ struct Vec3
   double z{0.0};
 
   Vec3() = default;
-  Vec3(double x_, double y_, double z_) : x{x_}, y{y_}, z{z_} {}
+  Vec3(double x_, double y_, double z_) : x{x_}, y{y_}, z{z_}
+  {
+  }
 
   Vec3 operator+(const Vec3& other) const
   {
@@ -70,9 +72,15 @@ struct Vec3
     return {x - other.x, y - other.y, z - other.z};
   }
 
-  Vec3 operator*(double s) const { return {x * s, y * s, z * s}; }
+  Vec3 operator*(double s) const
+  {
+    return {x * s, y * s, z * s};
+  }
 
-  Vec3 operator/(double s) const { return {x / s, y / s, z / s}; }
+  Vec3 operator/(double s) const
+  {
+    return {x / s, y / s, z / s};
+  }
 
   Vec3& operator+=(const Vec3& other)
   {
@@ -87,9 +95,15 @@ struct Vec3
     return x * other.x + y * other.y + z * other.z;
   }
 
-  double squaredNorm() const { return x * x + y * y + z * z; }
+  double squaredNorm() const
+  {
+    return x * x + y * y + z * z;
+  }
 
-  double norm() const { return std::sqrt(squaredNorm()); }
+  double norm() const
+  {
+    return std::sqrt(squaredNorm());
+  }
 };
 
 /**
@@ -111,7 +125,7 @@ struct Quaternion
 
   Quaternion() = default;
   Quaternion(double w_, double x_, double y_, double z_)
-      : w{w_}, x{x_}, y{y_}, z{z_}
+    : w{w_}, x{x_}, y{y_}, z{z_}
   {
   }
 
@@ -121,7 +135,10 @@ struct Quaternion
    * For a unit quaternion, this should equal 1.0
    * Constraint violation = squaredNorm() - 1.0
    */
-  double squaredNorm() const { return w * w + x * x + y * y + z * z; }
+  double squaredNorm() const
+  {
+    return w * w + x * x + y * y + z * z;
+  }
 
   /**
    * @brief Normalize quaternion to unit length
@@ -154,15 +171,25 @@ struct Vec4
   double data[4]{0.0, 0.0, 0.0, 0.0};
 
   Vec4() = default;
-  Vec4(double a, double b, double c, double d) : data{a, b, c, d} {}
+  Vec4(double a, double b, double c, double d) : data{a, b, c, d}
+  {
+  }
 
-  double& operator[](int i) { return data[i]; }
-  double operator[](int i) const { return data[i]; }
+  double& operator[](int i)
+  {
+    return data[i];
+  }
+  double operator[](int i) const
+  {
+    return data[i];
+  }
 
   Vec4 operator+(const Vec4& other) const
   {
-    return {data[0] + other.data[0], data[1] + other.data[1],
-            data[2] + other.data[2], data[3] + other.data[3]};
+    return {data[0] + other.data[0],
+            data[1] + other.data[1],
+            data[2] + other.data[2],
+            data[3] + other.data[3]};
   }
 
   Vec4 operator*(double s) const
@@ -194,15 +221,27 @@ class Matrix
 
 public:
   Matrix(int rows, int cols)
-      : rows_{rows}, cols_{cols}, data_(static_cast<size_t>(rows * cols), 0.0)
+    : rows_{rows}, cols_{cols}, data_(static_cast<size_t>(rows * cols), 0.0)
   {
   }
 
-  int rows() const { return rows_; }
-  int cols() const { return cols_; }
+  int rows() const
+  {
+    return rows_;
+  }
+  int cols() const
+  {
+    return cols_;
+  }
 
-  double& operator()(int r, int c) { return data_[static_cast<size_t>(r * cols_ + c)]; }
-  double operator()(int r, int c) const { return data_[static_cast<size_t>(r * cols_ + c)]; }
+  double& operator()(int r, int c)
+  {
+    return data_[static_cast<size_t>(r * cols_ + c)];
+  }
+  double operator()(int r, int c) const
+  {
+    return data_[static_cast<size_t>(r * cols_ + c)];
+  }
 
   /**
    * @brief Set all elements to zero
@@ -261,12 +300,23 @@ class Vector
   std::vector<double> data_;
 
 public:
-  explicit Vector(int size) : data_(static_cast<size_t>(size), 0.0) {}
+  explicit Vector(int size) : data_(static_cast<size_t>(size), 0.0)
+  {
+  }
 
-  int size() const { return static_cast<int>(data_.size()); }
+  int size() const
+  {
+    return static_cast<int>(data_.size());
+  }
 
-  double& operator[](int i) { return data_[static_cast<size_t>(i)]; }
-  double operator[](int i) const { return data_[static_cast<size_t>(i)]; }
+  double& operator[](int i)
+  {
+    return data_[static_cast<size_t>(i)];
+  }
+  double operator[](int i) const
+  {
+    return data_[static_cast<size_t>(i)];
+  }
 
   Vector operator+(const Vector& other) const
   {
@@ -354,7 +404,8 @@ Vector solveLLT(const Matrix& A, const Vector& b)
     }
     L(i, i) = std::sqrt(A(i, i) - sum);
 
-    // Off-diagonal elements: L(j,i) = (A(j,i) - sum_{k<i} L(j,k)*L(i,k)) / L(i,i)
+    // Off-diagonal elements: L(j,i) = (A(j,i) - sum_{k<i} L(j,k)*L(i,k)) /
+    // L(i,i)
     for (int j = i + 1; j < n; ++j)
     {
       double offDiagSum = 0.0;
@@ -416,9 +467,9 @@ struct RigidBodyState
   Vec3 acceleration;  // Linear acceleration [m/s^2]
 
   // Orientation state
-  Quaternion orientation;     // Unit quaternion (w, x, y, z)
-  Vec4 quaternionRate;        // Q_dot = dQ/dt
-  Vec3 angularAcceleration;   // alpha = I^-1 * tau [rad/s^2]
+  Quaternion orientation;    // Unit quaternion (w, x, y, z)
+  Vec4 quaternionRate;       // Q_dot = dQ/dt
+  Vec3 angularAcceleration;  // alpha = I^-1 * tau [rad/s^2]
 
   /**
    * @brief Get angular velocity from quaternion rate
@@ -437,19 +488,20 @@ struct RigidBodyState
     const Vec4& Qdot = quaternionRate;
 
     // Quaternion conjugate: conj(Q) = (w, -x, -y, -z)
-    // Quaternion multiplication: p * q = [p0*q0 - p_vec . q_vec, p0*q_vec + q0*p_vec + p_vec x q_vec]
-    // For omega = 2 * conj(Q) * Qdot, we only need the vector part
+    // Quaternion multiplication: p * q = [p0*q0 - p_vec . q_vec, p0*q_vec +
+    // q0*p_vec + p_vec x q_vec] For omega = 2 * conj(Q) * Qdot, we only need
+    // the vector part
 
-    // 2 * conj(Q) * Qdot vector part = 2 * (w*Qdot_vec - Qdot_w*(-Q_vec) + (-Q_vec) x Qdot_vec)
-    // = 2 * (w*Qdot_vec + Qdot_w*Q_vec - Q_vec x Qdot_vec)
+    // 2 * conj(Q) * Qdot vector part = 2 * (w*Qdot_vec - Qdot_w*(-Q_vec) +
+    // (-Q_vec) x Qdot_vec) = 2 * (w*Qdot_vec + Qdot_w*Q_vec - Q_vec x Qdot_vec)
 
     Vec3 omega;
     omega.x =
-        2.0 * (Q.w * Qdot[1] + Qdot[0] * Q.x - (Q.y * Qdot[3] - Q.z * Qdot[2]));
+      2.0 * (Q.w * Qdot[1] + Qdot[0] * Q.x - (Q.y * Qdot[3] - Q.z * Qdot[2]));
     omega.y =
-        2.0 * (Q.w * Qdot[2] + Qdot[0] * Q.y - (Q.z * Qdot[1] - Q.x * Qdot[3]));
+      2.0 * (Q.w * Qdot[2] + Qdot[0] * Q.y - (Q.z * Qdot[1] - Q.x * Qdot[3]));
     omega.z =
-        2.0 * (Q.w * Qdot[3] + Qdot[0] * Q.z - (Q.x * Qdot[2] - Q.y * Qdot[1]));
+      2.0 * (Q.w * Qdot[3] + Qdot[0] * Q.z - (Q.x * Qdot[2] - Q.y * Qdot[1]));
 
     return omega;
   }
@@ -546,7 +598,10 @@ public:
    *
    * Constraint force contribution: -alpha * C
    */
-  virtual double alpha() const { return 10.0; }
+  virtual double alpha() const
+  {
+    return 10.0;
+  }
 
   /**
    * @brief Baumgarte velocity error gain
@@ -556,7 +611,10 @@ public:
    *
    * Constraint force contribution: -beta * C_dot
    */
-  virtual double beta() const { return 10.0; }
+  virtual double beta() const
+  {
+    return 10.0;
+  }
 
   /**
    * @brief Constraint type name for debugging
@@ -590,7 +648,7 @@ class UnitQuaternionConstraint : public Constraint
 
 public:
   UnitQuaternionConstraint(double alpha = 10.0, double beta = 10.0)
-      : alpha_{alpha}, beta_{beta}
+    : alpha_{alpha}, beta_{beta}
   {
   }
 
@@ -632,10 +690,19 @@ public:
     return J;
   }
 
-  double alpha() const override { return alpha_; }
-  double beta() const override { return beta_; }
+  double alpha() const override
+  {
+    return alpha_;
+  }
+  double beta() const override
+  {
+    return beta_;
+  }
 
-  const char* typeName() const override { return "UnitQuaternionConstraint"; }
+  const char* typeName() const override
+  {
+    return "UnitQuaternionConstraint";
+  }
 };
 
 /**
@@ -665,11 +732,12 @@ public:
   /**
    * @param targetDistance Desired distance from origin [m]
    */
-  explicit DistanceConstraint(double targetDistance, double alpha = 10.0,
+  explicit DistanceConstraint(double targetDistance,
+                              double alpha = 10.0,
                               double beta = 10.0)
-      : targetDistanceSquared_{targetDistance * targetDistance},
-        alpha_{alpha},
-        beta_{beta}
+    : targetDistanceSquared_{targetDistance * targetDistance},
+      alpha_{alpha},
+      beta_{beta}
   {
   }
 
@@ -709,10 +777,19 @@ public:
     return J;
   }
 
-  double alpha() const override { return alpha_; }
-  double beta() const override { return beta_; }
+  double alpha() const override
+  {
+    return alpha_;
+  }
+  double beta() const override
+  {
+    return beta_;
+  }
 
-  const char* typeName() const override { return "DistanceConstraint"; }
+  const char* typeName() const override
+  {
+    return "DistanceConstraint";
+  }
 };
 
 // ============================================================================
@@ -741,7 +818,8 @@ struct SolveResult
  *   J * M^-1 * J^T * lambda = b
  *   F_constraint = J^T * lambda
  *
- * where b includes external forces, Baumgarte stabilization, and velocity terms.
+ * where b includes external forces, Baumgarte stabilization, and velocity
+ * terms.
  *
  * Production equivalent: msd_sim::ConstraintSolver
  *
@@ -755,7 +833,8 @@ struct SolveResult
  */
 SolveResult solveConstraints(const std::vector<Constraint*>& constraints,
                              const RigidBodyState& state,
-                             const Vec3& externalForce, double mass,
+                             const Vec3& externalForce,
+                             double mass,
                              const std::array<double, 3>& inverseInertia,
                              double /*dt*/)
 {
@@ -792,9 +871,9 @@ SolveResult solveConstraints(const std::vector<Constraint*>& constraints,
     rowOffset += c->dimension();
   }
 
-  // ========== Step 2: Build inverse mass matrix M^-1 (7x7 block diagonal) ==========
-  // M = diag([m*I_3, I_3x3, 1])  (mass for position, inertia for orientation, 1 for quaternion scalar)
-  // M^-1 = diag([I_3/m, I^-1, 1])
+  // ========== Step 2: Build inverse mass matrix M^-1 (7x7 block diagonal)
+  // ========== M = diag([m*I_3, I_3x3, 1])  (mass for position, inertia for
+  // orientation, 1 for quaternion scalar) M^-1 = diag([I_3/m, I^-1, 1])
   Matrix M_inv(7, 7);
   M_inv.setZero();
 
@@ -817,7 +896,8 @@ SolveResult solveConstraints(const std::vector<Constraint*>& constraints,
   Matrix Jt = J.transpose();
   Matrix A = JM * Jt;
 
-  // ========== Step 4: Compute RHS b = -J*M^-1*F_ext - alpha*C - beta*C_dot ==========
+  // ========== Step 4: Compute RHS b = -J*M^-1*F_ext - alpha*C - beta*C_dot
+  // ==========
 
   // External force in generalized coordinates (7x1)
   Vector F_ext(7);
@@ -886,8 +966,10 @@ SolveResult solveConstraints(const std::vector<Constraint*>& constraints,
   double minDiag = A(0, 0);
   for (int i = 1; i < totalDim; ++i)
   {
-    if (A(i, i) > maxDiag) maxDiag = A(i, i);
-    if (A(i, i) < minDiag) minDiag = A(i, i);
+    if (A(i, i) > maxDiag)
+      maxDiag = A(i, i);
+    if (A(i, i) < minDiag)
+      minDiag = A(i, i);
   }
   double conditionNumber = (minDiag > 1e-10) ? maxDiag / minDiag : 1e10;
 
@@ -915,7 +997,9 @@ SolveResult solveConstraints(const std::vector<Constraint*>& constraints,
  * @param mass Object mass [kg]
  * @param dt Integration timestep [s]
  */
-void integrateLinear(RigidBodyState& state, const Vec3& netForce, double mass,
+void integrateLinear(RigidBodyState& state,
+                     const Vec3& netForce,
+                     double mass,
                      double dt)
 {
   // Semi-implicit Euler: update velocity first, then position with new velocity
@@ -962,7 +1046,8 @@ int main()
   // ========== Setup ==========
   // Create a rigid body with some initial state
   RigidBodyState state;
-  state.position = Vec3{5.0, 0.0, 0.0};  // Start 5m from origin (for distance constraint)
+  state.position =
+    Vec3{5.0, 0.0, 0.0};  // Start 5m from origin (for distance constraint)
   state.velocity = Vec3{0.0, 1.0, 0.0};  // Moving in Y direction
 
   // Slightly non-unit quaternion to test constraint enforcement
@@ -972,15 +1057,15 @@ int main()
   state.setAngularVelocity(Vec3{0.0, 0.0, 0.5});  // Rotating around Z axis
 
   // Physical parameters
-  double mass = 10.0;  // kg
+  double mass = 10.0;                                      // kg
   std::array<double, 3> inverseInertia = {0.1, 0.1, 0.1};  // Diagonal I^-1
 
   // External force: gravity in -Z direction
   Vec3 gravity{0.0, 0.0, -9.81 * mass};
 
   // Integration parameters
-  double dt = 0.016;       // 16ms timestep (~60 FPS)
-  int numSteps = 100;      // Number of integration steps
+  double dt = 0.016;   // 16ms timestep (~60 FPS)
+  int numSteps = 100;  // Number of integration steps
 
   // ========== Create Constraints ==========
   // 1. Unit quaternion constraint: keeps |Q| = 1
@@ -999,16 +1084,16 @@ int main()
   std::cout << "  Quaternion: (" << state.orientation.w << ", "
             << state.orientation.x << ", " << state.orientation.y << ", "
             << state.orientation.z << ")\n";
-  std::cout << "  Quaternion norm: " << std::sqrt(state.orientation.squaredNorm())
-            << "\n\n";
+  std::cout << "  Quaternion norm: "
+            << std::sqrt(state.orientation.squaredNorm()) << "\n\n";
 
   std::cout << "Running " << numSteps << " steps at dt = " << dt << "s...\n\n";
 
   for (int step = 0; step < numSteps; ++step)
   {
     // 1. Solve constraints to get constraint forces
-    SolveResult result = solveConstraints(constraints, state, gravity, mass,
-                                          inverseInertia, dt);
+    SolveResult result =
+      solveConstraints(constraints, state, gravity, mass, inverseInertia, dt);
 
     // 2. Combine forces
     Vec3 totalForce = gravity + result.linearForce;
@@ -1027,9 +1112,8 @@ int main()
       double distance = state.position.norm();
       std::cout << "Step " << std::setw(3) << (step + 1) << ": "
                 << "dist=" << std::fixed << std::setprecision(6) << distance
-                << "m, |Q|=" << quatNorm
-                << ", cond=" << std::scientific << result.conditionNumber
-                << std::fixed << "\n";
+                << "m, |Q|=" << quatNorm << ", cond=" << std::scientific
+                << result.conditionNumber << std::fixed << "\n";
     }
   }
 
@@ -1042,8 +1126,8 @@ int main()
   std::cout << "  Quaternion: (" << state.orientation.w << ", "
             << state.orientation.x << ", " << state.orientation.y << ", "
             << state.orientation.z << ")\n";
-  std::cout << "  Quaternion norm: " << std::sqrt(state.orientation.squaredNorm())
-            << " (target: 1.0)\n";
+  std::cout << "  Quaternion norm: "
+            << std::sqrt(state.orientation.squaredNorm()) << " (target: 1.0)\n";
 
   // Compute constraint violations
   Vector quatViolation = quatConstraint.evaluate(state, 0.0);

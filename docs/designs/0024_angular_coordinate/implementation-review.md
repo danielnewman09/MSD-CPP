@@ -50,7 +50,7 @@ The implementation follows the design specification exactly:
 | Deferred normalization with 100π threshold | ✓ | `kNormalizationThreshold = 100.0 * M_PI` defined, checked in all modifying operations |
 | Override compound operators | ✓ | `+=`, `-=`, `*=`, `/=` all override base class and call `normalizeIfNeeded()` |
 | Fast accessors (no normalization on read) | ✓ | `pitch()`, `roll()`, `yaw()` return raw values with no normalization check |
-| Inherit from Eigen::Vector3d | ✓ | Both classes inherit from `Eigen::Vector3d` preserving SIMD |
+| Inherit from msd_sim::Vector3D | ✓ | Both classes inherit from `msd_sim::Vector3D` preserving SIMD |
 | 24-byte memory footprint | ✓ | Tests verify `sizeof(AngularCoordinate) == 24` and `sizeof(AngularRate) == 24` |
 | Explicit duplication (no shared base) | ✓ | No inheritance hierarchy between AngularCoordinate and AngularRate |
 | Accept operator[] bypass | ✓ | Documented as LIMITATION in AngularCoordinate header |

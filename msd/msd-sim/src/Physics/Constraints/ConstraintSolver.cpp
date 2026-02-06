@@ -20,6 +20,7 @@
 #include <limits>
 #include <utility>
 #include <vector>
+
 #include "msd-sim/src/DataTypes/AngularRate.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
@@ -185,9 +186,9 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
   // External forces in generalized coordinates (7 × 1)
   Eigen::VectorXd fExt(kNumStates);
   fExt.segment<3>(0) =
-    Eigen::Vector3d{externalForce.x(), externalForce.y(), externalForce.z()};
+    Vector3D{externalForce.x(), externalForce.y(), externalForce.z()};
   fExt.segment<3>(3) =
-    Eigen::Vector3d{externalTorque.x(), externalTorque.y(), externalTorque.z()};
+    Vector3D{externalTorque.x(), externalTorque.y(), externalTorque.z()};
   fExt(6) = 0.0;  // No external force on quaternion scalar component
 
   // Assemble constraint violation C and time derivative Ċ
@@ -218,7 +219,7 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
   // State velocity vector (7 × 1)
   Eigen::VectorXd qDot(kNumStates);
   qDot.segment<3>(0) =
-    Eigen::Vector3d{state.velocity.x(), state.velocity.y(), state.velocity.z()};
+    Vector3D{state.velocity.x(), state.velocity.y(), state.velocity.z()};
 
   // Quaternion rate Q̇
   qDot.segment<4>(3) = state.quaternionRate;
@@ -499,14 +500,14 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
 
     // Velocity vector v = [v_A, omega_A, v_B, omega_B] (12×1)
     Eigen::VectorXd v(12);
-    v.segment<3>(0) = Eigen::Vector3d{
-      stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
+    v.segment<3>(0) =
+      Vector3D{stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
     AngularRate omegaA = stateA.getAngularVelocity();
-    v.segment<3>(3) = Eigen::Vector3d{omegaA.x(), omegaA.y(), omegaA.z()};
-    v.segment<3>(6) = Eigen::Vector3d{
-      stateB.velocity.x(), stateB.velocity.y(), stateB.velocity.z()};
+    v.segment<3>(3) = Vector3D{omegaA.x(), omegaA.y(), omegaA.z()};
+    v.segment<3>(6) =
+      Vector3D{stateB.velocity.x(), stateB.velocity.y(), stateB.velocity.z()};
     AngularRate omegaB = stateB.getAngularVelocity();
-    v.segment<3>(9) = Eigen::Vector3d{omegaB.x(), omegaB.y(), omegaB.z()};
+    v.segment<3>(9) = Vector3D{omegaB.x(), omegaB.y(), omegaB.z()};
 
     double const jv =
       (jacobians[i] * v)(0);  // Scalar: relative velocity along constraint

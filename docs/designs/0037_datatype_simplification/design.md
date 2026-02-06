@@ -2,7 +2,7 @@
 
 ## Summary
 
-This design addresses the accumulated code quality issues and semantic misuse in the `Coordinate`, `CoordinateRate`, `AngularCoordinate`, and `AngularRate` types introduced in ticket 0024. The solution is a phased refactoring that (A) fixes mechanical code quality issues, (B) consolidates duplicated formatters, (C) replaces semantically incorrect type usage with `Eigen::Vector3d` for generic vectors/normals/forces, and (D) simplifies the Eigen expression constructor to remove explicit wrapping friction. This approach preserves the validated design decisions from ticket 0024 while eliminating the practical issues that have emerged through use.
+This design addresses the accumulated code quality issues and semantic misuse in the `Coordinate`, `CoordinateRate`, `AngularCoordinate`, and `AngularRate` types introduced in ticket 0024. The solution is a phased refactoring that (A) fixes mechanical code quality issues, (B) consolidates duplicated formatters, (C) replaces semantically incorrect type usage with `msd_sim::Vector3D` for generic vectors/normals/forces, and (D) simplifies the Eigen expression constructor to remove explicit wrapping friction. This approach preserves the validated design decisions from ticket 0024 while eliminating the practical issues that have emerged through use.
 
 ## Architecture Changes
 
@@ -24,14 +24,14 @@ See: `./0037_datatype_simplification.puml`
 // Current (explicit template ctor)
 template <typename OtherDerived>
 explicit Vec3Base(const Eigen::MatrixBase<OtherDerived>& other)
-  : Eigen::Vector3d{other}
+  : msd_sim::Vector3D{other}
 {
 }
 
 // Modified (implicit template ctor with NOLINT)
 template <typename OtherDerived>
 Vec3Base(const Eigen::MatrixBase<OtherDerived>& other)  // NOLINT(google-explicit-constructor)
-  : Eigen::Vector3d{other}
+  : msd_sim::Vector3D{other}
 {
 }
 ```
@@ -56,7 +56,7 @@ struct Coordinate final : detail::Vec3Base<Coordinate>
 #### CoordinateRate (Removed in Phase C)
 - **Current location**: `msd/msd-sim/src/DataTypes/Coordinate.hpp` (lines 61-71)
 - **Changes required**: Remove entire type definition
-- **Migration strategy**: Replace all usages with `Eigen::Vector3d` where semantically vectors/normals/forces
+- **Migration strategy**: Replace all usages with `msd_sim::Vector3D` where semantically vectors/normals/forces
 - **Breaking change**: Yes — all usages must be updated
 
 **Rationale**: CoordinateRate was introduced for velocities/accelerations, but in practice is misused for:
@@ -65,7 +65,7 @@ struct Coordinate final : detail::Vec3Base<Coordinate>
 - GJK search directions (GJK.hpp)
 - Forces/torques (SemiImplicitEulerIntegrator.hpp, AssetInertial.hpp)
 
-These quantities are not velocities/accelerations. Using raw `Eigen::Vector3d` is more honest and avoids semantic confusion.
+These quantities are not velocities/accelerations. Using raw `msd_sim::Vector3D` is more honest and avoids semantic confusion.
 
 #### AngularCoordinate (Phase A + Phase D)
 - **Current location**: `msd/msd-sim/src/DataTypes/AngularCoordinate.hpp`
@@ -113,14 +113,14 @@ void normalizeIfNeeded()
 template <typename OtherDerived>
 - explicit AngularCoordinate(const Eigen::MatrixBase<OtherDerived>& other)
 + AngularCoordinate(const Eigen::MatrixBase<OtherDerived>& other)  // NOLINT(google-explicit-constructor)
-  : Eigen::Vector3d{other}
+  : msd_sim::Vector3D{other}
 {
   normalizeIfNeeded();
 }
 
 // Phase D: Add final specifier
-- class AngularCoordinate : public Eigen::Vector3d
-+ class AngularCoordinate final : public Eigen::Vector3d
+- class AngularCoordinate : public msd_sim::Vector3D
++ class AngularCoordinate final : public msd_sim::Vector3D
 ```
 
 #### AngularRate (Phase A + Phase D)
@@ -147,13 +147,13 @@ template <typename OtherDerived>
 template <typename OtherDerived>
 - explicit AngularRate(const Eigen::MatrixBase<OtherDerived>& other)
 + AngularRate(const Eigen::MatrixBase<OtherDerived>& other)  // NOLINT(google-explicit-constructor)
-  : Eigen::Vector3d{other}
+  : msd_sim::Vector3D{other}
 {
 }
 
 // Phase D: Add final specifier
-- class AngularRate : public Eigen::Vector3d
-+ class AngularRate final : public Eigen::Vector3d
+- class AngularRate : public msd_sim::Vector3D
++ class AngularRate final : public msd_sim::Vector3D
 ```
 
 #### std::formatter Specializations (Phase B)
@@ -244,7 +244,7 @@ struct std::formatter<msd_sim::AngularCoordinate>
 |--------------------|----------------|------------------|-------|
 | Vec3Base | Coordinate.hpp | Internal refactoring | Implicit template ctor, NOLINT annotations |
 | Coordinate | Coordinate.hpp | API preservation | Add final specifier, inherit implicit ctor |
-| CoordinateRate | **REMOVED** | **Breaking change** | Replace with Eigen::Vector3d at all call sites |
+| CoordinateRate | **REMOVED** | **Breaking change** | Replace with msd_sim::Vector3D at all call sites |
 | AngularCoordinate | AngularCoordinate.hpp | Code quality + API change | Fix artifacts, implicit ctor, final specifier |
 | AngularRate | AngularRate.hpp | Code quality + API change | Fix artifacts, implicit ctor, final specifier |
 | Formatters | All three headers | Internal consolidation | Extract to Vec3FormatterBase, zero API impact |
@@ -255,30 +255,30 @@ This phase requires manual review of each usage to determine semantic intent. Th
 
 | File | Line(s) | Current Type | Semantic Quantity | Replacement | Rationale |
 |------|---------|--------------|-------------------|-------------|-----------|
-| `InertialState.hpp` | 40 | `Coordinate` | Linear velocity | `Eigen::Vector3d` | Velocity is not a position |
-| `InertialState.hpp` | 41 | `Coordinate` | Linear acceleration | `Eigen::Vector3d` | Acceleration is not a position |
-| `Facet.hpp` | 30 | `CoordinateRate` | Facet normal | `Eigen::Vector3d` | Unit normal is a direction, not a velocity |
-| `CollisionResult.hpp` | 82 | `CoordinateRate` | Contact normal | `Eigen::Vector3d` | Unit normal is a direction, not a velocity |
-| `ContactConstraint.hpp` | ~50 | `CoordinateRate` | Contact normal | `Eigen::Vector3d` | Unit normal is a direction, not a velocity |
+| `InertialState.hpp` | 40 | `Coordinate` | Linear velocity | `msd_sim::Vector3D` | Velocity is not a position |
+| `InertialState.hpp` | 41 | `Coordinate` | Linear acceleration | `msd_sim::Vector3D` | Acceleration is not a position |
+| `Facet.hpp` | 30 | `CoordinateRate` | Facet normal | `msd_sim::Vector3D` | Unit normal is a direction, not a velocity |
+| `CollisionResult.hpp` | 82 | `CoordinateRate` | Contact normal | `msd_sim::Vector3D` | Unit normal is a direction, not a velocity |
+| `ContactConstraint.hpp` | ~50 | `CoordinateRate` | Contact normal | `msd_sim::Vector3D` | Unit normal is a direction, not a velocity |
 | `ContactConstraint.hpp` | ~52-53 | `Coordinate` | Lever arms | `Coordinate` | **Keep as-is** — lever arms are position offsets |
-| `FrictionConstraint.hpp` | ~45-46 | `Coordinate` | Tangent basis | `Eigen::Vector3d` | Tangent vectors are directions, not positions |
-| `TangentBasis.hpp` | 38-39 | `Coordinate` | Tangent frame | `Eigen::Vector3d` | Tangent vectors are directions, not positions |
-| `GJK.hpp` | Various | `CoordinateRate` | Search direction | `Eigen::Vector3d` | Search direction is a vector, not a velocity |
-| `EPA.cpp` | Various | `Coordinate` | Face normals | `Eigen::Vector3d` | Face normals are directions, not positions |
+| `FrictionConstraint.hpp` | ~45-46 | `Coordinate` | Tangent basis | `msd_sim::Vector3D` | Tangent vectors are directions, not positions |
+| `TangentBasis.hpp` | 38-39 | `Coordinate` | Tangent frame | `msd_sim::Vector3D` | Tangent vectors are directions, not positions |
+| `GJK.hpp` | Various | `CoordinateRate` | Search direction | `msd_sim::Vector3D` | Search direction is a vector, not a velocity |
+| `EPA.cpp` | Various | `Coordinate` | Face normals | `msd_sim::Vector3D` | Face normals are directions, not positions |
 
 **Note**: The `InertialState` migration has the broadest downstream impact (~50+ files reference `InertialState::velocity` or `InertialState::acceleration`). The migration is mechanically simple (`.x()`, `.y()`, `.z()` accessors are identical on both types) but the scope must not be underestimated.
 
 **Key principle**: If the quantity is:
 - A **position** or **displacement** → `Coordinate`
-- A **velocity** or **linear acceleration** → Remove `CoordinateRate`, use `Eigen::Vector3d` (velocities stored in InertialState)
-- A **direction**, **normal**, or **force** → `Eigen::Vector3d` (not position, not velocity)
+- A **velocity** or **linear acceleration** → Remove `CoordinateRate`, use `msd_sim::Vector3D` (velocities stored in InertialState)
+- A **direction**, **normal**, or **force** → `msd_sim::Vector3D` (not position, not velocity)
 - An **orientation** → `AngularCoordinate` (Euler angles with normalization)
 - An **angular velocity** or **angular acceleration** → `AngularRate` (no normalization)
 
 **Verification strategy**: For each file modified in Phase C:
 1. Read surrounding code to confirm semantic intent
 2. Check function signatures for ADL/template specialization dependencies
-3. Verify no implicit conversions break (e.g., Coordinate → Eigen::Vector3d is safe due to inheritance)
+3. Verify no implicit conversions break (e.g., Coordinate → msd_sim::Vector3D is safe due to inheritance)
 4. Run full test suite after each file migration
 
 ## Test Impact
@@ -290,11 +290,11 @@ This phase requires manual review of each usage to determine semantic intent. Th
 | `AngularCoordinateTest.cpp` | All `[[nodiscard]]` usage | None | Tests unchanged, attribute removal is internal |
 | `AngularRateTest.cpp` | All `[[nodiscard]]` usage | None | Tests unchanged, attribute removal is internal |
 | `CoordinateTest.cpp` | Explicit ctor tests | **Breaking** | Remove tests verifying explicit constructor behavior (Phase D) |
-| `ContactConstraintFactoryTest.cpp` | Normal vector construction | **Minor** | Update type expectations `CoordinateRate` → `Eigen::Vector3d` |
-| `FrictionConstraintTest.cpp` | Tangent basis construction | **Minor** | Update type expectations `Coordinate` → `Eigen::Vector3d` |
-| `TangentBasisTest.cpp` | Tangent frame validation | **Minor** | Update type expectations `Coordinate` → `Eigen::Vector3d` |
-| `CollisionHandlerTest.cpp` | CollisionResult normal checks | **Minor** | Update type expectations `CoordinateRate` → `Eigen::Vector3d` |
-| `EPATest.cpp` | Contact normal assertions | **Minor** | Update type expectations `CoordinateRate` → `Eigen::Vector3d` |
+| `ContactConstraintFactoryTest.cpp` | Normal vector construction | **Minor** | Update type expectations `CoordinateRate` → `msd_sim::Vector3D` |
+| `FrictionConstraintTest.cpp` | Tangent basis construction | **Minor** | Update type expectations `Coordinate` → `msd_sim::Vector3D` |
+| `TangentBasisTest.cpp` | Tangent frame validation | **Minor** | Update type expectations `Coordinate` → `msd_sim::Vector3D` |
+| `CollisionHandlerTest.cpp` | CollisionResult normal checks | **Minor** | Update type expectations `CoordinateRate` → `msd_sim::Vector3D` |
+| `EPATest.cpp` | Contact normal assertions | **Minor** | Update type expectations `CoordinateRate` → `msd_sim::Vector3D` |
 
 ### New Tests Required
 
@@ -315,11 +315,11 @@ This phase requires manual review of each usage to determine semantic intent. Th
 
 | Test Case | Components Involved | What It Validates |
 |-----------|---------------------|-------------------|
-| Collision normal type | CollisionHandler, CollisionResult | Eigen::Vector3d normal in CollisionResult |
-| Contact constraint normal | ContactConstraintFactory, ContactConstraint | Eigen::Vector3d normal passed to constraint |
-| Friction tangents | FrictionConstraint, TangentBasis | Eigen::Vector3d tangents in friction constraint |
-| Facet normal usage | ConvexHull, Facet | Eigen::Vector3d facet normal in hull |
-| GJK search direction | GJK algorithm | Eigen::Vector3d search direction |
+| Collision normal type | CollisionHandler, CollisionResult | msd_sim::Vector3D normal in CollisionResult |
+| Contact constraint normal | ContactConstraintFactory, ContactConstraint | msd_sim::Vector3D normal passed to constraint |
+| Friction tangents | FrictionConstraint, TangentBasis | msd_sim::Vector3D tangents in friction constraint |
+| Facet normal usage | ConvexHull, Facet | msd_sim::Vector3D facet normal in hull |
+| GJK search direction | GJK algorithm | msd_sim::Vector3D search direction |
 
 #### Regression Tests
 
@@ -343,7 +343,7 @@ This phase requires manual review of each usage to determine semantic intent. Th
 
 1. **CoordinateRate Removal Scope**
    - Option A: Remove CoordinateRate entirely in Phase C — Pros: Eliminates confusion, honest about semantics. Cons: Requires updating ~50+ files.
-   - Option B: Keep CoordinateRate as alias to Eigen::Vector3d — Pros: Minimal breaking changes. Cons: Perpetuates semantic ambiguity.
+   - Option B: Keep CoordinateRate as alias to msd_sim::Vector3D — Pros: Minimal breaking changes. Cons: Perpetuates semantic ambiguity.
    - **Recommendation**: Option A. The semantic confusion is the root problem. An alias would preserve the confusion while adding no value.
 
 2. **Vec3FormatterBase Location**
@@ -368,7 +368,7 @@ This phase requires manual review of each usage to determine semantic intent. Th
 
 6. **Final Specifier Placement**
    - **Confirmed**: Add `final` to Coordinate, AngularCoordinate, AngularRate (per constraint from ticket)
-   - **Rationale**: Eigen::Vector3d has non-virtual destructor, deleting through base pointer is UB
+   - **Rationale**: msd_sim::Vector3D has non-virtual destructor, deleting through base pointer is UB
    - **No human input needed** — required by C++ standard to prevent UB
 
 ### Prototype Required
@@ -376,7 +376,7 @@ This phase requires manual review of each usage to determine semantic intent. Th
 None. The design consists of:
 - **Phase A**: Mechanical text replacements (no algorithm changes)
 - **Phase B**: Template refactoring with existing logic (no new algorithms)
-- **Phase C**: Type replacements (Eigen::Vector3d already in use, just changing where)
+- **Phase C**: Type replacements (msd_sim::Vector3D already in use, just changing where)
 - **Phase D**: Constructor simplification (removing explicit keyword, validated pattern)
 
 All changes are deterministic refactorings of existing code. No performance characteristics to validate.
@@ -431,7 +431,7 @@ All changes are deterministic refactorings of existing code. No performance char
 
 **Design for const-correctness**: All phases preserve existing const-correctness.
 - Coordinate/AngularCoordinate/AngularRate already have const accessors
-- Phase C type replacements do not affect const propagation (Eigen::Vector3d has const methods)
+- Phase C type replacements do not affect const propagation (msd_sim::Vector3D has const methods)
 - No new mutable state introduced
 
 ### Performance Considerations
@@ -444,7 +444,7 @@ All changes are deterministic refactorings of existing code. No performance char
 3. Friction constraint evaluation — Uses tangent vectors
 4. Physics integration — Uses forces, torques
 
-**Expected performance impact**: **Zero**. Eigen::Vector3d vs CoordinateRate are identical at machine code level (both inherit from Eigen::Vector3d). Phase C is changing compile-time types only, not runtime behavior.
+**Expected performance impact**: **Zero**. msd_sim::Vector3D vs CoordinateRate are identical at machine code level (both inherit from msd_sim::Vector3D). Phase C is changing compile-time types only, not runtime behavior.
 
 **Benchmark requirements**: None. No algorithmic changes, no new operations, no performance-sensitive refactoring.
 
@@ -522,12 +522,12 @@ All changes are deterministic refactorings of existing code. No performance char
 ### Phase C: Semantic Type Cleanup
 
 **Files to modify** (exhaustive list via grep):
-1. `msd/msd-sim/src/Physics/RigidBody/InertialState.hpp` — `Coordinate velocity` → `Eigen::Vector3d velocity`, `Coordinate acceleration` → `Eigen::Vector3d acceleration` (broadest downstream impact, ~50+ consumer files)
-2. `msd/msd-sim/src/DataTypes/Facet.hpp` — Line 30: `CoordinateRate normal` → `Eigen::Vector3d normal`
-3. `msd/msd-sim/src/Physics/Collision/CollisionResult.hpp` — Line 82: `CoordinateRate normal` → `Eigen::Vector3d normal`
-4. `msd/msd-sim/src/Physics/Constraints/ContactConstraint.hpp` — `CoordinateRate contactNormal_` → `Eigen::Vector3d contactNormal_`
-5. `msd/msd-sim/src/Physics/Constraints/FrictionConstraint.hpp` — `Coordinate tangent1_/tangent2_` → `Eigen::Vector3d tangent1_/tangent2_`
-6. `msd/msd-sim/src/Physics/Collision/TangentBasis.hpp` — `Coordinate t1/t2` → `Eigen::Vector3d t1/t2`
+1. `msd/msd-sim/src/Physics/RigidBody/InertialState.hpp` — `Coordinate velocity` → `msd_sim::Vector3D velocity`, `Coordinate acceleration` → `msd_sim::Vector3D acceleration` (broadest downstream impact, ~50+ consumer files)
+2. `msd/msd-sim/src/DataTypes/Facet.hpp` — Line 30: `CoordinateRate normal` → `msd_sim::Vector3D normal`
+3. `msd/msd-sim/src/Physics/Collision/CollisionResult.hpp` — Line 82: `CoordinateRate normal` → `msd_sim::Vector3D normal`
+4. `msd/msd-sim/src/Physics/Constraints/ContactConstraint.hpp` — `CoordinateRate contactNormal_` → `msd_sim::Vector3D contactNormal_`
+5. `msd/msd-sim/src/Physics/Constraints/FrictionConstraint.hpp` — `Coordinate tangent1_/tangent2_` → `msd_sim::Vector3D tangent1_/tangent2_`
+6. `msd/msd-sim/src/Physics/Collision/TangentBasis.hpp` — `Coordinate t1/t2` → `msd_sim::Vector3D t1/t2`
 7. `msd/msd-sim/src/Physics/Collision/GJK.hpp` — Search direction usages
 8. `msd/msd-sim/src/Physics/Collision/EPA.cpp` — Face normal usages
 9. **All downstream files** referencing `InertialState::velocity` or `InertialState::acceleration` — mechanical migration (accessors identical)
@@ -536,7 +536,7 @@ All changes are deterministic refactorings of existing code. No performance char
 **Migration strategy**:
 1. For each file, run `grep -n "CoordinateRate\|Coordinate" <file>` to identify all usages
 2. Manually review each usage context to determine semantic intent
-3. Replace with `Eigen::Vector3d` if quantity is direction/normal/force
+3. Replace with `msd_sim::Vector3D` if quantity is direction/normal/force
 4. **Keep as Coordinate** if quantity is truly a position/displacement (e.g., lever arms)
 5. Update function signatures if parameter types change
 6. Check for ADL or template specialization dependencies (unlikely for these files)
@@ -595,12 +595,12 @@ After all four phases:
 
 #### BLOCKER-1: Eigen Memory Alignment (DISMISSED — False Positive)
 
-**Gemini's concern**: Replacing `CoordinateRate` with `Eigen::Vector3d` in struct members could cause alignment-related segfaults if containers don't use `EIGEN_MAKE_ALIGNED_OPERATOR_NEW`.
+**Gemini's concern**: Replacing `CoordinateRate` with `msd_sim::Vector3D` in struct members could cause alignment-related segfaults if containers don't use `EIGEN_MAKE_ALIGNED_OPERATOR_NEW`.
 
-**Verdict**: **Not applicable.** `Eigen::Vector3d` is 24 bytes (3 × 8-byte doubles), which is NOT a multiple of 16 bytes. Eigen's special alignment requirements only apply to "fixed-size vectorizable" types (e.g., `Vector4d` at 32 bytes, `Vector2d` at 16 bytes). `Vector3d` uses natural 8-byte alignment. Confirmed:
+**Verdict**: **Not applicable.** `msd_sim::Vector3D` is 24 bytes (3 × 8-byte doubles), which is NOT a multiple of 16 bytes. Eigen's special alignment requirements only apply to "fixed-size vectorizable" types (e.g., `Vector4d` at 32 bytes, `Vector2d` at 16 bytes). `Vector3d` uses natural 8-byte alignment. Confirmed:
 - No `EIGEN_MAKE_ALIGNED_OPERATOR_NEW` usage in codebase (not needed)
 - No `EIGEN_MAX_ALIGN_BYTES` configuration (default is correct)
-- All affected structs (`Facet`, `CollisionResult`, `ContactConstraint`, `FrictionConstraint`) already store `Coordinate`/`CoordinateRate` members that inherit `Eigen::Vector3d` with identical layout
+- All affected structs (`Facet`, `CollisionResult`, `ContactConstraint`, `FrictionConstraint`) already store `Coordinate`/`CoordinateRate` members that inherit `msd_sim::Vector3D` with identical layout
 
 **No design change required.**
 
@@ -611,15 +611,15 @@ After all four phases:
 **Verdict**: **Valid.** `InertialState` currently uses `Coordinate` (position type) for `velocity` and `acceleration`. This is a pre-existing semantic misuse not introduced by this ticket, but if we're cleaning up semantic types, it should be addressed.
 
 **Design change**: Add `InertialState` to the Phase C migration table:
-- `InertialState::velocity` → `Eigen::Vector3d` (linear velocity, not a position)
-- `InertialState::acceleration` → `Eigen::Vector3d` (linear acceleration, not a position)
+- `InertialState::velocity` → `msd_sim::Vector3D` (linear velocity, not a position)
+- `InertialState::acceleration` → `msd_sim::Vector3D` (linear acceleration, not a position)
 - `InertialState::position` → Keep as `Coordinate` (semantically a position)
 
 This change has broad downstream impact since `InertialState` is used in 50+ files. The migration is mechanical (`.x()`, `.y()`, `.z()` accessors work identically on both types) but must be added to the Phase C scope estimate.
 
 #### MAJOR-1: Vec3Base Hierarchy Inconsistency (ACCEPTED — Design Decision Needed)
 
-**Gemini's concern**: `Coordinate` uses `Vec3Base<Coordinate>` CRTP, but `AngularCoordinate` and `AngularRate` inherit directly from `Eigen::Vector3d`. This creates inconsistency.
+**Gemini's concern**: `Coordinate` uses `Vec3Base<Coordinate>` CRTP, but `AngularCoordinate` and `AngularRate` inherit directly from `msd_sim::Vector3D`. This creates inconsistency.
 
 **Verdict**: **Valid observation, but intentional.** `AngularCoordinate` cannot use `Vec3Base` because it adds normalization logic in constructors and compound operators that `Vec3Base` doesn't provide. `AngularRate` could use `Vec3Base` but was implemented separately in ticket 0024 (before `Vec3Base` existed in its current form).
 
@@ -661,7 +661,7 @@ This eliminates the `decltype([...])` portability concern entirely.
 
 #### INFO: Include Dependency (DISMISSED — No Impact)
 
-**Gemini's concern**: Replacing `CoordinateRate` with `Eigen::Vector3d` may require adding `<Eigen/Dense>` includes.
+**Gemini's concern**: Replacing `CoordinateRate` with `msd_sim::Vector3D` may require adding `<Eigen/Dense>` includes.
 
 **Verdict**: **No impact.** All files that currently include `Coordinate.hpp` (which defines `CoordinateRate`) already transitively include `<Eigen/Dense>` because `Coordinate.hpp` includes it. Replacing the type doesn't change include dependencies.
 
@@ -691,7 +691,7 @@ This eliminates the `decltype([...])` portability concern entirely.
 
 ### Executive Summary
 
-This design comprehensively addresses accumulated technical debt and semantic misuse in the DataType system through a well-structured four-phase refactoring. The phased approach (A: code quality → B: formatter consolidation → C: semantic cleanup → D: constructor simplification) minimizes risk and rework. The design correctly identifies the root cause (semantic type confusion) and proposes a pragmatic solution (use raw `Eigen::Vector3d` for generic vectors) that respects the "don't fight the linter when you're wrong" principle while appropriately suppressing it when the code is correct (mathematical types are the canonical exception to explicit constructors).
+This design comprehensively addresses accumulated technical debt and semantic misuse in the DataType system through a well-structured four-phase refactoring. The phased approach (A: code quality → B: formatter consolidation → C: semantic cleanup → D: constructor simplification) minimizes risk and rework. The design correctly identifies the root cause (semantic type confusion) and proposes a pragmatic solution (use raw `msd_sim::Vector3D` for generic vectors) that respects the "don't fight the linter when you're wrong" principle while appropriately suppressing it when the code is correct (mathematical types are the canonical exception to explicit constructors).
 
 The design demonstrates strong architectural judgment by rejecting composition-based workarounds (correctly identifying that Eigen inheritance + `using Base::operator=` is the standard pattern) and by executing semantic cleanup (Phase C) before constructor simplification (Phase D) to avoid refactoring constructors for code about to be deleted.
 
@@ -715,21 +715,21 @@ The design demonstrates strong architectural judgment by rejecting composition-b
 | RAII usage | ✓ | No RAII changes. Existing value semantics preserved. |
 | Smart pointer appropriateness | ✓ | No smart pointers involved. Pure value types throughout. |
 | Value/reference semantics | ✓ | All types remain value types (24 bytes). No semantic changes beyond improved type safety via removal of `CoordinateRate`. |
-| Rule of 0/3/5 | ✓ | **Critical**: Design adds `final` specifier to prevent base-pointer deletion UB (non-virtual `Eigen::Vector3d` destructor). Rule of Zero preserved with explicit `= default` as per project convention. |
+| Rule of 0/3/5 | ✓ | **Critical**: Design adds `final` specifier to prevent base-pointer deletion UB (non-virtual `msd_sim::Vector3D` destructor). Rule of Zero preserved with explicit `= default` as per project convention. |
 | Const correctness | ✓ | No const changes. Existing const accessors preserved. |
 | Exception safety | ✓ | No exception handling changes. Deferred normalization logic unchanged (basic guarantee). |
 | Initialization | ✓ | Existing brace initialization preserved. NaN for uninitialized floats not applicable (these are initialized coordinate types). |
 | Return values | ✓ | No new functions with output parameters. Existing return-value pattern preserved. |
 
-**Critical Safety Note**: The `final` specifier addition in Phase D is **essential** to prevent undefined behavior. `Eigen::Vector3d` has a non-virtual destructor, so deleting `Coordinate*`/`AngularCoordinate*` through `Eigen::Vector3d*` would be UB. The design correctly addresses this.
+**Critical Safety Note**: The `final` specifier addition in Phase D is **essential** to prevent undefined behavior. `msd_sim::Vector3D` has a non-virtual destructor, so deleting `Coordinate*`/`AngularCoordinate*` through `msd_sim::Vector3D*` would be UB. The design correctly addresses this.
 
 #### Feasibility
 
 | Criterion | Pass/Fail | Notes |
 |-----------|-----------|-------|
-| Header dependencies | ✓ | All affected files already include `<Eigen/Dense>` transitively via `Coordinate.hpp`. Phase C replacement with `Eigen::Vector3d` adds zero new includes. |
+| Header dependencies | ✓ | All affected files already include `<Eigen/Dense>` transitively via `Coordinate.hpp`. Phase C replacement with `msd_sim::Vector3D` adds zero new includes. |
 | Template complexity | ✓ | `Vec3FormatterBase<T>` is simple template (no SFINAE, no variadic packs). Function template for `formatComponents()` accessor avoids `decltype([...])` portability issues (per Gemini review feedback). |
-| Memory strategy | ✓ | Zero memory impact. `Eigen::Vector3d` and `CoordinateRate` are identical at machine code level (both 24 bytes, same layout). |
+| Memory strategy | ✓ | Zero memory impact. `msd_sim::Vector3D` and `CoordinateRate` are identical at machine code level (both 24 bytes, same layout). |
 | Thread safety | ✓ | No thread-safety changes. AngularCoordinate normalization is deferred (on write), not lazy (on read). No `mutable` members. |
 | Build integration | ✓ | No CMakeLists.txt changes required. Phase C removes `CoordinateRate` from `Coordinate.hpp`, no source file additions. Phase B adds no new source files (formatter is header-only in `std` namespace). |
 
@@ -760,9 +760,9 @@ This is **exemplary** test planning that goes beyond typical unit tests to catch
 | R4 | InertialState migration scope underestimated | Technical | Low | Medium | Design identifies ~50+ consumers. Mechanical migration (accessors identical). Per-file compilation gate. | No |
 
 **R1 Analysis**: The design correctly identifies ADL and template specialization as potential breakage vectors (Technical Risk 5 in ticket, line 149). Mitigation is appropriate (manual review per signature change). Likelihood is Low because:
-- `Coordinate` and `CoordinateRate` both inherit `Eigen::Vector3d` (ADL set unchanged)
+- `Coordinate` and `CoordinateRate` both inherit `msd_sim::Vector3D` (ADL set unchanged)
 - No known template specializations on `Coordinate`/`CoordinateRate` in codebase
-- Replacing with `Eigen::Vector3d` *narrows* the ADL set (base class only), which is safer than widening
+- Replacing with `msd_sim::Vector3D` *narrows* the ADL set (base class only), which is safer than widening
 
 **R2 Analysis**: This is a known trade-off. The design documents the limitation (line 147, line 164) and accepts it as the cost of implicit Eigen constructors. This is the correct decision—attempting to close this gap would require wrapping all Eigen accessors, defeating the purpose of inheritance and violating the Constraint "Do not use composition for Eigen types" (line 163).
 
@@ -775,7 +775,7 @@ This is **exemplary** test planning that goes beyond typical unit tests to catch
 **No prototypes required**. All changes are deterministic refactorings:
 - **Phase A**: Text replacements (syntactic cleanup)
 - **Phase B**: Template refactoring with existing logic (no new algorithms)
-- **Phase C**: Type replacements (`Eigen::Vector3d` already in use, just changing where)
+- **Phase C**: Type replacements (`msd_sim::Vector3D` already in use, just changing where)
 - **Phase D**: Constructor simplification (removing `explicit`, validated pattern from Eigen ecosystem)
 
 **Validation**: The ticket's prototype P1 from 0024 already validated deferred normalization (line 138-142). No new performance characteristics to prototype.
@@ -802,11 +802,11 @@ This demonstrates strategic thinking about change sequencing.
 
 #### Semantic Clarity Wins
 
-The decision to use raw `Eigen::Vector3d` for normals, forces, directions (Q2 recommendation, line 122) is **architecturally sound**:
+The decision to use raw `msd_sim::Vector3D` for normals, forces, directions (Q2 recommendation, line 122) is **architecturally sound**:
 - **Honest naming**: A normal vector is not a position. Using `Coordinate` for normals is a lie.
 - **Type proliferation avoided**: Alternative (introduce `Direction3` type) creates "type hell" with no semantic value
-- **Eigen interoperability**: `Eigen::Vector3d` is the lingua franca of the Eigen ecosystem
-- **Precedent**: InertialState already uses `Eigen::Vector3d` for quaternionRate and inverseInertiaTensor
+- **Eigen interoperability**: `msd_sim::Vector3D` is the lingua franca of the Eigen ecosystem
+- **Precedent**: InertialState already uses `msd_sim::Vector3D` for quaternionRate and inverseInertiaTensor
 
 The ticket author's assessment "The current two-type system forces these quantities into ill-fitting semantic boxes" (line 62) is correct. This design fixes the root cause.
 
@@ -828,7 +828,7 @@ The decision to suppress `google-explicit-constructor` via per-line `// NOLINT` 
 - Alternative (CRTP/policy workarounds) would be engineering solely to satisfy a linter—overengineering
 - Per-line NOLINT is scoped and auditable
 
-The design correctly rejects composition (Q1 option D, line 113) because wrapping `Eigen::Vector3d` would require forwarding dozens of methods and lose expression template machinery.
+The design correctly rejects composition (Q1 option D, line 113) because wrapping `msd_sim::Vector3D` would require forwarding dozens of methods and lose expression template machinery.
 
 #### Migration Risk Mitigation is Comprehensive
 

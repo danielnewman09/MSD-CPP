@@ -3,8 +3,8 @@
 // Purpose: Test lazy normalization with writeback in assignment (not accessor)
 //          and variable threshold bounds
 
-#include <Eigen/Dense>
 #include <benchmark/benchmark.h>
+#include <Eigen/Dense>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -24,29 +24,32 @@ inline double normalizeAngle(double rad)
 // Strategy 1: Eager Always (baseline - normalize on every write)
 // =============================================================================
 
-class AngularCoordinate_EagerAlways : public Eigen::Vector3d
+class AngularCoordinate_EagerAlways : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_EagerAlways() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_EagerAlways() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
   AngularCoordinate_EagerAlways(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{normalizeAngle(pitch), normalizeAngle(roll), normalizeAngle(yaw)}
+    : msd_sim::Vector3D{normalizeAngle(pitch),
+                        normalizeAngle(roll),
+                        normalizeAngle(yaw)}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_EagerAlways(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
     normalizeInPlace();
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_EagerAlways& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_EagerAlways& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     normalizeInPlace();
     return *this;
   }
@@ -78,31 +81,33 @@ private:
 // Normalize in assignment only when |angle| > PI
 // =============================================================================
 
-class AngularCoordinate_DeferredPI : public Eigen::Vector3d
+class AngularCoordinate_DeferredPI : public msd_sim::Vector3D
 {
 public:
   static constexpr double kThreshold = M_PI;
 
-  AngularCoordinate_DeferredPI() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_DeferredPI() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
-  AngularCoordinate_DeferredPI(double pitch, double roll, double yaw) : Eigen::Vector3d{pitch, roll, yaw}
+  AngularCoordinate_DeferredPI(double pitch, double roll, double yaw)
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
     normalizeIfNeeded();
   }
 
   template <typename OtherDerived>
   AngularCoordinate_DeferredPI(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
     normalizeIfNeeded();
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_DeferredPI& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_DeferredPI& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     normalizeIfNeeded();
     return *this;
   }
@@ -145,32 +150,33 @@ private:
 // Normalize only when |angle| > 10*PI (~5 revolutions)
 // =============================================================================
 
-class AngularCoordinate_Deferred10PI : public Eigen::Vector3d
+class AngularCoordinate_Deferred10PI : public msd_sim::Vector3D
 {
 public:
   static constexpr double kThreshold = 10.0 * M_PI;
 
-  AngularCoordinate_Deferred10PI() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_Deferred10PI() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
   AngularCoordinate_Deferred10PI(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw}
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
     normalizeIfNeeded();
   }
 
   template <typename OtherDerived>
   AngularCoordinate_Deferred10PI(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
     normalizeIfNeeded();
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_Deferred10PI& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Deferred10PI& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     normalizeIfNeeded();
     return *this;
   }
@@ -211,32 +217,33 @@ private:
 // Normalize only when |angle| > 100*PI (~50 revolutions)
 // =============================================================================
 
-class AngularCoordinate_Deferred100PI : public Eigen::Vector3d
+class AngularCoordinate_Deferred100PI : public msd_sim::Vector3D
 {
 public:
   static constexpr double kThreshold = 100.0 * M_PI;
 
-  AngularCoordinate_Deferred100PI() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_Deferred100PI() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
   AngularCoordinate_Deferred100PI(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw}
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
     normalizeIfNeeded();
   }
 
   template <typename OtherDerived>
   AngularCoordinate_Deferred100PI(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
     normalizeIfNeeded();
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_Deferred100PI& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Deferred100PI& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     normalizeIfNeeded();
     return *this;
   }
@@ -276,27 +283,29 @@ private:
 // Strategy 5: Never Normalize (baseline for accessor speed)
 // =============================================================================
 
-class AngularCoordinate_Never : public Eigen::Vector3d
+class AngularCoordinate_Never : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_Never() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_Never() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
-  AngularCoordinate_Never(double pitch, double roll, double yaw) : Eigen::Vector3d{pitch, roll, yaw}
+  AngularCoordinate_Never(double pitch, double roll, double yaw)
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_Never(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_Never& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Never& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -341,7 +350,8 @@ std::vector<T> generateData()
 static auto gDataEagerAlways = generateData<AngularCoordinate_EagerAlways>();
 static auto gDataDeferredPI = generateData<AngularCoordinate_DeferredPI>();
 static auto gDataDeferred10PI = generateData<AngularCoordinate_Deferred10PI>();
-static auto gDataDeferred100PI = generateData<AngularCoordinate_Deferred100PI>();
+static auto gDataDeferred100PI =
+  generateData<AngularCoordinate_Deferred100PI>();
 static auto gDataNever = generateData<AngularCoordinate_Never>();
 
 static void BM_Accessor_EagerAlways(benchmark::State& state)
@@ -486,7 +496,7 @@ BENCHMARK(BM_Construction_Never_NearPI);
 static void BM_PhysicsUpdate_EagerAlways(benchmark::State& state)
 {
   AngularCoordinate_EagerAlways orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
   double dt = 0.01;
 
   for (auto _ : state)
@@ -500,7 +510,7 @@ BENCHMARK(BM_PhysicsUpdate_EagerAlways);
 static void BM_PhysicsUpdate_DeferredPI(benchmark::State& state)
 {
   AngularCoordinate_DeferredPI orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
   double dt = 0.01;
 
   for (auto _ : state)
@@ -514,7 +524,7 @@ BENCHMARK(BM_PhysicsUpdate_DeferredPI);
 static void BM_PhysicsUpdate_Deferred10PI(benchmark::State& state)
 {
   AngularCoordinate_Deferred10PI orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
   double dt = 0.01;
 
   for (auto _ : state)
@@ -528,7 +538,7 @@ BENCHMARK(BM_PhysicsUpdate_Deferred10PI);
 static void BM_PhysicsUpdate_Deferred100PI(benchmark::State& state)
 {
   AngularCoordinate_Deferred100PI orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
   double dt = 0.01;
 
   for (auto _ : state)
@@ -542,7 +552,7 @@ BENCHMARK(BM_PhysicsUpdate_Deferred100PI);
 static void BM_PhysicsUpdate_Never(benchmark::State& state)
 {
   AngularCoordinate_Never orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
   double dt = 0.01;
 
   for (auto _ : state)
@@ -652,7 +662,7 @@ static void BM_LongSim_EagerAlways(benchmark::State& state)
   for (auto _ : state)
   {
     AngularCoordinate_EagerAlways orientation{0.0, 0.0, 0.0};
-    Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+    msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
     double dt = 0.01;
 
     for (int i = 0; i < 1000; ++i)
@@ -669,7 +679,7 @@ static void BM_LongSim_DeferredPI(benchmark::State& state)
   for (auto _ : state)
   {
     AngularCoordinate_DeferredPI orientation{0.0, 0.0, 0.0};
-    Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+    msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
     double dt = 0.01;
 
     for (int i = 0; i < 1000; ++i)
@@ -686,7 +696,7 @@ static void BM_LongSim_Deferred10PI(benchmark::State& state)
   for (auto _ : state)
   {
     AngularCoordinate_Deferred10PI orientation{0.0, 0.0, 0.0};
-    Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+    msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
     double dt = 0.01;
 
     for (int i = 0; i < 1000; ++i)
@@ -703,7 +713,7 @@ static void BM_LongSim_Deferred100PI(benchmark::State& state)
   for (auto _ : state)
   {
     AngularCoordinate_Deferred100PI orientation{0.0, 0.0, 0.0};
-    Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+    msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
     double dt = 0.01;
 
     for (int i = 0; i < 1000; ++i)
@@ -720,7 +730,7 @@ static void BM_LongSim_Never(benchmark::State& state)
   for (auto _ : state)
   {
     AngularCoordinate_Never orientation{0.0, 0.0, 0.0};
-    Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+    msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
     double dt = 0.01;
 
     for (int i = 0; i < 1000; ++i)

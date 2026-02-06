@@ -10,6 +10,8 @@
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
 #include "msd-sim/src/DataTypes/AngularRate.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Vector4D.hpp"
+#include "msd-transfer/src/InertialStateRecord.hpp"
 
 namespace msd_sim
 {
@@ -73,8 +75,8 @@ struct InertialState
    *
    * Formula: Q̇ = ½ * Q ⊗ [0, ω]
    */
-  static Eigen::Vector4d omegaToQuaternionRate(const AngularRate& omega,
-                                               const Eigen::Quaterniond& Q);
+  static Vector4D omegaToQuaternionRate(const AngularRate& omega,
+                                        const Eigen::Quaterniond& Q);
 
   /**
    * @brief Convert quaternion rate to angular velocity
@@ -84,8 +86,8 @@ struct InertialState
    *
    * Formula: ω = 2 * Q̄ ⊗ Q̇
    */
-  static Eigen::Vector3d quaternionRateToOmega(const Eigen::Vector4d& Qdot,
-                                               const Eigen::Quaterniond& Q);
+  static AngularRate quaternionRateToOmega(const Eigen::Vector4d& Qdot,
+                                           const Eigen::Quaterniond& Q);
 
   /**
    * @brief Get Euler angles from quaternion (deprecated, for backward

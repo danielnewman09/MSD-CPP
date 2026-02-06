@@ -655,7 +655,7 @@ Implemented a complete force application system for rigid body physics, enabling
 **Diagram**: [`angular-coordinate.puml`](../../docs/msd/msd-sim/Environment/angular-coordinate.puml)
 **Type**: Breaking Change
 
-Introduced two type-safe classes for angular quantity representation: `AngularCoordinate` for orientation with deferred normalization, and `AngularRate` for angular velocity/acceleration without normalization. Both inherit from `Eigen::Vector3d` for full matrix operations while providing semantic pitch/roll/yaw accessors.
+Introduced two type-safe classes for angular quantity representation: `AngularCoordinate` for orientation with deferred normalization, and `AngularRate` for angular velocity/acceleration without normalization. Both inherit from `msd_sim::Vector3D` for full matrix operations while providing semantic pitch/roll/yaw accessors.
 
 **Breaking changes**:
 - Removed `EulerAngles` class entirely
@@ -669,7 +669,7 @@ Introduced two type-safe classes for angular quantity representation: `AngularCo
 - **Type safety**: Prevents accidental assignment of rates to orientations (compile-time error)
 - **Performance**: Deferred normalization with 100π threshold is 10x faster than eager normalization (validated by prototypes)
 - **Semantic clarity**: `orientation.yaw()` vs `angularVelocity.yaw()` makes intent explicit
-- **Memory efficiency**: 24 bytes per instance (same as `Eigen::Vector3d`)
+- **Memory efficiency**: 24 bytes per instance (same as `msd_sim::Vector3D`)
 
 **Migration**:
 ```cpp

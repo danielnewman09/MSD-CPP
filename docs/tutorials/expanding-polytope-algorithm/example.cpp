@@ -1,14 +1,17 @@
 /**
  * @file example.cpp
- * @brief Standalone tutorial implementation of the Expanding Polytope Algorithm (EPA)
+ * @brief Standalone tutorial implementation of the Expanding Polytope Algorithm
+ * (EPA)
  *
- * This file demonstrates the EPA algorithm for computing collision contact information
- * (penetration depth, contact normal, contact point) from two colliding convex shapes.
+ * This file demonstrates the EPA algorithm for computing collision contact
+ * information (penetration depth, contact normal, contact point) from two
+ * colliding convex shapes.
  *
  * Production equivalent: msd-sim/src/Physics/EPA.hpp, EPA.cpp
  * The production version uses:
  * - Eigen-based Coordinate and CoordinateRate types
- * - Integration with AssetPhysical and ReferenceFrame for world-space transforms
+ * - Integration with AssetPhysical and ReferenceFrame for world-space
+ * transforms
  * - Robust simplex completion for edge cases
  * This tutorial version prioritizes readability and educational clarity.
  *
@@ -24,30 +27,55 @@
 
 // ============================================================================
 // Vec3: Simple 3D vector for tutorial clarity
-// Production equivalent: msd_sim::Coordinate (Eigen::Vector3d wrapper)
+// Production equivalent: msd_sim::Coordinate (msd_sim::Vector3D wrapper)
 // ============================================================================
 
 struct Vec3
 {
   double x, y, z;
 
-  Vec3() : x{0}, y{0}, z{0} {}
-  Vec3(double x_, double y_, double z_) : x{x_}, y{y_}, z{z_} {}
+  Vec3() : x{0}, y{0}, z{0}
+  {
+  }
+  Vec3(double x_, double y_, double z_) : x{x_}, y{y_}, z{z_}
+  {
+  }
 
-  Vec3 operator+(const Vec3& o) const { return {x + o.x, y + o.y, z + o.z}; }
-  Vec3 operator-(const Vec3& o) const { return {x - o.x, y - o.y, z - o.z}; }
-  Vec3 operator*(double s) const { return {x * s, y * s, z * s}; }
-  Vec3 operator/(double s) const { return {x / s, y / s, z / s}; }
-  Vec3 operator-() const { return {-x, -y, -z}; }
+  Vec3 operator+(const Vec3& o) const
+  {
+    return {x + o.x, y + o.y, z + o.z};
+  }
+  Vec3 operator-(const Vec3& o) const
+  {
+    return {x - o.x, y - o.y, z - o.z};
+  }
+  Vec3 operator*(double s) const
+  {
+    return {x * s, y * s, z * s};
+  }
+  Vec3 operator/(double s) const
+  {
+    return {x / s, y / s, z / s};
+  }
+  Vec3 operator-() const
+  {
+    return {-x, -y, -z};
+  }
 
-  double dot(const Vec3& o) const { return x * o.x + y * o.y + z * o.z; }
+  double dot(const Vec3& o) const
+  {
+    return x * o.x + y * o.y + z * o.z;
+  }
 
   Vec3 cross(const Vec3& o) const
   {
     return {y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x};
   }
 
-  double norm() const { return std::sqrt(x * x + y * y + z * z); }
+  double norm() const
+  {
+    return std::sqrt(x * x + y * y + z * z);
+  }
 
   Vec3 normalized() const
   {
@@ -103,7 +131,8 @@ struct ConvexShape
 
 /**
  * @brief Create a unit cube centered at the origin
- * @return ConvexShape with 8 vertices forming a cube from (-0.5,-0.5,-0.5) to (0.5,0.5,0.5)
+ * @return ConvexShape with 8 vertices forming a cube from (-0.5,-0.5,-0.5) to
+ * (0.5,0.5,0.5)
  */
 ConvexShape createUnitCube()
 {
@@ -193,7 +222,8 @@ bool gjkIntersects(const ConvexShape& shapeA,
   simplex.clear();
 
   // Get 4 support points in different directions to form a tetrahedron
-  Vec3 dirs[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+  Vec3 dirs[6] = {
+    {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
 
   // First, check if shapes are separated in any cardinal direction
   for (int i = 0; i < 6; ++i)
@@ -222,7 +252,9 @@ bool gjkIntersects(const ConvexShape& shapeA,
   Vec3 origin{0, 0, 0};
 
   // Compute signed volumes
-  auto signedVolume = [](const Vec3& p1, const Vec3& p2, const Vec3& p3, const Vec3& p4) {
+  auto signedVolume =
+    [](const Vec3& p1, const Vec3& p2, const Vec3& p3, const Vec3& p4)
+  {
     Vec3 v1 = p2 - p1, v2 = p3 - p1, v3 = p4 - p1;
     return v1.dot(v2.cross(v3));
   };
@@ -234,7 +266,8 @@ bool gjkIntersects(const ConvexShape& shapeA,
   double d4 = signedVolume(a, b, c, origin);
 
   // Origin is inside if all barycentric coordinates have the same sign
-  bool inside = sameSign(d0, d1) && sameSign(d0, d2) && sameSign(d0, d3) && sameSign(d0, d4);
+  bool inside = sameSign(d0, d1) && sameSign(d0, d2) && sameSign(d0, d3) &&
+                sameSign(d0, d4);
 
   return inside;
 }
@@ -257,7 +290,9 @@ struct EPAFace
   Vec3 normal;                     // Outward-facing unit normal
   double distance;                 // Distance from origin to face plane
 
-  EPAFace() : vertices{0, 0, 0}, normal{}, distance{0} {}
+  EPAFace() : vertices{0, 0, 0}, normal{}, distance{0}
+  {
+  }
   EPAFace(size_t v0, size_t v1, size_t v2, const Vec3& n, double d)
     : vertices{v0, v1, v2}, normal{n}, distance{d}
   {
@@ -274,7 +309,9 @@ struct EPAEdge
 {
   size_t v0, v1;
 
-  EPAEdge(size_t a, size_t b) : v0{a}, v1{b} {}
+  EPAEdge(size_t a, size_t b) : v0{a}, v1{b}
+  {
+  }
 
   bool operator==(const EPAEdge& other) const
   {
@@ -291,9 +328,9 @@ struct EPAEdge
  */
 struct CollisionResult
 {
-  Vec3 normal;           // Contact normal (points from A toward B)
+  Vec3 normal;              // Contact normal (points from A toward B)
   double penetrationDepth;  // How far objects overlap
-  Vec3 contactPoint;     // Approximate contact location
+  Vec3 contactPoint;        // Approximate contact location
 };
 
 // ============================================================================
@@ -408,8 +445,8 @@ bool isVisible(const EPAFace& face,
  * 2. Identify the "horizon" - edges shared by exactly one visible face
  * 3. Remove visible faces
  *
- * The horizon forms the silhouette of visible faces as seen from the new vertex.
- * New faces will connect the new vertex to each horizon edge.
+ * The horizon forms the silhouette of visible faces as seen from the new
+ * vertex. New faces will connect the new vertex to each horizon edge.
  *
  * @param faces Polytope faces (will have visible faces removed)
  * @param vertices Polytope vertices
@@ -418,9 +455,9 @@ bool isVisible(const EPAFace& face,
  * @return Vector of horizon edges
  */
 std::vector<EPAEdge> buildHorizonEdges(std::vector<EPAFace>& faces,
-                                        const std::vector<Vec3>& vertices,
-                                        const Vec3& newVertex,
-                                        double epsilon = 1e-6)
+                                       const std::vector<Vec3>& vertices,
+                                       const Vec3& newVertex,
+                                       double epsilon = 1e-6)
 {
   std::vector<EPAEdge> horizon;
   std::vector<size_t> visibleFaceIndices;
@@ -462,12 +499,11 @@ std::vector<EPAEdge> buildHorizonEdges(std::vector<EPAFace>& faces,
     faces[idx].distance = std::numeric_limits<double>::infinity();
   }
 
-  faces.erase(std::remove_if(faces.begin(),
-                             faces.end(),
-                             [](const EPAFace& f) {
-                               return std::isinf(f.distance);
-                             }),
-              faces.end());
+  faces.erase(
+    std::remove_if(faces.begin(),
+                   faces.end(),
+                   [](const EPAFace& f) { return std::isinf(f.distance); }),
+    faces.end());
 
   return horizon;
 }
@@ -546,8 +582,8 @@ CollisionResult epa(const ConvexShape& shapeA,
     size_t closestIndex = findClosestFace(faces);
     const EPAFace& closestFace = faces[closestIndex];
 
-    std::cout << "  Iteration " << iteration << ": closest face distance = "
-              << closestFace.distance << "\n";
+    std::cout << "  Iteration " << iteration
+              << ": closest face distance = " << closestFace.distance << "\n";
 
     // Query new support point in direction of closest face normal
     Vec3 newPoint = supportMinkowski(shapeA, shapeB, closestFace.normal);
@@ -568,7 +604,7 @@ CollisionResult epa(const ConvexShape& shapeA,
 
     // Expand polytope
     std::vector<EPAEdge> horizon =
-        buildHorizonEdges(faces, vertices, newPoint, epsilon);
+      buildHorizonEdges(faces, vertices, newPoint, epsilon);
 
     // Add new vertex
     size_t newVertexIndex = vertices.size();
@@ -619,8 +655,8 @@ int main()
       // Expected: penetration ~0.3, normal ~(1, 0, 0)
       double expectedDepth = 0.3;
       std::cout << "  Expected depth: ~" << expectedDepth << "\n";
-      std::cout << "  Depth error: " << std::abs(result.penetrationDepth - expectedDepth)
-                << "\n";
+      std::cout << "  Depth error: "
+                << std::abs(result.penetrationDepth - expectedDepth) << "\n";
     }
     catch (const std::exception& e)
     {

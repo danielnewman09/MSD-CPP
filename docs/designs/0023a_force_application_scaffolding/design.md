@@ -526,7 +526,7 @@ The design will proceed to implementation only after human review and approval.
 
 | Issue ID | Original | Revised | Rationale |
 |----------|----------|---------|-----------|
-| I1 | N/A - Already consistent | Verified `Coordinate` used throughout | Design document already used `Coordinate` consistently for angular velocity/acceleration. Ticket acceptance criteria references `Eigen::Vector3d`, but design document is authoritative. |
+| I1 | N/A - Already consistent | Verified `Coordinate` used throughout | Design document already used `Coordinate` consistently for angular velocity/acceleration. Ticket acceptance criteria references `msd_sim::Vector3D`, but design document is authoritative. |
 | I2 | `Coordinate accumulatedTorque_{Coordinate::Zero()};` | `Coordinate accumulatedTorque_{0.0, 0.0, 0.0};` | `Coordinate` does not have a static `Zero()` method. Changed to brace initialization per project standards, matching `accumulatedForce_` initialization pattern. Also fixed in `clearForces()` placeholder implementation. |
 | I3 | Contradictory specification with both `setGravity()` and const-like initialization | Removed `setGravity()` method, kept only `getGravity()` accessor | Aligned with ticket requirement (line 76) specifying gravity is constant after construction. Removed `setGravity()` method from interface and placeholder implementations. Updated rationale to clarify gravity is not modifiable after construction. |
 
@@ -560,7 +560,7 @@ The design will proceed to implementation only after human review and approval.
 
 | ID | Issue | Category | Required Change |
 |----|-------|----------|-----------------|
-| I1 | Type inconsistency for angular velocity/acceleration | C++ Quality / Architectural Fit | Clarify whether to use `Coordinate` or `Eigen::Vector3d` and apply consistently |
+| I1 | Type inconsistency for angular velocity/acceleration | C++ Quality / Architectural Fit | Clarify whether to use `Coordinate` or `msd_sim::Vector3D` and apply consistently |
 | I2 | Invalid `Coordinate::Zero()` initialization | C++ Quality | Use correct initialization for `Coordinate` type (brace initialization `{0.0, 0.0, 0.0}`) |
 | I3 | WorldModel constructor contradiction | Feasibility | Clarify whether gravity_ is const or mutable and align setGravity() accordingly |
 
@@ -569,20 +569,20 @@ The design will proceed to implementation only after human review and approval.
 The following changes must be made before final review:
 
 1. **Issue I1 - Type Consistency for Angular Quantities**:
-   - **Problem**: The design document (lines 19, 54, 76) specifies `Coordinate` for `InertialState::angularVelocity` and `angularAcceleration`, but the ticket acceptance criteria (lines 115-116) and PlantUML diagram (lines 14-15) specify `Eigen::Vector3d`
+   - **Problem**: The design document (lines 19, 54, 76) specifies `Coordinate` for `InertialState::angularVelocity` and `angularAcceleration`, but the ticket acceptance criteria (lines 115-116) and PlantUML diagram (lines 14-15) specify `msd_sim::Vector3D`
    - **Impact**: This creates confusion about which type to use and would lead to compilation errors
    - **Required change**:
-     - Determine the correct type (recommend `Coordinate` since it inherits from `Eigen::Vector3d` and is already used for linear quantities)
+     - Determine the correct type (recommend `Coordinate` since it inherits from `msd_sim::Vector3D` and is already used for linear quantities)
      - Update ALL occurrences consistently in:
        - InertialState struct specification (line 51-55)
        - AssetInertial method signatures (lines 135, 179, 186)
        - Migration guide (lines 407, 411, 425)
        - PlantUML diagram references
      - If using `Coordinate`, update ticket acceptance criteria to reflect this
-     - If using `Eigen::Vector3d`, update design document to reflect this
+     - If using `msd_sim::Vector3D`, update design document to reflect this
 
 2. **Issue I2 - Invalid Initialization Syntax**:
-   - **Problem**: Line 161 shows `Coordinate accumulatedTorque_{Coordinate::Zero()};` but `Coordinate` does not have a static `Zero()` method (that's `Eigen::Vector3d::Zero()`)
+   - **Problem**: Line 161 shows `Coordinate accumulatedTorque_{Coordinate::Zero()};` but `Coordinate` does not have a static `Zero()` method (that's `msd_sim::Vector3D::Zero()`)
    - **Impact**: Would cause compilation error
    - **Required change**: Use brace initialization per project standards: `Coordinate accumulatedTorque_{0.0, 0.0, 0.0};` (consistent with `accumulatedForce_` on line 160)
    - **Also check**: AssetInertial placeholder implementations (line 195) for similar issues
@@ -651,7 +651,7 @@ All three issues from the initial assessment have been successfully resolved:
 
 | Issue ID | Status | Verification |
 |----------|--------|--------------|
-| I1 | ✓ RESOLVED | Verified `Coordinate` is used consistently throughout for angular velocity/acceleration. No `Eigen::Vector3d` references remain. Design document types match PlantUML diagram. |
+| I1 | ✓ RESOLVED | Verified `Coordinate` is used consistently throughout for angular velocity/acceleration. No `msd_sim::Vector3D` references remain. Design document types match PlantUML diagram. |
 | I2 | ✓ RESOLVED | All invalid `Coordinate::Zero()` calls replaced with correct brace initialization `{0.0, 0.0, 0.0}`. Verified in both member initialization (line 161) and placeholder implementation (line 193). |
 | I3 | ✓ RESOLVED | `gravity_` member is now non-const, `setGravity()` method added with placeholder implementation. Constructor contradiction eliminated. Ticket requirement for `setGravity()` satisfied. |
 
@@ -736,7 +736,7 @@ Three inconsistencies were identified and resolved:
 | Fix ID | Issue | Resolution | Verification |
 |--------|-------|------------|--------------|
 | Fix 1 | WorldModel Gravity (const, no setter) | Removed `setGravity()` method from interface and implementation | ✓ VERIFIED: Lines 213-214, 226-254 show only `getGravity()` accessor |
-| Fix 2 | Angular Velocity/Acceleration Type (use Coordinate) | Changed all `Eigen::Vector3d` references to `Coordinate` in ticket | ✓ VERIFIED: Design.md and PlantUML already used `Coordinate` correctly |
+| Fix 2 | Angular Velocity/Acceleration Type (use Coordinate) | Changed all `msd_sim::Vector3D` references to `Coordinate` in ticket | ✓ VERIFIED: Design.md and PlantUML already used `Coordinate` correctly |
 | Fix 3 | EulerAngles Helper Methods | Added `toCoordinate()` and `fromCoordinate()` to design | ✓ VERIFIED: New section added at lines 282-336 with interface and implementation |
 
 ### Consistency Verification

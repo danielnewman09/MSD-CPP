@@ -4,7 +4,7 @@
 #include <filesystem>
 #include <memory>
 
-#include "msd-sim/src/Environment/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/AngularRate.hpp"
 #include "msd-transfer/src/AngularRateRecord.hpp"
 
 namespace fs = std::filesystem;

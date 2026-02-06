@@ -468,9 +468,9 @@ TEST(MotionControllerTest, UpdateTransform_NoCommands_NoChange)
     10.0 * M_PI / 180.0, 20.0 * M_PI / 180.0, 30.0 * M_PI / 180.0};
   frame.setOrigin(initialOrigin);
   Eigen::Quaterniond q =
-    Eigen::AngleAxisd{initialAngles.yaw(), Eigen::Vector3d::UnitZ()} *
-    Eigen::AngleAxisd{initialAngles.pitch(), Eigen::Vector3d::UnitY()} *
-    Eigen::AngleAxisd{initialAngles.roll(), Eigen::Vector3d::UnitX()};
+    Eigen::AngleAxisd{initialAngles.yaw(), msd_sim::Vector3D::UnitZ()} *
+    Eigen::AngleAxisd{initialAngles.pitch(), msd_sim::Vector3D::UnitY()} *
+    Eigen::AngleAxisd{initialAngles.roll(), msd_sim::Vector3D::UnitX()};
   frame.setQuaternion(q);
 
   InputCommands commands;  // All false

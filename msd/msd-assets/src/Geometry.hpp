@@ -9,6 +9,7 @@
 
 #include <Eigen/Dense>
 
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
 
 namespace msd_assets
@@ -37,7 +38,7 @@ struct BoundingBox
  * @param vertices Source coordinate data
  */
 std::vector<Vertex> computeVertexData(
-  const std::vector<Eigen::Vector3d>& vertices);
+  const std::vector<msd_sim::Vector3D>& vertices);
 
 
 /**
@@ -56,14 +57,14 @@ class BaseGeometry
 public:
   /**
    * @brief Constructor from raw coordinate data
-   * @param rawVertices Vector of 3D coordinates (Eigen::Vector3d)
+   * @param rawVertices Vector of 3D coordinates (msd_sim::Vector3D)
    * @param objectId Unique identifier for the geometry
    *
    * For VisualGeometry (T=Vertex): Computes normals and converts to Vertex
-   * format. For CollisionGeometry (T=Eigen::Vector3d): Stores raw vertices
+   * format. For CollisionGeometry (T=msd_sim::Vector3D): Stores raw vertices
    * directly.
    */
-  explicit BaseGeometry(const std::vector<Eigen::Vector3d>& rawVertices,
+  explicit BaseGeometry(const std::vector<msd_sim::Vector3D>& rawVertices,
                         uint32_t objectId = 0)
     : objectId_{objectId}
   {
@@ -87,8 +88,8 @@ public:
    * Deserializes vertex data from the MeshRecord's vertex_data blob.
    * The blob must contain data in the correct format for type T:
    * - For VisualGeometry (T=Vertex): blob contains Vertex structs (36 bytes)
-   * - For CollisionGeometry (T=Eigen::Vector3d): blob contains Vector3d (24
-   * bytes)
+   * - For CollisionGeometry (T=msd_sim::Vector3D): blob contains
+   * msd_sim::Vector3d (24 bytes)
    */
   explicit BaseGeometry(const msd_transfer::MeshRecord& record,
                         uint32_t objectId = 0)
@@ -104,13 +105,13 @@ public:
 
     // Deserialize cached vertex data directly as type T
     const size_t vertexCount =
-      record.vertex_data.size() / sizeof(Eigen::Vector3d);
+      record.vertex_data.size() / sizeof(msd_sim::Vector3D);
     const auto* vertexBegin =
-      reinterpret_cast<const Eigen::Vector3d*>(record.vertex_data.data());
-    const Eigen::Vector3d* vertexEnd = vertexBegin + vertexCount;
+      reinterpret_cast<const msd_sim::Vector3D*>(record.vertex_data.data());
+    const msd_sim::Vector3D* vertexEnd = vertexBegin + vertexCount;
 
-    std::vector<Eigen::Vector3d> const vertices =
-      std::vector<Eigen::Vector3d>(vertexBegin, vertexEnd);
+    std::vector<msd_sim::Vector3D> const vertices =
+      std::vector<msd_sim::Vector3D>(vertexBegin, vertexEnd);
 
     if constexpr (std::is_same_v<T, Vertex>)
     {
@@ -177,8 +178,8 @@ public:
     const size_t vertexBlobSize = cachedVertices_.size() * sizeof(T);
     record.vertex_data.resize(vertexBlobSize);
     static_assert(
-      std::is_trivially_copyable_v<T> || std::is_same_v<T, Eigen::Vector3d>,
-      "T must be trivially copyable or Eigen::Vector3d");
+      std::is_trivially_copyable_v<T> || std::is_same_v<T, msd_sim::Vector3D>,
+      "T must be trivially copyable or msd_sim::Vector3D");
     // NOLINTNEXTLINE(bugprone-undefined-memory-manipulation)
     std::memcpy(
       record.vertex_data.data(), cachedVertices_.data(), vertexBlobSize);
@@ -192,7 +193,7 @@ private:
   std::vector<T> cachedVertices_;
 };
 
-using CollisionGeometry = BaseGeometry<Eigen::Vector3d>;
+using CollisionGeometry = BaseGeometry<msd_sim::Vector3D>;
 using VisualGeometry = BaseGeometry<Vertex>;
 
 

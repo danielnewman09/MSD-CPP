@@ -10,7 +10,7 @@ namespace msd_assets
 /**
  * @brief Concept requiring a 3D vector type with x(), y(), z() accessors
  *
- * This concept matches types like Eigen::Vector3d or msd_sim::Coordinate
+ * This concept matches types like msd_sim::Vector3D or msd_sim::Coordinate
  * that provide coordinate access methods returning floating-point values.
  */
 template <typename T>

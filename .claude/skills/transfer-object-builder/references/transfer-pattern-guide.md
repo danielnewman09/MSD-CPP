@@ -38,12 +38,12 @@ DomainClass                 -- Rich domain object (business logic, computed prop
 
 | C++ Domain Type | Transfer Type | Size (bytes) | Serialization |
 |---|---|---|---|
-| `Eigen::Vector3d` | `std::vector<uint8_t>` | 24 | 3 doubles, `memcpy` |
+| `msd_sim::Vector3D` | `std::vector<uint8_t>` | 24 | 3 doubles, `memcpy` |
 | `Eigen::Vector4d` | `std::vector<uint8_t>` | 32 | 4 doubles, `memcpy` |
 | `Eigen::Quaterniond` | `std::vector<uint8_t>` | 32 | 4 doubles (w,x,y,z), `memcpy` via `.coeffs()` |
 | `Eigen::Matrix3d` | `std::vector<uint8_t>` | 72 | 9 doubles, `memcpy` via `.data()` |
 | `Eigen::Matrix4d` | `std::vector<uint8_t>` | 128 | 16 doubles, `memcpy` via `.data()` |
-| `std::vector<Eigen::Vector3d>` | `std::vector<uint8_t>` | N*24 | + `uint32_t count` field |
+| `std::vector<msd_sim::Vector3D>` | `std::vector<uint8_t>` | N*24 | + `uint32_t count` field |
 | `std::vector<Vertex>` | `std::vector<uint8_t>` | N*36 | + `uint32_t count` field |
 | `float[3]` | `std::vector<uint8_t>` | 12 | 3 floats, `memcpy` |
 
@@ -99,7 +99,7 @@ std::memcpy(quat.coeffs().data(), record.quat_blob.data(), 4 * sizeof(double));
 
 **Eigen::Quaterniond storage order**: `.coeffs()` returns `[x, y, z, w]` (NOT `[w, x, y, z]`). This is Eigen's internal convention. The BLOB preserves this order, so round-trips are exact.
 
-### Eigen::Vector3d
+### msd_sim::Vector3D
 
 ```cpp
 // Serialize (domain -> record)
@@ -107,28 +107,28 @@ record.vec_blob.resize(3 * sizeof(double));
 std::memcpy(record.vec_blob.data(), vec.data(), 3 * sizeof(double));
 
 // Deserialize (record -> domain)
-Eigen::Vector3d vec;
+msd_sim::Vector3D vec;
 if (record.vec_blob.size() != 3 * sizeof(double)) {
   throw std::runtime_error("Invalid vector BLOB size");
 }
 std::memcpy(vec.data(), record.vec_blob.data(), 3 * sizeof(double));
 ```
 
-### Variable-Length Arrays (e.g., `std::vector<Eigen::Vector3d>`)
+### Variable-Length Arrays (e.g., `std::vector<msd_sim::Vector3D>`)
 
 ```cpp
 // Serialize
-const size_t blobSize = vertices.size() * sizeof(Eigen::Vector3d);
+const size_t blobSize = vertices.size() * sizeof(msd_sim::Vector3D);
 record.vertex_data.resize(blobSize);
 std::memcpy(record.vertex_data.data(), vertices.data(), blobSize);
 record.vertex_count = static_cast<uint32_t>(vertices.size());
 
 // Deserialize
-if (record.vertex_data.size() % sizeof(Eigen::Vector3d) != 0) {
+if (record.vertex_data.size() % sizeof(msd_sim::Vector3D) != 0) {
   throw std::runtime_error("Invalid vertex BLOB size");
 }
-const size_t count = record.vertex_data.size() / sizeof(Eigen::Vector3d);
-std::vector<Eigen::Vector3d> vertices(count);
+const size_t count = record.vertex_data.size() / sizeof(msd_sim::Vector3D);
+std::vector<msd_sim::Vector3D> vertices(count);
 std::memcpy(vertices.data(), record.vertex_data.data(), record.vertex_data.size());
 ```
 
@@ -200,8 +200,8 @@ Use these include paths for cpp_sqlite headers:
 ## Test Comparison Helpers
 
 ```cpp
-// Compare Eigen::Vector3d components
-void expectVector3dEq(const Eigen::Vector3d& a, const Eigen::Vector3d& b) {
+// Compare msd_sim::Vector3D components
+void expectVector3dEq(const msd_sim::Vector3D& a, const msd_sim::Vector3D& b) {
   EXPECT_DOUBLE_EQ(a.x(), b.x());
   EXPECT_DOUBLE_EQ(a.y(), b.y());
   EXPECT_DOUBLE_EQ(a.z(), b.z());

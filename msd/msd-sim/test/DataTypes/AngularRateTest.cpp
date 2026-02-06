@@ -6,6 +6,7 @@
 #include <format>
 
 #include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 
 using namespace msd_sim;
 
@@ -98,7 +99,7 @@ TEST(AngularRateTest, ConstAccessors)
 
 TEST(AngularRateTest, ConstructorFromEigenVector)
 {
-  Eigen::Vector3d vec{1.0, 2.0, 3.0};
+  msd_sim::Vector3D vec{1.0, 2.0, 3.0};
   AngularRate rate{vec};
   EXPECT_DOUBLE_EQ(rate.pitch(), 1.0);
   EXPECT_DOUBLE_EQ(rate.roll(), 2.0);
@@ -107,8 +108,8 @@ TEST(AngularRateTest, ConstructorFromEigenVector)
 
 TEST(AngularRateTest, EigenExpressionTemplateConstructor)
 {
-  Eigen::Vector3d a{1.0, 2.0, 3.0};
-  Eigen::Vector3d b{4.0, 5.0, 6.0};
+  msd_sim::Vector3D a{1.0, 2.0, 3.0};
+  msd_sim::Vector3D b{4.0, 5.0, 6.0};
   AngularRate rate{a + b};
   EXPECT_DOUBLE_EQ(rate.pitch(), 5.0);
   EXPECT_DOUBLE_EQ(rate.roll(), 7.0);
@@ -118,7 +119,7 @@ TEST(AngularRateTest, EigenExpressionTemplateConstructor)
 TEST(AngularRateTest, EigenExpressionAssignment)
 {
   AngularRate rate{};
-  Eigen::Vector3d vec{1.0, 2.0, 3.0};
+  msd_sim::Vector3D vec{1.0, 2.0, 3.0};
   rate = vec;
   EXPECT_DOUBLE_EQ(rate.pitch(), 1.0);
   EXPECT_DOUBLE_EQ(rate.roll(), 2.0);
@@ -263,8 +264,8 @@ TEST(AngularRateTest, AngularVelocityIntegration)
 TEST(AngularRateTest, TorqueCalculation)
 {
   // r × F for torque calculation
-  Eigen::Vector3d r{1.0, 0.0, 0.0};   // Moment arm
-  Eigen::Vector3d F{0.0, 10.0, 0.0};  // Force
+  msd_sim::Vector3D r{1.0, 0.0, 0.0};   // Moment arm
+  msd_sim::Vector3D F{0.0, 10.0, 0.0};  // Force
   AngularRate torque{r.cross(F)};
   // Torque = r × F = (1, 0, 0) × (0, 10, 0) = (0, 0, 10)
   EXPECT_DOUBLE_EQ(torque.pitch(), 0.0);
@@ -278,7 +279,7 @@ TEST(AngularRateTest, TorqueCalculation)
 
 TEST(AngularRateTest, MemoryFootprint)
 {
-  // Should be same size as Eigen::Vector3d (24 bytes)
-  EXPECT_EQ(sizeof(AngularRate), sizeof(Eigen::Vector3d));
+  // Should be same size as msd_sim::Vector3D (24 bytes)
+  EXPECT_EQ(sizeof(AngularRate), sizeof(msd_sim::Vector3D));
   EXPECT_EQ(sizeof(AngularRate), 24);
 }

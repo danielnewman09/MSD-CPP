@@ -153,7 +153,7 @@ public:
    *
    * @param force Force vector in world coordinates [N]
    */
-  void applyForce(const Eigen::Vector3d& force);
+  void applyForce(const msd_sim::Vector3D& force);
 
   /**
    * @brief Apply a force at a specific world-space point.
@@ -165,7 +165,7 @@ public:
    * @param force Force vector in world coordinates [N]
    * @param worldPoint Application point in world coordinates [m]
    */
-  void applyForceAtPoint(const Eigen::Vector3d& force,
+  void applyForceAtPoint(const msd_sim::Vector3D& force,
                          const Coordinate& worldPoint);
 
   /**
@@ -175,7 +175,7 @@ public:
    *
    * @param torque Torque vector in world coordinates [N·m]
    */
-  void applyTorque(const Eigen::Vector3d& torque);
+  void applyTorque(const msd_sim::Vector3D& torque);
 
   /**
    * @brief Clear all accumulated forces and torques.
@@ -188,13 +188,13 @@ public:
    * @brief Get the accumulated force for this frame.
    * @return Accumulated force vector [N]
    */
-  const Eigen::Vector3d& getAccumulatedForce() const;
+  const msd_sim::Vector3D& getAccumulatedForce() const;
 
   /**
    * @brief Get the accumulated torque for this frame.
    * @return Accumulated torque vector [N·m]
    */
-  const Eigen::Vector3d& getAccumulatedTorque() const;
+  const msd_sim::Vector3D& getAccumulatedTorque() const;
 
   // ========== NEW: Coefficient of Restitution (ticket 0027) ==========
 
@@ -329,8 +329,8 @@ private:
   InertialState dynamicState_;
 
   // NEW: Force accumulation (ticket 0023a)
-  Eigen::Vector3d accumulatedForce_{0.0, 0.0, 0.0};
-  Eigen::Vector3d accumulatedTorque_{0.0, 0.0, 0.0};
+  msd_sim::Vector3D accumulatedForce_{0.0, 0.0, 0.0};
+  msd_sim::Vector3D accumulatedTorque_{0.0, 0.0, 0.0};
 
   // NEW: Coefficient of restitution (ticket 0027)
   double coefficientOfRestitution_{0.5};  // Default: moderate elasticity

@@ -46,13 +46,13 @@ public:
 
   Coordinate globalToLocalRelative(const Coordinate& globalVector) const
   {
-    Eigen::Vector3d result = rotation_.transpose() * globalVector;
+    msd_sim::Vector3D result = rotation_.transpose() * globalVector;
     return Coordinate{result};
   }
 
   Coordinate localToGlobal(const Coordinate& localPoint) const
   {
-    Eigen::Vector3d result = rotation_ * localPoint + origin_;
+    msd_sim::Vector3D result = rotation_ * localPoint + origin_;
     return Coordinate{result};
   }
 
@@ -63,9 +63,9 @@ private:
     double pitch = euler.pitch.getRad();
     double yaw = euler.yaw.getRad();
 
-    Eigen::AngleAxisd rollAngle(roll, Eigen::Vector3d::UnitX());
-    Eigen::AngleAxisd pitchAngle(pitch, Eigen::Vector3d::UnitY());
-    Eigen::AngleAxisd yawAngle(yaw, Eigen::Vector3d::UnitZ());
+    Eigen::AngleAxisd rollAngle(roll, msd_sim::Vector3D::UnitX());
+    Eigen::AngleAxisd pitchAngle(pitch, msd_sim::Vector3D::UnitY());
+    Eigen::AngleAxisd yawAngle(yaw, msd_sim::Vector3D::UnitZ());
 
     rotation_ = (yawAngle * pitchAngle * rollAngle).toRotationMatrix();
   }

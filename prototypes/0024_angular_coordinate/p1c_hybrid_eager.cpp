@@ -1,9 +1,10 @@
 // Prototype P1c: Hybrid Eager Normalization
 // Ticket: 0024_angular_coordinate
-// Purpose: Test eager normalization with early-exit optimization in normalize function
+// Purpose: Test eager normalization with early-exit optimization in normalize
+// function
 
-#include <Eigen/Dense>
 #include <benchmark/benchmark.h>
+#include <Eigen/Dense>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -36,30 +37,32 @@ inline double normalizeAngle_EarlyExit(double rad)
 // Strategy 1: Eager Always (current design - always calls fmod)
 // =============================================================================
 
-class AngularCoordinate_EagerAlways : public Eigen::Vector3d
+class AngularCoordinate_EagerAlways : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_EagerAlways() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_EagerAlways() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
   AngularCoordinate_EagerAlways(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{normalizeAngle_Always(pitch), normalizeAngle_Always(roll),
-                      normalizeAngle_Always(yaw)}
+    : msd_sim::Vector3D{normalizeAngle_Always(pitch),
+                        normalizeAngle_Always(roll),
+                        normalizeAngle_Always(yaw)}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_EagerAlways(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
     normalizeInPlace();
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_EagerAlways& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_EagerAlways& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     normalizeInPlace();
     return *this;
   }
@@ -90,30 +93,32 @@ private:
 // Strategy 2: Eager with Early Exit (hybrid - skip fmod if in range)
 // =============================================================================
 
-class AngularCoordinate_EagerEarlyExit : public Eigen::Vector3d
+class AngularCoordinate_EagerEarlyExit : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_EagerEarlyExit() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_EagerEarlyExit() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
   AngularCoordinate_EagerEarlyExit(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{normalizeAngle_EarlyExit(pitch), normalizeAngle_EarlyExit(roll),
-                      normalizeAngle_EarlyExit(yaw)}
+    : msd_sim::Vector3D{normalizeAngle_EarlyExit(pitch),
+                        normalizeAngle_EarlyExit(roll),
+                        normalizeAngle_EarlyExit(yaw)}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_EagerEarlyExit(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
     normalizeInPlace();
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_EagerEarlyExit& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_EagerEarlyExit& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     normalizeInPlace();
     return *this;
   }
@@ -144,28 +149,29 @@ private:
 // Strategy 3: Never Normalize (baseline)
 // =============================================================================
 
-class AngularCoordinate_Never : public Eigen::Vector3d
+class AngularCoordinate_Never : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate_Never() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate_Never() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
 
   AngularCoordinate_Never(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{pitch, roll, yaw}
+    : msd_sim::Vector3D{pitch, roll, yaw}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate_Never(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
-  AngularCoordinate_Never& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularCoordinate_Never& operator=(
+    const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -284,11 +290,11 @@ static void BM_Assignment_Never_OutOfRange(benchmark::State& state)
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
   AngularCoordinate_Never a{0, 0, 0};
-  Eigen::Vector3d source{0, 0, 0};
+  msd_sim::Vector3D source{0, 0, 0};
 
   for (auto _ : state)
   {
-    source = Eigen::Vector3d{dis(gen), dis(gen), dis(gen)};
+    source = msd_sim::Vector3D{dis(gen), dis(gen), dis(gen)};
     a = source;
     benchmark::DoNotOptimize(a);
   }
@@ -300,11 +306,11 @@ static void BM_Assignment_EagerAlways_OutOfRange(benchmark::State& state)
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
   AngularCoordinate_EagerAlways a{0, 0, 0};
-  Eigen::Vector3d source{0, 0, 0};
+  msd_sim::Vector3D source{0, 0, 0};
 
   for (auto _ : state)
   {
-    source = Eigen::Vector3d{dis(gen), dis(gen), dis(gen)};
+    source = msd_sim::Vector3D{dis(gen), dis(gen), dis(gen)};
     a = source;
     benchmark::DoNotOptimize(a);
   }
@@ -316,11 +322,11 @@ static void BM_Assignment_EagerEarlyExit_OutOfRange(benchmark::State& state)
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
   AngularCoordinate_EagerEarlyExit a{0, 0, 0};
-  Eigen::Vector3d source{0, 0, 0};
+  msd_sim::Vector3D source{0, 0, 0};
 
   for (auto _ : state)
   {
-    source = Eigen::Vector3d{dis(gen), dis(gen), dis(gen)};
+    source = msd_sim::Vector3D{dis(gen), dis(gen), dis(gen)};
     a = source;
     benchmark::DoNotOptimize(a);
   }
@@ -336,11 +342,11 @@ static void BM_Assignment_Never_InRange(benchmark::State& state)
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-M_PI + 0.01, M_PI - 0.01);
   AngularCoordinate_Never a{0, 0, 0};
-  Eigen::Vector3d source{0, 0, 0};
+  msd_sim::Vector3D source{0, 0, 0};
 
   for (auto _ : state)
   {
-    source = Eigen::Vector3d{dis(gen), dis(gen), dis(gen)};
+    source = msd_sim::Vector3D{dis(gen), dis(gen), dis(gen)};
     a = source;
     benchmark::DoNotOptimize(a);
   }
@@ -352,11 +358,11 @@ static void BM_Assignment_EagerAlways_InRange(benchmark::State& state)
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-M_PI + 0.01, M_PI - 0.01);
   AngularCoordinate_EagerAlways a{0, 0, 0};
-  Eigen::Vector3d source{0, 0, 0};
+  msd_sim::Vector3D source{0, 0, 0};
 
   for (auto _ : state)
   {
-    source = Eigen::Vector3d{dis(gen), dis(gen), dis(gen)};
+    source = msd_sim::Vector3D{dis(gen), dis(gen), dis(gen)};
     a = source;
     benchmark::DoNotOptimize(a);
   }
@@ -368,11 +374,11 @@ static void BM_Assignment_EagerEarlyExit_InRange(benchmark::State& state)
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-M_PI + 0.01, M_PI - 0.01);
   AngularCoordinate_EagerEarlyExit a{0, 0, 0};
-  Eigen::Vector3d source{0, 0, 0};
+  msd_sim::Vector3D source{0, 0, 0};
 
   for (auto _ : state)
   {
-    source = Eigen::Vector3d{dis(gen), dis(gen), dis(gen)};
+    source = msd_sim::Vector3D{dis(gen), dis(gen), dis(gen)};
     a = source;
     benchmark::DoNotOptimize(a);
   }
@@ -387,8 +393,8 @@ BENCHMARK(BM_Assignment_EagerEarlyExit_InRange);
 static void BM_PhysicsUpdate_EagerAlways(benchmark::State& state)
 {
   AngularCoordinate_EagerAlways orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};  // rad/s
-  double dt = 0.01;  // 10ms timestep
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};  // rad/s
+  double dt = 0.01;                                    // 10ms timestep
 
   for (auto _ : state)
   {
@@ -403,7 +409,7 @@ BENCHMARK(BM_PhysicsUpdate_EagerAlways);
 static void BM_PhysicsUpdate_EagerEarlyExit(benchmark::State& state)
 {
   AngularCoordinate_EagerEarlyExit orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
   double dt = 0.01;
 
   for (auto _ : state)
@@ -417,7 +423,7 @@ BENCHMARK(BM_PhysicsUpdate_EagerEarlyExit);
 static void BM_PhysicsUpdate_Never(benchmark::State& state)
 {
   AngularCoordinate_Never orientation{0.0, 0.0, 0.0};
-  Eigen::Vector3d angularVelocity{0.1, 0.05, 0.15};
+  msd_sim::Vector3D angularVelocity{0.1, 0.05, 0.15};
   double dt = 0.01;
 
   for (auto _ : state)

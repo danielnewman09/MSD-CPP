@@ -9,6 +9,7 @@
  * Use this when you need access to the complete database schema.
  */
 
+#include "msd-transfer/src/AngularCoordinateRecord.hpp"
 #include "msd-transfer/src/AngularRateRecord.hpp"
 #include "msd-transfer/src/CoordinateRecord.hpp"
 #include "msd-transfer/src/MaterialRecord.hpp"

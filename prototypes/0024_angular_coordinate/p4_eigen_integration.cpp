@@ -1,9 +1,10 @@
 // Prototype P4: Eigen Integration
 // Ticket: 0024_angular_coordinate
-// Purpose: Verify SIMD optimizations are preserved when inheriting from Eigen::Vector3d
+// Purpose: Verify SIMD optimizations are preserved when inheriting from
+// msd_sim::Vector3D
 
-#include <Eigen/Dense>
 #include <benchmark/benchmark.h>
+#include <Eigen/Dense>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -16,28 +17,30 @@ inline double normalizeAngle(double rad)
   return result <= 0.0 ? result + M_PI : result - M_PI;
 }
 
-// AngularCoordinate inheriting from Eigen::Vector3d (eager normalization)
-class AngularCoordinate : public Eigen::Vector3d
+// AngularCoordinate inheriting from msd_sim::Vector3D (eager normalization)
+class AngularCoordinate : public msd_sim::Vector3D
 {
 public:
-  AngularCoordinate() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularCoordinate() : msd_sim::Vector3D{0.0, 0.0, 0.0}
   {
   }
   AngularCoordinate(double pitch, double roll, double yaw)
-    : Eigen::Vector3d{normalizeAngle(pitch), normalizeAngle(roll), normalizeAngle(yaw)}
+    : msd_sim::Vector3D{normalizeAngle(pitch),
+                        normalizeAngle(roll),
+                        normalizeAngle(yaw)}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate(const Eigen::MatrixBase<OtherDerived>& other)
-    : Eigen::Vector3d{other}
+    : msd_sim::Vector3D{other}
   {
   }
 
   template <typename OtherDerived>
   AngularCoordinate& operator=(const Eigen::MatrixBase<OtherDerived>& other)
   {
-    this->Eigen::Vector3d::operator=(other);
+    this->msd_sim::Vector3D::operator=(other);
     return *this;
   }
 
@@ -61,10 +64,11 @@ public:
 
 constexpr size_t kDataSize = 1024;
 
-static std::vector<Eigen::Vector3d> gDataEigen = []() {
+static std::vector<msd_sim::Vector3D> gDataEigen = []()
+{
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
-  std::vector<Eigen::Vector3d> data;
+  std::vector<msd_sim::Vector3D> data;
   data.reserve(kDataSize);
   for (size_t i = 0; i < kDataSize; ++i)
   {
@@ -73,7 +77,8 @@ static std::vector<Eigen::Vector3d> gDataEigen = []() {
   return data;
 }();
 
-static std::vector<AngularCoordinate> gDataAngular = []() {
+static std::vector<AngularCoordinate> gDataAngular = []()
+{
   std::mt19937 gen(42);
   std::uniform_real_distribution<> dis(-10.0, 10.0);
   std::vector<AngularCoordinate> data;
@@ -86,7 +91,7 @@ static std::vector<AngularCoordinate> gDataAngular = []() {
 }();
 
 static Eigen::Matrix3d gRotationMatrix =
-    Eigen::AngleAxisd(M_PI / 4, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+  Eigen::AngleAxisd(M_PI / 4, msd_sim::Vector3D::UnitZ()).toRotationMatrix();
 
 // =============================================================================
 // Benchmark: Vector Addition
@@ -95,7 +100,7 @@ static Eigen::Matrix3d gRotationMatrix =
 static void BM_Addition_Eigen(benchmark::State& state)
 {
   size_t idx = 0;
-  Eigen::Vector3d result{0, 0, 0};
+  msd_sim::Vector3D result{0, 0, 0};
   for (auto _ : state)
   {
     const auto& a = gDataEigen[idx % kDataSize];
@@ -129,7 +134,7 @@ BENCHMARK(BM_Addition_Angular);
 static void BM_ScalarMultiply_Eigen(benchmark::State& state)
 {
   size_t idx = 0;
-  Eigen::Vector3d result{0, 0, 0};
+  msd_sim::Vector3D result{0, 0, 0};
   for (auto _ : state)
   {
     const auto& a = gDataEigen[idx++ % kDataSize];
@@ -159,7 +164,7 @@ BENCHMARK(BM_ScalarMultiply_Angular);
 static void BM_CrossProduct_Eigen(benchmark::State& state)
 {
   size_t idx = 0;
-  Eigen::Vector3d result{0, 0, 0};
+  msd_sim::Vector3D result{0, 0, 0};
   for (auto _ : state)
   {
     const auto& a = gDataEigen[idx % kDataSize];
@@ -257,7 +262,7 @@ BENCHMARK(BM_Norm_Angular);
 static void BM_MatrixMultiply_Eigen(benchmark::State& state)
 {
   size_t idx = 0;
-  Eigen::Vector3d result{0, 0, 0};
+  msd_sim::Vector3D result{0, 0, 0};
   for (auto _ : state)
   {
     const auto& a = gDataEigen[idx++ % kDataSize];
@@ -287,7 +292,7 @@ BENCHMARK(BM_MatrixMultiply_Angular);
 static void BM_ExpressionTemplate_Eigen(benchmark::State& state)
 {
   size_t idx = 0;
-  Eigen::Vector3d result{0, 0, 0};
+  msd_sim::Vector3D result{0, 0, 0};
   for (auto _ : state)
   {
     const auto& a = gDataEigen[idx % kDataSize];
@@ -326,10 +331,11 @@ static void BM_MemorySize_Report(benchmark::State& state)
 {
   for (auto _ : state)
   {
-    benchmark::DoNotOptimize(sizeof(Eigen::Vector3d));
+    benchmark::DoNotOptimize(sizeof(msd_sim::Vector3D));
     benchmark::DoNotOptimize(sizeof(AngularCoordinate));
   }
-  state.SetLabel("Eigen::Vector3d=" + std::to_string(sizeof(Eigen::Vector3d)) +
-                 "B, AngularCoordinate=" + std::to_string(sizeof(AngularCoordinate)) + "B");
+  state.SetLabel(
+    "msd_sim::Vector3D=" + std::to_string(sizeof(msd_sim::Vector3D)) +
+    "B, AngularCoordinate=" + std::to_string(sizeof(AngularCoordinate)) + "B");
 }
 BENCHMARK(BM_MemorySize_Report);

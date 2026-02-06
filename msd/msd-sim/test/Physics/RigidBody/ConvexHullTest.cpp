@@ -40,34 +40,34 @@ std::vector<Coordinate> createTetrahedronPoints()
 
 // Create pyramid vertices (5 unique points: 4 base corners + 1 apex)
 // Matches GeometryFactory::createPyramid layout
-std::vector<Eigen::Vector3d> createPyramidVertices(double baseSize,
-                                                   double height)
+std::vector<msd_sim::Vector3D> createPyramidVertices(double baseSize,
+                                                     double height)
 {
   double half = baseSize / 2.0;
   double halfHeight = height / 2.0;
 
   // Return only the 5 unique vertices (not triangulated)
   return {
-    Eigen::Vector3d{-half, -halfHeight, -half},  // base front-left
-    Eigen::Vector3d{half, -halfHeight, -half},   // base front-right
-    Eigen::Vector3d{half, -halfHeight, half},    // base back-right
-    Eigen::Vector3d{-half, -halfHeight, half},   // base back-left
-    Eigen::Vector3d{0.0, halfHeight, 0.0}        // apex
+    msd_sim::Vector3D{-half, -halfHeight, -half},  // base front-left
+    msd_sim::Vector3D{half, -halfHeight, -half},   // base front-right
+    msd_sim::Vector3D{half, -halfHeight, half},    // base back-right
+    msd_sim::Vector3D{-half, -halfHeight, half},   // base back-left
+    msd_sim::Vector3D{0.0, halfHeight, 0.0}        // apex
   };
 }
 
 // Create cube vertices (8 unique corner points)
-std::vector<Eigen::Vector3d> createCubeVertices(double size)
+std::vector<msd_sim::Vector3D> createCubeVertices(double size)
 {
   double half = size / 2.0;
-  return {Eigen::Vector3d{-half, -half, -half},
-          Eigen::Vector3d{half, -half, -half},
-          Eigen::Vector3d{half, half, -half},
-          Eigen::Vector3d{-half, half, -half},
-          Eigen::Vector3d{-half, -half, half},
-          Eigen::Vector3d{half, -half, half},
-          Eigen::Vector3d{half, half, half},
-          Eigen::Vector3d{-half, half, half}};
+  return {msd_sim::Vector3D{-half, -half, -half},
+          msd_sim::Vector3D{half, -half, -half},
+          msd_sim::Vector3D{half, half, -half},
+          msd_sim::Vector3D{-half, half, -half},
+          msd_sim::Vector3D{-half, -half, half},
+          msd_sim::Vector3D{half, -half, half},
+          msd_sim::Vector3D{half, half, half},
+          msd_sim::Vector3D{-half, half, half}};
 }
 
 // Create points with some interior points (should be removed by hull)

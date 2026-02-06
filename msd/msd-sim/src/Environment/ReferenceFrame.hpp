@@ -10,6 +10,7 @@
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
 #include "msd-sim/src/DataTypes/AngularRate.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 
 namespace msd_sim
 {
@@ -42,14 +43,14 @@ public:
    * @brief Constructor with translation only
    * @param origin The origin of this frame in global coordinates
    */
-  explicit ReferenceFrame(Coordinate  origin);
+  explicit ReferenceFrame(Coordinate origin);
 
   /**
    * @brief Constructor with translation and rotation
    * @param origin The origin of this frame in global coordinates
    * @param angular The angular coordinate defining the rotation
    */
-  ReferenceFrame(Coordinate  origin, AngularCoordinate  angular);
+  ReferenceFrame(Coordinate origin, AngularCoordinate angular);
 
   /**
    * @brief Constructor from local X and Z axes (right-hand rule)
@@ -73,7 +74,7 @@ public:
    * @throws std::invalid_argument if either vector is zero or if vectors are
    *         parallel
    */
-  ReferenceFrame(Coordinate  origin,
+  ReferenceFrame(Coordinate origin,
                  const Coordinate& xDirection,
                  const Coordinate& zDirection);
 
@@ -86,8 +87,7 @@ public:
    * @param origin The origin of this frame in global coordinates
    * @param quaternion The orientation as a unit quaternion (will be normalized)
    */
-  ReferenceFrame(Coordinate  origin,
-                 const Eigen::Quaterniond& quaternion);
+  ReferenceFrame(Coordinate origin, const Eigen::Quaterniond& quaternion);
 
   /**
    * @brief Transform a coordinate from global frame to this local frame
@@ -136,7 +136,7 @@ public:
    * @param globalVector Direction vector in global frame
    * @return Direction vector in local frame
    */
-  Eigen::Vector3d globalToLocal(const Eigen::Vector3d& globalVector) const;
+  msd_sim::Vector3D globalToLocal(const msd_sim::Vector3D& globalVector) const;
 
   /**
    * @brief Transform a direction vector from global frame to local frame
@@ -162,7 +162,7 @@ public:
    * @param localVector Direction vector in local frame
    * @return Direction vector in global frame
    */
-  Eigen::Vector3d localToGlobal(const Eigen::Vector3d& localVector) const;
+  Vector3D localToGlobal(const Vector3D& localVector) const;
 
   /**
    * @brief Transform a direction vector from local frame to global frame

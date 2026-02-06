@@ -44,7 +44,7 @@ This approach allows:
 5. All new methods shall have placeholder implementations (no physics logic)
 
 ### Non-Functional Requirements
-- **Breaking Change**: `InertialState` angular representation changes from `EulerAngles` to `Eigen::Vector3d`
+- **Breaking Change**: `InertialState` angular representation changes from `EulerAngles` to `msd_sim::Vector3D`
 - **Backward Compatibility**: Existing tests may need updates for the `InertialState` change
 - **No Physics Logic**: Placeholder implementations only - actual physics in ticket 0023
 
@@ -227,7 +227,7 @@ void WorldModel::updatePhysics(double dt) {
   - `docs/designs/0023a_force_application_scaffolding/0023a_force_application_scaffolding.puml` — PlantUML architecture diagram
 - **Notes**:
   - Design establishes scaffolding-only interfaces (no physics logic)
-  - Breaking change identified: `InertialState` angular fields migrate to `Coordinate` (not `Eigen::Vector3d` as initially stated)
+  - Breaking change identified: `InertialState` angular fields migrate to `Coordinate` (not `msd_sim::Vector3D` as initially stated)
   - Migration guide provided for the breaking change
   - All placeholder implementations specified with TODO comments for ticket 0023
   - Test requirements enumerated (12 unit tests, 2 integration tests)
@@ -255,13 +255,13 @@ void WorldModel::updatePhysics(double dt) {
 - **Started**: 2026-01-19 (workflow orchestrator processing human clarifications)
 - **Completed**: 2026-01-19
 - **Artifacts Updated**:
-  - `tickets/0023a_force_application_scaffolding.md` — Fixed type inconsistencies (Eigen::Vector3d → Coordinate)
+  - `tickets/0023a_force_application_scaffolding.md` — Fixed type inconsistencies (msd_sim::Vector3D → Coordinate)
   - `tickets/0023a_force_application_scaffolding.md` — Removed `setGravity()` from WorldModel API
   - `docs/designs/0023a_force_application_scaffolding/design.md` — Removed `setGravity()` method and implementation
   - `docs/designs/0023a_force_application_scaffolding/design.md` — Added EulerAngles helper methods section
 - **Issues Resolved**:
   - **Fix 1**: WorldModel Gravity — Removed `setGravity()`, gravity is now const after construction (aligns with ticket line 76 and PlantUML)
-  - **Fix 2**: Angular Velocity/Acceleration Type — Changed `Eigen::Vector3d` to `Coordinate` in ticket (aligns with design.md and PlantUML)
+  - **Fix 2**: Angular Velocity/Acceleration Type — Changed `msd_sim::Vector3D` to `Coordinate` in ticket (aligns with design.md and PlantUML)
   - **Fix 3**: EulerAngles Helper Methods — Added `toCoordinate()` and `fromCoordinate()` to design.md (aligns with PlantUML lines 81-83)
 - **Status**: Ready for final design review
 - **Notes**:

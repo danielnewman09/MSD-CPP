@@ -6,8 +6,9 @@
  * convex polyhedra using Brian Mirtich's algorithm from "Fast and Accurate
  * Computation of Polyhedral Mass Properties" (1996).
  *
- * Production equivalent: msd/msd-sim/src/Physics/RigidBody/InertialCalculations.cpp
- * The production version:
+ * Production equivalent:
+ * msd/msd-sim/src/Physics/RigidBody/InertialCalculations.cpp The production
+ * version:
  * - Uses Eigen for matrix operations
  * - Integrates with ConvexHull and Qhull
  * - Includes vertex winding correction for Qhull compatibility
@@ -43,23 +44,17 @@ constexpr int Z = 2;
 /**
  * @brief Simple 3D vector for tutorial purposes
  *
- * Production equivalent: msd_sim::Coordinate (Eigen::Vector3d wrapper)
+ * Production equivalent: msd_sim::Coordinate (msd_sim::Vector3D wrapper)
  */
 struct Vec3
 {
   double x, y, z;
 
-  Vec3()
-    : x{0.0}
-    , y{0.0}
-    , z{0.0}
+  Vec3() : x{0.0}, y{0.0}, z{0.0}
   {
   }
 
-  Vec3(double x_, double y_, double z_)
-    : x{x_}
-    , y{y_}
-    , z{z_}
+  Vec3(double x_, double y_, double z_) : x{x_}, y{y_}, z{z_}
   {
   }
 
@@ -80,7 +75,10 @@ struct Vec3
   }
 
   /// Euclidean length: |v| = sqrt(x² + y² + z²)
-  double length() const { return std::sqrt(x * x + y * y + z * z); }
+  double length() const
+  {
+    return std::sqrt(x * x + y * y + z * z);
+  }
 
   /// Return unit vector in same direction
   Vec3 normalized() const
@@ -118,8 +116,14 @@ struct Mat3
     }
   }
 
-  double& operator()(int i, int j) { return data[i][j]; }
-  double operator()(int i, int j) const { return data[i][j]; }
+  double& operator()(int i, int j)
+  {
+    return data[i][j];
+  }
+  double operator()(int i, int j) const
+  {
+    return data[i][j];
+  }
 
   void print() const
   {
@@ -198,9 +202,9 @@ struct Mesh
  */
 struct ProjectionIntegrals
 {
-  double P1;                 // ∫1 dA (signed area)
-  double Pa, Pb;             // ∫a dA, ∫b dA (first moments)
-  double Paa, Pab, Pbb;      // ∫a² dA, ∫ab dA, ∫b² dA (second moments)
+  double P1;                      // ∫1 dA (signed area)
+  double Pa, Pb;                  // ∫a dA, ∫b dA (first moments)
+  double Paa, Pab, Pbb;           // ∫a² dA, ∫ab dA, ∫b² dA (second moments)
   double Paaa, Paab, Pabb, Pbbb;  // Third moments
 };
 
@@ -313,10 +317,10 @@ ProjectionIntegrals computeProjectionIntegrals(const Mesh& mesh,
  */
 struct FaceIntegrals
 {
-  double Fa, Fb, Fc;           // First moments: ∫a, ∫b, ∫c over face
-  double Faa, Fbb, Fcc;        // Second moments
-  double Faaa, Fbbb, Fccc;     // Third moments
-  double Faab, Fbbc, Fcca;     // Mixed third moments
+  double Fa, Fb, Fc;        // First moments: ∫a, ∫b, ∫c over face
+  double Faa, Fbb, Fcc;     // Second moments
+  double Faaa, Fbbb, Fccc;  // Third moments
+  double Faab, Fbbc, Fcca;  // Mixed third moments
 };
 
 /**
@@ -363,22 +367,20 @@ FaceIntegrals computeFaceIntegrals(const Mesh& mesh,
   // Second moments
   face.Faa = k1 * proj.Paa;
   face.Fbb = k1 * proj.Pbb;
-  face.Fcc =
-    k3 * (n[A] * n[A] * proj.Paa + 2 * n[A] * n[B] * proj.Pab +
-          n[B] * n[B] * proj.Pbb +
-          w * (2 * (n[A] * proj.Pa + n[B] * proj.Pb) + w * proj.P1));
+  face.Fcc = k3 * (n[A] * n[A] * proj.Paa + 2 * n[A] * n[B] * proj.Pab +
+                   n[B] * n[B] * proj.Pbb +
+                   w * (2 * (n[A] * proj.Pa + n[B] * proj.Pb) + w * proj.P1));
 
   // Third moments
   face.Faaa = k1 * proj.Paaa;
   face.Fbbb = k1 * proj.Pbbb;
   face.Fccc =
-    -k4 *
-    (n[A] * n[A] * n[A] * proj.Paaa + 3 * n[A] * n[A] * n[B] * proj.Paab +
-     3 * n[A] * n[B] * n[B] * proj.Pabb + n[B] * n[B] * n[B] * proj.Pbbb +
-     3 * w *
-       (n[A] * n[A] * proj.Paa + 2 * n[A] * n[B] * proj.Pab +
-        n[B] * n[B] * proj.Pbb) +
-     w * w * (3 * (n[A] * proj.Pa + n[B] * proj.Pb) + w * proj.P1));
+    -k4 * (n[A] * n[A] * n[A] * proj.Paaa + 3 * n[A] * n[A] * n[B] * proj.Paab +
+           3 * n[A] * n[B] * n[B] * proj.Pabb + n[B] * n[B] * n[B] * proj.Pbbb +
+           3 * w *
+             (n[A] * n[A] * proj.Paa + 2 * n[A] * n[B] * proj.Pab +
+              n[B] * n[B] * proj.Pbb) +
+           w * w * (3 * (n[A] * proj.Pa + n[B] * proj.Pb) + w * proj.P1));
 
   // Mixed third moments
   face.Faab = k1 * proj.Paab;
@@ -402,10 +404,10 @@ FaceIntegrals computeFaceIntegrals(const Mesh& mesh,
  */
 struct VolumeIntegrals
 {
-  double T0;                    // Volume: ∫∫∫ 1 dV
-  std::array<double, 3> T1;     // First moments: ∫∫∫ x, y, z dV
-  std::array<double, 3> T2;     // Second moments: ∫∫∫ x², y², z² dV
-  std::array<double, 3> TP;     // Products: ∫∫∫ xy, yz, zx dV
+  double T0;                 // Volume: ∫∫∫ 1 dV
+  std::array<double, 3> T1;  // First moments: ∫∫∫ x, y, z dV
+  std::array<double, 3> T2;  // Second moments: ∫∫∫ x², y², z² dV
+  std::array<double, 3> TP;  // Products: ∫∫∫ xy, yz, zx dV
 };
 
 /**
@@ -418,7 +420,8 @@ struct VolumeIntegrals
  * @param normal Facet normal vector
  * @param[out] A First coordinate index in projection plane
  * @param[out] B Second coordinate index in projection plane
- * @param[out] C Coordinate index perpendicular to projection plane (largest |n|)
+ * @param[out] C Coordinate index perpendicular to projection plane (largest
+ * |n|)
  */
 void selectProjectionPlane(const Vec3& normal, int& A, int& B, int& C)
 {
@@ -591,25 +594,24 @@ Mesh createUnitCube()
                    Vec3{-0.5, 0.5, 0.5}};
 
   // 12 triangular facets with CCW winding (viewed from outside)
-  mesh.facets = {
-    // Bottom (-Z face)
-    {{0, 2, 1}, Vec3{}},
-    {{0, 3, 2}, Vec3{}},
-    // Top (+Z face)
-    {{4, 5, 6}, Vec3{}},
-    {{4, 6, 7}, Vec3{}},
-    // Front (-Y face)
-    {{0, 1, 5}, Vec3{}},
-    {{0, 5, 4}, Vec3{}},
-    // Back (+Y face)
-    {{2, 3, 7}, Vec3{}},
-    {{2, 7, 6}, Vec3{}},
-    // Left (-X face)
-    {{0, 4, 7}, Vec3{}},
-    {{0, 7, 3}, Vec3{}},
-    // Right (+X face)
-    {{1, 2, 6}, Vec3{}},
-    {{1, 6, 5}, Vec3{}}};
+  mesh.facets = {// Bottom (-Z face)
+                 {{0, 2, 1}, Vec3{}},
+                 {{0, 3, 2}, Vec3{}},
+                 // Top (+Z face)
+                 {{4, 5, 6}, Vec3{}},
+                 {{4, 6, 7}, Vec3{}},
+                 // Front (-Y face)
+                 {{0, 1, 5}, Vec3{}},
+                 {{0, 5, 4}, Vec3{}},
+                 // Back (+Y face)
+                 {{2, 3, 7}, Vec3{}},
+                 {{2, 7, 6}, Vec3{}},
+                 // Left (-X face)
+                 {{0, 4, 7}, Vec3{}},
+                 {{0, 7, 3}, Vec3{}},
+                 // Right (+X face)
+                 {{1, 2, 6}, Vec3{}},
+                 {{1, 6, 5}, Vec3{}}};
 
   mesh.computeFacetNormals();
   return mesh;
@@ -775,8 +777,8 @@ void testRegularTetrahedron()
   std::cout << "Symmetry error: " << symmetry_error << "\n";
 
   bool passed = (symmetry_error < 1e-10);
-  std::cout << "Result: " << (passed ? "PASS (diagonal elements equal)" : "FAIL")
-            << "\n";
+  std::cout << "Result: "
+            << (passed ? "PASS (diagonal elements equal)" : "FAIL") << "\n";
 }
 
 // =============================================================================
@@ -795,7 +797,8 @@ int main()
   testRectangularBox();
   testRegularTetrahedron();
 
-  std::cout << "\n============================================================\n";
+  std::cout
+    << "\n============================================================\n";
   std::cout << "Tutorial complete. See README.md for algorithm explanation.\n";
   std::cout << "============================================================\n";
 

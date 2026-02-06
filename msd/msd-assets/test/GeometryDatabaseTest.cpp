@@ -18,23 +18,23 @@ namespace fs = std::filesystem;
 // These helpers generate raw vertex coordinates for CollisionGeometry.
 // VisualGeometry should use GeometryFactory, which produces Vertex blobs.
 
-std::vector<Eigen::Vector3d> generateCubeVertices(double size)
+std::vector<msd_sim::Vector3D> generateCubeVertices(double size)
 {
   double half = size / 2.0;
 
   // Define 8 corners
-  std::array<Eigen::Vector3d, 8> corners = {
-    Eigen::Vector3d{-half, -half, -half},  // 0: FTL
-    Eigen::Vector3d{half, -half, -half},   // 1: FTR
-    Eigen::Vector3d{half, half, -half},    // 2: FBR
-    Eigen::Vector3d{-half, half, -half},   // 3: FBL
-    Eigen::Vector3d{-half, -half, half},   // 4: BTL
-    Eigen::Vector3d{half, -half, half},    // 5: BTR
-    Eigen::Vector3d{half, half, half},     // 6: BBR
-    Eigen::Vector3d{-half, half, half}     // 7: BBL
+  std::array<msd_sim::Vector3D, 8> corners = {
+    msd_sim::Vector3D{-half, -half, -half},  // 0: FTL
+    msd_sim::Vector3D{half, -half, -half},   // 1: FTR
+    msd_sim::Vector3D{half, half, -half},    // 2: FBR
+    msd_sim::Vector3D{-half, half, -half},   // 3: FBL
+    msd_sim::Vector3D{-half, -half, half},   // 4: BTL
+    msd_sim::Vector3D{half, -half, half},    // 5: BTR
+    msd_sim::Vector3D{half, half, half},     // 6: BBR
+    msd_sim::Vector3D{-half, half, half}     // 7: BBL
   };
 
-  std::vector<Eigen::Vector3d> vertices;
+  std::vector<msd_sim::Vector3D> vertices;
   vertices.reserve(36);
 
   // Front face (z = -half)
@@ -88,23 +88,23 @@ std::vector<Eigen::Vector3d> generateCubeVertices(double size)
   return vertices;
 }
 
-std::vector<Eigen::Vector3d> generatePyramidVertices(double baseSize,
-                                                     double height)
+std::vector<msd_sim::Vector3D> generatePyramidVertices(double baseSize,
+                                                       double height)
 {
   double half = baseSize / 2.0;
   double halfHeight = height / 2.0;
 
-  std::vector<Eigen::Vector3d> vertices;
+  std::vector<msd_sim::Vector3D> vertices;
   vertices.reserve(18);
 
   // Base corners (y = -height/2)
-  Eigen::Vector3d base_fl{-half, -halfHeight, -half};
-  Eigen::Vector3d base_fr{half, -halfHeight, -half};
-  Eigen::Vector3d base_br{half, -halfHeight, half};
-  Eigen::Vector3d base_bl{-half, -halfHeight, half};
+  msd_sim::Vector3D base_fl{-half, -halfHeight, -half};
+  msd_sim::Vector3D base_fr{half, -halfHeight, -half};
+  msd_sim::Vector3D base_br{half, -halfHeight, half};
+  msd_sim::Vector3D base_bl{-half, -halfHeight, half};
 
   // Apex
-  Eigen::Vector3d apex{0.0, halfHeight, 0.0};
+  msd_sim::Vector3D apex{0.0, halfHeight, 0.0};
 
   // Front face
   vertices.push_back(base_fl);
@@ -194,7 +194,7 @@ TEST_F(GeometryDatabaseTest, VisualGeometry_CreateAndStore_Cube)
   // Verify record fields
   EXPECT_EQ(meshRecord.vertex_count, 36);
   EXPECT_FALSE(meshRecord.vertex_data.empty());
-  EXPECT_EQ(meshRecord.vertex_data.size(), 36 * sizeof(Eigen::Vector3d));
+  EXPECT_EQ(meshRecord.vertex_data.size(), 36 * sizeof(msd_sim::Vector3D));
 
   auto& meshDAO = db_->getDAO<msd_transfer::MeshRecord>();
 
@@ -315,7 +315,7 @@ TEST_F(GeometryDatabaseTest, CollisionGeometry_CreateAndStore_Cube)
   // Verify record data (Vector3d is 24 bytes each)
   EXPECT_EQ(collisionRecord.vertex_count, 36);
   EXPECT_FALSE(collisionRecord.vertex_data.empty());
-  EXPECT_EQ(collisionRecord.vertex_data.size(), 36 * sizeof(Eigen::Vector3d));
+  EXPECT_EQ(collisionRecord.vertex_data.size(), 36 * sizeof(msd_sim::Vector3D));
 
   // Insert collision mesh into database
   auto& collisionDAO = db_->getDAO<msd_transfer::MeshRecord>();

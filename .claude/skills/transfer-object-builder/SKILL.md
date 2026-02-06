@@ -59,11 +59,11 @@ Apply these rules to determine how each member maps to a transfer field:
 | `double`, `float`, `uint32_t`, `int` | Same type | Direct scalar field |
 | `std::string` | `std::string` | Direct scalar field |
 | `bool` | `uint32_t` | Store as 0/1 integer (SQLite has no bool) |
-| `Eigen::Vector3d` | `std::vector<uint8_t>` | BLOB: 24 bytes (3 doubles) |
+| `msd_sim::Vector3D` | `std::vector<uint8_t>` | BLOB: 24 bytes (3 doubles) |
 | `Eigen::Vector4d` | `std::vector<uint8_t>` | BLOB: 32 bytes (4 doubles) |
 | `Eigen::Quaterniond` | `std::vector<uint8_t>` | BLOB: 32 bytes (4 doubles, w,x,y,z) |
 | `Eigen::Matrix3d` | `std::vector<uint8_t>` | BLOB: 72 bytes (9 doubles) |
-| `std::vector<Eigen::Vector3d>` | `std::vector<uint8_t>` | BLOB: N*24 bytes + separate count field |
+| `std::vector<msd_sim::Vector3D>` | `std::vector<uint8_t>` | BLOB: N*24 bytes + separate count field |
 | `std::vector<T>` (POD) | `std::vector<uint8_t>` | BLOB: N*sizeof(T) + separate count field |
 | Reference to class with existing record | `cpp_sqlite::ForeignKey<TRecord>` | FK reference |
 | `std::optional<T>` | nullable field or optional FK | FK with `.isSet()` check |
@@ -234,7 +234,7 @@ TEST_F(FooTransferTest, RoundTrip_AllFields)
 Field comparison rules:
 - `double`: Use `EXPECT_DOUBLE_EQ` (exact match through round-trip)
 - `float`: Use `EXPECT_FLOAT_EQ`
-- `Eigen::Vector3d`: Compare component-wise with `EXPECT_DOUBLE_EQ`
+- `msd_sim::Vector3D`: Compare component-wise with `EXPECT_DOUBLE_EQ`
 - `Eigen::Matrix3d`: Compare all 9 elements
 - `Eigen::Quaterniond`: Compare w,x,y,z components
 - `std::string`: Use `EXPECT_EQ`

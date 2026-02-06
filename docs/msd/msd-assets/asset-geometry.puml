@@ -71,7 +71,7 @@ package "msd_assets" {
 
     class CollisionGeometry {
         <<type alias>>
-        BaseGeometry<Eigen::Vector3d>
+        BaseGeometry<msd_sim::Vector3D>
     }
 
     class Vertex {

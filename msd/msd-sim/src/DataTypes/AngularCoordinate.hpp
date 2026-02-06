@@ -9,6 +9,8 @@
 #include <Eigen/Dense>
 #include <cmath>
 
+#include "msd-transfer/src/AngularCoordinateRecord.hpp"
+
 namespace msd_sim
 {
 
@@ -59,7 +61,8 @@ public:
 
   // Template constructor for Eigen expressions
   template <typename OtherDerived>
-  AngularCoordinate(const Eigen::MatrixBase<OtherDerived>& other)  // NOLINT(google-explicit-constructor)
+  AngularCoordinate(const Eigen::MatrixBase<OtherDerived>&
+                      other)  // NOLINT(google-explicit-constructor)
     : Eigen::Vector3d{other}
   {
     normalizeIfNeeded();
@@ -180,6 +183,22 @@ public:
     (*this)[2] = normalizeAngle((*this)[2]);
   }
 
+  // Transfer methods
+  static AngularCoordinate fromRecord(
+    const msd_transfer::AngularCoordinateRecord& record)
+  {
+    return AngularCoordinate{record.pitch, record.roll, record.yaw};
+  }
+
+  [[nodiscard]] msd_transfer::AngularCoordinateRecord toRecord() const
+  {
+    msd_transfer::AngularCoordinateRecord record;
+    record.pitch = pitch();
+    record.roll = roll();
+    record.yaw = yaw();
+    return record;
+  }
+
   // Rule of Zero
   AngularCoordinate(const AngularCoordinate&) = default;
   AngularCoordinate(AngularCoordinate&&) noexcept = default;
@@ -229,8 +248,7 @@ struct std::formatter<msd_sim::AngularCoordinate>
   {
     return formatComponents(
       coord,
-      [](const auto& c)
-      { return std::tuple{c.pitch(), c.roll(), c.yaw()}; },
+      [](const auto& c) { return std::tuple{c.pitch(), c.roll(), c.yaw()}; },
       ctx);
   }
 };

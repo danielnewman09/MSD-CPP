@@ -1,9 +1,9 @@
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
-    EnvironmentTest.cpp
-    MotionControllerTest.cpp
-    ReferenceFrameTest.cpp
-    WorldModelCollisionTest.cpp
-    WorldModelContactIntegrationTest.cpp
+    AngularCoordinateTest.cpp
+    AngularCoordinateTransferTest.cpp
+    AngularRateTest.cpp
+    AngularRateTransferTest.cpp
+    CoordinateTransferTest.cpp
 )
 
 set(

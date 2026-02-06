@@ -26,14 +26,14 @@ skinparam note {
 package "msd_sim" {
 
     class Coordinate {
-        ' Inherits from Eigen::Vector3d
+        ' Inherits from msd_sim::Vector3D
         ..
         ' Construction
         +Coordinate()
         +Coordinate(x: double, y: double, z: double)
-        +Coordinate(vec: Eigen::Vector3d)
+        +Coordinate(vec: msd_sim::Vector3D)
         ..
-        ' Inherited from Eigen::Vector3d
+        ' Inherited from msd_sim::Vector3D
         +x(): double
         +y(): double
         +z(): double
@@ -49,7 +49,7 @@ package "msd_sim" {
     }
 
     class AngularCoordinate {
-        ' Inherits from Eigen::Vector3d
+        ' Inherits from msd_sim::Vector3D
         ..
         +AngularCoordinate()
         +AngularCoordinate(pitch, roll, yaw: double)
@@ -64,7 +64,7 @@ package "msd_sim" {
     }
 
     class AngularRate {
-        ' Inherits from Eigen::Vector3d
+        ' Inherits from msd_sim::Vector3D
         ..
         +AngularRate()
         +AngularRate(pitchRate, rollRate, yawRate: double)
@@ -89,7 +89,7 @@ package "msd_sim" {
 }
 
 package "Eigen" {
-    class "Eigen::Vector3d" as EigenVector3d {
+    class "msd_sim::Vector3D" as EigenVector3d {
         +x(): double
         +y(): double
         +z(): double

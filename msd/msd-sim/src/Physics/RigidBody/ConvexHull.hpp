@@ -118,7 +118,7 @@ public:
    * @return Reference to the facet with greatest dot product
    */
   [[nodiscard]] const Facet& getFacetAlignedWith(
-    const Eigen::Vector3d& normal) const;
+    const msd_sim::Vector3D& normal) const;
 
   /**
    * @brief Get all facets aligned with a given direction within tolerance.
@@ -132,7 +132,7 @@ public:
    * @return Vector of references to aligned facets
    */
   [[nodiscard]] std::vector<std::reference_wrapper<const Facet>>
-  getFacetsAlignedWith(const Eigen::Vector3d& normal,
+  getFacetsAlignedWith(const msd_sim::Vector3D& normal,
                        double tolerance = 1e-9) const;
 
   /**
@@ -228,7 +228,7 @@ private:
    * @brief Internal template method to compute the convex hull using Qhull.
    *
    * Accepts any vector-like type that provides x(), y(), z() accessors,
-   * such as Eigen::Vector3d or msd_sim::Coordinate.
+   * such as msd_sim::Vector3D or msd_sim::Coordinate.
    *
    * @tparam VectorType Type with x(), y(), z() methods returning doubles
    * @param points Input point cloud

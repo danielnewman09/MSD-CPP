@@ -83,7 +83,7 @@ package "msd_sim::Environment" {
 
     class Coordinate {
         <<value>>
-        ' Inherits Eigen::Vector3d
+        ' Inherits msd_sim::Vector3D
     }
 
     class Angle {

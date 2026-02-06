@@ -23,9 +23,8 @@ void InertialState::setAngularVelocity(const AngularRate& omega)
   quaternionRate = omegaToQuaternionRate(omega, orientation);
 }
 
-Eigen::Vector4d InertialState::omegaToQuaternionRate(
-  const AngularRate& omega,
-  const Eigen::Quaterniond& Q)
+Vector4D InertialState::omegaToQuaternionRate(const AngularRate& omega,
+                                              const Eigen::Quaterniond& Q)
 {
   // Q̇ = ½ * Q ⊗ [0, ω]
   // Quaternion multiplication: Q ⊗ [0, ω] where [0, ω] = (0, ωx, ωy, ωz)
@@ -65,9 +64,8 @@ Eigen::Vector4d InertialState::omegaToQuaternionRate(
   return qdot;
 }
 
-Eigen::Vector3d InertialState::quaternionRateToOmega(
-  const Eigen::Vector4d& Qdot,
-  const Eigen::Quaterniond& Q)
+AngularRate InertialState::quaternionRateToOmega(const Eigen::Vector4d& Qdot,
+                                                 const Eigen::Quaterniond& Q)
 {
   // ω = 2 * Q̄ ⊗ Q̇
   // where Q̄ is the conjugate quaternion (w, -x, -y, -z)

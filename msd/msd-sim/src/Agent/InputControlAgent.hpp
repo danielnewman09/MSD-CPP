@@ -45,7 +45,8 @@ public:
    * Translates boolean commands into velocity updates. Commands are directional
    * (agent converts to velocity in object's local frame).
    */
-  [[nodiscard]] InertialState updateState(const InertialState& currentState) const;
+  [[nodiscard]] InertialState updateState(
+    const InertialState& currentState) const;
 
   /**
    * @brief Set current input commands

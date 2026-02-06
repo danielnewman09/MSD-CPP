@@ -13,7 +13,7 @@ All three issues from the initial assessment have been successfully resolved:
 
 | Issue ID | Status | Verification |
 |----------|--------|--------------|
-| I1 | ✓ RESOLVED | Verified `Coordinate` is used consistently throughout for angular velocity/acceleration. No `Eigen::Vector3d` references remain. Design document types match PlantUML diagram. |
+| I1 | ✓ RESOLVED | Verified `Coordinate` is used consistently throughout for angular velocity/acceleration. No `msd_sim::Vector3D` references remain. Design document types match PlantUML diagram. |
 | I2 | ✓ RESOLVED | All invalid `Coordinate::Zero()` calls replaced with correct brace initialization `{0.0, 0.0, 0.0}`. Verified in both member initialization (line 161) and placeholder implementation (line 193). |
 | I3 | ✓ RESOLVED | `gravity_` member is now non-const, `setGravity()` method added with placeholder implementation. Constructor contradiction eliminated. Ticket requirement for `setGravity()` satisfied. |
 
