@@ -10,6 +10,7 @@
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
 #include "msd-sim/src/DataTypes/AngularRate.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Quaternion.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 
 namespace msd_sim
@@ -221,7 +222,7 @@ public:
    *
    * @ticket 0030_lagrangian_quaternion_physics
    */
-  void setQuaternion(const Eigen::Quaterniond& quaternion);
+  void setQuaternion(const QuaternionD& quaternion);
 
   /**
    * @brief Get the origin of this frame in global coordinates

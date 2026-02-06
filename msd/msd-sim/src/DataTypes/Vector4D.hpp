@@ -7,6 +7,8 @@
 #include "msd-sim/src/DataTypes/Vec4DBase.hpp"
 #include "msd-sim/src/DataTypes/Vec4FormatterBase.hpp"
 
+#include "msd-transfer/src/Vector4DRecord.hpp"
+
 namespace msd_sim
 {
 
@@ -15,6 +17,7 @@ namespace msd_sim
  *
  * Thin wrapper around Eigen::Vector4d providing:
  * - Full Eigen matrix operation compatibility
+ * - fromRecord/toRecord for database serialization
  * - std::format support
  *
  * Commonly used for:
@@ -23,9 +26,6 @@ namespace msd_sim
  * - RGBA colors
  *
  * Memory footprint: 32 bytes (same as Eigen::Vector4d)
- *
- * @note Transfer record support will be added when Vector4DRecord
- *       is created in msd-transfer.
  */
 struct Vector4D final : detail::Vec4DBase<Vector4D>
 {
@@ -36,6 +36,22 @@ struct Vector4D final : detail::Vec4DBase<Vector4D>
   // NOLINTNEXTLINE(google-explicit-constructor)
   Vector4D(const Eigen::MatrixBase<OtherDerived>& other) : Vec4DBase{other}
   {
+  }
+
+  // Transfer methods
+  static Vector4D fromRecord(const msd_transfer::Vector4DRecord& record)
+  {
+    return Vector4D{record.x, record.y, record.z, record.w};
+  }
+
+  [[nodiscard]] msd_transfer::Vector4DRecord toRecord() const
+  {
+    msd_transfer::Vector4DRecord record;
+    record.x = x();
+    record.y = y();
+    record.z = z();
+    record.w = w();
+    return record;
   }
 
   // Rule of Zero

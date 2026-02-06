@@ -8,8 +8,7 @@
 namespace msd_sim
 {
 
-SemiImplicitEulerIntegrator::SemiImplicitEulerIntegrator()  
-= default;
+SemiImplicitEulerIntegrator::SemiImplicitEulerIntegrator() = default;
 
 SemiImplicitEulerIntegrator::SemiImplicitEulerIntegrator(
   ConstraintSolver solver)
@@ -70,7 +69,7 @@ void SemiImplicitEulerIntegrator::step(
   state.setAngularVelocity(omega);
 
   // Integrate quaternion: Q_new = Q_old + Q̇ * dt
-  Eigen::Vector4d qVec = state.orientation.coeffs();
+  Vector4D qVec = state.orientation.coeffs();
   qVec += state.quaternionRate * dt;
   state.orientation.coeffs() = qVec;
 

@@ -147,7 +147,7 @@ TEST(QuaternionPhysicsAC2, ConstraintMaintainsUnitQuaternion_10000Steps)
     world.update(simTime);
 
     // Check constraint violation
-    const Eigen::Quaterniond& Q = mutableAsset.getInertialState().orientation;
+    const auto& Q = mutableAsset.getInertialState().orientation;
     double violation = std::abs(Q.squaredNorm() - 1.0);
     maxViolation = std::max(maxViolation, violation);
 

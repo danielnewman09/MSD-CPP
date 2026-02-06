@@ -1,10 +1,11 @@
 // Ticket: 0024_angular_coordinate
 // Design: docs/designs/0024_angular_coordinate/design.md
 
-#include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <utility>
+
+#include "msd-sim/src/Environment/ReferenceFrame.hpp"
 
 namespace msd_sim
 {
@@ -224,7 +225,7 @@ void ReferenceFrame::setRotation(const AngularCoordinate& angular)
   updateRotationMatrix();
 }
 
-void ReferenceFrame::setQuaternion(const Eigen::Quaterniond& quaternion)
+void ReferenceFrame::setQuaternion(const QuaternionD& quaternion)
 {
   // Normalize for robustness and convert to rotation matrix
   rotation_ = quaternion.normalized().toRotationMatrix();

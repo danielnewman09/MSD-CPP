@@ -6,7 +6,7 @@
 
 #include "msd-sim/src/DataTypes/Vec3DBase.hpp"
 #include "msd-sim/src/DataTypes/Vec3FormatterBase.hpp"
-#include "msd-transfer/src/CoordinateRecord.hpp"
+#include "msd-transfer/src/Vector3DRecord.hpp"
 
 namespace msd_sim
 {
@@ -36,15 +36,15 @@ struct Vector3D final : detail::Vec3DBase<Vector3D>
   {
   }
 
-  // Transfer methods using CoordinateRecord (same x,y,z structure)
-  static Vector3D fromRecord(const msd_transfer::CoordinateRecord& record)
+  // Transfer methods
+  static Vector3D fromRecord(const msd_transfer::Vector3DRecord& record)
   {
     return Vector3D{record.x, record.y, record.z};
   }
 
-  [[nodiscard]] msd_transfer::CoordinateRecord toRecord() const
+  [[nodiscard]] msd_transfer::Vector3DRecord toRecord() const
   {
-    msd_transfer::CoordinateRecord record;
+    msd_transfer::Vector3DRecord record;
     record.x = x();
     record.y = y();
     record.z = z();

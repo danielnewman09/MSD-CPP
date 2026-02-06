@@ -10,7 +10,10 @@
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
 #include "msd-sim/src/DataTypes/AngularRate.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Quaternion.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/DataTypes/Vector4D.hpp"
+
 #include "msd-transfer/src/InertialStateRecord.hpp"
 
 namespace msd_sim
@@ -39,16 +42,16 @@ struct InertialState
 {
   // Linear components
   Coordinate position;
-  Coordinate velocity;
-  Coordinate acceleration;
+  Vector3D velocity;
+  Vector3D acceleration;
 
   // Angular components (quaternion representation)
-  Eigen::Quaterniond orientation{1.0,
-                                 0.0,
-                                 0.0,
-                                 0.0};  // Identity quaternion (w, x, y, z)
-  Eigen::Vector4d quaternionRate{0.0, 0.0, 0.0, 0.0};  // Q̇ (w, x, y, z)
-  AngularRate angularAcceleration;                     // α = I⁻¹ * τ [rad/s²]
+  QuaternionD orientation{1.0,
+                          0.0,
+                          0.0,
+                          0.0};  // Identity quaternion (w, x, y, z)
+  Vector4D quaternionRate{0.0, 0.0, 0.0, 0.0};  // Q̇ (w, x, y, z)
+  AngularRate angularAcceleration;              // α = I⁻¹ * τ [rad/s²]
 
   /**
    * @brief Convert quaternion rate to angular velocity
@@ -76,7 +79,7 @@ struct InertialState
    * Formula: Q̇ = ½ * Q ⊗ [0, ω]
    */
   static Vector4D omegaToQuaternionRate(const AngularRate& omega,
-                                        const Eigen::Quaterniond& Q);
+                                        const QuaternionD& Q);
 
   /**
    * @brief Convert quaternion rate to angular velocity
@@ -86,8 +89,8 @@ struct InertialState
    *
    * Formula: ω = 2 * Q̄ ⊗ Q̇
    */
-  static AngularRate quaternionRateToOmega(const Eigen::Vector4d& Qdot,
-                                           const Eigen::Quaterniond& Q);
+  static AngularRate quaternionRateToOmega(const Vector4D& Qdot,
+                                           const QuaternionD& Q);
 
   /**
    * @brief Get Euler angles from quaternion (deprecated, for backward
@@ -102,6 +105,20 @@ struct InertialState
   [[nodiscard]] [[deprecated(
     "Use quaternion representation directly. Euler angles have gimbal lock.")]]
   AngularCoordinate getEulerAngles() const;
+
+  // Transfer methods
+  /**
+   * @brief Create InertialState from a database record
+   * @param record The transfer record containing state data
+   * @return Reconstructed InertialState
+   */
+  static InertialState fromRecord(const msd_transfer::InertialStateRecord& record);
+
+  /**
+   * @brief Convert InertialState to a database record
+   * @return Transfer record containing all state data
+   */
+  [[nodiscard]] msd_transfer::InertialStateRecord toRecord() const;
 };
 
 }  // namespace msd_sim

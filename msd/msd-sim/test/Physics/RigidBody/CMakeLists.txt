@@ -4,4 +4,5 @@
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/AssetEnvironmentTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ConvexHullTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/InertialStateTransferTest.cpp
 )

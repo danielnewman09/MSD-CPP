@@ -4,6 +4,8 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     AngularRateTest.cpp
     AngularRateTransferTest.cpp
     CoordinateTransferTest.cpp
+    Vector3DTransferTest.cpp
+    Vector4DTransferTest.cpp
 )
 
 set(
