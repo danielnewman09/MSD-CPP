@@ -16,6 +16,7 @@
 #include "msd-transfer/src/MaterialRecord.hpp"
 #include "msd-transfer/src/MeshRecord.hpp"
 #include "msd-transfer/src/PhysicsTemplateRecord.hpp"
+#include "msd-transfer/src/SimulationFrameRecord.hpp"
 #include "msd-transfer/src/Vector3DRecord.hpp"
 #include "msd-transfer/src/Vector4DRecord.hpp"
 

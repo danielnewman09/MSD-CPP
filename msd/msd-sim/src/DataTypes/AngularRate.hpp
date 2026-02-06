@@ -108,7 +108,7 @@ public:
     return AngularRate{record.pitch, record.roll, record.yaw};
   }
 
-  msd_transfer::AngularRateRecord toRecord() const
+  [[nodiscard]] msd_transfer::AngularRateRecord toRecord() const
   {
     msd_transfer::AngularRateRecord record;
     record.pitch = pitch();

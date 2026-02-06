@@ -9,6 +9,7 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     EngineIntegrationTest.cpp
 )
 
+add_subdirectory(DataRecorder)
 add_subdirectory(Environment)
 add_subdirectory(Physics)
 add_subdirectory(DataTypes)

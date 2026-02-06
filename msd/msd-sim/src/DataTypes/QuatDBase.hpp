@@ -36,7 +36,7 @@ public:
   }
 
   // NOLINTNEXTLINE(google-explicit-constructor)
-  QuatDBase(const Eigen::Quaterniond& quat) : quat_{quat}
+  QuatDBase(Eigen::Quaterniond quat) : quat_{std::move(quat)}
   {
   }
 

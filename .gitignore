@@ -16,3 +16,5 @@ profile_results/
 .debug-sessions/*
 test_geometry.db
 analysis/clang_tidy_reports/
+*.db-shm
+*.db-wal

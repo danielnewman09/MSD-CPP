@@ -13,9 +13,11 @@
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 
-
 namespace msd_sim
 {
+
+// Forward declare DataRecorder to avoid including in header
+class DataRecorder;
 
 /**
  * @brief Container and manager for all simulation objects
@@ -61,7 +63,7 @@ public:
    * @ticket 0030_lagrangian_quaternion_physics
    */
   WorldModel();
-  ~WorldModel() = default;
+  ~WorldModel();  // Defined in .cpp for unique_ptr forward-declared type
 
   // ========== Object Management ==========
 
@@ -246,6 +248,34 @@ public:
    */
   uint32_t getInertialAssetId();
 
+  // ========== Data Recording (ticket 0038) ==========
+
+  /**
+   * @brief Enable simulation data recording to SQLite database
+   *
+   * Creates a DataRecorder instance that operates on a background thread,
+   * periodically flushing buffered records. Recording begins immediately
+   * and continues until disableRecording() is called or WorldModel is destroyed.
+   *
+   * @param dbPath Path to SQLite database file (created if doesn't exist)
+   * @param flushInterval How often to flush buffered records to disk
+   *
+   * @throws std::runtime_error if database cannot be opened
+   * @ticket 0038_simulation_data_recorder
+   */
+  void enableRecording(const std::string& dbPath,
+                       std::chrono::milliseconds flushInterval =
+                         std::chrono::milliseconds{100});
+
+  /**
+   * @brief Disable simulation data recording
+   *
+   * Flushes all pending records and stops the recorder thread.
+   * After this call, no more recording occurs until enableRecording() is called.
+   *
+   * @ticket 0038_simulation_data_recorder
+   */
+  void disableRecording();
 
 private:
   // ========== Internal Update Methods ==========
@@ -268,6 +298,15 @@ private:
    */
   void updateCollisions(double dt);
 
+  /**
+   * @brief Record current frame to database if recording is enabled
+   *
+   * Creates a SimulationFrameRecord with timestamp, then records all inertial
+   * assets' states with FK reference to the frame.
+   *
+   * @ticket 0038_simulation_data_recorder
+   */
+  void recordCurrentFrame();
 
   // ========== Data ==========
 
@@ -305,6 +344,9 @@ private:
   // NEW: Potential energies and integrator (ticket 0030)
   std::vector<std::unique_ptr<PotentialEnergy>> potentialEnergies_;
   std::unique_ptr<Integrator> integrator_;
+
+  // NEW: Data recorder (ticket 0038)
+  std::unique_ptr<DataRecorder> dataRecorder_;
 };
 
 }  // namespace msd_sim

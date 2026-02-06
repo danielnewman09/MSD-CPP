@@ -61,8 +61,8 @@ public:
 
   // Template constructor for Eigen expressions
   template <typename OtherDerived>
-  AngularCoordinate(const Eigen::MatrixBase<OtherDerived>&
-                      other)  // NOLINT(google-explicit-constructor)
+  explicit AngularCoordinate(const Eigen::MatrixBase<OtherDerived>&
+                               other)  // NOLINT(google-explicit-constructor)
     : Eigen::Vector3d{other}
   {
     normalizeIfNeeded();

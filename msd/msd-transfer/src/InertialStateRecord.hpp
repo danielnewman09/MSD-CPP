@@ -6,10 +6,12 @@
 
 #include <boost/describe.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
+#include <cpp_sqlite/src/cpp_sqlite/DBForeignKey.hpp>
 
 #include "msd-transfer/src/AngularRateRecord.hpp"
 #include "msd-transfer/src/CoordinateRecord.hpp"
 #include "msd-transfer/src/QuaternionDRecord.hpp"
+#include "msd-transfer/src/SimulationFrameRecord.hpp"
 #include "msd-transfer/src/Vector3DRecord.hpp"
 #include "msd-transfer/src/Vector4DRecord.hpp"
 
@@ -30,8 +32,10 @@ namespace msd_transfer
  * - orientation: Unit quaternion (w, x, y, z)
  * - quaternionRate: Quaternion time derivative Q̇
  * - angularAcceleration: Angular acceleration [rad/s²]
+ * - frame: Foreign key to SimulationFrameRecord for timestamping
  *
  * @see msd_sim::InertialState
+ * @ticket 0038_simulation_data_recorder
  */
 struct InertialStateRecord : public cpp_sqlite::BaseTransferObject
 {
@@ -41,18 +45,20 @@ struct InertialStateRecord : public cpp_sqlite::BaseTransferObject
   QuaternionDRecord orientation;
   Vector4DRecord quaternionRate;
   AngularRateRecord angularAcceleration;
+  cpp_sqlite::ForeignKey<SimulationFrameRecord> frame;
 };
 
-}  // namespace msd_transfer
-
 // Register with Boost.Describe for cpp_sqlite ORM
-BOOST_DESCRIBE_STRUCT(msd_transfer::InertialStateRecord,
+BOOST_DESCRIBE_STRUCT(InertialStateRecord,
                       (cpp_sqlite::BaseTransferObject),
                       (position,
                        velocity,
                        acceleration,
                        orientation,
                        quaternionRate,
-                       angularAcceleration));
+                       angularAcceleration,
+                       frame));
+
+}  // namespace msd_transfer
 
 #endif  // MSD_TRANSFER_INERTIAL_STATE_RECORD_HPP
