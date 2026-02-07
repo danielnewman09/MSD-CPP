@@ -1,11 +1,15 @@
 // Ticket: 0024_angular_coordinate
 // Design: docs/designs/0024_angular_coordinate/design.md
+// Ticket: 0041_reference_frame_transform_refactor
+// Design: docs/designs/0041_reference_frame_transform_refactor/design.md
 
 #ifndef REFERENCE_FRAME_HPP
 #define REFERENCE_FRAME_HPP
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include <concepts>
+#include <type_traits>
 
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
 #include "msd-sim/src/DataTypes/AngularRate.hpp"
@@ -15,6 +19,20 @@
 
 namespace msd_sim
 {
+
+namespace detail
+{
+
+/// Concept constraining template parameters to 3D vector types compatible
+/// with ReferenceFrame transforms. Accepts Vector3D, Coordinate,
+/// AngularRate, and AngularCoordinate.
+/// @ticket 0041_reference_frame_transform_refactor
+template<typename T>
+concept EigenVec3Type =
+  std::derived_from<T, Eigen::Vector3d> &&
+  std::is_constructible_v<T, const Eigen::Vector3d&>;
+
+}  // namespace detail
 
 /**
  * @brief A reference frame for coordinate transformations
@@ -126,80 +144,140 @@ public:
    */
   void localToGlobalBatch(Eigen::Matrix3Xd& localCoords) const;
 
+  // === New explicit template API (Ticket 0041) ===
+
+  /**
+   * @brief Transform a point from global frame to local frame.
+   * Applies rotation AND translation (for positions/points).
+   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularRate,
+   * AngularCoordinate)
+   * @param globalPoint Point in global frame
+   * @return Point in this local frame
+   * @ticket 0041_reference_frame_transform_refactor
+   */
+  template<detail::EigenVec3Type T>
+  [[nodiscard]] T globalToLocalAbsolute(const T& globalPoint) const
+  {
+    return T{getRotation().transpose() * (globalPoint - origin_)};
+  }
+
+  /**
+   * @brief Transform a point from local frame to global frame.
+   * Applies rotation AND translation (for positions/points).
+   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularRate,
+   * AngularCoordinate)
+   * @param localPoint Point in this local frame
+   * @return Point in global frame
+   * @ticket 0041_reference_frame_transform_refactor
+   */
+  template<detail::EigenVec3Type T>
+  [[nodiscard]] T localToGlobalAbsolute(const T& localPoint) const
+  {
+    return T{getRotation() * localPoint + origin_};
+  }
+
+  /**
+   * @brief Transform a direction vector from global frame to local frame.
+   * Applies rotation ONLY (for directions, normals, velocities).
+   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularRate,
+   * AngularCoordinate)
+   * @param globalVector Direction vector in global frame
+   * @return Direction vector in this local frame
+   * @ticket 0041_reference_frame_transform_refactor
+   */
+  template<detail::EigenVec3Type T>
+  [[nodiscard]] T globalToLocalRelative(const T& globalVector) const
+  {
+    return T{getRotation().transpose() * globalVector};
+  }
+
+  /**
+   * @brief Transform a direction vector from local frame to global frame.
+   * Applies rotation ONLY (for directions, normals, velocities).
+   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularRate,
+   * AngularCoordinate)
+   * @param localVector Direction vector in this local frame
+   * @return Direction vector in global frame
+   * @ticket 0041_reference_frame_transform_refactor
+   */
+  template<detail::EigenVec3Type T>
+  [[nodiscard]] T localToGlobalRelative(const T& localVector) const
+  {
+    return T{getRotation() * localVector};
+  }
+
+  // === Deprecated overloaded API ===
+
   /**
    * @brief Transform a direction vector from global frame to local frame
    * (relative transformation)
    *
-   * This applies only rotation, not translation. Use this for transforming
-   * direction vectors, velocities, or any vector that represents a direction
-   * rather than a position.
+   * @deprecated Use globalToLocalRelative() for directions
    *
    * @param globalVector Direction vector in global frame
    * @return Direction vector in local frame
    */
+  [[deprecated("Use globalToLocalRelative() for directions")]]
   msd_sim::Vector3D globalToLocal(const msd_sim::Vector3D& globalVector) const;
 
   /**
    * @brief Transform a direction vector from global frame to local frame
    * (relative transformation)
    *
-   * This applies only rotation, not translation. Use this for transforming
-   * direction vectors, velocities, or any vector that represents a direction
-   * rather than a position.
+   * @deprecated Use globalToLocalRelative() for angular rates
    *
    * @param globalVector Direction vector in global frame
    * @return Direction vector in local frame
    */
+  [[deprecated("Use globalToLocalRelative() for angular rates")]]
   AngularRate globalToLocal(const AngularRate& globalVector) const;
 
   /**
    * @brief Transform a direction vector from local frame to global frame
    * (relative transformation)
    *
-   * This applies only rotation, not translation. Use this for transforming
-   * direction vectors, velocities, or any vector that represents a direction
-   * rather than a position.
+   * @deprecated Use localToGlobalRelative() for directions
    *
    * @param localVector Direction vector in local frame
    * @return Direction vector in global frame
    */
+  [[deprecated("Use localToGlobalRelative() for directions")]]
   Vector3D localToGlobal(const Vector3D& localVector) const;
 
   /**
    * @brief Transform a direction vector from local frame to global frame
    * (relative transformation)
    *
-   * This applies only rotation, not translation. Use this for transforming
-   * direction vectors, velocities, or any vector that represents a direction
-   * rather than a position.
+   * @deprecated Use localToGlobalRelative() for angular rates
    *
    * @param localVector Direction vector in local frame
    * @return Direction vector in global frame
    */
+  [[deprecated("Use localToGlobalRelative() for angular rates")]]
   AngularRate localToGlobal(const AngularRate& localVector) const;
 
   /**
    * @brief Transform a point from global frame to local frame (absolute
    * transformation)
    *
-   * This applies both rotation and translation. Use this for transforming
-   * positions/points. This is an alias for globalToLocal() for clarity.
+   * @deprecated Use globalToLocalAbsolute() for points or globalToLocalRelative() for directions
    *
    * @param globalPoint Point in global frame
    * @return Point in local frame
    */
+  [[deprecated("Use globalToLocalAbsolute() for points or globalToLocalRelative() for directions")]]
   Coordinate globalToLocal(const Coordinate& globalPoint) const;
 
   /**
    * @brief Transform a point from local frame to global frame (absolute
    * transformation)
    *
-   * This applies both rotation and translation. Use this for transforming
-   * positions/points. This is an alias for localToGlobal() for clarity.
+   * @deprecated Use localToGlobalAbsolute() for points or localToGlobalRelative() for directions
    *
    * @param localPoint Point in local frame
    * @return Point in global frame
    */
+  [[deprecated("Use localToGlobalAbsolute() for points or localToGlobalRelative() for directions")]]
   Coordinate localToGlobal(const Coordinate& localPoint) const;
 
   /**
