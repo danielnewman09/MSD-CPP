@@ -18,3 +18,5 @@ test_geometry.db
 analysis/clang_tidy_reports/
 *.db-shm
 *.db-wal
+*.pyc
+**/.venv/**
