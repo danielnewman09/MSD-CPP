@@ -239,7 +239,7 @@ T localToGlobalAbsolute(const T& localPoint) const
 - **Started**: 2026-02-07
 - **Completed**: 2026-02-07
 - **Branch**: 0041-reference-frame-transform-refactor
-- **PR**: N/A
+- **PR**: #13
 - **Artifacts**:
   - `docs/designs/0041_reference_frame_transform_refactor/quality-gate-report.md`
 - **Notes**: All gates passed. Build gate caught 7 remaining deprecated API calls in test files (ReferenceFrameTest.cpp and ShaderTransformTest.cpp) — these were migrated as remediation. Release build then passed with zero warnings. 749 tests run, 740 pass (9 pre-existing failures). clang-tidy: 0 new warnings from ticket changes. Benchmarks: N/A (refactoring ticket).
@@ -263,3 +263,8 @@ T localToGlobalAbsolute(const T& localPoint) const
   - `Absolute_Relative_Roundtrip`
   - `TypeDeduction_AllTypes` — AC2 validation
   - `Relative_Does_Not_Apply_Translation_Coordinate` — AC1/AC6
+
+### GitHub Integration
+- **Branch**: `0041-reference-frame-transform-refactor`
+- **PR**: [#13](https://github.com/danielnewman09/MSD-CPP/pull/13) — `Closes #9`
+- **Issue**: [#9](https://github.com/danielnewman09/MSD-CPP/issues/9) — ReferenceFrame Transform API Refactor
