@@ -10,4 +10,6 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     ContactConstraint.cpp
     ContactConstraintFactory.cpp
     FrictionConstraint.cpp
+    PositionCorrector.cpp
+    ContactCache.cpp
 )

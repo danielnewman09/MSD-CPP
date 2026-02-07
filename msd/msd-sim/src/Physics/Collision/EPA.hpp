@@ -136,6 +136,10 @@ public:
   size_t extractContactManifold(size_t faceIndex,
                                 std::array<ContactPoint, 4>& contacts) const;
 
+  // Edge contact generation (Ticket: 0040c_edge_contact_manifold)
+  size_t generateEdgeContacts(const Facet& epaFace,
+                              std::array<ContactPoint, 4>& contacts) const;
+
   const AssetPhysical& assetA_;
   const AssetPhysical& assetB_;
   double epsilon_;

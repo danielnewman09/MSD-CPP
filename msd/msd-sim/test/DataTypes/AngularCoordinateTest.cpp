@@ -158,7 +158,7 @@ TEST(AngularCoordinateTest, Addition)
 {
   AngularCoordinate a{M_PI / 4, 0, 0};
   AngularCoordinate b{M_PI / 4, 0, 0};
-  AngularCoordinate c = a + b;
+  AngularCoordinate c{AngularCoordinate{a + b}};
   EXPECT_DOUBLE_EQ(c.pitch(), M_PI / 2);
 }
 
@@ -166,14 +166,14 @@ TEST(AngularCoordinateTest, Subtraction)
 {
   AngularCoordinate a{M_PI / 2, 0, 0};
   AngularCoordinate b{M_PI / 4, 0, 0};
-  AngularCoordinate c = a - b;
+  AngularCoordinate c{AngularCoordinate{a - b}};
   EXPECT_DOUBLE_EQ(c.pitch(), M_PI / 4);
 }
 
 TEST(AngularCoordinateTest, ScalarMultiplication)
 {
   AngularCoordinate a{M_PI / 4, 0, 0};
-  AngularCoordinate c = a * 2.0;
+  AngularCoordinate c{AngularCoordinate{a * 2.0}};
   EXPECT_DOUBLE_EQ(c.pitch(), M_PI / 2);
 }
 
@@ -181,7 +181,7 @@ TEST(AngularCoordinateTest, CrossProduct)
 {
   AngularCoordinate a{1.0, 0.0, 0.0};
   AngularCoordinate b{0.0, 1.0, 0.0};
-  AngularCoordinate c = a.cross(b);
+  AngularCoordinate c{AngularCoordinate{a.cross(b)}};
   EXPECT_NEAR(c[2], 1.0, 1e-10);
 }
 

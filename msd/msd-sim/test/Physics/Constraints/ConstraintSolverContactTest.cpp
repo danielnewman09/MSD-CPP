@@ -425,9 +425,12 @@ TEST(ConstraintSolverContactTest, EqualMass_SymmetricForces_0033)
 TEST(ConstraintSolverContactTest, StaticBody_ZeroForceOnStatic_0033)
 {
   // Test: Body with inverseMass=0 receives zero velocity change
+  // Ticket: 0040b — stateA approaching stateB so contact produces positive
+  // RHS via velocity (split impulse: zero-velocity contacts produce lambda=0).
   ConstraintSolver solver;
 
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};
@@ -461,9 +464,12 @@ TEST(ConstraintSolverContactTest, StaticBody_ZeroForceOnStatic_0033)
 TEST(ConstraintSolverContactTest, ForceDirection_AlongContactNormal_0033)
 {
   // Test: Constraint force is along the contact normal direction
+  // Ticket: 0040b — stateA approaching stateB so contact produces positive
+  // RHS via velocity (split impulse: zero-velocity contacts produce lambda=0).
   ConstraintSolver solver;
 
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};  // Z-axis normal
@@ -501,9 +507,12 @@ TEST(ConstraintSolverContactTest, ForceDirection_AlongContactNormal_0033)
 TEST(ConstraintSolverContactTest, AngularForces_LeverArmProducesTorque_0033)
 {
   // Test: Off-center contact produces angular constraint torque
+  // Ticket: 0040b — stateA approaching stateB so contact produces positive
+  // RHS via velocity (split impulse: zero-velocity contacts produce lambda=0).
   ConstraintSolver solver;
 
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};
@@ -577,45 +586,73 @@ TEST(ConstraintSolverContactTest,
 }
 
 TEST(ConstraintSolverContactTest,
-     BaumgarteStabilization_ReducesPenetration_0033)
+     SlopCorrection_CappedToApproachVelocity_0033)
 {
-  // Test: ERP bias term produces force that reduces penetration depth
+  // Ticket: 0040b — Split impulse with min-capped slop correction.
+  //
+  // slopRecovery = min(max(pen - 0.005, 0) / dt, |jv|)
+  //
+  // With approaching velocity and penetration, the slop correction adds
+  // bounce recovery capped to the approach velocity. At zero velocity,
+  // slopRecovery is capped to 0 and position correction is deferred
+  // to PositionCorrector.
   ConstraintSolver solver;
-
-  // Bodies at rest with penetration
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
-  InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};
   Coordinate contactA{0, 0, 0.5};
-  Coordinate contactB{0, 0, 0.3};  // Large penetration
+  Coordinate contactB{0, 0, 0.3};
   Coordinate comA{0, 0, 0};
   Coordinate comB{0, 0, 0};
 
-  auto contact = std::make_unique<ContactConstraint>(0,
-                                                     1,
-                                                     normal,
-                                                     contactA,
-                                                     contactB,
-                                                     0.2,
-                                                     comA,
-                                                     comB,
-                                                     0.0,
-                                                     0.0);  // Large penetration
+  double const penetration = 0.2;
+  double const dt = 0.016;
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                  stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
-    constraints, states, inverseMasses, inverseInertias, 2, 0.016);
+  // Case 1: Bodies approaching — elastic contact produces slop correction
+  {
+    InertialState stateA = createDefaultState(
+      Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
+    InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
-  EXPECT_TRUE(result.converged);
-  EXPECT_GT(result.lambdas(0),
-            0.0);  // Baumgarte bias produces corrective force
+    auto contact = std::make_unique<ContactConstraint>(
+      0, 1, normal, contactA, contactB, penetration, comA, comB, 0.5, 0.0);
+
+    std::vector<TwoBodyConstraint*> constraints{contact.get()};
+    std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                    stateB};
+    auto result = solver.solveWithContacts(
+      constraints, states, inverseMasses, inverseInertias, 2, dt);
+
+    EXPECT_TRUE(result.converged);
+    EXPECT_GT(result.lambdas(0), 0.0)
+      << "Approaching elastic contact produces positive lambda";
+  }
+
+  // Case 2: Bodies at rest — slop correction provides gentle position recovery
+  // (Ticket: 0040b — resting contacts get small correction in velocity RHS
+  //  to prevent sinking, in addition to PositionCorrector)
+  {
+    InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
+    InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
+
+    auto contact = std::make_unique<ContactConstraint>(
+      0, 1, normal, contactA, contactB, penetration, comA, comB, 0.5, 0.0);
+
+    std::vector<TwoBodyConstraint*> constraints{contact.get()};
+    std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                    stateB};
+    auto result = solver.solveWithContacts(
+      constraints, states, inverseMasses, inverseInertias, 2, dt);
+
+    EXPECT_TRUE(result.converged);
+    // Resting contact with penetration > slop produces small positive lambda
+    // from velocity-level slop correction (0.2 * (pen - 0.005) / dt)
+    EXPECT_GT(result.lambdas(0), 0.0)
+      << "Resting contact with penetration gets slop correction";
+  }
 }
 
 TEST(ConstraintSolverContactTest, Restitution_ZeroBounce_0033)
@@ -764,11 +801,14 @@ TEST(ConstraintSolverContactTest, BothBodiesStatic_AllLambdasZero_0033)
 TEST(ConstraintSolverContactTest, ParallelContacts_SameNormal_0033)
 {
   // Test: Multiple contacts with same normal converge correctly
+  // Ticket: 0040b — stateA approaching stateB so contacts produce positive
+  // RHS via velocity (split impulse: zero-velocity contacts produce lambda=0).
   ConstraintSolver solver;
   solver.setMaxIterations(50);  // Allow many iterations for coupled contacts
   solver.setConvergenceTolerance(1e-3);  // Looser tolerance for stability
 
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};  // Same normal for all contacts
@@ -863,9 +903,12 @@ TEST(ConstraintSolverContactTest, OrthogonalContacts_IndependentResolution_0033)
 TEST(ConstraintSolverContactTest, HighMassRatio_Converges_0033)
 {
   // Test: Mass ratio of 1000:1 still converges
+  // Ticket: 0040b — stateA approaching stateB so contact produces positive
+  // RHS via velocity (split impulse: zero-velocity contacts produce lambda=0).
   ConstraintSolver solver;
 
-  InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};

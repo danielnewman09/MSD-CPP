@@ -428,6 +428,86 @@ std::vector<Coordinate> buildPolygonFromFacets(
 
   return vertices;
 }
+// Ticket: 0040c_edge_contact_manifold
+// Compute the closest pair of points between two line segments in 3D.
+// Standard algorithm from Ericson, "Real-Time Collision Detection", Section
+// 5.1.9.
+std::pair<Coordinate, Coordinate> closestPointsBetweenSegments(
+  const Coordinate& p1, const Coordinate& q1,
+  const Coordinate& p2, const Coordinate& q2)
+{
+  Coordinate const d1 = q1 - p1;  // Direction of segment 1
+  Coordinate const d2 = q2 - p2;  // Direction of segment 2
+  Coordinate const r = p1 - p2;
+
+  double const a = d1.dot(d1);  // Squared length of segment 1
+  double const e = d2.dot(d2);  // Squared length of segment 2
+  double const f = d2.dot(r);
+
+  double s = 0.0;
+  double t = 0.0;
+
+  constexpr double kEpsilon = 1e-10;
+
+  if (a <= kEpsilon && e <= kEpsilon)
+  {
+    // Both segments degenerate to points
+    return {p1, p2};
+  }
+
+  if (a <= kEpsilon)
+  {
+    // Segment 1 degenerates to a point
+    s = 0.0;
+    t = std::clamp(f / e, 0.0, 1.0);
+  }
+  else
+  {
+    double const c = d1.dot(r);
+    if (e <= kEpsilon)
+    {
+      // Segment 2 degenerates to a point
+      t = 0.0;
+      s = std::clamp(-c / a, 0.0, 1.0);
+    }
+    else
+    {
+      // General non-degenerate case
+      double const b = d1.dot(d2);
+      double const denom = a * e - b * b;  // Always >= 0
+
+      // If segments not parallel, compute closest point on line 1 to line 2
+      if (std::abs(denom) > kEpsilon)
+      {
+        s = std::clamp((b * f - c * e) / denom, 0.0, 1.0);
+      }
+      else
+      {
+        s = 0.0;  // Parallel segments: pick arbitrary s
+      }
+
+      // Compute t from s
+      t = (b * s + f) / e;
+
+      // Clamp t and recompute s if needed
+      if (t < 0.0)
+      {
+        t = 0.0;
+        s = std::clamp(-c / a, 0.0, 1.0);
+      }
+      else if (t > 1.0)
+      {
+        t = 1.0;
+        s = std::clamp((b - c) / a, 0.0, 1.0);
+      }
+    }
+  }
+
+  Coordinate const closest1 = p1 + d1 * s;
+  Coordinate const closest2 = p2 + d2 * t;
+  return {closest1, closest2};
+}
+
 }  // namespace
 
 size_t EPA::extractContactManifold(size_t faceIndex,
@@ -439,12 +519,23 @@ size_t EPA::extractContactManifold(size_t faceIndex,
   const Facet& epaFace = faces_[faceIndex];
   const auto& normal = epaFace.normal;
 
-  // Find all coplanar faces on each hull aligned with the collision normal
-  auto facesA = assetA_.getCollisionHull().getFacetsAlignedWith(normal);
-  auto facesB = assetB_.getCollisionHull().getFacetsAlignedWith(-normal);
+  // Transform EPA normal from world space to each hull's local space
+  // before querying aligned facets (hull normals are stored in local space)
+  // Ticket: 0039e — fixes single-contact-point bug for rotated objects
+  // IMPORTANT: Cast to Vector3D to use rotation-only overload (not Coordinate
+  // overload which applies translation, corrupting the direction vector)
+  msd_sim::Vector3D const normalAsVec{normal.x(), normal.y(), normal.z()};
+  msd_sim::Vector3D const normalLocalA =
+    assetA_.getReferenceFrame().globalToLocal(normalAsVec);
+  msd_sim::Vector3D const negNormal{-normal.x(), -normal.y(), -normal.z()};
+  msd_sim::Vector3D const normalLocalB =
+    assetB_.getReferenceFrame().globalToLocal(negNormal);
 
-  double const alignA = std::abs(normal.dot(facesA[0].get().normal));
-  double const alignB = std::abs(normal.dot(facesB[0].get().normal));
+  auto facesA = assetA_.getCollisionHull().getFacetsAlignedWith(normalLocalA);
+  auto facesB = assetB_.getCollisionHull().getFacetsAlignedWith(normalLocalB);
+
+  double const alignA = std::abs(normalLocalA.dot(facesA[0].get().normal));
+  double const alignB = std::abs(normalLocalB.dot(facesB[0].get().normal));
 
   // Reference face = more aligned with normal (provides clipping planes)
   // Incident face = less aligned (gets clipped)
@@ -482,11 +573,21 @@ size_t EPA::extractContactManifold(size_t faceIndex,
                            refFrame,
                            refNormalWorld);
 
-  // Handle degenerate cases
+  // Handle degenerate cases — attempt edge contact generation first
+  // Ticket: 0040c_edge_contact_manifold
+  // Ticket: 0040a — fallback uses EPA offset as per-contact depth
   if (refVerts.size() < 3 || incidentPoly.size() < 3)
   {
+    size_t const edgeContactCount =
+      generateEdgeContacts(epaFace, contacts);
+    if (edgeContactCount >= 2)
+    {
+      return edgeContactCount;
+    }
+
+    // Fallback to single EPA centroid point
     Coordinate const contactPoint = epaFace.normal * epaFace.offset;
-    contacts[0] = ContactPoint{contactPoint, contactPoint};
+    contacts[0] = ContactPoint{contactPoint, contactPoint, epaFace.offset};
     return 1;
   }
 
@@ -526,10 +627,11 @@ size_t EPA::extractContactManifold(size_t faceIndex,
   }
 
   // If no points survived clipping, fall back to EPA centroid contact
+  // Ticket: 0040a — fallback uses EPA offset as per-contact depth
   if (finalPoints.empty())
   {
     Coordinate const contactPoint = epaFace.normal * epaFace.offset;
-    contacts[0] = ContactPoint{contactPoint, contactPoint};
+    contacts[0] = ContactPoint{contactPoint, contactPoint, epaFace.offset};
     return 1;
   }
 
@@ -537,25 +639,131 @@ size_t EPA::extractContactManifold(size_t faceIndex,
   size_t const count = std::min(finalPoints.size(), static_cast<size_t>(4));
 
   // Build contact pairs: project incident points onto reference plane
+  // Ticket: 0040a — compute per-contact penetration depth
   for (size_t i = 0; i < count; ++i)
   {
     const Coordinate& incPoint = finalPoints[i];
     double const dist = refNormalWorld.dot(incPoint) - refPlaneD;
     Coordinate const refPoint = incPoint - refNormalWorld * dist;
 
+    // Per-contact depth: distance from incident point to reference plane.
+    // dist < 0 means the point is below the reference face (penetrating),
+    // so -dist gives a positive penetration depth value.
+    double const pointDepth = std::max(-dist, 0.0);
+
     // Assign based on which asset owns the reference face
     if (refIsA)
     {
-      contacts[i] = ContactPoint{refPoint, incPoint};
+      contacts[i] = ContactPoint{refPoint, incPoint, pointDepth};
     }
     else
     {
-      contacts[i] = ContactPoint{incPoint, refPoint};
+      contacts[i] = ContactPoint{incPoint, refPoint, pointDepth};
     }
   }
 
   return count;
 }
 
+// Ticket: 0040c_edge_contact_manifold
+// Design: docs/designs/0040c-edge-contact-manifold/design.md
+size_t EPA::generateEdgeContacts(
+  const Facet& epaFace,
+  std::array<ContactPoint, 4>& contacts) const
+{
+  const auto& normal = epaFace.normal;
+
+  // 1. Compute witness points from EPA face via barycentric interpolation
+  const auto& v0 = vertices_[epaFace.vertexIndices[0]];
+  const auto& v1 = vertices_[epaFace.vertexIndices[1]];
+  const auto& v2 = vertices_[epaFace.vertexIndices[2]];
+  Coordinate const witnessA =
+    (v0.witnessA + v1.witnessA + v2.witnessA) / 3.0;
+  Coordinate const witnessB =
+    (v0.witnessB + v1.witnessB + v2.witnessB) / 3.0;
+
+  // 2. Transform witness points to local space for edge query
+  const auto& frameA = assetA_.getReferenceFrame();
+  const auto& frameB = assetB_.getReferenceFrame();
+  Coordinate const localWitnessA = frameA.globalToLocal(witnessA);
+  Coordinate const localWitnessB = frameB.globalToLocal(witnessB);
+
+  // 3. Find closest edge on each hull
+  auto edgeA = assetA_.getCollisionHull().findClosestEdge(localWitnessA);
+  auto edgeB = assetB_.getCollisionHull().findClosestEdge(localWitnessB);
+
+  // 4. Transform edge endpoints to world space
+  Coordinate const edgeA_start = frameA.localToGlobal(edgeA.start);
+  Coordinate const edgeA_end = frameA.localToGlobal(edgeA.end);
+  Coordinate const edgeB_start = frameB.localToGlobal(edgeB.start);
+  Coordinate const edgeB_end = frameB.localToGlobal(edgeB.end);
+
+  // 5. Compute closest points between two line segments
+  auto [closestOnA, closestOnB] =
+    closestPointsBetweenSegments(edgeA_start, edgeA_end,
+                                 edgeB_start, edgeB_end);
+
+  // 6. Generate 2 contact points
+  // Use the edge endpoints projected onto the contact plane
+  // Point 1: closest point between the edges (midpoint)
+  Coordinate const midpoint1 = (closestOnA + closestOnB) * 0.5;
+
+  // Point 2: offset along the edge direction to provide geometric extent
+  Coordinate const edgeDirA = edgeA_end - edgeA_start;
+  Coordinate const edgeDirB = edgeB_end - edgeB_start;
+  double const edgeLenA = edgeDirA.norm();
+  double const edgeLenB = edgeDirB.norm();
+
+  // Choose the shorter edge length for offset (conservative)
+  double const halfExtent = std::min(edgeLenA, edgeLenB) * 0.5;
+
+  // 7. Validate geometric extent
+  if (halfExtent < epsilon_)
+  {
+    return 0;  // Degenerate edge, fall back to single point
+  }
+
+  // Edge direction: use longer edge
+  Coordinate const edgeDir = (edgeLenA >= edgeLenB)
+                               ? edgeDirA / edgeLenA
+                               : edgeDirB / edgeLenB;
+
+  // Project edge direction onto contact plane (remove component along normal)
+  // IMPORTANT: Construct explicit Vector3D for direction vector operations
+  // to avoid the Coordinate overload of globalToLocal which applies
+  // translation
+  msd_sim::Vector3D const normalVec{normal.x(), normal.y(), normal.z()};
+  double const normalComponent = edgeDir.dot(normal);
+  Coordinate const edgeDirInPlane =
+    (edgeDir - normal * normalComponent).normalized();
+
+  // Check that edge direction in plane is not degenerate
+  if (edgeDirInPlane.norm() < epsilon_)
+  {
+    return 0;  // Edge parallel to normal, degenerate
+  }
+
+  // Generate two contact points offset from the closest point
+  Coordinate const offset = edgeDirInPlane * halfExtent;
+
+  Coordinate const cp1_mid = midpoint1 + offset;
+  Coordinate const cp2_mid = midpoint1 - offset;
+
+  // Project each contact point onto both surfaces along the normal
+  // pointA = point projected onto hull A's surface
+  // pointB = point projected onto hull B's surface
+  double const depth = epaFace.offset;
+
+  contacts[0] = ContactPoint{
+    cp1_mid + normal * (depth * 0.5),
+    cp1_mid - normal * (depth * 0.5),
+    depth};
+  contacts[1] = ContactPoint{
+    cp2_mid + normal * (depth * 0.5),
+    cp2_mid - normal * (depth * 0.5),
+    depth};
+
+  return 2;
+}
 
 }  // namespace msd_sim

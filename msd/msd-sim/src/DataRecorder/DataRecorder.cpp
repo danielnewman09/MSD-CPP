@@ -6,8 +6,10 @@
 #include <cpp_sqlite/src/cpp_sqlite/DBDataAccessObject.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBDatabase.hpp>
 #include "msd-sim/src/DataRecorder/DataRecorder.hpp"
+#include "msd-transfer/src/EnergyRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
 #include "msd-transfer/src/SimulationFrameRecord.hpp"
+#include "msd-transfer/src/SystemEnergyRecord.hpp"
 
 namespace msd_sim
 {
@@ -123,5 +125,12 @@ DataRecorder::getDAO<msd_transfer::SimulationFrameRecord>();
 
 template cpp_sqlite::DataAccessObject<msd_transfer::InertialStateRecord>&
 DataRecorder::getDAO<msd_transfer::InertialStateRecord>();
+
+// Ticket: 0039a_energy_tracking_diagnostic_infrastructure
+template cpp_sqlite::DataAccessObject<msd_transfer::EnergyRecord>&
+DataRecorder::getDAO<msd_transfer::EnergyRecord>();
+
+template cpp_sqlite::DataAccessObject<msd_transfer::SystemEnergyRecord>&
+DataRecorder::getDAO<msd_transfer::SystemEnergyRecord>();
 
 }  // namespace msd_sim

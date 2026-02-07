@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codebase": {
+      "command": "/Users/danielnewman/Documents/GitHub/MSD-CPP/scripts/.venv/bin/python3",
+      "args": [
+        "/Users/danielnewman/Documents/GitHub/MSD-CPP/scripts/mcp_codebase_server.py",
+        "/Users/danielnewman/Documents/GitHub/MSD-CPP/build/Debug/docs/codebase.db"
+      ]
+    }
+  }
+}

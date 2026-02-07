@@ -31,6 +31,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+try:
+    from mcp.server.fastmcp import FastMCP
+    HAS_MCP = True
+except ImportError:
+    HAS_MCP = False
+
 
 class CodebaseServer:
     """MCP server for codebase navigation queries."""
@@ -773,6 +779,84 @@ class CodebaseServer:
         return self._rows_to_dicts(cursor.fetchall())
 
 
+def create_mcp_server(db_path: str) -> "FastMCP":
+    """Create a FastMCP server wrapping the CodebaseServer."""
+    server = CodebaseServer(db_path)
+    mcp = FastMCP("codebase")
+
+    @mcp.tool()
+    def search_symbols(query: str, kind: str | None = None, limit: int = 20) -> str:
+        """Full-text search across all symbols (classes, functions, variables)."""
+        return json.dumps(server.search_symbols(query, kind, limit), indent=2, default=str)
+
+    @mcp.tool()
+    def find_class(name: str, exact: bool = False) -> str:
+        """Find a class or struct by name."""
+        return json.dumps(server.find_class(name, exact), indent=2, default=str)
+
+    @mcp.tool()
+    def find_function(name: str, class_name: str | None = None, exact: bool = False) -> str:
+        """Find a function by name, optionally scoped to a class."""
+        return json.dumps(server.find_function(name, class_name, exact), indent=2, default=str)
+
+    @mcp.tool()
+    def get_class_hierarchy(class_name: str) -> str:
+        """Get the inheritance hierarchy (base and derived classes) for a class."""
+        return json.dumps(server.get_class_hierarchy(class_name), indent=2, default=str)
+
+    @mcp.tool()
+    def get_callers(function_name: str, class_name: str | None = None) -> str:
+        """Find all functions that call a given function."""
+        return json.dumps(server.get_callers(function_name, class_name), indent=2, default=str)
+
+    @mcp.tool()
+    def get_callees(function_name: str, class_name: str | None = None) -> str:
+        """Find all functions called by a given function."""
+        return json.dumps(server.get_callees(function_name, class_name), indent=2, default=str)
+
+    @mcp.tool()
+    def get_file_symbols(file_path: str) -> str:
+        """List all symbols (classes, functions, variables) defined in a file."""
+        return json.dumps(server.get_file_symbols(file_path), indent=2, default=str)
+
+    @mcp.tool()
+    def get_includes(file_path: str) -> str:
+        """Get include dependencies for a file (what it includes and what includes it)."""
+        return json.dumps(server.get_includes(file_path), indent=2, default=str)
+
+    @mcp.tool()
+    def get_class_members(class_name: str, include_private: bool = True, kind: str | None = None) -> str:
+        """Get all members of a class, categorized by type."""
+        return json.dumps(server.get_class_members(class_name, include_private, kind), indent=2, default=str)
+
+    @mcp.tool()
+    def get_function_parameters(function_name: str, class_name: str | None = None) -> str:
+        """Get parameters for a function."""
+        return json.dumps(server.get_function_parameters(function_name, class_name), indent=2, default=str)
+
+    @mcp.tool()
+    def search_documentation(query: str, limit: int = 20) -> str:
+        """Full-text search in documentation (uses FTS5 match syntax)."""
+        return json.dumps(server.search_documentation(query, limit), indent=2, default=str)
+
+    @mcp.tool()
+    def get_statistics() -> str:
+        """Get database statistics (counts of files, classes, functions, etc.)."""
+        return json.dumps(server.get_statistics(), indent=2, default=str)
+
+    @mcp.tool()
+    def list_namespaces() -> str:
+        """List all namespaces in the codebase."""
+        return json.dumps(server.list_namespaces(), indent=2, default=str)
+
+    @mcp.tool()
+    def list_classes(namespace: str | None = None) -> str:
+        """List all classes in the codebase, optionally filtered by namespace."""
+        return json.dumps(server.list_classes(namespace), indent=2, default=str)
+
+    return mcp
+
+
 def format_output(data: Any) -> str:
     """Format output as pretty-printed JSON."""
     return json.dumps(data, indent=2, default=str)
@@ -807,9 +891,10 @@ Examples:
         """
     )
     parser.add_argument("database", help="Path to the SQLite database")
-    parser.add_argument("command", nargs="?", help="Command to execute")
+    parser.add_argument("command", nargs="?", help="Command to execute (omit for MCP server mode)")
     parser.add_argument("args", nargs="*", help="Command arguments")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--cli", action="store_true", help="Force CLI mode (show help)")
 
     args = parser.parse_args()
 
@@ -817,11 +902,20 @@ Examples:
         print(f"Error: Database not found: {args.database}", file=sys.stderr)
         sys.exit(1)
 
+    if not args.command and not args.cli:
+        # MCP server mode (default when no command given)
+        if not HAS_MCP:
+            print("Error: mcp package not installed. Run: pip install mcp", file=sys.stderr)
+            sys.exit(1)
+        mcp_server = create_mcp_server(args.database)
+        mcp_server.run(transport="stdio")
+        return
+
     server = CodebaseServer(args.database)
 
     try:
-        if not args.command:
-            # Interactive mode or show help
+        if args.cli or not args.command:
+            # Show help
             print("Available commands:")
             commands = [
                 ("search_symbols <query> [kind]", "Search for symbols by name"),

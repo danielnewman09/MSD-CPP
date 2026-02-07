@@ -1,6 +1,7 @@
 add_subdirectory(Agent)
 add_subdirectory(Algorithms)
 add_subdirectory(DataRecorder)
+add_subdirectory(Diagnostics)
 add_subdirectory(Environment)
 add_subdirectory(Physics)
 add_subdirectory(Utils)
