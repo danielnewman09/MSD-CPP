@@ -2,12 +2,12 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Investigation
-- [ ] Investigation Complete — Root Cause Identified
+- [x] Ready for Investigation
+- [x] Investigation Complete — Root Cause Identified
 - [ ] Ready for Implementation
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Investigation Complete — Root Cause Identified
 **Assignee**: TBD
 **Created**: 2026-02-05
 **Generate Tutorial**: No
@@ -298,6 +298,49 @@ Key changes incorporated:
 Additional hypotheses to consider if needed:
 - Mass ratio bugs (heavy vs light object, infinite mass floor)
 - Delta time (Δt) dependency (does bug vanish with fixed timestep?)
+
+---
+
+### Investigation Phase (2026-02-06)
+**Status: Root Cause Identified**
+
+Created `ParameterIsolationTest.cpp` with 10 diagnostic tests. Results: 7 passed, 3 failed (failures confirm root cause).
+
+#### Root Cause: Two-Part Failure
+
+**Primary: EPA produces single contact point for face-on-face contacts**
+- H5 test confirmed: cube-on-floor produces only 1 contact point instead of 4
+- Single offset contact point has non-zero angular Jacobian `-(r × n)`
+- This creates unbalanced torque when Baumgarte correction force is applied
+
+**Secondary: Baumgarte ERP/dt amplifies the torque into a feedback loop**
+- H1 test: With e=0, resting cube energy grew from 49J to 331,506J (675,753% growth)
+- H3 test: Smaller timesteps produce worse growth (ERP/dt = 25.0 at 8ms vs 12.5 at 16ms)
+- H8 test: 2-degree tilted cube shows monotonic angular velocity growth for 20+ frames
+
+**Feedback loop mechanism:**
+```
+Gravity pushes cube into floor
+  → EPA produces SINGLE contact point (not 4 for face contact)
+    → Single contact has non-zero angular Jacobian -(r × n)
+      → Baumgarte term (ERP/dt × penetration) applies correction force
+        → Force through offset lever arm creates torque
+          → Cube rotates slightly
+            → Rotation increases penetration on one edge
+              → Larger penetration → larger Baumgarte correction
+                → FEEDBACK LOOP → catastrophic energy injection
+```
+
+#### Supporting Evidence
+- H7: Without gravity, only 0.00078J injected (no sustained penetration = no feedback)
+- H6: Zero-gravity touching cubes are stable (confirms Baumgarte alone is insufficient)
+- H2: Minimal-penetration placement shows less energy growth
+- H10: Integration order is correct (collision before physics)
+
+#### Recommended Fixes for 0039e (in priority order)
+1. **Primary**: Improve contact manifold to produce multiple points for face-on-face contacts. With 4 balanced contacts, angular Jacobian contributions cancel.
+2. **Secondary**: Add ERP clamping: `correction = min(ERP/dt × penetration, max_correction_velocity)`
+3. **Tertiary**: Add penetration depth clamping: `penetration_capped = min(penetration, max_penetration)`
 
 ---
 

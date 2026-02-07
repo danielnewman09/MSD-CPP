@@ -4,11 +4,14 @@
 #include <stdexcept>
 
 #include "msd-sim/src/DataRecorder/DataRecorder.hpp"
+#include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
+#include "msd-transfer/src/EnergyRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
+#include "msd-transfer/src/SystemEnergyRecord.hpp"
 
 namespace msd_sim
 {
@@ -38,6 +41,16 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
 {
   auto instanceId = getInertialAssetId();
   inertialAssets_.emplace_back(assetId, instanceId, hull, 10.0, origin);
+  return inertialAssets_.back();
+}
+
+const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
+                                             ConvexHull& hull,
+                                             double mass,
+                                             const ReferenceFrame& origin)
+{
+  auto instanceId = getInertialAssetId();
+  inertialAssets_.emplace_back(assetId, instanceId, hull, mass, origin);
   return inertialAssets_.back();
 }
 
@@ -191,6 +204,9 @@ void WorldModel::updateCollisions(double dt)
   //
   // Ticket: 0032_contact_constraint_refactor
 
+  // Ticket: 0039a_energy_tracking_diagnostic_infrastructure
+  collisionActiveThisFrame_ = false;
+
   const size_t numInertial = inertialAssets_.size();
   const size_t numEnvironment = environmentalAssets_.size();
   const size_t numBodies = numInertial + numEnvironment;
@@ -258,6 +274,9 @@ void WorldModel::updateCollisions(double dt)
   {
     return;
   }
+
+  // Ticket: 0039a_energy_tracking_diagnostic_infrastructure
+  collisionActiveThisFrame_ = true;
 
   // ===== Phase 2: Create Contact Constraints =====
   std::vector<std::unique_ptr<ContactConstraint>> allConstraints;
@@ -420,6 +439,31 @@ void WorldModel::recordCurrentFrame()
     record.frame.id = frameId;  // Explicit FK assignment
     stateDAO.addToBuffer(record);
   }
+
+  // Ticket: 0039a_energy_tracking_diagnostic_infrastructure
+  // Compute and record per-body energy
+  auto& energyDAO = dataRecorder_->getDAO<msd_transfer::EnergyRecord>();
+  for (const auto& asset : inertialAssets_)
+  {
+    auto bodyEnergy = EnergyTracker::computeBodyEnergy(
+      asset.getInertialState(),
+      asset.getMass(),
+      asset.getInertiaTensor(),
+      potentialEnergies_);
+    auto energyRecord =
+      bodyEnergy.toRecord(frameId, asset.getInstanceId());
+    energyDAO.addToBuffer(energyRecord);
+  }
+
+  // Compute and record system energy summary
+  auto systemEnergy =
+    EnergyTracker::computeSystemEnergy(inertialAssets_, potentialEnergies_);
+  auto& sysEnergyDAO =
+    dataRecorder_->getDAO<msd_transfer::SystemEnergyRecord>();
+  auto sysRecord = systemEnergy.toRecord(
+    frameId, previousSystemEnergy_, collisionActiveThisFrame_);
+  sysEnergyDAO.addToBuffer(sysRecord);
+  previousSystemEnergy_ = systemEnergy.total();
 }
 
 }  // namespace msd_sim

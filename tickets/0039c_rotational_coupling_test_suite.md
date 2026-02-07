@@ -2,14 +2,14 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Quality Gate
+- [x] Ready for Implementation
+- [x] Implementation Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Documentation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Implementation Complete — Awaiting Quality Gate
 **Assignee**: TBD
 **Created**: 2026-02-05
 **Generate Tutorial**: No
@@ -415,6 +415,36 @@ Key changes incorporated:
 Additional guidance:
 - Ensure lever arm `r` is defined as `P_contact - P_COM` (not `P_contact - P_origin`)
 - Common bug: using body-frame inertia tensor with world-frame angular velocity
+
+---
+
+### Implementation Phase (2026-02-06)
+**Status: Implementation Complete**
+
+Created 4 test files with 14 tests (11 new + 3 pre-existing EnergyTracker):
+
+**PASSED (5)**:
+- EnergyTracker suite (3 pre-existing tests)
+- B4_RodFallsFlat_NoRotation — Rod correctly shows no rotation
+- F4_RotationEnergyTransfer_EnergyConserved — Energy conserved within 1% tolerance
+
+**FAILED (9 — expected diagnostic failures confirming energy injection bug)**:
+- **D1**: Resting cube drifted 4196m, velocity 293 m/s, omega 123 rad/s, energy grew from 4.9J to 31899J
+- **D4**: Micro-jitter amplified instead of damping
+- **B1**: Corner impact — energy grew 51%
+- **B2**: Edge impact produced no rotation (omega = 3.3e-8 rad/s)
+- **B3**: Sphere gained unexpected rotation (1.17 rad/s) despite symmetric contact
+- **B5**: L-shape showed no rotation (convex hull fills L-shape — test design issue)
+- **F4b**: 7.8% energy growth in zero-gravity elastic rotational collision
+- **C2**: Rocking amplitude increased, energy grew 4.66x
+- **C3**: Tilted cube didn't settle, spinning at 8.88 rad/s, energy grew
+
+**Key diagnostic findings for 0039d**:
+1. D1 failure is catastrophic — resting contact is completely unstable
+2. Energy injection happens during collision frames (not integration-only frames)
+3. Rotational coupling is the trigger — linear-only tests (0039b) all pass
+4. B2 failure suggests angular Jacobian terms may not be activating correctly
+5. B3 failure suggests spurious torque from symmetric contacts
 
 ---
 

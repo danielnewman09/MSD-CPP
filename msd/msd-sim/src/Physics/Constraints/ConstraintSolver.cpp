@@ -521,8 +521,13 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
       double const penetration = contact->getPenetrationDepth();
 
       // RHS: -(1+e) · J·v⁻ + (ERP/dt) · penetration
+      // Ticket: 0039e — Clamp Baumgarte correction velocity to prevent
+      // energy injection from large penetrations or high ERP/dt ratios
+      constexpr double kMaxBaumgarteCorrection = 5.0;  // m/s
+      double const baumgarteCorrection =
+        std::min((erp / dt) * penetration, kMaxBaumgarteCorrection);
       b(static_cast<Eigen::Index>(i)) =
-        (-(1.0 + e) * jv) + ((erp / dt) * penetration);
+        (-(1.0 + e) * jv) + baumgarteCorrection;
     }
     else
     {

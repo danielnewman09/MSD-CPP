@@ -1,28 +1,49 @@
-# Ticket 0038a: Energy Tracking Diagnostic Infrastructure
+# Ticket 0039a: Energy Tracking Diagnostic Infrastructure
 
 ## Status
 - [x] Draft
-- [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Quality Gate
+- [x] Ready for Implementation
+- [x] Implementation Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Documentation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Implementation Complete — Awaiting Quality Gate
 **Assignee**: TBD
 **Created**: 2026-02-05
+**Updated**: 2026-02-06
 **Generate Tutorial**: No
-**Parent Ticket**: [0038_collision_energy_stabilization_debug](0038_collision_energy_stabilization_debug.md)
+**Parent Ticket**: [0039_collision_energy_stabilization_debug](0039_collision_energy_stabilization_debug.md)
+**Depends On**: [0038_simulation_data_recorder](0038_simulation_data_recorder.md) ✅ Merged
 **Type**: Infrastructure
 
 ---
 
 ## Overview
 
-This ticket creates the diagnostic infrastructure required to investigate the collision energy stabilization bug. Without accurate energy measurement and logging, debugging is blind guesswork.
+This ticket creates the energy tracking infrastructure required to investigate the collision energy stabilization bug. The DataRecorder infrastructure (ticket 0038) provides the persistence layer; this ticket adds energy computation and recording.
 
-**Blocking**: All subsequent 0038x tickets depend on this infrastructure.
+**Key Insight**: The DataRecorder already handles frame timestamping, per-body state recording, SQLite persistence, background threading, and opt-in enablement. This ticket focuses on:
+1. Computing energy values correctly (especially world-frame rotational KE)
+2. Extending records to include energy data
+3. Adding energy change detection for anomaly identification
+
+---
+
+## Foundation: What DataRecorder Provides
+
+The following infrastructure from ticket 0038 is already complete:
+
+| Capability | Implementation | Status |
+|------------|----------------|--------|
+| Frame timestamping | `SimulationFrameRecord` | ✅ Complete |
+| Per-body kinematic state | `InertialStateRecord` | ✅ Complete |
+| Position, velocity, orientation, angular velocity | Fields in `InertialStateRecord` | ✅ Complete |
+| SQLite persistence | `DataRecorder` with background thread | ✅ Complete |
+| Opt-in recording | `WorldModel::enableRecording()` | ✅ Complete |
+| Thread-safe buffering | Double-buffer DAOs | ✅ Complete |
+| Configurable flush interval | `DataRecorder::Config` | ✅ Complete |
 
 ---
 
@@ -58,196 +79,210 @@ Where:
 - `r` is the center of mass position
 - The dot product supports arbitrary gravity directions
 
-**Note**: The formula `PE = mgh` is a simplification assuming gravity aligned with a coordinate axis. Use the dot product form for general support.
-
 #### R1.4: Total Mechanical Energy
 ```
 E_total = KE_linear + KE_rot + PE
 ```
 
-### R2: Per-Frame Logging Infrastructure
+### R2: Energy Record Extension
 
-Create a logging system that captures collision pipeline state at each simulation frame.
+Extend the data recording to include computed energy values.
 
-#### R2.1: Frame Header
-- Frame number
-- Simulation time
-- Timestep (dt)
+#### R2.1: Create EnergyRecord
 
-#### R2.2: Per-Body State
-For each rigid body:
-- Body ID
-- Position (x, y, z)
-- Velocity (vx, vy, vz)
-- Orientation (quaternion: w, x, y, z)
-- Angular velocity (ωx, ωy, ωz)
-- Linear KE, Rotational KE, PE, Total E
+Create a new transfer record to store per-body energy values:
 
-#### R2.3: Per-Contact State
-For each active contact constraint:
-- Contact ID
-- Body A index, Body B index
-- Contact normal (nx, ny, nz)
-- Contact point A (world frame)
-- Contact point B (world frame)
-- Penetration depth
-- Pre-solve relative normal velocity
-- Post-solve relative normal velocity
-- Lagrange multiplier (λ)
+```cpp
+struct EnergyRecord : public cpp_sqlite::BaseTransferObject {
+  uint32_t body_id;           // Identifier for the rigid body
+  double linear_ke;           // Linear kinetic energy [J]
+  double rotational_ke;       // Rotational kinetic energy [J]
+  double potential_e;         // Gravitational potential energy [J]
+  double total_e;             // Total mechanical energy [J]
+  cpp_sqlite::ForeignKey<SimulationFrameRecord> frame;
+};
+```
 
-#### R2.4: Force Audit Trail
-For each body receiving constraint forces:
-- Body ID
-- Applied linear force (fx, fy, fz)
-- Applied torque (τx, τy, τz)
-- Pre-apply velocity
-- Post-apply velocity
-- Expected Δv (from impulse/mass)
-- Actual Δv
+**Rationale**: Separate record (vs extending `InertialStateRecord`) keeps energy diagnostics cleanly separated and allows recording energy without modifying the core kinematic record schema.
 
-#### R2.5: Solver State (NEW - from Gemini review)
-For diagnosing solver-related energy injection:
-- Solver iteration count (how many iterations before convergence/cap)
-- Final velocity residual (convergence quality)
-- Max penetration depth per frame
-- Warm-start initial λ values (if using cached impulses)
+#### R2.2: Body Identification
 
-#### R2.6: Pre-Solve vs Post-Solve Energy (NEW - from Gemini review)
-**Critical for isolating integrator vs solver bugs:**
-- Energy **Pre-Solve**: After external force integration, before constraint solving
-- Energy **Post-Solve**: After constraint forces applied
-- Energy delta during solve phase specifically
+Add `body_id` field to enable tracking individual bodies across frames. This should be a stable identifier (not vector index) that persists across the simulation.
 
 ### R3: Energy Change Detection
 
-#### R3.1: Frame-to-Frame Delta
-Compute and log:
-```
-ΔE = E_total(frame N) - E_total(frame N-1)
-```
+#### R3.1: System Energy Record
 
-#### R3.2: Energy Injection Flag
-Flag frames where `ΔE > ε` (energy increased beyond numerical tolerance).
-- Suggested tolerance: `ε = 1e-6 * E_total` (relative) or `ε = 1e-9` (absolute)
+Create a per-frame system-level energy summary:
 
-#### R3.3: Collision Frame Correlation
-Mark whether each frame had active collisions, to correlate energy changes with collision events.
-
-### R4: Output Format
-
-#### R4.1: CSV Export
-Primary output should be CSV for easy analysis in spreadsheets or Python/MATLAB.
-
-Example structure:
-```csv
-frame,time,body_id,KE_linear,KE_rot,PE,E_total,delta_E,collision_frame
-0,0.000,0,0.0,0.0,9.81,9.81,0.0,false
-1,0.016,0,0.157,0.0,9.653,9.81,0.0,false
-...
+```cpp
+struct SystemEnergyRecord : public cpp_sqlite::BaseTransferObject {
+  double total_linear_ke;     // Sum of all body linear KE
+  double total_rotational_ke; // Sum of all body rotational KE
+  double total_potential_e;   // Sum of all body PE
+  double total_system_e;      // Total system energy
+  double delta_e;             // Change from previous frame
+  bool energy_injection;      // True if ΔE > ε (anomaly flag)
+  bool collision_active;      // True if any collision this frame
+  cpp_sqlite::ForeignKey<SimulationFrameRecord> frame;
+};
 ```
 
-#### R4.2: Contact Log (Separate File)
-```csv
-frame,contact_id,body_a,body_b,nx,ny,nz,penetration,v_rel_pre,v_rel_post,lambda
-10,0,0,1,0.0,0.0,1.0,0.001,-2.5,0.5,15.3
+#### R3.2: Anomaly Detection Threshold
+
+Flag frames where energy increased beyond numerical tolerance:
+- Relative tolerance: `ε = 1e-6 * |E_total|`
+- Absolute tolerance: `ε = 1e-9 J` (for near-zero energy states)
+- Use whichever is larger
+
+#### R3.3: Collision Correlation
+
+The `collision_active` flag enables post-hoc queries like:
+```sql
+SELECT * FROM SystemEnergyRecord
+WHERE energy_injection = 1 AND collision_active = 1;
 ```
 
-#### R4.3: Optional JSON Format
-For programmatic analysis, provide JSON output option with nested structure.
+### R4: Integration with DataRecorder
 
-#### R4.4: Ring Buffer Mode (NEW - from Gemini review)
-To avoid I/O bottlenecks that alter timing (Heisenbugs):
-- Store last N frames (e.g., 60) in a circular memory buffer
-- Only write to disk when energy anomaly (ΔE > ε) is detected
-- Captures the moments leading up to instability without generating gigabytes of CSVs
-- Optional body ID filter ("watch list") to reduce data volume
+#### R4.1: Extend WorldModel::recordCurrentFrame()
+
+After recording kinematic state, compute and record energy:
+
+```cpp
+void WorldModel::recordCurrentFrame() {
+  // ... existing kinematic recording ...
+
+  // Compute and record energy for each body
+  auto& energyDAO = dataRecorder_->getDAO<msd_transfer::EnergyRecord>();
+  for (const auto& asset : inertialAssets_) {
+    auto energy = EnergyTracker::computeBodyEnergy(
+      asset.getInertialState(),
+      asset.getMass(),
+      asset.getBodyInertia(),
+      gravityVector_
+    );
+    energyDAO.addToBuffer(energy.toRecord(frameId, asset.getId()));
+  }
+
+  // Compute and record system energy summary
+  auto& sysEnergyDAO = dataRecorder_->getDAO<msd_transfer::SystemEnergyRecord>();
+  auto sysEnergy = EnergyTracker::computeSystemEnergy(inertialAssets_, gravityVector_);
+  sysEnergyDAO.addToBuffer(sysEnergy.toRecord(frameId, previousSystemEnergy_));
+  previousSystemEnergy_ = sysEnergy;
+}
+```
 
 ---
 
-## Design Considerations
+## Deferred Requirements
 
-### Integration Points
+The following requirements from the original ticket are **deferred** to follow-up tickets if root cause analysis requires them:
 
-The energy tracker should integrate with `WorldModel::update()` or `CollisionPipeline::execute()` to capture state at the appropriate points:
+| Requirement | Reason for Deferral |
+|-------------|---------------------|
+| R2.3: Per-Contact State | Requires solver instrumentation; add if energy injection correlates with contacts |
+| R2.4: Force Audit Trail | Deep solver instrumentation; add if energy injection source unclear |
+| R2.5: Solver State | Iteration counts, residuals; add if solver convergence suspected |
+| R2.6: Pre/Post-Solve Energy | Requires collision pipeline hooks; add to isolate integrator vs solver |
+| R4.4: Ring Buffer Mode | SQLite handles large datasets; optimize only if I/O becomes bottleneck |
 
-1. **Pre-collision**: State after external force integration, before collision detection
-2. **Post-collision**: State after constraint forces applied
-
-### Performance
-
-Diagnostic logging should be:
-- **Opt-in**: Disabled by default, enabled via flag or compile-time option
-- **Low overhead when disabled**: No virtual calls or branching in hot path
-- **Acceptable overhead when enabled**: Logging during debugging is acceptable
-
-### Thread Safety
-
-If simulation is multi-threaded, ensure logging is thread-safe or document single-threaded requirement.
+These can be added incrementally in tickets 0039b-0039e as investigation proceeds.
 
 ---
 
 ## Implementation Approach
 
-### Option A: Standalone Utility Class (Recommended)
+### EnergyTracker Class
 
 ```cpp
+// msd-sim/src/Diagnostics/EnergyTracker.hpp
+
+namespace msd_sim {
+
 class EnergyTracker {
 public:
   struct BodyEnergy {
-    double linearKE;
-    double rotationalKE;
-    double potentialE;
+    double linearKE{0.0};
+    double rotationalKE{0.0};
+    double potentialE{0.0};
+
     double total() const { return linearKE + rotationalKE + potentialE; }
+
+    msd_transfer::EnergyRecord toRecord(uint32_t frameId, uint32_t bodyId) const;
   };
 
-  // Compute energy for a single body
+  struct SystemEnergy {
+    double totalLinearKE{0.0};
+    double totalRotationalKE{0.0};
+    double totalPotentialE{0.0};
+
+    double total() const {
+      return totalLinearKE + totalRotationalKE + totalPotentialE;
+    }
+
+    msd_transfer::SystemEnergyRecord toRecord(
+      uint32_t frameId,
+      const SystemEnergy& previous,
+      bool collisionActive) const;
+  };
+
+  /// Compute energy for a single rigid body
+  /// @param state Current kinematic state
+  /// @param mass Body mass [kg]
+  /// @param bodyInertia Inertia tensor in body frame [kg·m²]
+  /// @param gravity Gravity vector in world frame [m/s²]
   static BodyEnergy computeBodyEnergy(
     const InertialState& state,
     double mass,
     const Eigen::Matrix3d& bodyInertia,
-    double gravity = 9.81,
-    double referenceHeight = 0.0);
+    const Eigen::Vector3d& gravity);
 
-  // Compute total system energy
-  static double computeSystemEnergy(
+  /// Compute total system energy across all bodies
+  static SystemEnergy computeSystemEnergy(
     std::span<const AssetInertial> bodies,
-    double gravity = 9.81);
+    const Eigen::Vector3d& gravity);
+
+  /// Check if energy change exceeds tolerance (anomaly detection)
+  static bool isEnergyInjection(
+    double currentEnergy,
+    double previousEnergy,
+    double relativeTolerance = 1e-6,
+    double absoluteTolerance = 1e-9);
 };
+
+} // namespace msd_sim
 ```
 
-### Option B: Observer Pattern Integration (Recommended by Gemini)
-
-Use an Observer/Listener interface to decouple debug logic from core physics:
+### Key Implementation Detail: World-Frame Rotational KE
 
 ```cpp
-class IPhysicsDebugListener {
-public:
-  virtual ~IPhysicsDebugListener() = default;
-  virtual void onPreSolve(const SystemState& state) = 0;
-  virtual void onPostSolve(const SystemState& state) = 0;
-  virtual void onContactProcessed(const ContactInfo& contact) = 0;
-};
+BodyEnergy EnergyTracker::computeBodyEnergy(
+    const InertialState& state,
+    double mass,
+    const Eigen::Matrix3d& bodyInertia,
+    const Eigen::Vector3d& gravity) {
 
-class CollisionPipeline {
-public:
-  void setDebugListener(std::shared_ptr<IPhysicsDebugListener> listener);
-  // ...
-};
+  BodyEnergy result;
 
-// EnergyTracker implements IPhysicsDebugListener
-class EnergyTracker : public IPhysicsDebugListener {
-  // ...
-};
+  // Linear KE: ½mv²
+  Eigen::Vector3d velocity = state.getVelocity();
+  result.linearKE = 0.5 * mass * velocity.squaredNorm();
+
+  // Rotational KE: ½ω^T I_world ω
+  // CRITICAL: Transform inertia to world frame
+  Eigen::Matrix3d R = state.getOrientation().toRotationMatrix();
+  Eigen::Matrix3d I_world = R * bodyInertia * R.transpose();
+  Eigen::Vector3d omega = state.getAngularVelocity();
+  result.rotationalKE = 0.5 * omega.transpose() * I_world * omega;
+
+  // Potential energy: -m(g·r)
+  Eigen::Vector3d position = state.getPosition();
+  result.potentialE = -mass * gravity.dot(position);
+
+  return result;
+}
 ```
-
-**Advantages**:
-- Keeps debug logic decoupled from core physics math
-- Avoids modifying solver loop to extract λ values (which can introduce bugs)
-- Easy to swap different diagnostic implementations
-
-### Recommendation
-
-Start with Option A (standalone utility) for flexibility in tests. Use Option B (Observer Pattern) if inline pre/post-solve logging proves necessary for root cause identification.
 
 ---
 
@@ -260,28 +295,35 @@ Start with Option A (standalone utility) for flexibility in tests. Use Option B 
 TEST(EnergyTracker, LinearKE_MovingSphere)
 TEST(EnergyTracker, LinearKE_StationaryBody_ReturnsZero)
 
-// Verify rotational KE with world-frame tensor
+// Verify rotational KE with world-frame tensor (CRITICAL)
 TEST(EnergyTracker, RotationalKE_SpinningCube_AxisAligned)
 TEST(EnergyTracker, RotationalKE_SpinningCube_Tilted)
 TEST(EnergyTracker, RotationalKE_ConsistentAcrossOrientations)
 
 // Verify PE computation
 TEST(EnergyTracker, PotentialEnergy_HeightProportional)
+TEST(EnergyTracker, PotentialEnergy_ArbitraryGravityDirection)
 
 // Verify total energy conservation (no collision)
 TEST(EnergyTracker, FreeFall_TotalEnergyConstant)
+TEST(EnergyTracker, Tumbling_TotalEnergyConstant)
+
+// Verify anomaly detection
+TEST(EnergyTracker, IsEnergyInjection_DetectsIncrease)
+TEST(EnergyTracker, IsEnergyInjection_IgnoresNumericalNoise)
+TEST(EnergyTracker, IsEnergyInjection_AllowsEnergyDecrease)
 ```
 
 ### Integration Tests
 
 ```cpp
-// Verify logging output format
-TEST(DiagnosticLogger, CSV_OutputFormat_Valid)
-TEST(DiagnosticLogger, ContactLog_CapturesAllContacts)
+// Verify energy recording with DataRecorder
+TEST(EnergyRecording, RecordsEnergyPerBody)
+TEST(EnergyRecording, RecordsSystemEnergySummary)
+TEST(EnergyRecording, FlagsEnergyInjection)
 
-// Verify energy change detection
-TEST(EnergyTracker, DetectsEnergyIncrease_WhenPresent)
-TEST(EnergyTracker, NoFalsePositives_NumericalNoise)
+// Verify SQLite queryability
+TEST(EnergyRecording, QueryEnergyAnomalies)
 ```
 
 ---
@@ -289,12 +331,13 @@ TEST(EnergyTracker, NoFalsePositives_NumericalNoise)
 ## Acceptance Criteria
 
 1. [ ] **AC1**: `EnergyTracker` class implemented with correct world-frame rotational KE
-2. [ ] **AC2**: Per-frame CSV logging of body energies implemented
-3. [ ] **AC3**: Per-contact CSV logging implemented
-4. [ ] **AC4**: Energy injection detection (ΔE > ε flagging) implemented
-5. [ ] **AC5**: All unit tests pass
-6. [ ] **AC6**: Free-fall test shows constant total energy (validates baseline)
-7. [ ] **AC7**: Documentation of output format and usage
+2. [ ] **AC2**: `EnergyRecord` transfer object created and registered
+3. [ ] **AC3**: `SystemEnergyRecord` transfer object created and registered
+4. [ ] **AC4**: `WorldModel::recordCurrentFrame()` extended to record energy data
+5. [ ] **AC5**: Energy injection detection (ΔE > ε flagging) implemented
+6. [ ] **AC6**: All unit tests pass
+7. [ ] **AC7**: Free-fall test shows constant total energy (validates baseline)
+8. [ ] **AC8**: Tumbling rigid body test shows constant total energy
 
 ---
 
@@ -305,25 +348,16 @@ TEST(EnergyTracker, NoFalsePositives_NumericalNoise)
 |------|---------|
 | `msd-sim/src/Diagnostics/EnergyTracker.hpp` | Energy computation utility |
 | `msd-sim/src/Diagnostics/EnergyTracker.cpp` | Implementation |
-| `msd-sim/src/Diagnostics/DiagnosticLogger.hpp` | CSV/JSON logging |
-| `msd-sim/src/Diagnostics/DiagnosticLogger.cpp` | Implementation |
+| `msd-transfer/src/EnergyRecord.hpp` | Per-body energy transfer object |
+| `msd-transfer/src/SystemEnergyRecord.hpp` | System energy summary transfer object |
 | `msd-sim/test/Diagnostics/EnergyTrackerTest.cpp` | Unit tests |
 
 ### Modified Files
 | File | Change |
 |------|--------|
 | `msd-sim/CMakeLists.txt` | Add Diagnostics directory |
-
----
-
-## Estimated Effort
-
-- Energy computation: ~2 hours
-- Logging infrastructure: ~3 hours
-- Testing: ~2 hours
-- Documentation: ~1 hour
-
-**Total**: ~8 hours
+| `msd-transfer/src/Records.hpp` | Include new record headers |
+| `msd-sim/src/Environment/WorldModel.cpp` | Extend `recordCurrentFrame()` |
 
 ---
 
@@ -331,7 +365,7 @@ TEST(EnergyTracker, NoFalsePositives_NumericalNoise)
 
 ### Draft Phase
 - **Created**: 2026-02-05
-- **Notes**: Subticket split from parent 0038. Focuses on diagnostic infrastructure required before investigation can proceed.
+- **Notes**: Subticket split from parent 0039. Focuses on diagnostic infrastructure required before investigation can proceed.
 
 ### Gemini Review (2026-02-05)
 **Status: Approved with Modifications**
@@ -342,6 +376,23 @@ Key changes incorporated:
 3. **R2.6**: Added explicit Pre-Solve vs Post-Solve energy tracking requirement
 4. **R4.4**: Added ring buffer mode for triggered logging (reduces I/O, avoids Heisenbugs)
 5. **Option B**: Changed from simple hooks to Observer Pattern (`IPhysicsDebugListener`)
+
+### Scope Revision (2026-02-06)
+**Status: Simplified based on DataRecorder foundation**
+
+The DataRecorder infrastructure (ticket 0038) was merged, providing:
+- Frame timestamping (`SimulationFrameRecord`)
+- Per-body kinematic state (`InertialStateRecord`)
+- SQLite persistence with background threading
+- Opt-in enablement via `WorldModel::enableRecording()`
+
+**Revised scope**:
+- **Kept**: R1 (EnergyTracker utility), R3 (Energy change detection)
+- **Simplified**: R2 (Create new EnergyRecord instead of CSV logging)
+- **Removed**: R4 (CSV/JSON output - SQLite is superior for analysis)
+- **Deferred**: Contact/Force/Solver logging to follow-up tickets (0039b-0039e)
+
+This reduces implementation effort while maintaining the critical capability: detecting when and where energy is injected during collision resolution.
 
 ---
 

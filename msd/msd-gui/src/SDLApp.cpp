@@ -59,7 +59,7 @@ SDLApplication::SDLApplication(const std::string& dbPath)
     }
   }
 
-  if (cameraFrame != nullptr)
+  if (cameraFrame == nullptr)
   {
     SDL_Log("ERROR: Failed to get camera reference frame from player platform");
     throw std::runtime_error("Failed to get camera reference frame");

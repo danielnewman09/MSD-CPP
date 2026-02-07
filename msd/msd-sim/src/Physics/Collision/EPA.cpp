@@ -439,12 +439,23 @@ size_t EPA::extractContactManifold(size_t faceIndex,
   const Facet& epaFace = faces_[faceIndex];
   const auto& normal = epaFace.normal;
 
-  // Find all coplanar faces on each hull aligned with the collision normal
-  auto facesA = assetA_.getCollisionHull().getFacetsAlignedWith(normal);
-  auto facesB = assetB_.getCollisionHull().getFacetsAlignedWith(-normal);
+  // Transform EPA normal from world space to each hull's local space
+  // before querying aligned facets (hull normals are stored in local space)
+  // Ticket: 0039e — fixes single-contact-point bug for rotated objects
+  // IMPORTANT: Cast to Vector3D to use rotation-only overload (not Coordinate
+  // overload which applies translation, corrupting the direction vector)
+  msd_sim::Vector3D const normalAsVec{normal.x(), normal.y(), normal.z()};
+  msd_sim::Vector3D const normalLocalA =
+    assetA_.getReferenceFrame().globalToLocal(normalAsVec);
+  msd_sim::Vector3D const negNormal{-normal.x(), -normal.y(), -normal.z()};
+  msd_sim::Vector3D const normalLocalB =
+    assetB_.getReferenceFrame().globalToLocal(negNormal);
 
-  double const alignA = std::abs(normal.dot(facesA[0].get().normal));
-  double const alignB = std::abs(normal.dot(facesB[0].get().normal));
+  auto facesA = assetA_.getCollisionHull().getFacetsAlignedWith(normalLocalA);
+  auto facesB = assetB_.getCollisionHull().getFacetsAlignedWith(normalLocalB);
+
+  double const alignA = std::abs(normalLocalA.dot(facesA[0].get().normal));
+  double const alignB = std::abs(normalLocalB.dot(facesB[0].get().normal));
 
   // Reference face = more aligned with normal (provides clipping planes)
   // Incident face = less aligned (gets clipped)

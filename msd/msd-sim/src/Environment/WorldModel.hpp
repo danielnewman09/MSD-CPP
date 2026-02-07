@@ -80,6 +80,22 @@ public:
                                    const ReferenceFrame& origin);
 
   /**
+   * @brief Spawn a new object with specified mass.
+   *
+   * @param assetId Asset type identifier
+   * @param hull Collision hull for the object
+   * @param mass Mass in kilograms [kg]
+   * @param origin Initial reference frame
+   * @return Reference to the spawned object
+   *
+   * @ticket 0039b_linear_collision_test_suite
+   */
+  const AssetInertial& spawnObject(uint32_t assetId,
+                                   ConvexHull& hull,
+                                   double mass,
+                                   const ReferenceFrame& origin);
+
+  /**
    * @brief Spawn a new static environment object in the world
    *
    * Environment objects are static (immovable) and participate in collision
@@ -347,6 +363,10 @@ private:
 
   // NEW: Data recorder (ticket 0038)
   std::unique_ptr<DataRecorder> dataRecorder_;
+
+  // NEW: Energy tracking (ticket 0039a)
+  double previousSystemEnergy_{0.0};
+  bool collisionActiveThisFrame_{false};
 };
 
 }  // namespace msd_sim
