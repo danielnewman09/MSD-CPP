@@ -1,0 +1,173 @@
+@startuml 0040c-edge-contact-manifold
+
+title Edge Contact Manifold Generation
+footer Ticket: 0040c_edge_contact_manifold
+
+skinparam {
+  ClassBackgroundColor #F5F5F5
+  ClassBorderColor #333333
+  ArrowColor #333333
+  NoteBackgroundColor #FFFFCC
+  NoteBorderColor #999999
+  ActivityBackgroundColor #E8F4FD
+  ActivityBorderColor #2196F3
+}
+
+package "ConvexHull Extensions" #E8F4FD {
+  class ConvexHull {
+    +getVertices() : const vector<Coordinate>&
+    +getFacets() : const vector<Facet>&
+    +getFacetsAlignedWith(normal) : vector<ref<Facet>>
+    --
+    +**findClosestEdge(point) : Edge** <<new>>
+  }
+
+  struct "ConvexHull::Edge" as Edge <<new>> {
+    +start : Coordinate
+    +end : Coordinate
+  }
+
+  ConvexHull --> Edge : returns
+}
+
+package "EPA Extensions" #FDE8E8 {
+  class EPA {
+    -assetA_ : const AssetPhysical&
+    -assetB_ : const AssetPhysical&
+    -epsilon_ : double
+    -vertices_ : vector<MinkowskiVertex>
+    -faces_ : vector<Facet>
+    --
+    +computeContactInfo(simplex) : CollisionResult
+    +extractContactManifold(faceIdx, contacts) : size_t
+    --
+    -**generateEdgeContacts(face, contacts) : size_t** <<new>>
+  }
+
+  note right of EPA::generateEdgeContacts
+    Called when clipping produces < 3 points.
+    Returns 2 on success, 0 on failure.
+    Fallback to single-point on failure.
+  end note
+}
+
+package "Utility Functions (anonymous namespace)" #E8FDE8 {
+  class "closestPointsBetweenSegments()" as SegSeg <<new>> {
+    {static} (p1, q1, p2, q2) -> pair<Coordinate, Coordinate>
+    --
+    Standard segment-segment closest point
+    algorithm (Ericson 2004, Section 5.1.9)
+  }
+
+  class "pointToSegmentDistance()" as PtSeg <<new>> {
+    {static} (point, segStart, segEnd) -> double
+    --
+    Point-to-line-segment distance
+  }
+}
+
+package "Existing Components (unchanged)" #F5F5F5 {
+  struct ContactPoint {
+    +pointA : Coordinate
+    +pointB : Coordinate
+  }
+
+  struct CollisionResult {
+    +normal : Coordinate
+    +penetrationDepth : double
+    +contacts : array<ContactPoint, 4>
+    +contactCount : size_t
+  }
+
+  class AssetPhysical {
+    +getCollisionHull() : const ConvexHull&
+    +getReferenceFrame() : const ReferenceFrame&
+  }
+
+  class ReferenceFrame {
+    +localToGlobal(Coordinate) : Coordinate
+    +globalToLocal(Coordinate) : Coordinate
+    +localToGlobal(Vector3D) : Vector3D
+    +globalToLocal(Vector3D) : Vector3D
+  }
+}
+
+' Relationships
+EPA ..> ConvexHull : queries edges via\nfindClosestEdge()
+EPA ..> SegSeg : computes closest\npoints between edges
+EPA ..> ContactPoint : generates 2\ncontact points
+EPA ..> AssetPhysical : reads hull\nand frame
+ConvexHull ..> PtSeg : used by\nfindClosestEdge()
+AssetPhysical --> ConvexHull
+AssetPhysical --> ReferenceFrame
+
+@enduml
+
+' ============================================================
+' FLOW DIAGRAM
+' ============================================================
+
+@startuml 0040c-edge-contact-flow
+
+title extractContactManifold() Flow with Edge Contact Detection
+footer Ticket: 0040c_edge_contact_manifold
+
+skinparam {
+  ActivityBackgroundColor #E8F4FD
+  ActivityBorderColor #2196F3
+  DiamondBackgroundColor #FFF3E0
+  DiamondBorderColor #FF9800
+}
+
+start
+
+:EPA converges on closest face;
+
+:Transform EPA normal to local space for each hull;
+
+:Get aligned facets (getFacetsAlignedWith) for hull A and hull B;
+
+:Build reference and incident polygons\nfrom coplanar facets;
+
+if (refVerts.size() >= 3 AND\nincidentPoly.size() >= 3?) then (yes)
+  :Clip incident polygon against\nreference face edge planes\n(Sutherland-Hodgman);
+
+  :Keep points below reference plane;
+
+  if (finalPoints not empty?) then (yes)
+    :Generate up to 4 contact points\nwith per-contact projection;
+    #90EE90:Return face-face contacts;
+    stop
+  else (no)
+    :Fall through to fallback;
+  endif
+
+else (no - **edge-edge case**)
+
+  #FDE8E8:**generateEdgeContacts()**;
+
+  :Compute EPA witness points\n(barycentric centroid of closest face);
+
+  :Transform witnesses to local space;
+
+  :Find closest edge on each hull\n(ConvexHull::findClosestEdge);
+
+  :Transform edge endpoints to world space;
+
+  :Compute closest points between\nedge segments;
+
+  :Generate 2 contact points offset\nalong edge direction in contact plane;
+
+  if (geometric extent > epsilon?) then (yes)
+    #90EE90:Return 2 edge contact points;
+    stop
+  else (no)
+    :Edge detection failed\n(degenerate geometry);
+  endif
+endif
+
+#FFCDD2:Fallback: single EPA centroid point\ncontactPoint = normal * offset;
+
+stop
+
+@enduml

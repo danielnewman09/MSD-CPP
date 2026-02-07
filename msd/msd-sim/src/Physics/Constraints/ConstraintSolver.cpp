@@ -289,7 +289,8 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
   const std::vector<double>& inverseMasses,
   const std::vector<Eigen::Matrix3d>& inverseInertias,
   size_t numBodies,
-  double dt)
+  double dt,
+  const std::optional<Eigen::VectorXd>& initialLambda)
 {
   MultiBodySolveResult result;
   result.bodyForces.resize(
@@ -357,7 +358,8 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
   else
   {
     // No friction — use existing Active Set Method (zero-regression path)
-    asmResult = solveActiveSet(a, b, numConstraintRows);
+    // Ticket 0040d: Pass initial lambda for warm-starting
+    asmResult = solveActiveSet(a, b, numConstraintRows, initialLambda);
   }
 
   // Step 6: Extract per-body forces
@@ -512,22 +514,45 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
     double const jv =
       (jacobians[i] * v)(0);  // Scalar: relative velocity along constraint
 
-    // Restitution and Baumgarte terms
+    // Restitution term with velocity-level slop correction (no Baumgarte bias)
     if (contact != nullptr)
     {
       double const e = contact->getRestitution();
-      double const erp =
-        contact->alpha();  // alpha() returns ERP for ContactConstraint
+
+      // Ticket: 0040b — Split impulse: velocity-only RHS.
+      //
+      // Standard formula: b = -(1+e) * jv
+      // where jv = J·v (current relative velocity along constraint normal).
+      //
+      // For resting contacts (small jv, significant penetration), add gentle
+      // position correction velocity to prevent sinking under gravity.
+      // This replaces Baumgarte stabilization without injecting energy into
+      // high-speed impacts.
       double const penetration = contact->getPenetrationDepth();
 
-      // RHS: -(1+e) · J·v⁻ + (ERP/dt) · penetration
-      // Ticket: 0039e — Clamp Baumgarte correction velocity to prevent
-      // energy injection from large penetrations or high ERP/dt ratios
-      constexpr double kMaxBaumgarteCorrection = 5.0;  // m/s
-      double const baumgarteCorrection =
-        std::min((erp / dt) * penetration, kMaxBaumgarteCorrection);
-      b(static_cast<Eigen::Index>(i)) =
-        (-(1.0 + e) * jv) + baumgarteCorrection;
+      // Slop correction: only for resting contacts with significant penetration
+      double slopCorrection = 0.0;
+      constexpr double kSlop = 0.005;  // 5mm penetration allowed
+      if (penetration > kSlop)
+      {
+        // Velocity needed to resolve penetration over one frame
+        double const correctionVel = (penetration - kSlop) / dt;
+        // Scale down to avoid overcorrection (0.2 = ERP-like factor)
+        slopCorrection = 0.2 * correctionVel;
+        // Cap: never exceed 1 m/s correction to prevent energy injection
+        slopCorrection = std::min(slopCorrection, 1.0);
+        // Further cap: correction must not exceed approach speed to prevent
+        // energy injection during impacts. For resting contacts (jv ≈ 0),
+        // the slopCorrection dominates. For impacts, restitution dominates.
+        double const approachSpeed = std::abs(jv);
+        if (approachSpeed > 0.5)
+        {
+          // During impacts, restitution handles everything; no slop needed
+          slopCorrection = 0.0;
+        }
+      }
+
+      b(static_cast<Eigen::Index>(i)) = -(1.0 + e) * jv + slopCorrection;
     }
     else
     {
@@ -540,11 +565,13 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
 }
 
 // Ticket: 0034_active_set_method_contact_solver
+// Ticket: 0040d_contact_persistence_warm_starting
 // Design: docs/designs/0034_active_set_method_contact_solver/design.md
 ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
   const Eigen::MatrixXd& A,
   const Eigen::VectorXd& b,
-  int numContacts) const
+  int numContacts,
+  const std::optional<Eigen::VectorXd>& initialLambda) const
 {
   const int c = numContacts;
   Eigen::VectorXd lambda = Eigen::VectorXd::Zero(c);
@@ -557,12 +584,42 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
                            .active_set_size = 0};
   }
 
-  // Initialize working set: all contacts active (optimal for resting contacts)
+  // Ticket 0040d: Warm-start active set from previous frame's solution.
+  // If initial lambda is provided and correctly sized, initialize the active
+  // set to only those contacts with positive cached lambda. This skips the
+  // iterations needed to remove inactive contacts from the working set.
+  const bool warmStart = initialLambda.has_value() &&
+                         initialLambda->size() == c &&
+                         initialLambda->maxCoeff() > 0.0;
+
   std::vector<int> activeIndices;
   activeIndices.reserve(static_cast<size_t>(c));
-  for (int i = 0; i < c; ++i)
+
+  if (warmStart)
   {
-    activeIndices.push_back(i);
+    for (int i = 0; i < c; ++i)
+    {
+      if ((*initialLambda)(i) > 0.0)
+      {
+        activeIndices.push_back(i);
+      }
+    }
+    // If warm-start produced an empty active set, fall back to all active
+    if (activeIndices.empty())
+    {
+      for (int i = 0; i < c; ++i)
+      {
+        activeIndices.push_back(i);
+      }
+    }
+  }
+  else
+  {
+    // Default: all contacts active (optimal for resting contacts)
+    for (int i = 0; i < c; ++i)
+    {
+      activeIndices.push_back(i);
+    }
   }
 
   const int effectiveMaxIter = std::min(2 * c, max_safety_iterations_);

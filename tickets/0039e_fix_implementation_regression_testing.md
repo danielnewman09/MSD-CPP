@@ -310,7 +310,11 @@ All remaining 11 failures are diagnostic tests from 0039c/0039d that probe deepe
 2. **Contact persistence / warm-starting**: Reduce frame-to-frame contact jitter
 3. **Per-contact penetration depth**: Currently all contacts share `result.penetrationDepth`, causing overcorrection with multi-contact
 
-These are documented as future work and are beyond the scope of this fix.
+These are addressed in follow-on ticket [0040_collision_stabilization_phase2](0040_collision_stabilization_phase2.md):
+- **0040a**: Per-contact penetration depth (fixes N× overcorrection)
+- **0040b**: Split impulse position correction (replaces Baumgarte, fixes energy injection)
+- **0040c**: Edge contact manifold (fixes B2 edge torque)
+- **0040d**: Contact persistence and warm-starting (reduces jitter)
 
 ---
 

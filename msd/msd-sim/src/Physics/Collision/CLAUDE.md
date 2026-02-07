@@ -50,6 +50,8 @@ When GJK confirms intersection, we need penetration depth and contact normal. EP
 
 **Contact manifold generation** (Ticket 0029): Up to 4 contact points per collision for improved stability in constraint solving. Fixed array size avoids heap allocation.
 
+**Edge contact manifold** (Ticket 0040c): Edge-edge contacts (where Sutherland-Hodgman clipping produces < 3 points) generate 2 contact points with geometric extent along the contact edge segment, enabling torque generation from edge impacts. Uses `ConvexHull::findClosestEdge()` to identify contacting edges and a segment-segment closest point algorithm (Ericson 2004, Section 5.1.9) to compute contact point placement. Falls back to single-point contact if edge detection produces degenerate results.
+
 ### Why std::optional<CollisionResult>?
 
 Collision is inherently optional—most object pairs don't collide. Using `std::optional` makes the API self-documenting and eliminates the need for a separate `intersecting` boolean field.
@@ -139,4 +141,5 @@ Effective mass in normal direction: `m_eff = 1 / (J M⁻¹ Jᵀ)`
 ## Related Documentation
 
 - **Constraint System**: [Constraints/CLAUDE.md](../Constraints/CLAUDE.md) — ContactConstraint, solver
-- **Design Documents**: `docs/designs/0027a_expanding_polytope_algorithm/`, `0028_epa_witness_points/`, `0029_contact_manifold_generation/`
+- **Design Documents**: `docs/designs/0027a_expanding_polytope_algorithm/`, `0028_epa_witness_points/`, `0029_contact_manifold_generation/`, `docs/designs/0040c-edge-contact-manifold/`
+- **Diagrams**: [`edge-contact-manifold.puml`](../../../../../../docs/msd/msd-sim/Physics/edge-contact-manifold.puml)

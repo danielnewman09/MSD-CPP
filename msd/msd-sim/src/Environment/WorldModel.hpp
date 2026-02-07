@@ -7,7 +7,9 @@
 
 #include "msd-sim/src/Environment/Platform.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
+#include "msd-sim/src/Physics/Constraints/ContactCache.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
+#include "msd-sim/src/Physics/Constraints/PositionCorrector.hpp"
 #include "msd-sim/src/Physics/Integration/Integrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/PotentialEnergy.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
@@ -356,6 +358,8 @@ private:
   // 0032)
   CollisionHandler collisionHandler_{1e-6};
   ConstraintSolver contactSolver_;  // PGS solver for contact constraints
+  PositionCorrector positionCorrector_;  // Split impulse position correction
+  ContactCache contactCache_;  // Warm-starting cache for persistent contacts
 
   // NEW: Potential energies and integrator (ticket 0030)
   std::vector<std::unique_ptr<PotentialEnergy>> potentialEnergies_;

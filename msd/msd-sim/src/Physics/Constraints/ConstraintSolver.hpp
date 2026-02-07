@@ -12,6 +12,7 @@
 
 #include <functional>
 #include <limits>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -167,10 +168,15 @@ public:
    * @param inverseInertias Per-body inverse inertia tensors
    * @param numBodies Total number of bodies
    * @param dt Timestep [s]
+   * @param initialLambda Optional initial lambda guess for warm-starting.
+   *        If non-empty, must have size == contactConstraints.size().
+   *        Non-zero entries initialize the ASM active set for faster
+   *        convergence on persistent contacts.
    * @return MultiBodySolveResult with per-body forces
    *
    * @ticket 0032_contact_constraint_refactor
    * @ticket 0034_active_set_method_contact_solver
+   * @ticket 0040d_contact_persistence_warm_starting
    */
   MultiBodySolveResult solveWithContacts(
     const std::vector<TwoBodyConstraint*>& contactConstraints,
@@ -178,7 +184,8 @@ public:
     const std::vector<double>& inverseMasses,
     const std::vector<Eigen::Matrix3d>& inverseInertias,
     size_t numBodies,
-    double dt);
+    double dt,
+    const std::optional<Eigen::VectorXd>& initialLambda = std::nullopt);
 
   /**
    * @brief Set maximum safety iteration cap for Active Set Method
@@ -439,10 +446,13 @@ private:
    * set size
    *
    * @ticket 0034_active_set_method_contact_solver
+   * @ticket 0040d_contact_persistence_warm_starting
    */
-  [[nodiscard]] ActiveSetResult solveActiveSet(const Eigen::MatrixXd& A,
-                                               const Eigen::VectorXd& b,
-                                               int numContacts) const;
+  [[nodiscard]] ActiveSetResult solveActiveSet(
+    const Eigen::MatrixXd& A,
+    const Eigen::VectorXd& b,
+    int numContacts,
+    const std::optional<Eigen::VectorXd>& initialLambda = std::nullopt) const;
 
   /**
    * @brief Extract per-body forces from solved lambda values

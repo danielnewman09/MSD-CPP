@@ -453,10 +453,33 @@ ctest --preset debug
 | [`two-body-constraints.puml`](../../docs/msd/msd-sim/Physics/two-body-constraints.puml) | Two-body constraint infrastructure with ContactConstraint for collision response | `docs/msd/msd-sim/Physics/` |
 | [`0034_active_set_method_contact_solver.puml`](../../docs/designs/0034_active_set_method_contact_solver/0034_active_set_method_contact_solver.puml) | Active Set Method contact solver replacing PGS with exact LCP solution | `docs/designs/0034_active_set_method_contact_solver/` |
 | [`data-recorder.puml`](../../docs/msd/msd-sim/DataRecorder/data-recorder.puml) | Background thread simulation data recording with frame-based timestamping | `docs/msd/msd-sim/DataRecorder/` |
+| [`edge-contact-manifold.puml`](../../docs/msd/msd-sim/Physics/edge-contact-manifold.puml) | Edge-edge contact detection and 2-point contact manifold generation | `docs/msd/msd-sim/Physics/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Edge Contact Manifold — 2026-02-07
+**Ticket**: [0040c_edge_contact_manifold](../../tickets/0040c_edge_contact_manifold.md)
+**Diagram**: [`edge-contact-manifold.puml`](../../docs/msd/msd-sim/Physics/edge-contact-manifold.puml)
+**Type**: Feature Enhancement (Internal)
+
+Extended EPA contact manifold generation to detect edge-edge contact cases and produce 2 contact points with geometric extent along the contact edge segment. Previously, edge-edge contacts produced a degenerate single-point manifold where the contact point lay on the contact normal axis, giving `r x n = 0` and preventing torque generation from edge impacts.
+
+**Key components**:
+- **`ConvexHull::Edge`** — Nested struct representing a hull edge as a pair of vertex coordinates
+- **`ConvexHull::findClosestEdge()`** — Finds the hull edge closest to a query point by iterating all unique edges with `std::set`-based deduplication
+- **`EPA::generateEdgeContacts()`** — Detects edge-edge contacts when Sutherland-Hodgman clipping produces < 3 points, generates 2 contact points offset along edge direction in the contact plane
+- **`closestPointsBetweenSegments()`** — Standard segment-segment closest point algorithm (Ericson 2004, Section 5.1.9) in anonymous namespace
+
+**Algorithm**: When `extractContactManifold()` falls into the degenerate-case branch (both hulls have < 3 aligned facet vertices), `generateEdgeContacts()` computes EPA witness points via barycentric interpolation, queries the closest edge on each hull in local space, transforms to world space, computes the closest points between the two edge segments, and generates 2 contact points offset by half the shorter edge length along the edge direction projected onto the contact plane. Falls back to single-point contact if edge detection produces degenerate geometry (edge length < epsilon or edge parallel to normal).
+
+**Key files**:
+- `src/Physics/RigidBody/ConvexHull.hpp`, `ConvexHull.cpp` — Added `Edge` struct, `findClosestEdge()`, `pointToSegmentDistance()` helper
+- `src/Physics/Collision/EPA.hpp`, `EPA.cpp` — Added `generateEdgeContacts()`, `closestPointsBetweenSegments()`, modified degenerate-case branch
+- `test/Physics/Collision/EdgeContactTest.cpp` — 11 tests (4 ConvexHullEdge + 7 EdgeContact)
+
+**No public API changes**: EPA and CollisionResult interfaces unchanged. Edge detection is internal to the manifold generation fallback path.
 
 ### Simulation Data Recorder — 2026-02-06
 **Ticket**: [0038_simulation_data_recorder](../../tickets/0038_simulation_data_recorder.md)

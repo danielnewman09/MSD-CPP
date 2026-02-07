@@ -301,13 +301,22 @@ TEST(LinearCollisionTest, A4_EqualMassElastic_VelocitySwap)
   EXPECT_NEAR(initialMomentumX, finalMomentumX, 0.1 * std::abs(initialMomentumX))
     << "Total momentum should be conserved";
 
-  // KE conservation (elastic)
-  double const finalKE =
-    0.5 * mass * world.getObject(idA).getInertialState().velocity.squaredNorm() +
-    0.5 * mass * world.getObject(idB).getInertialState().velocity.squaredNorm();
+  // KE conservation (elastic) — include rotational KE since polyhedral
+  // contact geometry transfers energy from linear to rotational modes
+  auto computeTotalKE = [&](uint32_t id) -> double {
+    const auto& state = world.getObject(id).getInertialState();
+    double const linearKE = 0.5 * mass * state.velocity.squaredNorm();
+    Eigen::Vector3d omega{state.getAngularVelocity().x(),
+                          state.getAngularVelocity().y(),
+                          state.getAngularVelocity().z()};
+    Eigen::Matrix3d const I = world.getObject(id).getInertiaTensor();
+    double const rotKE = 0.5 * omega.transpose() * I * omega;
+    return linearKE + rotKE;
+  };
+  double const finalKE = computeTotalKE(idA) + computeTotalKE(idB);
 
   EXPECT_NEAR(initialKE, finalKE, 0.1 * initialKE)
-    << "Total KE should be conserved for elastic collision";
+    << "Total KE (linear + rotational) should be conserved for elastic collision";
 }
 
 // ============================================================================
@@ -433,9 +442,6 @@ TEST(LinearCollisionTest, A6_GlancingCollision_MomentumAndEnergyConserved)
   Coordinate const finalMomentum =
     world.getObject(idA).getInertialState().velocity * mass +
     world.getObject(idB).getInertialState().velocity * mass;
-  double const finalKE =
-    0.5 * mass * world.getObject(idA).getInertialState().velocity.squaredNorm() +
-    0.5 * mass * world.getObject(idB).getInertialState().velocity.squaredNorm();
 
   // Momentum conservation in each axis
   EXPECT_NEAR(initialMomentum.x(), finalMomentum.x(), 0.1 * std::abs(initialMomentum.x()))
@@ -443,9 +449,22 @@ TEST(LinearCollisionTest, A6_GlancingCollision_MomentumAndEnergyConserved)
   EXPECT_NEAR(initialMomentum.y(), finalMomentum.y(), 1.0)
     << "Y-momentum should be conserved";
 
-  // KE conservation (elastic)
+  // KE conservation (elastic) — include rotational KE since polyhedral
+  // contact geometry transfers energy from linear to rotational modes
+  auto computeTotalKE = [&](uint32_t id) -> double {
+    const auto& state = world.getObject(id).getInertialState();
+    double const linearKE = 0.5 * mass * state.velocity.squaredNorm();
+    Eigen::Vector3d omega{state.getAngularVelocity().x(),
+                          state.getAngularVelocity().y(),
+                          state.getAngularVelocity().z()};
+    Eigen::Matrix3d const I = world.getObject(id).getInertiaTensor();
+    double const rotKE = 0.5 * omega.transpose() * I * omega;
+    return linearKE + rotKE;
+  };
+  double const finalKE = computeTotalKE(idA) + computeTotalKE(idB);
+
   EXPECT_NEAR(initialKE, finalKE, 0.1 * initialKE)
-    << "KE should be conserved for elastic glancing collision";
+    << "Total KE (linear + rotational) should be conserved for elastic glancing collision";
 
   // Both objects should have non-zero velocity after glancing collision
   double const vBFinal = world.getObject(idB).getInertialState().velocity.norm();

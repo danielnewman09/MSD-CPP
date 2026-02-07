@@ -18,4 +18,7 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintSolverASMTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/FrictionConstraintTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/JacobianLinearTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SplitImpulseTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ContactCacheTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/WarmStartTest.cpp
 )

@@ -155,8 +155,9 @@ TEST(EffectiveMass, SingleBody_InverseMassOnly)
   // with no rotation (lever arm = 0), the effective mass matrix should be:
   //   A = J * M_inv * J^T = (1/m_A) * n^T * n + 0 = 1/m_A
   //
-  // Verify by checking the solver result: for a unit contact at rest with
-  // known penetration, the computed lambda should match 1/m_A physics.
+  // Ticket: 0040b — Split impulse: velocity RHS no longer contains Baumgarte.
+  // Use an approaching contact (non-zero velocity) to verify effective mass
+  // via the restitution impulse rather than the removed Baumgarte term.
 
   double const massA = 5.0;
   double const inverseMassA = 1.0 / massA;
@@ -168,8 +169,8 @@ TEST(EffectiveMass, SingleBody_InverseMassOnly)
   Coordinate comA{0.0, 0.0, 0.0};
   Coordinate comB{0.0, 0.0, 0.0};
 
-  // Zero velocity, zero restitution, known penetration
-  double const penetration = 0.1;
+  // Body A approaching B at 2 m/s, e=0 (perfectly inelastic), no penetration
+  double const penetration = 0.0;
   double const restitution = 0.0;
   double const preVelNormal = 0.0;
   double const dt = 1.0 / 60.0;
@@ -178,25 +179,19 @@ TEST(EffectiveMass, SingleBody_InverseMassOnly)
     0, 1, normal, contactA, contactB, penetration, comA, comB,
     restitution, preVelNormal);
 
-  InertialState stateA = createDefaultState();
+  // Body A moving upward into static body B
+  InertialState stateA = createDefaultState(
+    Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 2.0});
   InertialState stateB = createDefaultState();
 
-  // Build the effective mass manually to verify: A = J * M_inv * J^T
-  // J = [-n^T, 0, n^T, 0] (1x12 with zero angular parts since lever=0)
-  // M_inv for body A: (1/m_A)*I_3, angular: zero (not used, lever=0)
-  // M_inv for body B: 0 (static)
-  //
-  // A = (-n)^T * (1/m_A) * (-n) + n^T * 0 * n
-  //   = (1/m_A) * n^T*n = 1/m_A  (since n is unit)
-  //
-  // With regularization epsilon, A = 1/m_A + eps
+  // A = J * M_inv * J^T = (1/m_A) + eps (single body, linear only)
   double const kRegEps = 1e-8;
   double const expectedA = inverseMassA + kRegEps;
 
-  // The RHS for zero velocity and zero restitution:
-  // b = -(1+0)*J*v + (ERP/dt)*penetration = 0 + (0.2/dt)*0.1
-  double const erp = 0.2;
-  double const expectedB = (erp / dt) * penetration;
+  // RHS: b = -(1+0)*jv + 0 = -jv where jv = -v_A.z = -2
+  // b = -(-2) = 2
+  double const jv = -2.0;
+  double const expectedB = -(1.0 + restitution) * jv;
 
   // lambda = b / A
   double const expectedLambda = expectedB / expectedA;
@@ -229,7 +224,8 @@ TEST(EffectiveMass, TwoBody_EqualMass_HalfEffective)
   //   A = J * M_inv * J^T = (1/m)*n^T*n + (1/m)*n^T*n = 2/m
   // This means the effective mass is m/2.
   //
-  // Compare with single-body case to verify the factor-of-2 relationship.
+  // Ticket: 0040b — Split impulse: use approaching velocity instead of
+  // Baumgarte to verify the factor-of-2 effective mass relationship.
 
   double const mass = 10.0;
   double const inverseMass = 1.0 / mass;
@@ -240,7 +236,7 @@ TEST(EffectiveMass, TwoBody_EqualMass_HalfEffective)
   Coordinate comA{0.0, 0.0, 0.0};
   Coordinate comB{0.0, 0.0, 0.0};
 
-  double const penetration = 0.1;
+  double const penetration = 0.0;
   double const restitution = 0.0;
   double const preVelNormal = 0.0;
   double const dt = 1.0 / 60.0;
@@ -249,18 +245,21 @@ TEST(EffectiveMass, TwoBody_EqualMass_HalfEffective)
     0, 1, normal, contactA, contactB, penetration, comA, comB,
     restitution, preVelNormal);
 
-  InertialState stateA = createDefaultState();
-  InertialState stateB = createDefaultState();
+  // Body A approaching B along Z
+  InertialState stateA = createDefaultState(
+    Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 2.0});
+  InertialState stateB = createDefaultState(
+    Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, -2.0});
 
   // Expected effective mass matrix entry:
   // A = (1/m) + (1/m) + eps = 2/m + eps
   double const kRegEps = 1e-8;
   double const expectedA = 2.0 * inverseMass + kRegEps;
 
-  // RHS: same as single-body case (b depends only on velocity and penetration)
-  double const erp = 0.2;
-  double const expectedB = (erp / dt) * penetration;
-
+  // RHS: b = -(1+0)*jv where jv = -v_A.z + v_B.z = -2 + (-2) = -4
+  // b = -(-4) = 4
+  double const jv = -4.0;
+  double const expectedB = -(1.0 + restitution) * jv;
   double const expectedLambda = expectedB / expectedA;
 
   ConstraintSolver solver;
@@ -282,10 +281,7 @@ TEST(EffectiveMass, TwoBody_EqualMass_HalfEffective)
   EXPECT_NEAR(expectedLambda, result.lambdas(0), 1e-6)
     << "Lambda should equal b/A where A = 2/m + eps (two-body effective mass)";
 
-  // Also verify the factor-of-2 ratio against single-body case
-  // Single-body: A_single = 1/m + eps, so lambda_single = b / (1/m + eps)
-  // Two-body:    A_two    = 2/m + eps, so lambda_two    = b / (2/m + eps)
-  // Ratio: lambda_two / lambda_single ≈ (1/m + eps) / (2/m + eps) ≈ 0.5
+  // Verify the factor-of-2 ratio: same RHS but single-body A = 1/m + eps
   double const aSingle = inverseMass + kRegEps;
   double const lambdaSingle = expectedB / aSingle;
   double const ratio = result.lambdas(0) / lambdaSingle;
@@ -300,16 +296,14 @@ TEST(EffectiveMass, TwoBody_EqualMass_HalfEffective)
 
 TEST(ContactRHS, RestitutionTerm_CorrectSign)
 {
-  // Verify b = -(1+e) * v_rel_normal + Baumgarte_term
+  // Ticket: 0040b — Split impulse with approach-velocity-gated slop correction.
   //
-  // Setup: two bodies approaching along Z axis with known relative velocity.
-  // Body A moving up, Body B stationary => relative velocity = v_B - v_A = -v_A
-  // along normal direction.
+  // RHS formula:
+  //   For impacts (|jv| > 0.5): b = -(1+e) * jv  (pure restitution)
+  //   For resting (|jv| <= 0.5): b = -(1+e) * jv + slopCorrection
   //
-  // With normal = (0,0,1), J = [-n^T, 0, n^T, 0]
-  // J * v = -v_A.z + v_B.z = relative normal velocity (B's approach minus A's)
-  //
-  // RHS formula: b = -(1+e) * J*v + (ERP/dt) * penetration
+  // This test verifies the impact case: approach speed 3 m/s >> 0.5 threshold,
+  // so slop correction is zero and RHS is purely restitution-driven.
 
   double const mass = 10.0;
   double const inverseMass = 1.0 / mass;
@@ -323,7 +317,7 @@ TEST(ContactRHS, RestitutionTerm_CorrectSign)
   Coordinate comB{0.0, 0.0, 0.0};
 
   double const penetration = 0.05;
-  double const preVelNormal = -3.0;  // Bodies approaching
+  double const preVelNormal = -3.0;  // Bodies approaching at 3 m/s
 
   // Body A moving up at 3 m/s, Body B stationary
   InertialState stateA = createDefaultState(
@@ -338,14 +332,9 @@ TEST(ContactRHS, RestitutionTerm_CorrectSign)
   // Manually compute expected RHS:
   // J * v = [-n^T * v_A] + [n^T * v_B] = -1*3 + 0 = -3.0
   double const jv = -3.0;
-  double const erp = 0.2;
-  double const expectedB =
-    -(1.0 + restitution) * jv + (erp / dt) * penetration;
-
-  // expectedB = -(1.7) * (-3.0) + (0.2/dt)*0.05
-  //           = 5.1 + (12.0)*0.05
-  //           = 5.1 + 0.6
-  //           = 5.7
+  // |jv| = 3.0 > 0.5 (impact), so slopCorrection = 0
+  double const expectedB = -(1.0 + restitution) * jv;
+  // expectedB = -(1.7) * (-3.0) = 5.1
 
   // Verify through solver: lambda = b / A
   double const kRegEps = 1e-8;
@@ -373,24 +362,31 @@ TEST(ContactRHS, RestitutionTerm_CorrectSign)
 
   // Verify the computed lambda matches our expected RHS calculation
   EXPECT_NEAR(expectedLambda, result.lambdas(0), 1e-4)
-    << "Lambda should match b/A where b includes -(1+e)*Jv restitution term";
+    << "Lambda should match b/A with pure restitution (no slop for impacts)";
 
   // Verify the sign: b should be positive (pushing bodies apart)
   EXPECT_GT(expectedB, 0.0)
     << "RHS b should be positive for approaching bodies (negative Jv)";
 }
 
-TEST(ContactRHS, ZeroVelocity_OnlyBaumgarte)
+TEST(ContactRHS, SlopCorrectionGatedByApproachVelocity)
 {
-  // When v_rel = 0, only the Baumgarte stabilization term contributes to RHS.
-  // b = -(1+e) * 0 + (ERP/dt) * penetration = (ERP/dt) * penetration
+  // Ticket: 0040b — Split impulse with approach-velocity-gated slop correction.
   //
-  // This test verifies that with zero velocity, the only contribution is the
-  // Baumgarte position-correction term.
+  // Slop correction formula:
+  //   if pen > 0.005 and |jv| <= 0.5:
+  //     slopCorrection = min(0.2 * (pen - 0.005) / dt, 1.0)
+  //   else:
+  //     slopCorrection = 0
+  //   b = -(1+e) * jv + slopCorrection
+  //
+  // Key behaviors:
+  // - Resting contacts (|jv| ≈ 0) get gentle position recovery via slop correction
+  // - Impacts (|jv| > 0.5) get pure restitution, no slop (restitution handles bounce)
+  // - Slop correction capped at 1.0 m/s to prevent energy injection
 
   double const mass = 10.0;
   double const inverseMass = 1.0 / mass;
-  double const restitution = 0.8;  // Restitution is irrelevant at zero velocity
   double const dt = 1.0 / 60.0;
 
   Coordinate normal{0.0, 0.0, 1.0};
@@ -399,57 +395,103 @@ TEST(ContactRHS, ZeroVelocity_OnlyBaumgarte)
   Coordinate comA{0.0, 0.0, 0.0};
   Coordinate comB{0.0, 0.0, 0.0};
 
-  double const penetration = 0.1;
-
-  // Both bodies at rest
-  InertialState stateA = createDefaultState();
-  InertialState stateB = createDefaultState();
-
-  auto contact = std::make_unique<ContactConstraint>(
-    0, 1, normal, contactA, contactB, penetration, comA, comB,
-    restitution, 0.0);
-
-  // Expected RHS: b = -(1+e)*0 + (ERP/dt)*penetration = (ERP/dt)*penetration
-  double const erp = 0.2;
-  double const expectedB = (erp / dt) * penetration;
-
-  // Expected lambda: b / A
   double const kRegEps = 1e-8;
   double const effectiveA = 2.0 * inverseMass + kRegEps;
-  double const expectedLambda = expectedB / effectiveA;
 
   ConstraintSolver solver;
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
-  std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                   stateB};
-  std::vector<double> inverseMasses{inverseMass, inverseMass};
-
   Eigen::Matrix3d zeroInertia = Eigen::Matrix3d::Zero();
+  std::vector<double> inverseMasses{inverseMass, inverseMass};
   std::vector<Eigen::Matrix3d> inverseInertias{zeroInertia, zeroInertia};
 
-  auto result = solver.solveWithContacts(
-    constraints, states, inverseMasses, inverseInertias, 2, dt);
+  // Case 1: Resting contact (zero velocity, pen > slop) — slop correction active
+  {
+    double const penetration = 0.1;
+    InertialState stateA = createDefaultState();
+    InertialState stateB = createDefaultState();
+    std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                     stateB};
 
-  ASSERT_TRUE(result.converged);
-  ASSERT_EQ(1, result.lambdas.size());
-  EXPECT_GT(result.lambdas(0), 0.0)
-    << "Lambda should be positive from Baumgarte correction alone";
+    auto contact = std::make_unique<ContactConstraint>(
+      0, 1, normal, contactA, contactB, penetration, comA, comB, 0.8, 0.0);
 
-  EXPECT_NEAR(expectedLambda, result.lambdas(0), 1e-6)
-    << "Lambda should match (ERP/dt)*penetration / A, with no velocity term";
+    // |jv| = 0 <= 0.5, pen 0.1 > 0.005
+    // slopCorrection = min(0.2 * (0.1 - 0.005) / (1/60), 1.0)
+    //                = min(0.2 * 5.7, 1.0) = min(1.14, 1.0) = 1.0
+    double const expectedB = 1.0;  // -(1+0.8)*0 + 1.0 = 1.0
+    double const expectedLambda = expectedB / effectiveA;
 
-  // Verify that the result doesn't depend on restitution by comparing with e=0
-  auto contactNoRestitution = std::make_unique<ContactConstraint>(
-    0, 1, normal, contactA, contactB, penetration, comA, comB,
-    0.0, 0.0);
+    std::vector<TwoBodyConstraint*> constraints{contact.get()};
+    auto result = solver.solveWithContacts(
+      constraints, states, inverseMasses, inverseInertias, 2, dt);
 
-  std::vector<TwoBodyConstraint*> constraintsNoRest{
-    contactNoRestitution.get()};
+    ASSERT_TRUE(result.converged);
+    EXPECT_GT(result.lambdas(0), 0.0)
+      << "Resting contact with penetration should get slop correction";
+    EXPECT_NEAR(expectedLambda, result.lambdas(0), 1e-6)
+      << "Lambda should match capped slop correction (1.0 m/s)";
+  }
 
-  auto resultNoRest = solver.solveWithContacts(
-    constraintsNoRest, states, inverseMasses, inverseInertias, 2, dt);
+  // Case 2: Impact (approaching at 1 m/s) — no slop correction
+  {
+    double const penetration = 0.1;
+    double const approachSpeed = 1.0;
+    double const preImpactVel = -approachSpeed;
 
-  ASSERT_TRUE(resultNoRest.converged);
-  EXPECT_NEAR(result.lambdas(0), resultNoRest.lambdas(0), 1e-10)
-    << "At zero velocity, restitution value should not affect lambda";
+    InertialState stateA = createDefaultState(
+      Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, approachSpeed});
+    InertialState stateB = createDefaultState();
+    std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                     stateB};
+
+    double const e = 0.8;
+    auto contact = std::make_unique<ContactConstraint>(
+      0, 1, normal, contactA, contactB, penetration, comA, comB, e,
+      preImpactVel);
+
+    // |jv| = 1.0 > 0.5, so slopCorrection = 0
+    double const jv = -approachSpeed;
+    double const expectedB = -(1.0 + e) * jv;  // -(1.8)*(-1.0) = 1.8
+    double const expectedLambda = expectedB / effectiveA;
+
+    std::vector<TwoBodyConstraint*> constraints{contact.get()};
+    auto result = solver.solveWithContacts(
+      constraints, states, inverseMasses, inverseInertias, 2, dt);
+
+    ASSERT_TRUE(result.converged);
+    EXPECT_GT(result.lambdas(0), 0.0);
+    EXPECT_NEAR(expectedLambda, result.lambdas(0), 1e-6)
+      << "Impact: lambda should use pure restitution (no slop correction)";
+  }
+
+  // Case 3: Fast impact (approaching at 5 m/s) — no slop correction
+  {
+    double const penetration = 0.01;
+    double const approachSpeed = 5.0;
+    double const preImpactVel = -approachSpeed;
+
+    InertialState stateA = createDefaultState(
+      Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, approachSpeed});
+    InertialState stateB = createDefaultState();
+    std::vector<std::reference_wrapper<const InertialState>> states{stateA,
+                                                                     stateB};
+
+    double const e = 0.8;
+    auto contact = std::make_unique<ContactConstraint>(
+      0, 1, normal, contactA, contactB, penetration, comA, comB, e,
+      preImpactVel);
+
+    // |jv| = 5.0 > 0.5, so slopCorrection = 0
+    double const jv = -approachSpeed;
+    double const expectedB = -(1.0 + e) * jv;  // -(1.8)*(-5.0) = 9.0
+    double const expectedLambda = expectedB / effectiveA;
+
+    std::vector<TwoBodyConstraint*> constraints{contact.get()};
+    auto result = solver.solveWithContacts(
+      constraints, states, inverseMasses, inverseInertias, 2, dt);
+
+    ASSERT_TRUE(result.converged);
+    EXPECT_GT(result.lambdas(0), 0.0);
+    EXPECT_NEAR(expectedLambda, result.lambdas(0), 1e-6)
+      << "Fast impact: lambda should use pure restitution (no slop correction)";
+  }
 }

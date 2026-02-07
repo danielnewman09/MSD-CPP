@@ -1,0 +1,79 @@
+@startuml 0040b-split-impulse-position-correction
+
+title Split Impulse Position Correction\n(Ticket 0040b)
+
+skinparam backgroundColor white
+skinparam classFontSize 12
+skinparam noteFontSize 10
+skinparam sequenceMessageAlign center
+
+package "Constraint Solver (Modified)" {
+    class ConstraintSolver {
+        +solveWithContacts() : MultiBodySolveResult
+        -assembleContactRHS() : VectorXd
+        -assembleContactJacobians() : vector<MatrixXd>
+        -assembleContactEffectiveMass() : MatrixXd
+        -solveActiveSet() : ActiveSetResult
+        -extractContactBodyForces() : vector<BodyForces>
+        __
+        **Modified**: assembleContactRHS()
+        removes Baumgarte bias term.
+        RHS = -(1+e) * J*v  (velocity only)
+    }
+}
+
+package "Position Correction (New)" {
+    class PositionCorrector <<new>> {
+        +correctPositions(contacts, states, ...)
+        __
+        Applies position-only corrections
+        using pseudo-velocities that are
+        discarded after position update.
+    }
+
+    class "PositionCorrector::Config" as Config <<new>> {
+        +beta : double = 0.2
+        +slop : double = 0.005
+        +maxIterations : int = 4
+    }
+}
+
+package "WorldModel (Modified)" {
+    class WorldModel {
+        -contactSolver_ : ConstraintSolver
+        -positionCorrector_ : PositionCorrector
+        -updateCollisions(dt)
+        __
+        **Modified**: updateCollisions()
+        adds Phase 6 position correction
+        after Phase 5 velocity forces.
+    }
+}
+
+package "Contact Constraints (Unchanged)" {
+    class ContactConstraint {
+        -penetration_depth_ : double
+        -restitution_ : double
+        -erp_ : double = 0.2
+        +getPenetrationDepth() : double
+        +getRestitution() : double
+        +alpha() : double
+        __
+        erp_ no longer read by solver
+        (kept for diagnostics)
+    }
+
+    class ContactConstraintFactory {
+        +createFromCollision() : vector<ContactConstraint>
+        __
+        Uses per-contact depth from 0040a
+    }
+}
+
+WorldModel *-- ConstraintSolver
+WorldModel *-- PositionCorrector
+PositionCorrector ..> Config
+PositionCorrector ..> ContactConstraint : reads depth
+ConstraintSolver ..> ContactConstraint : reads restitution\n(no longer reads erp)
+
+@enduml

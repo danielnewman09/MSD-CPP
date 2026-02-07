@@ -46,13 +46,14 @@ std::vector<std::unique_ptr<ContactConstraint>> createFromCollision(
     }
 
     // Create contact constraint
+    // Ticket: 0040a — use per-contact depth instead of shared penetrationDepth
     constraints.push_back(
       std::make_unique<ContactConstraint>(bodyAIndex,
                                           bodyBIndex,
                                           result.normal,
                                           contactPair.pointA,
                                           contactPair.pointB,
-                                          result.penetrationDepth,
+                                          contactPair.depth,
                                           comA,
                                           comB,
                                           effectiveRestitution,

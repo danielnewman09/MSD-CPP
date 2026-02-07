@@ -214,6 +214,29 @@ public:
    */
   [[nodiscard]] bool isValid() const;
 
+  /**
+   * @brief Represents an edge of the convex hull as a pair of vertex
+   * coordinates.
+   * @ticket 0040c_edge_contact_manifold
+   */
+  struct Edge
+  {
+    Coordinate start;
+    Coordinate end;
+  };
+
+  /**
+   * @brief Find the edge of the convex hull closest to a given point in
+   * hull-local space.
+   *
+   * Iterates all unique edges (vertex pairs from facet definitions) and
+   * returns the one with minimum distance to the query point.
+   *
+   * @param point Query point in hull-local space
+   * @return Edge with start and end coordinates in hull-local space
+   * @ticket 0040c_edge_contact_manifold
+   */
+  [[nodiscard]] Edge findClosestEdge(const Coordinate& point) const;
 
 private:
   std::vector<Coordinate> vertices_;  // Hull boundary vertices

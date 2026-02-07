@@ -1,7 +1,9 @@
 // Ticket: 0027a_expanding_polytope_algorithm
 // Ticket: 0029_contact_manifold_generation
+// Ticket: 0040a_per_contact_penetration_depth
 // Design: docs/designs/0027a_expanding_polytope_algorithm/design.md
 // Design: docs/designs/0029_contact_manifold_generation/design.md
+// Design: docs/designs/0040a-per-contact-penetration-depth/design.md
 
 #ifndef MSD_SIM_PHYSICS_COLLISION_RESULT_HPP
 #define MSD_SIM_PHYSICS_COLLISION_RESULT_HPP
@@ -19,22 +21,27 @@ namespace msd_sim
 /**
  * @brief A single contact pair within a collision manifold.
  *
- * Stores contact locations on both object surfaces in world space.
+ * Stores contact locations on both object surfaces in world space,
+ * along with the penetration depth at this specific contact point.
  * Simple POD struct with value semantics.
  *
  * @see
  * docs/designs/0029_contact_manifold_generation/0029_contact_manifold_generation.puml
+ * @see
+ * docs/designs/0040a-per-contact-penetration-depth/0040a-per-contact-penetration-depth.puml
  * @ticket 0029_contact_manifold_generation
+ * @ticket 0040a_per_contact_penetration_depth
  */
 struct ContactPoint
 {
   Coordinate pointA;  // Contact point on object A's surface (world space) [m]
   Coordinate pointB;  // Contact point on object B's surface (world space) [m]
+  double depth{0.0};  // Penetration depth at this contact point [m]
 
   ContactPoint() = default;
 
-  ContactPoint(Coordinate  pA, Coordinate  pB)
-    : pointA{std::move(pA)}, pointB{std::move(pB)}
+  ContactPoint(Coordinate  pA, Coordinate  pB, double d = 0.0)
+    : pointA{std::move(pA)}, pointB{std::move(pB)}, depth{d}
   {
   }
 

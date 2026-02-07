@@ -2,6 +2,7 @@
 #include <cmath>
 #include <limits>
 #include <ranges>
+#include <set>
 #include <unordered_map>
 
 extern "C"
@@ -266,6 +267,74 @@ void ConvexHull::computeCentroid()
   {
     centroid_ = Coordinate{0.0, 0.0, 0.0};
   }
+}
+
+namespace
+{
+
+// Ticket: 0040c_edge_contact_manifold
+// Compute minimum distance from a point to a line segment.
+double pointToSegmentDistance(const Coordinate& point,
+                              const Coordinate& segStart,
+                              const Coordinate& segEnd)
+{
+  Coordinate const seg = segEnd - segStart;
+  double const segLenSq = seg.dot(seg);
+
+  if (segLenSq < 1e-10)
+  {
+    return (point - segStart).norm();
+  }
+
+  double const t =
+    std::clamp(seg.dot(point - segStart) / segLenSq, 0.0, 1.0);
+  Coordinate const projection = segStart + seg * t;
+  return (point - projection).norm();
+}
+
+}  // namespace
+
+// Ticket: 0040c_edge_contact_manifold
+ConvexHull::Edge ConvexHull::findClosestEdge(const Coordinate& point) const
+{
+  double minDist = std::numeric_limits<double>::infinity();
+  Edge closestEdge{};
+
+  // Use a set to track processed edges (unordered pair)
+  std::set<std::pair<size_t, size_t>> processedEdges;
+
+  for (const auto& facet : facets_)
+  {
+    for (size_t i = 0; i < 3; ++i)
+    {
+      size_t const idx0 = facet.vertexIndices[i];
+      size_t const idx1 = facet.vertexIndices[(i + 1) % 3];
+
+      // Canonical edge representation (smaller index first)
+      auto edgeKey = std::make_pair(std::min(idx0, idx1),
+                                     std::max(idx0, idx1));
+
+      if (processedEdges.contains(edgeKey))
+      {
+        continue;
+      }
+      processedEdges.insert(edgeKey);
+
+      const Coordinate& v0 = vertices_[idx0];
+      const Coordinate& v1 = vertices_[idx1];
+
+      // Compute distance from point to edge segment
+      double const dist = pointToSegmentDistance(point, v0, v1);
+
+      if (dist < minDist)
+      {
+        minDist = dist;
+        closestEdge = Edge{v0, v1};
+      }
+    }
+  }
+
+  return closestEdge;
 }
 
 }  // namespace msd_sim

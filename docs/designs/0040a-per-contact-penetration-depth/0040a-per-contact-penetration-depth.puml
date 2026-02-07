@@ -1,0 +1,96 @@
+@startuml 0040a-per-contact-penetration-depth
+
+title Per-Contact Penetration Depth
+footer Ticket: 0040a_per_contact_penetration_depth
+
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+
+package "Collision Detection" {
+
+  class ContactPoint <<struct>> {
+    + pointA : Coordinate
+    + pointB : Coordinate
+    + **depth : double = 0.0** <<NEW>>
+    --
+    + ContactPoint()
+    + ContactPoint(pA, pB, d = 0.0)
+  }
+
+  class CollisionResult <<struct>> {
+    + normal : Coordinate
+    + penetrationDepth : double <<max depth>>
+    + contacts : array<ContactPoint, 4>
+    + contactCount : size_t
+  }
+
+  class EPA {
+    - assetA_ : const AssetPhysical&
+    - assetB_ : const AssetPhysical&
+    - epsilon_ : double
+    --
+    + computeContactInfo(simplex) : CollisionResult
+    + extractContactManifold(faceIndex, contacts) : size_t
+    .. Modified Behavior ..
+    **Computes per-point depth**
+    **during Sutherland-Hodgman clipping**
+  }
+
+  CollisionResult *-- "1..4" ContactPoint : contains
+  EPA ..> CollisionResult : produces
+}
+
+package "Constraint System" {
+
+  class ContactConstraint {
+    - contact_normal_ : Coordinate
+    - lever_arm_a_ : Coordinate
+    - lever_arm_b_ : Coordinate
+    - penetration_depth_ : double
+    - restitution_ : double
+    - erp_ : double = 0.2
+    --
+    + getPenetrationDepth() : double
+    .. Unchanged Interface ..
+    Constructor accepts depth per contact
+  }
+
+  class ContactConstraintFactory <<namespace>> {
+    + createFromCollision(...) : vector<unique_ptr<ContactConstraint>>
+    .. Modified Behavior ..
+    **Uses contactPair.depth**
+    **instead of result.penetrationDepth**
+  }
+
+  class ConstraintSolver {
+    + assembleContactRHS(...) : VectorXd
+    .. Unchanged ..
+    b_i += (ERP/dt) * penetration_i
+    (already reads per-constraint depth)
+  }
+
+  ContactConstraintFactory ..> ContactConstraint : creates
+  ContactConstraintFactory ..> CollisionResult : reads
+  ConstraintSolver ..> ContactConstraint : reads depth from
+}
+
+note right of EPA
+  **Depth Computation (per contact point)**
+
+  For each clipped incident point:
+    dist = refNormal . incPoint - refPlaneD
+    depth = max(-dist, 0.0)
+
+  dist < 0 means point is below reference
+  face (penetrating), so -dist > 0 gives
+  the positive penetration depth.
+end note
+
+note bottom of ContactConstraintFactory
+  **Before**: depth = result.penetrationDepth (shared)
+  **After**: depth = contactPair.depth (per-contact)
+
+  Single line change in createFromCollision()
+end note
+
+@enduml
