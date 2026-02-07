@@ -81,11 +81,7 @@
         {
             "label": "CMake Build",
             "type": "shell",
-            "command": "cmake",
-            "args": [
-                "--build",
-                "${command:cmake.buildDirectory}"
-            ],
+            "command": "cmake --build ${command:cmake.buildDirectory} && cmake --build --preset doxygen-db",
             "group": "build",
             "presentation": {
                 "echo": true,
