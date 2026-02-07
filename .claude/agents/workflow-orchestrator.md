@@ -245,7 +245,9 @@ When updating the Workflow Log section:
 ### {Phase Name} Phase
 - **Started**: YYYY-MM-DD HH:MM
 - **Completed**: YYYY-MM-DD HH:MM
-- **Artifacts**: 
+- **Branch**: {branch-name}
+- **PR**: #{pr-number} (or "N/A" if not yet created)
+- **Artifacts**:
   - `path/to/artifact1`
   - `path/to/artifact2`
 - **Notes**: {Important observations, decisions made, feedback incorporated}
@@ -272,5 +274,49 @@ Ensure all work adheres to project standards:
 - Proper error handling with std::expected where appropriate
 - Memory management via references and unique_ptr
 - Brace initialization throughout
+
+## GitHub Integration Conventions
+
+All agents that create artifacts should integrate with GitHub for visibility. The orchestrator ensures these conventions are followed across phases.
+
+### Branch Naming
+- Format: `{ticket-number}-{ticket-name-kebab-case}` (e.g., `0041-reference-frame-transform-refactor`)
+- Derive from ticket filename: `tickets/0041_reference_frame_transform_refactor.md` → branch `0041-reference-frame-transform-refactor`
+- **Single branch per ticket**, shared across all phases (design, implementation, review, docs)
+
+### PR Lifecycle
+- **Design phase**: Create a **draft** PR when design artifacts are first committed
+- **Implementation phase**: Mark PR as **ready for review** when implementation is committed
+- **Human merges**: PRs are never auto-merged; humans merge after final approval
+
+### Issue Linking
+- During design/prototype phases: PR body includes `Part of #N` (where N is the GitHub issue number)
+- During implementation phase: PR body includes `Closes #N` to auto-close the issue on merge
+- If no GitHub issue exists, omit the linking line
+
+### Commit Message Prefixes
+All commits on a ticket branch should use a phase prefix:
+- `design:` — Design documents, PlantUML diagrams
+- `review:` — Review summaries appended to documents
+- `prototype:` — Prototype code and results
+- `impl:` — Production code, tests, build system changes
+- `docs:` — Documentation updates (CLAUDE.md, tutorials)
+
+### PlantUML Rendering in PRs
+Use the PlantUML proxy service to render diagrams as images in PR comments:
+```
+https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/{owner}/{repo}/{branch}/docs/designs/{feature-name}/{feature-name}.puml&fmt=svg
+```
+
+### Idempotency
+All git/GitHub operations must be **idempotent** — agents check before creating:
+- Check if branch exists before creating (`git branch --list`)
+- Check if PR exists before creating (`gh pr list --head "{branch}"`)
+- Check if comment already posted before posting
+
+### Non-Blocking Git Operations
+Git and GitHub operations are **non-blocking**:
+- If `git push` or `gh pr create` fails, report the error but do NOT stop the agent's core work
+- The design/implementation/review work is the primary output; GitHub integration is secondary
 
 You are the guardian of workflow integrity. Ensure phases complete properly, feedback is incorporated, and the human always knows the current state and next steps.

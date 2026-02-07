@@ -262,6 +262,57 @@ Steps:
 {2-3 sentence summary of findings and next steps}
 ```
 
+## GitHub PR Integration
+
+After completing the review, post results to the feature's GitHub PR for visibility.
+
+### Finding the PR
+```bash
+# Derive branch name from ticket filename
+# tickets/0041_reference_frame_transform_refactor.md → 0041-reference-frame-transform-refactor
+
+# Find the PR number for this branch
+gh pr list --head "{branch-name}" --json number --jq '.[0].number'
+```
+
+### Posting Review Summary as PR Comment
+
+If a PR exists, post a concise review summary as a PR comment:
+
+```bash
+gh pr comment {pr-number} --body "$(cat <<'EOF'
+## Design Review Summary
+
+**Status**: {APPROVED / APPROVED WITH NOTES / NEEDS REVISION / BLOCKED}
+**Date**: {YYYY-MM-DD}
+
+### Key Findings
+- {1-3 bullet points summarizing the review}
+
+### Issues Found
+| ID | Category | Description |
+|----|----------|-------------|
+| I1 | {category} | {brief description} |
+
+### Next Steps
+- {What happens next based on status}
+
+*Full review appended to `docs/designs/{feature-name}/design.md`*
+EOF
+)"
+```
+
+### Committing Review Results
+
+After appending the review to the design document:
+```bash
+git add docs/designs/{feature-name}/design.md
+git commit -m "review: design review for {feature-name}"
+git push
+```
+
+If git/GitHub operations fail, report the error but do NOT let it block the review output. The review appended to `design.md` is the primary artifact.
+
 ## Critical Constraints
 
 - **DO NOT** approve designs with high-likelihood, high-impact risks lacking mitigation

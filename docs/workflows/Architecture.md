@@ -16,6 +16,7 @@ This workflow provides a 5-phase process for adding new architectural functional
 - **Ticket-based** — Each feature has a markdown ticket that tracks requirements, status, and feedback
 - **Human-in-the-loop** — You review and provide feedback between each phase
 - **Persistent context** — All decisions and artifacts are version-controllable files
+- **GitHub-integrated** — Feature branches, draft PRs, review comments, and PlantUML diagrams are visible in GitHub
 
 ## When to Use This Workflow
 
@@ -255,6 +256,107 @@ Verifies:
 - Test coverage
 
 Final gate before merge.
+
+## GitHub Integration
+
+The workflow integrates with GitHub so that all design, review, and implementation activity is visible in PRs and issues.
+
+### Branch & PR Lifecycle
+
+```
+ main
+  │
+  ├── git checkout -b 0041-reference-frame-transform-refactor
+  │
+  │  ┌─────────────────────────────────────────────────────────┐
+  │  │ DESIGN PHASE                                            │
+  │  │  commit: "design: initial architecture for ..."         │
+  │  │  push → create DRAFT PR                                 │
+  │  │  post PlantUML diagram as PR comment                    │
+  │  └─────────────────────────────────────────────────────────┘
+  │
+  │  ┌─────────────────────────────────────────────────────────┐
+  │  │ DESIGN REVIEW                                           │
+  │  │  commit: "review: design review for ..."                │
+  │  │  push → post review summary as PR comment               │
+  │  └─────────────────────────────────────────────────────────┘
+  │
+  │  ┌─────────────────────────────────────────────────────────┐
+  │  │ IMPLEMENTATION PHASE                                    │
+  │  │  commit: "impl: implement ..."                          │
+  │  │  push → mark PR ready for review                        │
+  │  │  update PR body with implementation summary             │
+  │  └─────────────────────────────────────────────────────────┘
+  │
+  │  ┌─────────────────────────────────────────────────────────┐
+  │  │ IMPLEMENTATION REVIEW                                   │
+  │  │  commit: "review: implementation review for ..."        │
+  │  │  push → post review summary as PR comment               │
+  │  └─────────────────────────────────────────────────────────┘
+  │
+  ├── Human merges PR → main
+  │
+```
+
+### Branch Naming Convention
+
+| Ticket Filename | Branch Name |
+|----------------|-------------|
+| `tickets/0041_reference_frame_transform_refactor.md` | `0041-reference-frame-transform-refactor` |
+| `tickets/0015_profiling_trace_parser.md` | `0015-profiling-trace-parser` |
+
+Rule: Strip `tickets/` prefix and `.md` suffix, replace underscores with hyphens.
+
+### PR Lifecycle by Phase
+
+| Phase | PR Action | PR State |
+|-------|-----------|----------|
+| Design | Create draft PR | Draft |
+| Design Review | Post review comment | Draft |
+| Prototype | Push prototype results | Draft |
+| Implementation | Mark PR ready, update body | Ready for Review |
+| Implementation Review | Post review comment | Ready for Review |
+| Documentation | Push docs updates | Ready for Review |
+| Human Approval | Human merges | Merged |
+
+### Issue Linking
+
+- **Early phases** (design, prototype): `Part of #N` — references the issue without closing it
+- **Implementation phase**: `Closes #N` — auto-closes the issue when PR is merged
+- If no GitHub issue exists for the ticket, omit the linking line
+
+### Review Comments on PRs
+
+All reviewer agents (design-reviewer, math-reviewer, implementation-reviewer) post concise summaries as PR comments. Format:
+
+```markdown
+## {Review Type} Summary
+
+**Status**: {status}
+**Date**: {date}
+
+### Key Findings
+- {1-3 bullet points}
+
+### Issues Found
+| ID | Category | Description |
+|----|----------|-------------|
+
+### Next Steps
+- {What happens next}
+
+*Full review at `{path-to-full-review}`*
+```
+
+### PlantUML Diagrams in PRs
+
+Architecture diagrams are rendered in PR comments using the PlantUML proxy service:
+
+```
+![Diagram](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/{owner}/{repo}/{branch}/docs/designs/{feature-name}/{feature-name}.puml&fmt=svg)
+```
+
+This renders the `.puml` file directly from the repository without requiring local rendering tools.
 
 ## Orchestrator Commands
 
