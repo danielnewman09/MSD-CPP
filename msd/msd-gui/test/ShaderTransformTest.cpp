@@ -605,7 +605,7 @@ TEST(ReferenceFrameShaderTest, ConsistencyWithLocalToGlobal)
 
   // Use ReferenceFrame's localToGlobalAbsolute as ground truth
   msd_sim::Coordinate localPoint{1.0, 2.0, 3.0};
-  msd_sim::Coordinate expectedGlobal = frame.localToGlobal(localPoint);
+  msd_sim::Coordinate expectedGlobal = frame.localToGlobalAbsolute(localPoint);
 
   // Now test shader simulation
   Eigen::Matrix4f modelMatrix = createModelMatrixFromReferenceFrame(frame);
@@ -648,7 +648,7 @@ TEST(ReferenceFrameShaderTest, PyramidVertexWithRotation)
 
   // Ground truth from ReferenceFrame
   msd_sim::Coordinate localApex{0.0, 0.5, 0.0};
-  msd_sim::Coordinate expectedGlobal = frame.localToGlobal(localApex);
+  msd_sim::Coordinate expectedGlobal = frame.localToGlobalAbsolute(localApex);
 
   EXPECT_TRUE(floatEqual(result.x(), static_cast<float>(expectedGlobal.x())))
     << "Apex X: shader=" << result.x() << ", expected=" << expectedGlobal.x();

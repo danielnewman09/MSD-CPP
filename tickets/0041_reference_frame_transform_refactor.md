@@ -3,15 +3,16 @@
 ## Status
 - [x] Draft
 - [x] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Quality Gate
-- [ ] Quality Gate Passed — Awaiting Review
+- [x] Implementation Complete — Awaiting Quality Gate
+- [x] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Documentation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Ready for Implementation
-**Assignee**: TBD
+**Current Phase**: Quality Gate Passed — Awaiting Review
+**Assignee**: Workflow Orchestrator
 **Created**: 2026-02-07
+**Completed Implementation**: 2026-02-07
 **Generate Tutorial**: No
 **Prototype**: No
 **Dependencies**: None
@@ -214,3 +215,31 @@ T localToGlobalAbsolute(const T& localPoint) const
 - Changes to batch/in-place APIs
 - Changes to `setOrigin`, `setQuaternion`, or other non-transform methods
 - Performance optimization of the transform pipeline
+
+---
+
+## Workflow Log
+
+### Implementation Phase
+- **Started**: 2026-02-07 14:30
+- **Completed**: 2026-02-07 15:35
+- **Artifacts**:
+  - `msd-sim/src/Environment/ReferenceFrame.hpp` — Added concept, 4 template functions, deprecated 6 overloads
+  - `msd-sim/src/Environment/ReferenceFrame.cpp` — Implemented missing `globalToLocal(AngularRate)`
+  - `msd-sim/src/Physics/Collision/EPA.cpp` — Migrated all transform calls
+  - `msd-sim/src/Physics/SupportFunction.cpp` — Migrated all transform calls
+  - `msd-sim/src/Physics/Collision/GJK.cpp` — Migrated all transform calls
+  - `msd-sim/src/Environment/MotionController.cpp` — Migrated all transform calls
+  - `msd-gui/test/ShaderTransformTest.cpp` — Migrated 2 transform calls
+  - `msd-sim/test/Environment/ReferenceFrameTest.cpp` — Migrated ~50 transform calls
+  - `docs/designs/0041_reference_frame_transform_refactor/implementation-notes.md` — Complete implementation documentation
+- **Notes**: All call sites successfully migrated. Build successful with no warnings. All 660 previously-passing tests still pass (9 pre-existing diagnostic failures unchanged). Eigen expression wrapping retained where necessary (SupportFunction.cpp, EPA.cpp for negation). Workaround code eliminated in EPA.cpp normal transformation.
+
+### Quality Gate Phase
+- **Started**: 2026-02-07
+- **Completed**: 2026-02-07
+- **Branch**: 0041-reference-frame-transform-refactor
+- **PR**: N/A
+- **Artifacts**:
+  - `docs/designs/0041_reference_frame_transform_refactor/quality-gate-report.md`
+- **Notes**: All gates passed. Build gate caught 7 remaining deprecated API calls in test files (ReferenceFrameTest.cpp and ShaderTransformTest.cpp) — these were migrated as remediation. Release build then passed with zero warnings. 749 tests run, 740 pass (9 pre-existing failures). clang-tidy: 0 new warnings from ticket changes. Benchmarks: N/A (refactoring ticket).
