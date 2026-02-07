@@ -1,0 +1,187 @@
+@startuml
+' =============================================================================
+' Feature: 0041 ReferenceFrame Transform API Refactor
+' Description: Explicit Absolute/Relative transform functions replacing
+'              ambiguous overloaded globalToLocal/localToGlobal
+' Date: 2026-02-07
+' Ticket: 0041_reference_frame_transform_refactor
+' =============================================================================
+
+!theme cyborg
+
+' -----------------------------------------------------------------------------
+' Styling
+' -----------------------------------------------------------------------------
+skinparam class {
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor White
+    BorderColor Black
+}
+
+skinparam note {
+    BackgroundColor #2d2d2d
+    BorderColor #666666
+}
+
+' -----------------------------------------------------------------------------
+' Package/Namespace Organization
+' -----------------------------------------------------------------------------
+package "msd_sim" {
+
+    class ReferenceFrame <<modified>> {
+        -origin_: Coordinate
+        -angular_: AngularCoordinate
+        -rotation_: mutable Matrix3d
+        -updated_: mutable bool
+        ..
+        ' === NEW: Explicit template API (Ticket 0041) ===
+        ' Absolute transforms (rotation + translation, for points)
+        +globalToLocalAbsolute<T>(globalPoint: const T&): T
+        +localToGlobalAbsolute<T>(localPoint: const T&): T
+        ..
+        ' Relative transforms (rotation only, for directions)
+        +globalToLocalRelative<T>(globalVector: const T&): T
+        +localToGlobalRelative<T>(localVector: const T&): T
+        ..
+        ' === UNCHANGED: InPlace and Batch API ===
+        +globalToLocalInPlace(coord: Coordinate&): void
+        +localToGlobalInPlace(coord: Coordinate&): void
+        +globalToLocalBatch(coords: Matrix3Xd&): void
+        +localToGlobalBatch(coords: Matrix3Xd&): void
+        ..
+        ' === DEPRECATED: Old overloaded API ===
+        +<<deprecated>> globalToLocal(Vector3D): Vector3D
+        +<<deprecated>> globalToLocal(AngularRate): AngularRate
+        +<<deprecated>> globalToLocal(Coordinate): Coordinate
+        +<<deprecated>> localToGlobal(Vector3D): Vector3D
+        +<<deprecated>> localToGlobal(AngularRate): AngularRate
+        +<<deprecated>> localToGlobal(Coordinate): Coordinate
+        ..
+        ' Setters / Getters (unchanged)
+        +setOrigin(origin: const Coordinate&): void
+        +setQuaternion(quat: const QuaternionD&): void
+        +getOrigin(): Coordinate&
+        +getRotation(): const Matrix3d&
+        +getQuaternion(): Eigen::Quaterniond
+        ..
+        -updateRotationMatrix(): void
+        -{static} extractEulerAngles(rotation: Matrix3d): AngularCoordinate
+    }
+
+    note right of ReferenceFrame
+        **Template Constraint (C++20 concept):**
+
+        template<typename T>
+        concept EigenVec3Type =
+            std::derived_from<T, Eigen::Vector3d>
+            && std::is_constructible_v<T,
+                 const Eigen::Vector3d&>;
+
+        Accepted types:
+        - Vector3D (via Vec3DBase<Vector3D> -> Eigen::Vector3d)
+        - Coordinate (via Vec3DBase<Coordinate> -> Eigen::Vector3d)
+        - AngularRate (-> Eigen::Vector3d)
+        - AngularCoordinate (-> Eigen::Vector3d)
+
+        **Note:** Eigen expression types (e.g. -dir)
+        are NOT accepted; explicit construction required.
+
+        **Absolute** = R^T * (v - origin)  [globalToLocal]
+        **Relative** = R^T * v             [globalToLocal]
+
+        New templates call getRotation() (lazy update)
+        vs old overloads which accessed rotation_ directly.
+    end note
+
+    ' --- Existing types (context, not modified) ---
+
+    class Coordinate {
+        +x(): double
+        +y(): double
+        +z(): double
+    }
+
+    class Vector3D {
+        +x(): double
+        +y(): double
+        +z(): double
+    }
+
+    class AngularRate {
+        +pitch(): double
+        +roll(): double
+        +yaw(): double
+    }
+
+    class AngularCoordinate {
+        +pitch(): double
+        +roll(): double
+        +yaw(): double
+    }
+}
+
+package "msd_sim::detail" {
+    class "Vec3DBase<Derived>" as Vec3DBase {
+        ' CRTP base for Vector3D and Coordinate
+    }
+}
+
+package "Eigen" {
+    class "Eigen::Vector3d" as EigenVector3d
+    class "Eigen::Matrix3d" as Matrix3d
+    class "Eigen::Matrix3Xd" as Matrix3Xd
+}
+
+' -----------------------------------------------------------------------------
+' Inheritance hierarchy (showing the overload bug root cause)
+' -----------------------------------------------------------------------------
+EigenVector3d <|-- Vec3DBase : inherits
+Vec3DBase <|-- Vector3D : CRTP
+Vec3DBase <|-- Coordinate : CRTP
+EigenVector3d <|-- AngularRate : inherits
+EigenVector3d <|-- AngularCoordinate : inherits
+
+' Composition
+ReferenceFrame *-- Coordinate : origin_
+ReferenceFrame o-- Matrix3d : rotation_ (cached)
+
+' Usage
+ReferenceFrame ..> Matrix3Xd : batch transforms
+
+' Template usage
+ReferenceFrame ..> Vector3D : "globalToLocal/GlobalRelative<Vector3D>"
+ReferenceFrame ..> Coordinate : "globalToLocal/GlobalAbsolute<Coordinate>"
+ReferenceFrame ..> AngularRate : "globalToLocal/GlobalRelative<AngularRate>"
+
+' -----------------------------------------------------------------------------
+' Migration call sites
+' -----------------------------------------------------------------------------
+note as MigrationSites
+    **Call Site Migration Summary**
+
+    **EPA.cpp** (5 call sites):
+    - globalToLocal(Vector3D{...}) -> globalToLocalRelative(normal)
+    - globalToLocal(Vector3D{-normal}) -> globalToLocalRelative(Coordinate{-normal})
+    - localToGlobal(Vector3D{...}) -> localToGlobalRelative(faceNormal)
+    - globalToLocal(Coordinate) -> globalToLocalAbsolute(witness)
+    - localToGlobal(Coordinate) -> localToGlobalAbsolute(edgePoint)
+
+    **SupportFunction.cpp** (8 call sites):
+    - globalToLocal(dir) -> globalToLocalRelative(dir)
+    - globalToLocal(Vector3D{-dir}) -> globalToLocalRelative(Vector3D{-dir})
+    - localToGlobal(support) -> localToGlobalAbsolute(support)
+    **Note:** -dir produces Eigen expression; explicit
+    Vector3D{-dir} construction must be retained.
+
+    **GJK.cpp** (2 call sites):
+    - localToGlobal(centroid) -> localToGlobalAbsolute(centroid)
+    - localToGlobalBatch(corners) -> unchanged
+
+    **MotionController.cpp** (6 call sites):
+    - localToGlobal(Vector3D{...}) -> localToGlobalRelative(Vector3D{...})
+
+    **ShaderTransformTest.cpp** (2 call sites):
+    - localToGlobal(point) -> localToGlobalAbsolute(point)
+end note
+
+@enduml
