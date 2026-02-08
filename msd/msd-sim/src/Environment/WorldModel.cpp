@@ -208,8 +208,6 @@ void WorldModel::updateCollisions(double dt)
   collisionActiveThisFrame_ = collisionPipeline_.hadCollisions();
 }
 
-
-
 uint32_t WorldModel::getInertialAssetId()
 {
   return ++inertialAssetIdCounter_;

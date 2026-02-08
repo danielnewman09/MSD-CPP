@@ -60,13 +60,47 @@ Collision is inherently optional—most object pairs don't collide. Using `std::
 
 ## Integration with Physics Pipeline
 
-Collision detection runs before force integration in `WorldModel::updatePhysics()`:
+### CollisionPipeline Orchestration
+
+Collision response is orchestrated by the `CollisionPipeline` class, which owns the collision detection and response workflow. `WorldModel::updateCollisions()` delegates to the pipeline rather than implementing collision logic inline.
+
+**Diagram**: [`0044_collision_pipeline_integration.puml`](../../../../../../docs/designs/0044_collision_pipeline_integration/0044_collision_pipeline_integration.puml)
+
+#### Pipeline Phases
+
+The `CollisionPipeline` executes a multi-phase collision response workflow:
 
 1. **Collision Detection**: O(n²) pairwise GJK/EPA checks
 2. **Constraint Creation**: ContactConstraintFactory creates constraints from CollisionResult
-3. **Constraint Solving**: ConstraintSolver (Active Set Method) solves contact LCP
-4. **Force Application**: Constraint forces applied to bodies
-5. **Integration**: Semi-implicit Euler advances state
+3. **Solver Input Assembly**: Gather states, masses, inverse inertias for all bodies
+4. **Warm-Start Query**: Query ContactCache for previous frame's lambda values (10-25× speedup for persistent contacts)
+5. **Constraint Solving**: ConstraintSolver (Active Set Method) solves contact LCP with initial lambda
+6. **Cache Update**: Store solved lambda values in ContactCache for next frame
+7. **Force Application**: Constraint forces applied to bodies
+8. **Position Correction**: PositionCorrector applies split-impulse correction to remove penetration without energy injection
+
+#### CollisionPipeline Architecture
+
+**Location**: `msd-sim/src/Physics/Collision/CollisionPipeline.hpp/.cpp`
+**Introduced**: [Ticket: 0036_collision_pipeline_extraction](../../../../../../tickets/0036_collision_pipeline_extraction.md)
+**Extended**: [Ticket: 0044_collision_pipeline_integration](../../../../../../tickets/0044_collision_pipeline_integration.md)
+
+**Key components**:
+- Owns `ContactCache` for warm-starting (frame-persistent lambda storage)
+- Owns `PositionCorrector` for split-impulse position correction
+- Owns `ConstraintSolver` for Active Set Method solving
+- Owns `CollisionHandler` for GJK/EPA collision detection
+- Exposes `hadCollisions()` for energy tracking diagnostics
+
+**WorldModel integration**:
+```cpp
+void WorldModel::updateCollisions(double dt) {
+  collisionPipeline_.advanceFrame();      // Cache lifecycle
+  collisionPipeline_.expireOldEntries();  // Remove stale entries
+  collisionPipeline_.execute(inertialAssets_, environmentalAssets_, dt);
+  collisionActiveThisFrame_ = collisionPipeline_.hadCollisions();
+}
+```
 
 **Key insight**: Contacts are solved as constraints, not as standalone impulses. This unifies collision response with the Lagrangian constraint framework (quaternion normalization, future joints).
 
@@ -97,13 +131,14 @@ The original `CollisionResponse` namespace provided impulse-based collision resp
 
 ### Planned Enhancements
 
-| Enhancement | Priority | Benefit |
-|-------------|----------|---------|
-| Friction constraints | High | Realistic surface interaction |
-| Broadphase (BVH/Grid) | Medium | O(n log n) scaling |
-| Contact caching | Medium | 10-25× faster for persistent contacts |
-| CCD | Medium | Prevents tunneling |
-| Sleeping/islands | Low | Skip stationary objects |
+| Enhancement | Priority | Status | Benefit |
+|-------------|----------|--------|---------|
+| Friction constraints | High | Not started | Realistic surface interaction |
+| Broadphase (BVH/Grid) | Medium | Not started | O(n log n) scaling |
+| Contact caching | Medium | ✅ Complete (0040b, 0044) | 10-25× faster for persistent contacts |
+| Position correction | Medium | ✅ Complete (0040d, 0044) | Removes penetration without energy injection |
+| CCD | Medium | Not started | Prevents tunneling |
+| Sleeping/islands | Low | Not started | Skip stationary objects |
 
 ---
 

@@ -1,0 +1,111 @@
+@startuml
+
+package "msd-sim::Physics::Collision" {
+  class CollisionPipeline {
+    - collisionHandler_: CollisionHandler
+    - constraintSolver_: ConstraintSolver
+    - contactCache_: ContactCache
+    - positionCorrector_: PositionCorrector
+    - collisionOccurred_: bool
+    - collisions_: vector<CollisionPair>
+    - constraints_: vector<unique_ptr<ContactConstraint>>
+    - states_: vector<reference_wrapper<const InertialState>>
+    - inverseMasses_: vector<double>
+    - inverseInertias_: vector<Matrix3d>
+    - constraintPtrs_: vector<Constraint*>
+
+    + execute(inertialAssets, environmentalAssets, dt)
+    + advanceFrame()
+    + expireOldEntries(maxAge)
+    + hadCollisions(): bool
+
+    # detectCollisions(...)
+    # createConstraints(...)
+    # assembleSolverInput(...)
+    # solveConstraintsWithWarmStart(dt): SolveResult
+    # applyForces(...)
+    # correctPositions(...)
+    - clearFrameData()
+  }
+}
+
+package "msd-sim::Physics::Constraints" {
+  class ContactCache {
+    + advanceFrame()
+    + expireOldEntries(maxAge)
+    + getWarmStart(...): vector<double>
+    + update(...)
+    + clear()
+    + size(): size_t
+  }
+
+  class PositionCorrector {
+    + correctPositions(...)
+  }
+
+  class ConstraintSolver {
+    + solveWithContacts(...): MultiBodySolveResult
+  }
+}
+
+package "msd-sim::Environment" {
+  class WorldModel {
+    - inertialAssets_: vector<AssetInertial>
+    - environmentalAssets_: vector<AssetEnvironment>
+    - collisionPipeline_: CollisionPipeline
+    - collisionActiveThisFrame_: bool
+    - potentialEnergies_: vector<unique_ptr<PotentialEnergy>>
+    - integrator_: unique_ptr<Integrator>
+
+    + update(simTime)
+    - updatePhysics(dt)
+    - updateCollisions(dt)
+  }
+}
+
+CollisionPipeline *-- ContactCache : owns
+CollisionPipeline *-- PositionCorrector : owns
+CollisionPipeline *-- ConstraintSolver : owns
+CollisionPipeline ..> ContactConstraint : creates
+WorldModel *-- CollisionPipeline : owns
+WorldModel ..> CollisionPipeline : delegates collision response
+
+note right of CollisionPipeline::execute
+  Extended workflow:
+  1. Clear frame data
+  2. Detect collisions (GJK/EPA)
+  3. Create contact constraints
+  4. Assemble solver input
+  5. Query cache for warm-start lambdas
+  6. Solve with initial lambda
+  7. Update cache with solved lambdas
+  8. Apply constraint forces
+  9. Correct positions (split-impulse)
+  10. Clear frame data
+end note
+
+note left of WorldModel::updateCollisions
+  Simplified delegation:
+  1. collisionPipeline_.advanceFrame()
+  2. collisionPipeline_.expireOldEntries()
+  3. collisionPipeline_.execute(...)
+  4. collisionActiveThisFrame_ =
+     collisionPipeline_.hadCollisions()
+end note
+
+note bottom of ContactCache
+  Warm-starting: Stores solved lambda
+  values from previous frame. When
+  contacts persist, solver starts from
+  cached lambda requiring only small
+  corrections (10-25× speedup).
+end note
+
+note bottom of PositionCorrector
+  Split-impulse: Corrects penetration
+  depth using pseudo-velocities that
+  modify positions without affecting
+  real velocities (no energy injection).
+end note
+
+@enduml
