@@ -1,0 +1,174 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<removed>> LightCoral
+}
+
+title Constraint Hierarchy Refactor (Ticket 0043)
+footer Flattened to max 2 levels: Constraint -> Concrete
+
+' ===== MODIFIED: Constraint base class =====
+class Constraint <<modified>> {
+    ' --- Existing (retained) ---
+    +{abstract} dimension() : int
+    +{abstract} typeName() : string
+    +alpha() : double
+    +beta() : double
+    +partialTimeDerivative() : VectorXd
+    ' --- New: unified evaluation ---
+    +{abstract} evaluate(stateA, stateB, time) : VectorXd
+    +{abstract} jacobian(stateA, stateB, time) : MatrixXd
+    ' --- New: body index storage ---
+    +bodyAIndex() : size_t
+    +bodyBIndex() : size_t
+    +bodyCount() : int
+    ' --- New: multiplier bounds ---
+    +{abstract} lambdaBounds() : LambdaBounds
+    ' --- New: activation query ---
+    +isActive(stateA, stateB, time) : bool
+    ----
+    #body_a_index_ : size_t
+    #body_b_index_ : size_t
+}
+
+' ===== NEW: LambdaBounds value type =====
+class LambdaBounds <<new>> {
+    +lower : double
+    +upper : double
+    ----
+    +{static} bilateral() : LambdaBounds
+    +{static} unilateral() : LambdaBounds
+    +{static} boxConstrained(lo, hi) : LambdaBounds
+    +isBilateral() : bool
+    +isUnilateral() : bool
+    +isBoxConstrained() : bool
+}
+
+' ===== REMOVED: intermediate classes =====
+class BilateralConstraint <<removed>> {
+    <i>Empty marker class</i>
+}
+
+class UnilateralConstraint <<removed>> {
+    <i>Only added isActive()</i>
+}
+
+class TwoBodyConstraint <<removed>> {
+    <i>LSP-violating overrides</i>
+}
+
+' ===== MODIFIED: Concrete constraints =====
+class UnitQuaternionConstraint <<modified>> {
+    +evaluate(stateA, stateB, time) : VectorXd
+    +jacobian(stateA, stateB, time) : MatrixXd
+    +lambdaBounds() : LambdaBounds
+    +dimension() : int  {returns 1}
+    +bodyCount() : int  {returns 1}
+    ----
+    -alpha_ : double
+    -beta_ : double
+}
+
+class DistanceConstraint <<modified>> {
+    +evaluate(stateA, stateB, time) : VectorXd
+    +jacobian(stateA, stateB, time) : MatrixXd
+    +lambdaBounds() : LambdaBounds
+    +dimension() : int  {returns 1}
+    +bodyCount() : int  {returns 1}
+    ----
+    -target_distance_ : double
+    -alpha_ : double
+    -beta_ : double
+}
+
+class ContactConstraint <<modified>> {
+    +evaluate(stateA, stateB, time) : VectorXd
+    +jacobian(stateA, stateB, time) : MatrixXd
+    +lambdaBounds() : LambdaBounds
+    +dimension() : int  {returns 1}
+    +bodyCount() : int  {returns 2}
+    +isActive(stateA, stateB, time) : bool
+    ' --- Contact-specific accessors ---
+    +getContactNormal() : Coordinate
+    +getPenetrationDepth() : double
+    +getRestitution() : double
+    +getPreImpactRelVelNormal() : double
+    +getLeverArmA() : Coordinate
+    +getLeverArmB() : Coordinate
+    ----
+    -contact_normal_ : Coordinate
+    -lever_arm_a_ : Coordinate
+    -lever_arm_b_ : Coordinate
+    -penetration_depth_ : double
+    -restitution_ : double
+    -pre_impact_rel_vel_normal_ : double
+    -erp_ : double
+}
+
+class FrictionConstraint <<modified>> {
+    +evaluate(stateA, stateB, time) : VectorXd
+    +jacobian(stateA, stateB, time) : MatrixXd
+    +lambdaBounds() : LambdaBounds
+    +dimension() : int  {returns 2}
+    +bodyCount() : int  {returns 2}
+    +isActive(stateA, stateB, time) : bool
+    ' --- Friction-specific accessors ---
+    +setNormalLambda(normalLambda) : void
+    +getFrictionBounds() : pair<double,double>
+    +getTangent1() : Coordinate
+    +getTangent2() : Coordinate
+    +getFrictionCoefficient() : double
+    ----
+    -tangent1_ : Coordinate
+    -tangent2_ : Coordinate
+    -friction_coefficient_ : double
+    -normal_lambda_ : double
+}
+
+' ===== MODIFIED: ConstraintSolver =====
+class ConstraintSolver <<modified>> {
+    ' --- Unified contact solve interface ---
+    +solveWithContacts(constraints, ...) : MultiBodySolveResult
+    ----
+    ' dynamic_cast reduced from 6 to 2
+}
+
+' ===== MODIFIED: PositionCorrector =====
+class PositionCorrector <<modified>> {
+    +correctPositions(constraints, ...) : void
+    ----
+    ' Uses Constraint::lambdaBounds() instead of dynamic_cast
+}
+
+' ===== Relationships =====
+Constraint --> LambdaBounds : returns
+
+UnitQuaternionConstraint --|> Constraint
+DistanceConstraint --|> Constraint
+ContactConstraint --|> Constraint
+FrictionConstraint --|> Constraint
+
+ConstraintSolver --> Constraint : operates on
+PositionCorrector --> Constraint : operates on
+
+' ===== Context: unchanged consumers =====
+class AssetInertial {
+    -constraints_ : vector<unique_ptr<Constraint>>
+    +addConstraint(c : unique_ptr<Constraint>)
+    +getConstraints() : vector<Constraint*>
+}
+
+class WorldModel {
+    -updateCollisions(dt) : void
+}
+
+AssetInertial --> Constraint : owns
+WorldModel --> ConstraintSolver : uses
+WorldModel --> PositionCorrector : uses
+
+' ===== Layout hints =====
+BilateralConstraint -[hidden]-> UnilateralConstraint
+UnilateralConstraint -[hidden]-> TwoBodyConstraint
+
+@enduml
