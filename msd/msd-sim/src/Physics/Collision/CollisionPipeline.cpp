@@ -1,13 +1,16 @@
-// Ticket: 0036_collision_pipeline_extraction
-// Design: docs/designs/0036_collision_pipeline_extraction/design.md
+// Ticket: 0044_collision_pipeline_integration
+// Design: docs/designs/0044_collision_pipeline_integration/design.md
 
 #include "msd-sim/src/Physics/Collision/CollisionPipeline.hpp"
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <span>
 #include <utility>
+#include <vector>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
@@ -17,8 +20,26 @@
 namespace msd_sim
 {
 
+// Environment ID flag: high bit set to distinguish from inertial IDs
+constexpr uint32_t kEnvIdFlag = 0x80000000u;
+
 CollisionPipeline::CollisionPipeline() : collisionHandler_{1e-6}
 {
+}
+
+void CollisionPipeline::advanceFrame()
+{
+  contactCache_.advanceFrame();
+}
+
+void CollisionPipeline::expireOldEntries(uint32_t maxAge)
+{
+  contactCache_.expireOldEntries(maxAge);
+}
+
+bool CollisionPipeline::hadCollisions() const
+{
+  return collisionOccurred_;
 }
 
 void CollisionPipeline::execute(
@@ -36,11 +57,15 @@ void CollisionPipeline::execute(
   // Early return for empty scenes or invalid timestep
   if (numBodies == 0 || dt <= 0.0)
   {
+    collisionOccurred_ = false;
     return;
   }
 
   // ===== Phase 1: Collision Detection =====
   detectCollisions(inertialAssets, environmentalAssets);
+
+  // Update collision-active flag for energy tracking
+  collisionOccurred_ = !collisions_.empty();
 
   // Early return if no collisions
   if (collisions_.empty())
@@ -63,11 +88,14 @@ void CollisionPipeline::execute(
   // ===== Phase 3: Assemble Solver Input Arrays =====
   assembleSolverInput(inertialAssets, environmentalAssets, numBodies);
 
-  // ===== Phase 4: Solve Contact Constraint System =====
-  auto solveResult = solveConstraints(dt);
+  // ===== Phase 4: Solve Contact Constraint System with Warm-Starting =====
+  auto solveResult = solveConstraintsWithWarmStart(dt);
 
   // ===== Phase 5: Apply Constraint Forces to Inertial Bodies =====
   applyForces(inertialAssets, solveResult);
+
+  // ===== Phase 6: Position Correction =====
+  correctPositions(inertialAssets, environmentalAssets, numBodies);
 
   // Clear at end to leave pipeline empty when idle (prevents dangling refs)
   clearFrameData();
@@ -96,7 +124,12 @@ void CollisionPipeline::detectCollisions(
         inertialAssets[i].getCoefficientOfRestitution(),
         inertialAssets[j].getCoefficientOfRestitution());
 
-      collisions_.push_back({i, j, *result, combinedE});
+      collisions_.push_back({i,
+                             j,
+                             inertialAssets[i].getInstanceId(),
+                             inertialAssets[j].getInstanceId(),
+                             *result,
+                             combinedE});
     }
   }
 
@@ -117,10 +150,14 @@ void CollisionPipeline::detectCollisions(
         environmentalAssets[e].getCoefficientOfRestitution());
 
       // Environment body index offset by numInertial
-      collisions_.emplace_back(CollisionPair{.bodyAIndex = i,
-                                             .bodyBIndex = numInertial + e,
-                                             .result = std::move(*result),
-                                             .restitution = combinedE});
+      collisions_.emplace_back(
+        CollisionPair{.bodyAIndex = i,
+                      .bodyBIndex = numInertial + e,
+                      .bodyAId = inertialAssets[i].getInstanceId(),
+                      .bodyBId = environmentalAssets[e].getInstanceId() |
+                                 kEnvIdFlag,
+                      .result = std::move(*result),
+                      .restitution = combinedE});
     }
   }
 }
@@ -132,8 +169,11 @@ void CollisionPipeline::createConstraints(
 {
   const size_t numInertial = inertialAssets.size();
 
-  for (const auto& pair : collisions_)
+  for (size_t p = 0; p < collisions_.size(); ++p)
   {
+    const auto& pair = collisions_[p];
+    size_t const rangeStart = constraints_.size();
+
     // Extract states based on body index mapping
     const InertialState& stateA =
       (pair.bodyAIndex < numInertial)
@@ -164,6 +204,10 @@ void CollisionPipeline::createConstraints(
     {
       constraints_.push_back(std::move(c));
     }
+
+    // Track constraint range for cache mapping
+    pairRanges_.push_back(
+      {rangeStart, constraints_.size() - rangeStart, p});
   }
 }
 
@@ -196,23 +240,93 @@ void CollisionPipeline::assembleSolverInput(
   }
 }
 
-ConstraintSolver::MultiBodySolveResult CollisionPipeline::solveConstraints(
-  double dt)
+ConstraintSolver::MultiBodySolveResult
+CollisionPipeline::solveConstraintsWithWarmStart(double dt)
 {
-  // Build non-owning Constraint& vector for solver
-  constraintRefs_.reserve(constraints_.size());
+  // Build non-owning Constraint* vector for solver
+  constraintPtrs_.reserve(constraints_.size());
   for (auto& c : constraints_)
   {
-    constraintRefs_.push_back(c.get());
+    constraintPtrs_.push_back(c.get());
   }
 
-  // Invoke solver
-  return constraintSolver_.solveWithContacts(constraintRefs_,
-                                             states_,
-                                             inverseMasses_,
-                                             inverseInertias_,
-                                             states_.size(),
-                                             dt);
+  // ===== Phase 3.5: Warm-Start from Contact Cache =====
+  const size_t totalConstraints = constraints_.size();
+  Eigen::VectorXd initialLambda =
+    Eigen::VectorXd::Zero(static_cast<Eigen::Index>(totalConstraints));
+
+  // Helper: extract contact world-space points for a collision pair's
+  // constraint range. Contact point ≈ comA + leverArmA.
+  auto extractContactPoints =
+    [this](const PairConstraintRange& range,
+           const CollisionPair& pair) -> std::vector<Coordinate>
+  {
+    std::vector<Coordinate> points;
+    points.reserve(range.count);
+    for (size_t ci = 0; ci < range.count; ++ci)
+    {
+      const auto& contact = constraints_[range.startIdx + ci];
+      const InertialState& stateA = states_[pair.bodyAIndex].get();
+      points.push_back(Coordinate{stateA.position + contact->getLeverArmA()});
+    }
+    return points;
+  };
+
+  for (const auto& range : pairRanges_)
+  {
+    const auto& pair = collisions_[range.pairIdx];
+
+    auto currentPoints = extractContactPoints(range, pair);
+
+    // Look up cache
+    Vector3D const normalVec{pair.result.normal.x(),
+                             pair.result.normal.y(),
+                             pair.result.normal.z()};
+    auto cachedLambdas = contactCache_.getWarmStart(
+      pair.bodyAId, pair.bodyBId, normalVec, currentPoints);
+
+    if (!cachedLambdas.empty() && cachedLambdas.size() == range.count)
+    {
+      for (size_t ci = 0; ci < range.count; ++ci)
+      {
+        initialLambda(static_cast<Eigen::Index>(range.startIdx + ci)) =
+          cachedLambdas[ci];
+      }
+    }
+  }
+
+  // ===== Phase 4: Solve with warm-starting =====
+  auto solveResult = constraintSolver_.solveWithContacts(constraintPtrs_,
+                                                          states_,
+                                                          inverseMasses_,
+                                                          inverseInertias_,
+                                                          states_.size(),
+                                                          dt,
+                                                          initialLambda);
+
+  // ===== Phase 4.5: Update Contact Cache =====
+  for (const auto& range : pairRanges_)
+  {
+    const auto& pair = collisions_[range.pairIdx];
+
+    std::vector<double> solvedLambdas;
+    solvedLambdas.reserve(range.count);
+    for (size_t ci = 0; ci < range.count; ++ci)
+    {
+      solvedLambdas.push_back(
+        solveResult.lambdas(static_cast<Eigen::Index>(range.startIdx + ci)));
+    }
+
+    auto contactPoints = extractContactPoints(range, pair);
+
+    Vector3D const normalVec{pair.result.normal.x(),
+                             pair.result.normal.y(),
+                             pair.result.normal.z()};
+    contactCache_.update(
+      pair.bodyAId, pair.bodyBId, normalVec, solvedLambdas, contactPoints);
+  }
+
+  return solveResult;
 }
 
 void CollisionPipeline::applyForces(
@@ -239,6 +353,37 @@ void CollisionPipeline::applyForces(
   }
 }
 
+void CollisionPipeline::correctPositions(
+  std::span<AssetInertial> inertialAssets,
+  std::span<const AssetEnvironment> environmentalAssets,
+  size_t numBodies)
+{
+  const size_t numInertial = inertialAssets.size();
+
+  // Build mutable state pointer list for position correction
+  std::vector<InertialState*> mutableStates;
+  mutableStates.reserve(numBodies);
+  for (auto& asset : inertialAssets)
+  {
+    mutableStates.push_back(&asset.getInertialState());
+  }
+  for (auto& envAsset : environmentalAssets)
+  {
+    // Environment states are conceptually immutable, but position corrector
+    // handles this via zero inverse mass (no position change applied)
+    mutableStates.push_back(
+      const_cast<InertialState*>(&envAsset.getInertialState()));
+  }
+
+  positionCorrector_.correctPositions(constraintPtrs_,
+                                      mutableStates,
+                                      inverseMasses_,
+                                      inverseInertias_,
+                                      numBodies,
+                                      numInertial,
+                                      /* dt = */ 0.016);  // Placeholder, not used in position correction
+}
+
 void CollisionPipeline::clearFrameData()
 {
   collisions_.clear();
@@ -246,7 +391,8 @@ void CollisionPipeline::clearFrameData()
   states_.clear();
   inverseMasses_.clear();
   inverseInertias_.clear();
-  constraintRefs_.clear();
+  constraintPtrs_.clear();
+  pairRanges_.clear();
 }
 
 }  // namespace msd_sim

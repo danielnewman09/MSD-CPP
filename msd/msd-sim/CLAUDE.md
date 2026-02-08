@@ -460,6 +460,41 @@ ctest --preset debug
 
 ## Recent Architectural Changes
 
+### Collision Pipeline Integration — 2026-02-08
+**Ticket**: [0044_collision_pipeline_integration](../../tickets/0044_collision_pipeline_integration.md)
+**Diagram**: [`0044_collision_pipeline_integration.puml`](../../docs/designs/0044_collision_pipeline_integration/0044_collision_pipeline_integration.puml)
+**Type**: Refactoring (Zero Behavioral Change)
+
+Extended `CollisionPipeline` (created in ticket 0036) to include all collision response capabilities previously implemented inline in `WorldModel::updateCollisions()`. The pipeline now owns `ContactCache` and `PositionCorrector`, manages cache lifecycle, supports warm-starting, and exposes collision-active status for energy tracking. This refactoring restores the original intent of ticket 0036 by simplifying `WorldModel::updateCollisions()` from ~300 lines to ~10 lines of delegation.
+
+**Key components**:
+- **CollisionPipeline extensions** — Added `ContactCache contactCache_` member for warm-starting (frame-persistent lambda storage), `PositionCorrector positionCorrector_` member for split-impulse position correction, `bool collisionOccurred_` flag for energy tracking, and `std::vector<PairConstraintRange> pairRanges_` for cache interaction
+- **New public methods** — `advanceFrame()` delegates to `contactCache_.advanceFrame()`, `expireOldEntries(maxAge)` delegates to `contactCache_.expireOldEntries(maxAge)`, `hadCollisions()` returns collision-active flag
+- **Extended execute() workflow** — Phase 3.5: query cache for warm-start lambdas, Phase 4.5: update cache with solved lambdas, Phase 6: call `positionCorrector_.correctPositions()` for split-impulse correction
+- **CollisionPair extension** — Added `uint32_t bodyAId` and `uint32_t bodyBId` fields for cache keying (instance IDs with environment flag `0x80000000u`)
+- **WorldModel simplification** — Removed four collision-related members (`collisionHandler_`, `contactSolver_`, `contactCache_`, `positionCorrector_`), replaced with single `CollisionPipeline collisionPipeline_` member, simplified `updateCollisions()` to cache lifecycle + pipeline delegation
+
+**Architecture**:
+- Previous: WorldModel owned collision detection, constraint solving, contact caching, and position correction components separately; `updateCollisions()` implemented ~300-line collision response workflow inline
+- New: CollisionPipeline owns all collision response components; WorldModel delegates to pipeline via 3-line execute call
+- Cache lifecycle: `advanceFrame()` increments contact age, `expireOldEntries(maxAge)` removes stale entries (default maxAge = 10 frames)
+- Warm-starting: Pipeline queries cache for previous frame's lambda values before solving, passes initial lambda to `solveWithContacts()`, updates cache with solved lambdas after solving (10-25× speedup for persistent contacts)
+- Position correction: Pipeline calls `positionCorrector_.correctPositions()` after force application to remove penetration via pseudo-velocities (no energy injection)
+
+**Key files**:
+- `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp`, `CollisionPipeline.cpp` — Extended with new members and methods, implemented warm-starting and position correction phases
+- `msd/msd-sim/src/Environment/WorldModel.hpp`, `WorldModel.cpp` — Replaced 4 collision members with single `collisionPipeline_`, simplified `updateCollisions()` from ~300 lines to ~10 lines
+- `msd/msd-sim/src/Physics/Collision/CMakeLists.txt` — Added `CollisionPipeline.cpp` to build
+- `msd/msd-sim/test/Physics/Collision/CollisionPipelineTest.cpp` — 7 unit tests covering pipeline phases
+
+**Performance**: Zero performance impact — pure code motion refactoring with identical algorithms transferred line-by-line from WorldModel to CollisionPipeline. Memory increase: ~11KB typical for ContactCache + PositionCorrector + PairConstraintRange vector (10 active collisions).
+
+**Behavioral guarantee**: Zero behavioral change confirmed by quality gate — 759/768 integration tests passing (9 pre-existing failures from tickets 0042b/0042c), zero regressions introduced.
+
+**Thread safety**: No changes to thread safety guarantees — CollisionPipeline remains single-threaded, ContactCache and PositionCorrector are frame-persistent state.
+
+---
+
 ### Constraint Hierarchy Refactor — 2026-02-08
 **Ticket**: [0043_constraint_hierarchy_refactor](../../tickets/0043_constraint_hierarchy_refactor.md)
 **Diagram**: [`0043_constraint_hierarchy_refactor.puml`](../../docs/designs/0043_constraint_hierarchy_refactor/0043_constraint_hierarchy_refactor.puml)

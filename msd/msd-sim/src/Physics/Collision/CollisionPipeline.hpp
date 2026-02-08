@@ -1,20 +1,23 @@
-// Ticket: 0036_collision_pipeline_extraction
-// Design: docs/designs/0036_collision_pipeline_extraction/design.md
+// Ticket: 0044_collision_pipeline_integration
+// Design: docs/designs/0044_collision_pipeline_integration/design.md
 
 #ifndef MSD_SIM_PHYSICS_COLLISION_PIPELINE_HPP
 #define MSD_SIM_PHYSICS_COLLISION_PIPELINE_HPP
 
 #include <Eigen/Dense>
 
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <vector>
 
 #include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
+#include "msd-sim/src/Physics/Constraints/ContactCache.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/PositionCorrector.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
@@ -23,28 +26,28 @@ namespace msd_sim
 {
 
 /**
- * @brief Orchestrates collision response pipeline
+ * @brief Orchestrates collision response pipeline with warm-starting and
+ * position correction
  *
  * Extracts the collision detection, constraint creation, solver invocation,
- * and force application logic from WorldModel::updateCollisions() into a
+ * cache management, and position correction logic from WorldModel into a
  * dedicated orchestrator class with independently testable phases.
  *
- * The pipeline executes five distinct phases:
+ * The pipeline executes the following phases:
  * 1. Collision Detection — O(n²) pairwise narrow-phase checks
  * 2. Contact Constraint Creation — Factory calls to build ContactConstraint
- * objects
- * 3. Solver Input Assembly — Gathering states, masses, inertias into
- * solver-compatible arrays
- * 4. Constraint Solving — Invoking ConstraintSolver (Active Set Method or
- * ECOS)
- * 5. Force Application — Applying solved constraint forces back to inertial
- * bodies
+ *    objects
+ * 3. Solver Input Assembly — Gathering states, masses, inertias
+ * 3.5. Warm-Starting — Query ContactCache for previous frame's lambdas
+ * 4. Constraint Solving — Active Set Method with initial lambda
+ * 4.5. Cache Update — Store solved lambdas in ContactCache
+ * 5. Force Application — Apply solved constraint forces to inertial bodies
+ * 6. Position Correction — Split-impulse penetration correction
  *
  * Design rationale: Separates concerns (WorldModel manages simulation
  * lifecycle, CollisionPipeline implements collision response algorithm),
  * improves testability (each phase can be unit-tested independently), and
- * enhances extensibility (easier to add broadphase culling, warm-starting, or
- * friction).
+ * enhances extensibility (easier to add broadphase culling or friction).
  *
  * Thread safety: Not thread-safe (contains mutable state in member vectors)
  *
@@ -54,8 +57,8 @@ namespace msd_sim
  * - No exceptions thrown for normal operation
  *
  * @see
- * docs/designs/0036_collision_pipeline_extraction/0036_collision_pipeline_extraction.puml
- * @ticket 0036_collision_pipeline_extraction
+ * docs/designs/0044_collision_pipeline_integration/0044_collision_pipeline_integration.puml
+ * @ticket 0044_collision_pipeline_integration
  */
 class CollisionPipeline
 {
@@ -75,8 +78,11 @@ public:
    * 1. Collision detection (O(n²) pairwise narrow phase)
    * 2. Contact constraint creation via ContactConstraintFactory
    * 3. Solver input assembly (states, masses, inertias)
-   * 4. Constraint solving (ASM or ECOS based on friction presence)
+   * 3.5. Warm-starting query from ContactCache
+   * 4. Constraint solving with initial lambda (Active Set Method)
+   * 4.5. Cache update with solved lambdas
    * 5. Force application to inertial bodies
+   * 6. Position correction via PositionCorrector
    *
    * Frame data is cleared at both the start and end of this method to prevent
    * dangling references when the pipeline is idle between frames.
@@ -88,6 +94,38 @@ public:
   void execute(std::span<AssetInertial> inertialAssets,
                std::span<const AssetEnvironment> environmentalAssets,
                double dt);
+
+  /**
+   * @brief Advance contact cache age by one frame
+   *
+   * Must be called once per frame before execute() to increment cache age.
+   * This enables contact persistence tracking for warm-starting.
+   *
+   * @ticket 0044_collision_pipeline_integration
+   */
+  void advanceFrame();
+
+  /**
+   * @brief Expire stale contact cache entries
+   *
+   * Removes cached contacts older than maxAge frames. Typically called after
+   * advanceFrame() and before execute() each frame.
+   *
+   * @param maxAge Maximum age in frames (default: 10)
+   * @ticket 0044_collision_pipeline_integration
+   */
+  void expireOldEntries(uint32_t maxAge = 10);
+
+  /**
+   * @brief Check if collisions occurred this frame
+   *
+   * Returns true if collision detection found any colliding pairs.
+   * Used for energy tracking diagnostics.
+   *
+   * @return true if collisions occurred, false otherwise
+   * @ticket 0044_collision_pipeline_integration
+   */
+  bool hadCollisions() const;
 
   CollisionPipeline(const CollisionPipeline&) = delete;
   CollisionPipeline& operator=(const CollisionPipeline&) = delete;
@@ -149,14 +187,16 @@ protected:
     size_t numBodies);
 
   /**
-   * @brief Phase 4: Solve contact constraint system
+   * @brief Phase 4: Solve contact constraint system with warm-starting
    *
-   * Invokes ConstraintSolver::solveWithContacts() to compute contact impulses.
+   * Invokes ConstraintSolver::solveWithContacts() with initial lambda from
+   * ContactCache for faster convergence on persistent contacts.
    *
    * @param dt Timestep [s]
    * @return MultiBodySolveResult with per-body forces
    */
-  ConstraintSolver::MultiBodySolveResult solveConstraints(double dt);
+  ConstraintSolver::MultiBodySolveResult solveConstraintsWithWarmStart(
+    double dt);
 
   /**
    * @brief Phase 5: Apply constraint forces to inertial bodies
@@ -171,6 +211,20 @@ protected:
   static void applyForces(
     std::span<AssetInertial> inertialAssets,
     const ConstraintSolver::MultiBodySolveResult& solveResult);
+
+  /**
+   * @brief Phase 6: Position correction via split-impulse method
+   *
+   * Corrects penetrating contacts using pseudo-velocities without injecting
+   * kinetic energy into real velocities.
+   *
+   * @param inertialAssets Dynamic objects (mutable span)
+   * @param environmentalAssets Static objects (non-owning span)
+   * @param numBodies Total body count (inertial + environmental)
+   */
+  void correctPositions(std::span<AssetInertial> inertialAssets,
+                        std::span<const AssetEnvironment> environmentalAssets,
+                        size_t numBodies);
 
 private:
   /**
@@ -196,6 +250,8 @@ private:
   {
     size_t bodyAIndex;
     size_t bodyBIndex;
+    uint32_t bodyAId;  // Instance ID for cache keying
+    uint32_t bodyBId;  // Instance ID for cache keying
     CollisionResult result;
     double restitution;
   };
@@ -205,7 +261,23 @@ private:
   std::vector<std::reference_wrapper<const InertialState>> states_;
   std::vector<double> inverseMasses_;
   std::vector<Eigen::Matrix3d> inverseInertias_;
-  std::vector<TwoBodyConstraint*> constraintPtrs_;
+  std::vector<Constraint*> constraintPtrs_;
+
+  // NEW: Cache and position correction (ticket 0044)
+  ContactCache contactCache_;
+  PositionCorrector positionCorrector_;
+
+  // NEW: Track collision-active status (ticket 0044)
+  bool collisionOccurred_{false};
+
+  // NEW: Cache interaction data structures (ticket 0044)
+  struct PairConstraintRange
+  {
+    size_t startIdx;
+    size_t count;
+    size_t pairIdx;
+  };
+  std::vector<PairConstraintRange> pairRanges_;
 
   // Friend declarations for unit testing
   friend class CollisionPipelineTest;

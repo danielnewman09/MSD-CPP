@@ -229,5 +229,9 @@
         "print": "cpp",
         "queue": "cpp",
         "stack": "cpp"
+    },
+    "sonarlint.connectedMode.project": {
+        "connectionId": "<default>",
+        "projectKey": "msd-cpp"
     }
 }
