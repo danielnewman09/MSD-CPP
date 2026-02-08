@@ -29,7 +29,6 @@
 #include "msd-sim/src/Physics/Constraints/ECOS/ECOSProblemBuilder.hpp"
 #include "msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp"
 #include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -123,7 +122,10 @@ Eigen::MatrixXd ConstraintSolver::assembleConstraintMatrix(
   for (const auto* constraint : constraints)
   {
     int const dim = constraint->dimension();
-    j.block(rowOffset, 0, dim, kNumStates) = constraint->jacobian(state, time);
+    // Single-body convenience overload: state parameter doubled for
+    // compatibility
+    j.block(rowOffset, 0, dim, kNumStates) =
+      constraint->jacobian(state, state, time);
     rowOffset += dim;
   }
 
@@ -173,7 +175,10 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
   for (const auto* constraint : constraints)
   {
     int const dim = constraint->dimension();
-    j.block(rowOffset, 0, dim, kNumStates) = constraint->jacobian(state, time);
+    // Single-body convenience overload: state parameter doubled for
+    // compatibility
+    j.block(rowOffset, 0, dim, kNumStates) =
+      constraint->jacobian(state, state, time);
     rowOffset += dim;
   }
 
@@ -200,7 +205,9 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
   for (const auto* constraint : constraints)
   {
     int const dim = constraint->dimension();
-    c.segment(rowOffset, dim) = constraint->evaluate(state, time);
+    // Single-body convenience overload: state parameter doubled for
+    // compatibility
+    c.segment(rowOffset, dim) = constraint->evaluate(state, state, time);
     cDot.segment(rowOffset, dim) =
       constraint->partialTimeDerivative(state, time);
 
@@ -253,7 +260,10 @@ std::pair<Coordinate, Coordinate> ConstraintSolver::extractConstraintForces(
   for (const auto* constraint : constraints)
   {
     int const dim = constraint->dimension();
-    j.block(rowOffset, 0, dim, kNumStates) = constraint->jacobian(state, time);
+    // Single-body convenience overload: state parameter doubled for
+    // compatibility
+    j.block(rowOffset, 0, dim, kNumStates) =
+      constraint->jacobian(state, state, time);
     rowOffset += dim;
   }
 
@@ -284,7 +294,7 @@ std::pair<Coordinate, Coordinate> ConstraintSolver::extractConstraintForces(
 // prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
 
 ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
-  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<Constraint*>& contactConstraints,
   const std::vector<std::reference_wrapper<const InertialState>>& states,
   const std::vector<double>& inverseMasses,
   const std::vector<Eigen::Matrix3d>& inverseInertias,
@@ -306,12 +316,12 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     return result;
   }
 
-  // Ticket 0035b4: Detect friction constraints via dynamic_cast
-  // If any FrictionConstraint is present, route to ECOS SOCP solver
+  // Ticket 0035b4: Detect friction constraints via lambdaBounds()
+  // If any box-constrained constraint is present, route to ECOS SOCP solver
   bool hasFriction = false;
   for (const auto* constraint : contactConstraints)
   {
-    if (dynamic_cast<const FrictionConstraint*>(constraint) != nullptr)
+    if (constraint->lambdaBounds().isBoxConstrained())
     {
       hasFriction = true;
       break;
@@ -337,12 +347,12 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
     // Count actual contacts (each contact = 1 normal + 1 friction with dim=2,
     // so constraint count = C normals + C frictions = 2C constraints, but
     // the Jacobian rows are: C*1 (normals) + C*2 (frictions) = 3C rows)
-    // However, contactConstraints is a flat list of TwoBodyConstraint*.
-    // We need to count the number of ContactConstraint (normals) to get C.
+    // However, contactConstraints is a flat list of Constraint&.
+    // We need to count the number of unilateral (normal) constraints to get C.
     int numContacts = 0;
     for (const auto* constraint : contactConstraints)
     {
-      if (dynamic_cast<const ContactConstraint*>(constraint) != nullptr)
+      if (constraint->lambdaBounds().isUnilateral())
       {
         ++numContacts;
       }
@@ -380,7 +390,7 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
 // ===== Contact solver helper implementations =====
 
 std::vector<Eigen::MatrixXd> ConstraintSolver::assembleContactJacobians(
-  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<Constraint*>& contactConstraints,
   const std::vector<std::reference_wrapper<const InertialState>>& states)
 {
   const size_t c = contactConstraints.size();
@@ -389,17 +399,17 @@ std::vector<Eigen::MatrixXd> ConstraintSolver::assembleContactJacobians(
   for (size_t i = 0; i < c; ++i)
   {
     const auto* contact = contactConstraints[i];
-    size_t const bodyA = contact->getBodyAIndex();
-    size_t const bodyB = contact->getBodyBIndex();
+    size_t const bodyA = contact->bodyAIndex();
+    size_t const bodyB = contact->bodyBIndex();
     jacobians[i] =
-      contact->jacobianTwoBody(states[bodyA].get(), states[bodyB].get(), 0.0);
+      contact->jacobian(states[bodyA].get(), states[bodyB].get(), 0.0);
   }
 
   return jacobians;
 }
 
 Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
-  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<Constraint*>& contactConstraints,
   const std::vector<Eigen::MatrixXd>& jacobians,
   const std::vector<double>& inverseMasses,
   const std::vector<Eigen::Matrix3d>& inverseInertias,
@@ -424,8 +434,8 @@ Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
                                             static_cast<Eigen::Index>(c));
   for (size_t i = 0; i < c; ++i)
   {
-    size_t const bodyAI = contactConstraints[i]->getBodyAIndex();
-    size_t const bodyBI = contactConstraints[i]->getBodyBIndex();
+    size_t const bodyAI = contactConstraints[i]->bodyAIndex();
+    size_t const bodyBI = contactConstraints[i]->bodyBIndex();
 
     // J_i is 1×12: [J_i_A(1×6) | J_i_B(1×6)]
     Eigen::Matrix<double, 1, 6> const jIA = jacobians[i].block<1, 6>(0, 0);
@@ -433,8 +443,8 @@ Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
 
     for (size_t j = i; j < c; ++j)
     {
-      size_t const bodyAJ = contactConstraints[j]->getBodyAIndex();
-      size_t const bodyBJ = contactConstraints[j]->getBodyBIndex();
+      size_t const bodyAJ = contactConstraints[j]->bodyAIndex();
+      size_t const bodyBJ = contactConstraints[j]->bodyBIndex();
 
       Eigen::Matrix<double, 1, 6> jJA = jacobians[j].block<1, 6>(0, 0);
       Eigen::Matrix<double, 1, 6> jJB = jacobians[j].block<1, 6>(0, 6);
@@ -476,7 +486,7 @@ Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
 }
 
 Eigen::VectorXd ConstraintSolver::assembleContactRHS(
-  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<Constraint*>& contactConstraints,
   const std::vector<Eigen::MatrixXd>& jacobians,
   const std::vector<std::reference_wrapper<const InertialState>>& states,
   double dt)
@@ -493,8 +503,8 @@ Eigen::VectorXd ConstraintSolver::assembleContactRHS(
   {
     const auto* contact =
       dynamic_cast<const ContactConstraint*>(contactConstraints[i]);
-    size_t const bodyA = contactConstraints[i]->getBodyAIndex();
-    size_t const bodyB = contactConstraints[i]->getBodyBIndex();
+    size_t const bodyA = contactConstraints[i]->bodyAIndex();
+    size_t const bodyB = contactConstraints[i]->bodyBIndex();
 
     // Compute pre-impact relative velocity along constraint: J_i · v_minus
     const InertialState& stateA = states[bodyA].get();
@@ -742,7 +752,7 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
 
 std::vector<ConstraintSolver::BodyForces>
 ConstraintSolver::extractContactBodyForces(
-  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<Constraint*>& contactConstraints,
   const std::vector<Eigen::MatrixXd>& jacobians,
   const Eigen::VectorXd& lambda,
   size_t numBodies,
@@ -763,8 +773,8 @@ ConstraintSolver::extractContactBodyForces(
       continue;
     }
 
-    size_t const bodyA = contactConstraints[i]->getBodyAIndex();
-    size_t const bodyB = contactConstraints[i]->getBodyBIndex();
+    size_t const bodyA = contactConstraints[i]->bodyAIndex();
+    size_t const bodyB = contactConstraints[i]->bodyBIndex();
 
     Eigen::Matrix<double, 1, 6> jIA = jacobians[i].block<1, 6>(0, 0);
     Eigen::Matrix<double, 1, 6> jIB = jacobians[i].block<1, 6>(0, 6);
@@ -797,7 +807,7 @@ ConstraintSolver::extractContactBodyForces(
 // where K_SOC is a product of second-order cones (one 3D cone per contact).
 
 FrictionConeSpec ConstraintSolver::buildFrictionConeSpec(
-  const std::vector<TwoBodyConstraint*>& contactConstraints,
+  const std::vector<Constraint*>& contactConstraints,
   int numContacts)
 {
   FrictionConeSpec coneSpec{numContacts};

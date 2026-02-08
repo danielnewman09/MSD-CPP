@@ -17,8 +17,7 @@
 namespace msd_sim
 {
 
-CollisionPipeline::CollisionPipeline()
-  : collisionHandler_{1e-6} 
+CollisionPipeline::CollisionPipeline() : collisionHandler_{1e-6}
 {
 }
 
@@ -118,8 +117,10 @@ void CollisionPipeline::detectCollisions(
         environmentalAssets[e].getCoefficientOfRestitution());
 
       // Environment body index offset by numInertial
-      collisions_.emplace_back(
-        CollisionPair{.bodyAIndex=i, .bodyBIndex=numInertial + e, .result=std::move(*result), .restitution=combinedE});
+      collisions_.emplace_back(CollisionPair{.bodyAIndex = i,
+                                             .bodyBIndex = numInertial + e,
+                                             .result = std::move(*result),
+                                             .restitution = combinedE});
     }
   }
 }
@@ -150,13 +151,13 @@ void CollisionPipeline::createConstraints(
     // Create constraints via factory
     auto constraints =
       contact_constraint_factory::createFromCollision(pair.bodyAIndex,
-                                                    pair.bodyBIndex,
-                                                    pair.result,
-                                                    stateA,
-                                                    stateB,
-                                                    comA,
-                                                    comB,
-                                                    pair.restitution);
+                                                      pair.bodyBIndex,
+                                                      pair.result,
+                                                      stateA,
+                                                      stateB,
+                                                      comA,
+                                                      comB,
+                                                      pair.restitution);
 
     // Move constraints into pipeline storage
     for (auto& c : constraints)
@@ -188,7 +189,8 @@ void CollisionPipeline::assembleSolverInput(
   for (const auto& envAsset : environmentalAssets)
   {
     states_.push_back(std::cref(envAsset.getInertialState()));
-    inverseMasses_.push_back(msd_sim::AssetEnvironment::getInverseMass());  // 0.0
+    inverseMasses_.push_back(
+      msd_sim::AssetEnvironment::getInverseMass());  // 0.0
     inverseInertias_.push_back(
       msd_sim::AssetEnvironment::getInverseInertiaTensor());  // Zero matrix
   }
@@ -197,15 +199,15 @@ void CollisionPipeline::assembleSolverInput(
 ConstraintSolver::MultiBodySolveResult CollisionPipeline::solveConstraints(
   double dt)
 {
-  // Build non-owning TwoBodyConstraint* vector for solver
-  constraintPtrs_.reserve(constraints_.size());
+  // Build non-owning Constraint& vector for solver
+  constraintRefs_.reserve(constraints_.size());
   for (auto& c : constraints_)
   {
-    constraintPtrs_.push_back(c.get());
+    constraintRefs_.push_back(c.get());
   }
 
   // Invoke solver
-  return constraintSolver_.solveWithContacts(constraintPtrs_,
+  return constraintSolver_.solveWithContacts(constraintRefs_,
                                              states_,
                                              inverseMasses_,
                                              inverseInertias_,
@@ -244,7 +246,7 @@ void CollisionPipeline::clearFrameData()
   states_.clear();
   inverseMasses_.clear();
   inverseInertias_.clear();
-  constraintPtrs_.clear();
+  constraintRefs_.clear();
 }
 
 }  // namespace msd_sim

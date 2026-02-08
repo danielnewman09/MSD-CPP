@@ -1,4 +1,4 @@
-@startuml
+@startuml 0043_constraint_hierarchy_refactor
 skinparam class {
     BackgroundColor<<new>> LightGreen
     BackgroundColor<<modified>> LightYellow
@@ -13,8 +13,6 @@ class Constraint <<modified>> {
     ' --- Existing (retained) ---
     +{abstract} dimension() : int
     +{abstract} typeName() : string
-    +alpha() : double
-    +beta() : double
     +partialTimeDerivative() : VectorXd
     ' --- New: unified evaluation ---
     +{abstract} evaluate(stateA, stateB, time) : VectorXd
@@ -27,9 +25,16 @@ class Constraint <<modified>> {
     +{abstract} lambdaBounds() : LambdaBounds
     ' --- New: activation query ---
     +isActive(stateA, stateB, time) : bool
+    ' --- Baumgarte stabilization (moved from concrete) ---
+    +alpha() : double
+    +beta() : double
+    +setAlpha(alpha) : void
+    +setBeta(beta) : void
     ----
     #body_a_index_ : size_t
     #body_b_index_ : size_t
+    #alpha_ : double
+    #beta_ : double
 }
 
 ' ===== NEW: LambdaBounds value type =====
@@ -66,8 +71,7 @@ class UnitQuaternionConstraint <<modified>> {
     +dimension() : int  {returns 1}
     +bodyCount() : int  {returns 1}
     ----
-    -alpha_ : double
-    -beta_ : double
+    <i>alpha_/beta_ now in base</i>
 }
 
 class DistanceConstraint <<modified>> {
@@ -78,8 +82,7 @@ class DistanceConstraint <<modified>> {
     +bodyCount() : int  {returns 1}
     ----
     -target_distance_ : double
-    -alpha_ : double
-    -beta_ : double
+    <i>alpha_/beta_ now in base</i>
 }
 
 class ContactConstraint <<modified>> {
@@ -103,7 +106,7 @@ class ContactConstraint <<modified>> {
     -penetration_depth_ : double
     -restitution_ : double
     -pre_impact_rel_vel_normal_ : double
-    -erp_ : double
+    <i>erp_ replaced by alpha_ in base</i>
 }
 
 class FrictionConstraint <<modified>> {

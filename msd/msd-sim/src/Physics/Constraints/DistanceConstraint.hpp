@@ -1,10 +1,10 @@
-// Ticket: 0031_generalized_lagrange_constraints
-// Design: docs/designs/0031_generalized_constraints/design.md
+// Ticket: 0043_constraint_hierarchy_refactor
+// Design: docs/designs/0043_constraint_hierarchy_refactor/design.md
 
 #ifndef MSD_SIM_PHYSICS_DISTANCE_CONSTRAINT_HPP
 #define MSD_SIM_PHYSICS_DISTANCE_CONSTRAINT_HPP
 
-#include "msd-sim/src/Physics/Constraints/BilateralConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include <limits>
 
 namespace msd_sim
@@ -31,20 +31,22 @@ namespace msd_sim
  * Thread safety: Thread-safe for concurrent evaluation after construction
  * Error handling: Throws std::invalid_argument if targetDistance <= 0
  *
- * @see docs/designs/0031_generalized_lagrange_constraints/0031_generalized_lagrange_constraints.puml
- * @ticket 0031_generalized_lagrange_constraints
+ * @see docs/designs/0043_constraint_hierarchy_refactor/0043_constraint_hierarchy_refactor.puml
+ * @ticket 0043_constraint_hierarchy_refactor
  */
-class DistanceConstraint : public BilateralConstraint
+class DistanceConstraint : public Constraint
 {
 public:
   /**
    * @brief Construct constraint with target distance from origin
    * @param targetDistance Desired distance from origin [m]
+   * @param bodyAIndex Index of body in solver body list (default: 0)
    * @param alpha Position error gain [1/s²] (default: 10.0)
    * @param beta Velocity error gain [1/s] (default: 10.0)
    * @throws std::invalid_argument if targetDistance <= 0
    */
   explicit DistanceConstraint(double targetDistance,
+                              size_t bodyAIndex = 0,
                               double alpha = 10.0,
                               double beta = 10.0);
 
@@ -52,15 +54,20 @@ public:
 
   // Constraint interface implementation
   [[nodiscard]] int dimension() const override;
-  [[nodiscard]] Eigen::VectorXd evaluate(const InertialState& state, double time) const override;
-  [[nodiscard]] Eigen::MatrixXd jacobian(const InertialState& state, double time) const override;
+
+  using Constraint::evaluate;  // Bring base class convenience overload into scope
+  [[nodiscard]] Eigen::VectorXd evaluate(const InertialState& stateA,
+                                          const InertialState& stateB,
+                                          double time) const override;
+
+  using Constraint::jacobian;  // Bring base class convenience overload into scope
+  [[nodiscard]] Eigen::MatrixXd jacobian(const InertialState& stateA,
+                                          const InertialState& stateB,
+                                          double time) const override;
   [[nodiscard]] Eigen::VectorXd partialTimeDerivative(const InertialState& state,
                                         double time) const override;
+  [[nodiscard]] LambdaBounds lambdaBounds() const override;
   [[nodiscard]] std::string typeName() const override;
-
-  // Baumgarte parameters
-  [[nodiscard]] double alpha() const override;
-  [[nodiscard]] double beta() const override;
 
   /**
    * @brief Get target distance from origin
@@ -76,8 +83,6 @@ public:
 
 private:
   double targetDistance_{std::numeric_limits<double>::quiet_NaN()};  // Target distance [m]
-  double alpha_{10.0};  // Position error gain [1/s²]
-  double beta_{10.0};   // Velocity error gain [1/s]
 };
 
 }  // namespace msd_sim

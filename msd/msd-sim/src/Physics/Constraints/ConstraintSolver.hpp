@@ -21,7 +21,6 @@
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ECOS/FrictionConeSpec.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -179,7 +178,7 @@ public:
    * @ticket 0040d_contact_persistence_warm_starting
    */
   MultiBodySolveResult solveWithContacts(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Constraint*>& contactConstraints,
     const std::vector<std::reference_wrapper<const InertialState>>& states,
     const std::vector<double>& inverseMasses,
     const std::vector<Eigen::Matrix3d>& inverseInertias,
@@ -383,7 +382,7 @@ private:
    * @return Vector of per-contact Jacobian matrices (C entries, each 1×12)
    */
   [[nodiscard]] static std::vector<Eigen::MatrixXd> assembleContactJacobians(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Constraint*>& contactConstraints,
     const std::vector<std::reference_wrapper<const InertialState>>& states);
 
   /**
@@ -396,7 +395,7 @@ private:
    * @return Effective mass matrix (C × C)
    */
   [[nodiscard]] static Eigen::MatrixXd assembleContactEffectiveMass(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Constraint*>& contactConstraints,
     const std::vector<Eigen::MatrixXd>& jacobians,
     const std::vector<double>& inverseMasses,
     const std::vector<Eigen::Matrix3d>& inverseInertias,
@@ -410,7 +409,7 @@ private:
    * @return RHS vector (C × 1)
    */
   [[nodiscard]] static Eigen::VectorXd assembleContactRHS(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Constraint*>& contactConstraints,
     const std::vector<Eigen::MatrixXd>& jacobians,
     const std::vector<std::reference_wrapper<const InertialState>>& states,
     double dt);
@@ -463,7 +462,7 @@ private:
    * @return Per-body constraint forces (numBodies entries)
    */
   [[nodiscard]] static std::vector<BodyForces> extractContactBodyForces(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Constraint*>& contactConstraints,
     const std::vector<Eigen::MatrixXd>& jacobians,
     const Eigen::VectorXd& lambda,
     size_t numBodies,
@@ -490,7 +489,7 @@ private:
    * @ticket 0035b4_ecos_solve_integration
    */
   [[nodiscard]] static FrictionConeSpec buildFrictionConeSpec(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
+    const std::vector<Constraint*>& contactConstraints,
     int numContacts);
 
   static constexpr size_t kNumStates{7};

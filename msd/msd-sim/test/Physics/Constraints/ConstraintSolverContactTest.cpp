@@ -7,9 +7,9 @@
 #include <memory>
 #include <vector>
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 using namespace msd_sim;
@@ -52,7 +52,7 @@ TEST(ConstraintSolverContactTest, EmptyContactSet_ReturnsConverged_0033)
 {
   // Test: Zero contacts returns converged with empty forces
   ConstraintSolver solver;
-  std::vector<TwoBodyConstraint*> constraints;
+  std::vector<Constraint*> constraints;
   std::vector<std::reference_wrapper<const InertialState>> states;
   std::vector<double> inverseMasses;
   std::vector<Eigen::Matrix3d> inverseInertias;
@@ -85,7 +85,7 @@ TEST(ConstraintSolverContactTest, SingleContact_Converges_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};  // 10kg each
@@ -163,7 +163,7 @@ TEST(ConstraintSolverContactTest, MultipleContacts_Converges_0033)
                                         0.5,
                                         0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{
+  std::vector<Constraint*> constraints{
     contact1.get(), contact2.get(), contact3.get(), contact4.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
@@ -230,7 +230,7 @@ TEST(ConstraintSolverContactTest, MaxIterationsReached_ReportsNotConverged_0033)
                                                       0.0,
                                                       0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
+  std::vector<Constraint*> constraints{contact1.get(), contact2.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -279,7 +279,7 @@ TEST(ConstraintSolverContactTest, SeparatingBodies_LambdaZero_0033)
                                                      0.5,
                                                      -2.0);  // Separating
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -322,7 +322,7 @@ TEST(ConstraintSolverContactTest, ApproachingBodies_LambdaPositive_0033)
                                                      0.5,
                                                      2.0);  // Approaching
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -359,7 +359,7 @@ TEST(ConstraintSolverContactTest, RestingContact_LambdaNonNegative_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.05, comA, comB, 0.0, 0.0);  // Resting
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -397,7 +397,7 @@ TEST(ConstraintSolverContactTest, EqualMass_SymmetricForces_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};  // Equal mass
@@ -442,7 +442,7 @@ TEST(ConstraintSolverContactTest, StaticBody_ZeroForceOnStatic_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{0.0, 1.0 / 10.0};  // A is static
@@ -481,7 +481,7 @@ TEST(ConstraintSolverContactTest, ForceDirection_AlongContactNormal_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -524,7 +524,7 @@ TEST(ConstraintSolverContactTest, AngularForces_LeverArmProducesTorque_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -571,7 +571,7 @@ TEST(ConstraintSolverContactTest,
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 1.0, 4.0);  // e=1,
                                                                    // v_rel=4
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -585,8 +585,7 @@ TEST(ConstraintSolverContactTest,
   EXPECT_GT(result.lambdas(0), 0.0);  // Repulsive force
 }
 
-TEST(ConstraintSolverContactTest,
-     SlopCorrection_CappedToApproachVelocity_0033)
+TEST(ConstraintSolverContactTest, SlopCorrection_CappedToApproachVelocity_0033)
 {
   // Ticket: 0040b — Split impulse with min-capped slop correction.
   //
@@ -613,14 +612,14 @@ TEST(ConstraintSolverContactTest,
 
   // Case 1: Bodies approaching — elastic contact produces slop correction
   {
-    InertialState stateA = createDefaultState(
-      Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
+    InertialState stateA =
+      createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
     InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
     auto contact = std::make_unique<ContactConstraint>(
       0, 1, normal, contactA, contactB, penetration, comA, comB, 0.5, 0.0);
 
-    std::vector<TwoBodyConstraint*> constraints{contact.get()};
+    std::vector<Constraint*> constraints{contact.get()};
     std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                     stateB};
     auto result = solver.solveWithContacts(
@@ -641,7 +640,7 @@ TEST(ConstraintSolverContactTest,
     auto contact = std::make_unique<ContactConstraint>(
       0, 1, normal, contactA, contactB, penetration, comA, comB, 0.5, 0.0);
 
-    std::vector<TwoBodyConstraint*> constraints{contact.get()};
+    std::vector<Constraint*> constraints{contact.get()};
     std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                     stateB};
     auto result = solver.solveWithContacts(
@@ -674,7 +673,7 @@ TEST(ConstraintSolverContactTest, Restitution_ZeroBounce_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.0, 1.0);  // e=0
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -707,7 +706,7 @@ TEST(ConstraintSolverContactTest, Restitution_FullBounce_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 1.0, 2.0);  // e=1
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -743,7 +742,7 @@ TEST(ConstraintSolverContactTest,
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.8, 0.2);  // Slow
                                                                    // impact
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -779,7 +778,7 @@ TEST(ConstraintSolverContactTest, BothBodiesStatic_AllLambdasZero_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{0.0, 0.0};  // Both static
@@ -836,7 +835,7 @@ TEST(ConstraintSolverContactTest, ParallelContacts_SameNormal_0033)
                                                       0.5,
                                                       0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
+  std::vector<Constraint*> constraints{contact1.get(), contact2.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -886,7 +885,7 @@ TEST(ConstraintSolverContactTest, OrthogonalContacts_IndependentResolution_0033)
                                                       0.5,
                                                       0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contactZ.get(), contactX.get()};
+  std::vector<Constraint*> constraints{contactZ.get(), contactX.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -920,7 +919,7 @@ TEST(ConstraintSolverContactTest, HighMassRatio_Converges_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 1000.0, 1.0 / 1.0};  // 1000:1 ratio
@@ -959,7 +958,7 @@ TEST(ConstraintSolverContactTest, ZeroPenetration_NoBias_0033)
                                                      0.5,
                                                      0.0);  // No penetration
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -996,7 +995,7 @@ TEST(ConstraintSolverContactTest, SetMaxIterations_Respected_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -1032,8 +1031,8 @@ TEST(ConstraintSolverContactTest, SetConvergenceTolerance_EarlyExit_0033)
   auto contact2 = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraintsTight{contact1.get()};
-  std::vector<TwoBodyConstraint*> constraintsLoose{contact2.get()};
+  std::vector<Constraint*> constraintsTight{contact1.get()};
+  std::vector<Constraint*> constraintsLoose{contact2.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -1066,7 +1065,7 @@ TEST(ConstraintSolverContactTest, DefaultConfiguration_ReasonableDefaults_0033)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};

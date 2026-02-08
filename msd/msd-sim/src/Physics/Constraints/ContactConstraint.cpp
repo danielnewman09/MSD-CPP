@@ -19,7 +19,7 @@ ContactConstraint::ContactConstraint(size_t bodyAIndex,
                                      const Coordinate& comB,
                                      double restitution,
                                      double preImpactRelVelNormal)
-  : TwoBodyConstraint{bodyAIndex, bodyBIndex},
+  : Constraint{bodyAIndex, bodyBIndex, /*alpha=*/0.2, /*beta=*/0.0},
     contact_normal_{normal},
     lever_arm_a_{contactPointA - comA},
     lever_arm_b_{contactPointB - comB},
@@ -50,7 +50,7 @@ ContactConstraint::ContactConstraint(size_t bodyAIndex,
   }
 }
 
-Eigen::VectorXd ContactConstraint::evaluateTwoBody(
+Eigen::VectorXd ContactConstraint::evaluate(
     const InertialState& stateA,
     const InertialState& stateB,
     double /* time */) const
@@ -70,7 +70,7 @@ Eigen::VectorXd ContactConstraint::evaluateTwoBody(
   return c;
 }
 
-Eigen::MatrixXd ContactConstraint::jacobianTwoBody(
+Eigen::MatrixXd ContactConstraint::jacobian(
     const InertialState& /* stateA */,
     const InertialState& /* stateB */,
     double /* time */) const
@@ -102,7 +102,7 @@ Eigen::MatrixXd ContactConstraint::jacobianTwoBody(
   return j;
 }
 
-bool ContactConstraint::isActiveTwoBody(
+bool ContactConstraint::isActive(
     const InertialState& stateA,
     const InertialState& stateB,
     double time) const
@@ -111,7 +111,7 @@ bool ContactConstraint::isActiveTwoBody(
   // Threshold chosen to match typical slop tolerance (0.01m)
   const double kActivationThreshold = 0.01;  // [m]
 
-  Eigen::VectorXd c = evaluateTwoBody(stateA, stateB, time);
+  Eigen::VectorXd c = evaluate(stateA, stateB, time);
   return c(0) <= kActivationThreshold;
 }
 

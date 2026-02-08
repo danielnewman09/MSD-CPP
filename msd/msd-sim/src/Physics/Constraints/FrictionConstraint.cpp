@@ -17,7 +17,7 @@ FrictionConstraint::FrictionConstraint(size_t bodyAIndex,
                                        const Coordinate& comA,
                                        const Coordinate& comB,
                                        double frictionCoefficient)
-  : TwoBodyConstraint{bodyAIndex, bodyBIndex},
+  : Constraint{bodyAIndex, bodyBIndex, /*alpha=*/0.0, /*beta=*/0.0},
     contact_normal_{normal},
     friction_coefficient_{frictionCoefficient}
 {
@@ -39,7 +39,7 @@ FrictionConstraint::FrictionConstraint(size_t bodyAIndex,
   lever_arm_b_ = contactPointB - comB;
 }
 
-Eigen::VectorXd FrictionConstraint::evaluateTwoBody(const InertialState& stateA,
+Eigen::VectorXd FrictionConstraint::evaluate(const InertialState& stateA,
                                                     const InertialState& stateB,
                                                     double /* time */) const
 {
@@ -68,7 +68,7 @@ Eigen::VectorXd FrictionConstraint::evaluateTwoBody(const InertialState& stateA,
   return c;
 }
 
-Eigen::MatrixXd FrictionConstraint::jacobianTwoBody(
+Eigen::MatrixXd FrictionConstraint::jacobian(
   const InertialState& /* stateA */,
   const InertialState& /* stateB */,
   double /* time */) const
@@ -138,7 +138,7 @@ Eigen::MatrixXd FrictionConstraint::jacobianTwoBody(
   return j;
 }
 
-bool FrictionConstraint::isActiveTwoBody(const InertialState& /* stateA */,
+bool FrictionConstraint::isActive(const InertialState& /* stateA */,
                                          const InertialState& /* stateB */,
                                          double /* time */) const
 {

@@ -73,37 +73,123 @@ For friction constraints:
 
 ## Constraint Hierarchy
 
+**Diagram**: [`0043_constraint_hierarchy_refactor.puml`](../../../../../docs/designs/0043_constraint_hierarchy_refactor/0043_constraint_hierarchy_refactor.puml)
+**Introduced**: [Ticket: 0043_constraint_hierarchy_refactor](../../../../../tickets/0043_constraint_hierarchy_refactor.md)
+
+The constraint type hierarchy is a flat 2-level design where all concrete constraints inherit directly from the `Constraint` base class. This eliminates excessive inheritance depth and provides a clean, extensible interface.
+
 ```
-Constraint (abstract)
-├── BilateralConstraint (C = 0, λ unrestricted)
-│   ├── UnitQuaternionConstraint
-│   └── DistanceConstraint
-└── UnilateralConstraint (C ≥ 0, λ ≥ 0)
-    └── ContactConstraint (via TwoBodyConstraint)
+Constraint (abstract base)
+├── UnitQuaternionConstraint (single-body, bilateral)
+├── DistanceConstraint (single-body, bilateral)
+├── ContactConstraint (two-body, unilateral)
+└── FrictionConstraint (two-body, box-constrained)
 ```
+
+### Key Base Class Features
+
+The `Constraint` base class provides:
+
+- **Unified evaluation interface**: All constraints use `evaluate(stateA, stateB, time)` and `jacobian(stateA, stateB, time)` signatures. Single-body constraints ignore `stateB`.
+- **Body index storage**: `bodyAIndex()` and `bodyBIndex()` accessible on all constraints. Single-body constraints use only `bodyAIndex()`.
+- **Body count query**: `bodyCount()` returns 1 or 2, enabling solver dispatch without type casting.
+- **Multiplier bounds**: `lambdaBounds()` returns a `LambdaBounds` struct specifying constraint type (bilateral/unilateral/box-constrained).
+- **Activation query**: `isActive(stateA, stateB, time)` determines if constraint is currently enforced (default: always active).
+- **Baumgarte stabilization**: `alpha()` and `beta()` provide position and velocity correction gains (default: 10.0).
+
+### LambdaBounds Value Type
+
+The `LambdaBounds` struct encodes constraint multiplier semantics:
+
+```cpp
+struct LambdaBounds {
+  double lower;
+  double upper;
+
+  static LambdaBounds bilateral();      // (-∞, +∞) for equality constraints
+  static LambdaBounds unilateral();     // (0, +∞) for inequality constraints
+  static LambdaBounds boxConstrained(double lo, double hi);  // Custom bounds
+
+  bool isBilateral() const;
+  bool isUnilateral() const;
+  bool isBoxConstrained() const;
+};
+```
+
+This replaces the previous `BilateralConstraint` and `UnilateralConstraint` marker classes with a data-oriented approach.
 
 ### Implementing Custom Constraints
 
+**Single-body constraint example:**
+
 ```cpp
-class MyConstraint : public BilateralConstraint {
+class MyConstraint : public Constraint {
 public:
+  MyConstraint(size_t bodyIndex)
+    : Constraint(bodyIndex) {}  // Single-body: only bodyAIndex
+
   int dimension() const override { return 1; }
 
-  Eigen::VectorXd evaluate(const InertialState& state, double) const override {
-    return Eigen::VectorXd::Constant(1, /* C(q) */);
+  Eigen::VectorXd evaluate(const InertialState& stateA,
+                           const InertialState& /* stateB */,
+                           double /* time */) const override {
+    return Eigen::VectorXd::Constant(1, /* C(q_A) */);
   }
 
-  Eigen::MatrixXd jacobian(const InertialState& state, double) const override {
-    Eigen::MatrixXd J(1, 7);
-    J << /* ∂C/∂q */;
+  Eigen::MatrixXd jacobian(const InertialState& stateA,
+                           const InertialState& /* stateB */,
+                           double /* time */) const override {
+    Eigen::MatrixXd J(1, 7);  // 1 constraint × 7 DOF (position-level)
+    J << /* ∂C/∂q_A */;
     return J;
+  }
+
+  LambdaBounds lambdaBounds() const override {
+    return LambdaBounds::bilateral();
   }
 
   std::string typeName() const override { return "MyConstraint"; }
 };
 
 // Usage
-asset.addConstraint(std::make_unique<MyConstraint>());
+asset.addConstraint(std::make_unique<MyConstraint>(assetIndex));
+```
+
+**Two-body constraint example:**
+
+```cpp
+class MyJointConstraint : public Constraint {
+public:
+  MyJointConstraint(size_t bodyAIndex, size_t bodyBIndex)
+    : Constraint(bodyAIndex, bodyBIndex) {}  // Two-body constructor
+
+  int dimension() const override { return 3; }  // 3 constraint rows
+  int bodyCount() const override { return 2; }  // Two-body constraint
+
+  Eigen::VectorXd evaluate(const InertialState& stateA,
+                           const InertialState& stateB,
+                           double /* time */) const override {
+    // Constraint violation using both states
+    return Eigen::VectorXd::Constant(3, /* C(q_A, q_B) */);
+  }
+
+  Eigen::MatrixXd jacobian(const InertialState& stateA,
+                           const InertialState& stateB,
+                           double /* time */) const override {
+    Eigen::MatrixXd J(3, 12);  // 3 constraints × 12 DOF (velocity-level)
+    J << /* ∂C/∂(v_A, ω_A, v_B, ω_B) */;
+    return J;
+  }
+
+  LambdaBounds lambdaBounds() const override {
+    return LambdaBounds::bilateral();
+  }
+
+  std::string typeName() const override { return "MyJointConstraint"; }
+};
+
+// Usage
+worldModel.addConstraint(std::make_unique<MyJointConstraint>(indexA, indexB));
 ```
 
 ---

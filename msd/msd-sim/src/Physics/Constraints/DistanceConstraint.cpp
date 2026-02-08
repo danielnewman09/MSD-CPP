@@ -1,5 +1,5 @@
-// Ticket: 0031_generalized_lagrange_constraints
-// Design: docs/designs/0031_generalized_lagrange_constraints/design.md
+// Ticket: 0043_constraint_hierarchy_refactor
+// Design: docs/designs/0043_constraint_hierarchy_refactor/design.md
 
 #include "msd-sim/src/Physics/Constraints/DistanceConstraint.hpp"
 #include <Eigen/src/Core/Matrix.h>
@@ -12,9 +12,11 @@ namespace msd_sim
 {
 
 DistanceConstraint::DistanceConstraint(double targetDistance,
+                                       size_t bodyAIndex,
                                        double alpha,
                                        double beta)
-  : targetDistance_{targetDistance}, alpha_{alpha}, beta_{beta}
+  : Constraint{bodyAIndex, 0, alpha, beta},
+    targetDistance_{targetDistance}
 {
   if (targetDistance <= 0.0)
   {
@@ -29,11 +31,13 @@ int DistanceConstraint::dimension() const
   return 1;  // Single scalar constraint: |X|² - d² = 0
 }
 
-Eigen::VectorXd DistanceConstraint::evaluate(const InertialState& state,
+Eigen::VectorXd DistanceConstraint::evaluate(const InertialState& stateA,
+                                             const InertialState& /* stateB */,
                                              double /* time */) const
 {
   // Constraint: C(X) = |X|² - d²
-  const Coordinate& x = state.position;
+  // Single-body constraint — uses stateA, ignores stateB
+  const Coordinate& x = stateA.position;
 
   // Compute |X|² = X·X (dot product)
   double const xSquared = x.dot(x);
@@ -45,7 +49,8 @@ Eigen::VectorXd DistanceConstraint::evaluate(const InertialState& state,
   return c;
 }
 
-Eigen::MatrixXd DistanceConstraint::jacobian(const InertialState& state,
+Eigen::MatrixXd DistanceConstraint::jacobian(const InertialState& stateA,
+                                             const InertialState& /* stateB */,
                                              double /* time */) const
 {
   // Jacobian: J = ∂C/∂q where C = |X|² - d²
@@ -55,8 +60,9 @@ Eigen::MatrixXd DistanceConstraint::jacobian(const InertialState& state,
   // J = [∂C/∂X, ∂C/∂Q] = [2x 2y 2z, 0 0 0 0]
   //
   // Since the constraint only depends on position, ∂C/∂Q = 0
+  // Single-body constraint — uses stateA, ignores stateB
 
-  const Coordinate& x = state.position;
+  const Coordinate& x = stateA.position;
 
   Eigen::MatrixXd j(1, 7);
   j.setZero();
@@ -85,19 +91,14 @@ Eigen::VectorXd DistanceConstraint::partialTimeDerivative(
   return result;
 }
 
+LambdaBounds DistanceConstraint::lambdaBounds() const
+{
+  return LambdaBounds::bilateral();
+}
+
 std::string DistanceConstraint::typeName() const
 {
   return "DistanceConstraint";
-}
-
-double DistanceConstraint::alpha() const
-{
-  return alpha_;
-}
-
-double DistanceConstraint::beta() const
-{
-  return beta_;
 }
 
 double DistanceConstraint::getTargetDistance() const

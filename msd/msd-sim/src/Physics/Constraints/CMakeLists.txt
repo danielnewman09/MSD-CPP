@@ -6,7 +6,6 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     UnitQuaternionConstraint.cpp
     DistanceConstraint.cpp
     ConstraintSolver.cpp
-    TwoBodyConstraint.cpp
     ContactConstraint.cpp
     ContactConstraintFactory.cpp
     FrictionConstraint.cpp

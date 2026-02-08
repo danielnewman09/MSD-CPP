@@ -8,7 +8,7 @@
 
 #include <Eigen/Dense>
 
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -36,23 +36,22 @@ public:
   /// @brief Configuration parameters for position correction
   struct Config
   {
-    double beta{0.2};       ///< Position correction factor [0, 1]
-    double slop{0.005};     ///< Penetration tolerance [m] (no correction below)
-    int maxIterations{4};   ///< Maximum position correction iterations
+    double beta{0.2};      ///< Position correction factor [0, 1]
+    double slop{0.005};    ///< Penetration tolerance [m] (no correction below)
+    int maxIterations{4};  ///< Maximum position correction iterations
   };
 
   PositionCorrector() = default;
   ~PositionCorrector() = default;
 
   /// @brief Correct body positions to resolve penetration (default config)
-  void correctPositions(
-      const std::vector<TwoBodyConstraint*>& contactConstraints,
-      std::vector<InertialState*>& states,
-      const std::vector<double>& inverseMasses,
-      const std::vector<Eigen::Matrix3d>& inverseInertias,
-      size_t numBodies,
-      size_t numInertial,
-      double dt);
+  void correctPositions(const std::vector<Constraint*>& contactConstraints,
+                        std::vector<InertialState*>& states,
+                        const std::vector<double>& inverseMasses,
+                        const std::vector<Eigen::Matrix3d>& inverseInertias,
+                        size_t numBodies,
+                        size_t numInertial,
+                        double dt);
 
   /// @brief Correct body positions to resolve penetration
   ///
@@ -60,23 +59,24 @@ public:
   /// Only modifies position and orientation of bodies with non-zero
   /// inverse mass. Bodies with inverseMass == 0 (environment) are skipped.
   ///
-  /// @param contactConstraints Active contact constraints with per-contact depth
-  /// @param states Inertial states for all bodies (mutable for position updates)
+  /// @param contactConstraints Active contact constraints with per-contact
+  /// depth
+  /// @param states Inertial states for all bodies (mutable for position
+  /// updates)
   /// @param inverseMasses Per-body inverse mass [1/kg] (0 for static)
   /// @param inverseInertias Per-body inverse inertia tensors (world frame)
   /// @param numBodies Total bodies in solver (inertial + environment)
   /// @param numInertial Number of inertial (dynamic) bodies
   /// @param dt Timestep [s]
   /// @param config Position correction parameters
-  void correctPositions(
-      const std::vector<TwoBodyConstraint*>& contactConstraints,
-      std::vector<InertialState*>& states,
-      const std::vector<double>& inverseMasses,
-      const std::vector<Eigen::Matrix3d>& inverseInertias,
-      size_t numBodies,
-      size_t numInertial,
-      double dt,
-      const Config& config);
+  void correctPositions(const std::vector<Constraint*>& contactConstraints,
+                        std::vector<InertialState*>& states,
+                        const std::vector<double>& inverseMasses,
+                        const std::vector<Eigen::Matrix3d>& inverseInertias,
+                        size_t numBodies,
+                        size_t numInertial,
+                        double dt,
+                        const Config& config);
 
   // Rule of Five
   PositionCorrector(const PositionCorrector&) = default;
@@ -88,6 +88,6 @@ private:
   static constexpr double kRegularizationEpsilon = 1e-8;
 };
 
-} // namespace msd_sim
+}  // namespace msd_sim
 
-#endif // MSD_SIM_PHYSICS_POSITION_CORRECTOR_HPP
+#endif  // MSD_SIM_PHYSICS_POSITION_CORRECTOR_HPP

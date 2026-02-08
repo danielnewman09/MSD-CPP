@@ -8,7 +8,8 @@
 #include <utility>
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/Collision/TangentBasis.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include "msd-sim/src/Physics/Constraints/LambdaBounds.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -46,13 +47,13 @@ namespace msd_sim
  * Immutable after construction except setNormalLambda() (not thread-safe) Error
  * handling: Constructor validates normal unit length, mu in [0, ∞)
  *
- * @see TwoBodyConstraint
+ * @see Constraint
  * @see ContactConstraint
  * @see
  * docs/designs/0035a_tangent_basis_and_friction_constraint/0035a_tangent_basis_and_friction_constraint.puml
  * @ticket 0035a_tangent_basis_and_friction_constraint
  */
-class FrictionConstraint : public TwoBodyConstraint
+class FrictionConstraint : public Constraint
 {
 public:
   /**
@@ -84,7 +85,7 @@ public:
 
   ~FrictionConstraint() override = default;
 
-  // ===== TwoBodyConstraint interface =====
+  // ===== Constraint interface =====
 
   /**
    * @brief Number of scalar constraint equations (always 2 for friction)
@@ -109,7 +110,7 @@ public:
    * @param time Simulation time [s] (unused for friction)
    * @return 2×1 vector of tangential relative velocities [m/s]
    */
-  [[nodiscard]] Eigen::VectorXd evaluateTwoBody(const InertialState& stateA,
+  [[nodiscard]] Eigen::VectorXd evaluate(const InertialState& stateA,
                                   const InertialState& stateB,
                                   double time) const override;
 
@@ -127,7 +128,7 @@ public:
    * @param time Simulation time [s] (unused for friction)
    * @return 2×12 Jacobian matrix
    */
-  [[nodiscard]] Eigen::MatrixXd jacobianTwoBody(const InertialState& stateA,
+  [[nodiscard]] Eigen::MatrixXd jacobian(const InertialState& stateA,
                                   const InertialState& stateB,
                                   double time) const override;
 
@@ -143,31 +144,24 @@ public:
    * @param time Simulation time [s] (unused for activation check)
    * @return true if friction should be enforced
    */
-  [[nodiscard]] bool isActiveTwoBody(const InertialState& stateA,
+  [[nodiscard]] bool isActive(const InertialState& stateA,
                        const InertialState& stateB,
                        double time) const override;
+
+  [[nodiscard]] LambdaBounds lambdaBounds() const override
+  {
+    auto [lower, upper] = getFrictionBounds();
+    return LambdaBounds::boxConstrained(lower, upper);
+  }
+
+  [[nodiscard]] int bodyCount() const override
+  {
+    return 2;
+  }
 
   [[nodiscard]] std::string typeName() const override
   {
     return "FrictionConstraint";
-  }
-
-  /**
-   * @brief No position-level Baumgarte stabilization for friction
-   * @return 0.0 (friction is velocity-level constraint)
-   */
-  [[nodiscard]] double alpha() const override
-  {
-    return 0.0;
-  }
-
-  /**
-   * @brief No velocity-level Baumgarte stabilization for friction
-   * @return 0.0 (friction is velocity-level constraint)
-   */
-  [[nodiscard]] double beta() const override
-  {
-    return 0.0;
   }
 
   // ===== Friction-specific interface =====
