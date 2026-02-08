@@ -25,6 +25,7 @@
 - **Target Component(s)**: {e.g., networking, storage, ui}
 - **Generate Tutorial**: No (set to Yes for features with educational value)
 - **Requires Math Design**: No (set to Yes for features with significant mathematical content)
+- **GitHub Issue**: (set to #N if a corresponding GitHub issue exists)
 
 ---
 

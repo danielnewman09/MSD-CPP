@@ -160,12 +160,20 @@ If the ticket contains feedback:
 3. After completion, mark addressed feedback with ✓
 4. Note feedback incorporation in Workflow Log
 
+### Step 2.5: Ensure GitHub State
+Before executing the agent, set up GitHub prerequisites as described in the **GitHub Lifecycle Management** section:
+1. Ensure branch exists and is checked out (Step 2.5.1)
+2. Look up GitHub issue number from ticket metadata or `gh issue list` (Step 2.5.2)
+3. Check if PR exists and its current state (Step 2.5.3)
+4. Pass branch name, issue number, and PR number as context to the executing agent
+
 ### Step 3: Execute Agent
 Read the appropriate agent file and invoke it with:
 - Full ticket content
 - Any existing design artifacts
 - Human feedback to incorporate
 - Project context from CLAUDE.md
+- GitHub context: branch name, issue number, PR number (from Step 2.5)
 
 ### Step 4: Handle Agent Results
 
@@ -184,6 +192,13 @@ Read the appropriate agent file and invoke it with:
 - On next invocation, check if feedback addresses issues
 - Re-run previous phase if needed before re-running review
 
+### Step 4.5: Synchronize GitHub State
+After the agent completes, synchronize GitHub state as described in the **GitHub Lifecycle Management** section:
+1. Push branch to remote (Step 4.5.1)
+2. Create or update PR per the Phase-to-GitHub-State table (Step 4.5.2)
+3. Post PlantUML diagram if design phase produced a `.puml` file (Step 4.5.3)
+4. Record Branch/PR/Issue in the Workflow Log entry (Step 4.5.4)
+
 ### Step 5: Report to Human
 
 Provide structured summary:
@@ -192,6 +207,9 @@ Provide structured summary:
 
 **Previous Status**: {status}
 **New Status**: {status}
+**Branch**: {branch-name}
+**PR**: #{pr-number} ({draft/ready}) or "N/A"
+**Issue**: #{issue-number} or "N/A"
 
 **What Was Done**:
 - {Summary of work}
