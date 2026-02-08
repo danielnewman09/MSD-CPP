@@ -388,7 +388,7 @@ std::vector<Coordinate> buildPolygonFromFacets(
   vertices.reserve(uniqueIndices.size());
   for (size_t const idx : uniqueIndices)
   {
-    vertices.push_back(frame.localToGlobal(hullVertices[idx]));
+    vertices.push_back(frame.localToGlobalAbsolute(hullVertices[idx]));
   }
 
   // If only 1-2 vertices, return as-is (degenerate case)
@@ -522,14 +522,12 @@ size_t EPA::extractContactManifold(size_t faceIndex,
   // Transform EPA normal from world space to each hull's local space
   // before querying aligned facets (hull normals are stored in local space)
   // Ticket: 0039e — fixes single-contact-point bug for rotated objects
-  // IMPORTANT: Cast to Vector3D to use rotation-only overload (not Coordinate
-  // overload which applies translation, corrupting the direction vector)
-  msd_sim::Vector3D const normalAsVec{normal.x(), normal.y(), normal.z()};
+  // Ticket: 0041 — use explicit Relative API (rotation-only)
   msd_sim::Vector3D const normalLocalA =
-    assetA_.getReferenceFrame().globalToLocal(normalAsVec);
-  msd_sim::Vector3D const negNormal{-normal.x(), -normal.y(), -normal.z()};
+    assetA_.getReferenceFrame().globalToLocalRelative(normal);
+  // Note: -normal is an Eigen expression, must wrap in Coordinate for template deduction
   msd_sim::Vector3D const normalLocalB =
-    assetB_.getReferenceFrame().globalToLocal(negNormal);
+    assetB_.getReferenceFrame().globalToLocalRelative(Coordinate{-normal});
 
   auto facesA = assetA_.getCollisionHull().getFacetsAlignedWith(normalLocalA);
   auto facesB = assetB_.getCollisionHull().getFacetsAlignedWith(normalLocalB);
@@ -550,16 +548,12 @@ size_t EPA::extractContactManifold(size_t faceIndex,
   // Reference face normal in world space
   const auto& refFrame = refAsset.getReferenceFrame();
   msd_sim::Vector3D const refNormalWorld =
-    refFrame.localToGlobal(msd_sim::Vector3D{refFaces[0].get().normal.x(),
-                                             refFaces[0].get().normal.y(),
-                                             refFaces[0].get().normal.z()});
+    refFrame.localToGlobalRelative(refFaces[0].get().normal);
 
   // Build incident polygon from coplanar facets (properly ordered)
   const auto& incFrame = incAsset.getReferenceFrame();
   msd_sim::Vector3D const incNormalWorld =
-    incFrame.localToGlobal(msd_sim::Vector3D{incFaces[0].get().normal.x(),
-                                             incFaces[0].get().normal.y(),
-                                             incFaces[0].get().normal.z()});
+    incFrame.localToGlobalRelative(incFaces[0].get().normal);
   std::vector<Coordinate> incidentPoly =
     buildPolygonFromFacets(incFaces,
                            incAsset.getCollisionHull().getVertices(),
@@ -685,18 +679,18 @@ size_t EPA::generateEdgeContacts(
   // 2. Transform witness points to local space for edge query
   const auto& frameA = assetA_.getReferenceFrame();
   const auto& frameB = assetB_.getReferenceFrame();
-  Coordinate const localWitnessA = frameA.globalToLocal(witnessA);
-  Coordinate const localWitnessB = frameB.globalToLocal(witnessB);
+  Coordinate const localWitnessA = frameA.globalToLocalAbsolute(witnessA);
+  Coordinate const localWitnessB = frameB.globalToLocalAbsolute(witnessB);
 
   // 3. Find closest edge on each hull
   auto edgeA = assetA_.getCollisionHull().findClosestEdge(localWitnessA);
   auto edgeB = assetB_.getCollisionHull().findClosestEdge(localWitnessB);
 
   // 4. Transform edge endpoints to world space
-  Coordinate const edgeA_start = frameA.localToGlobal(edgeA.start);
-  Coordinate const edgeA_end = frameA.localToGlobal(edgeA.end);
-  Coordinate const edgeB_start = frameB.localToGlobal(edgeB.start);
-  Coordinate const edgeB_end = frameB.localToGlobal(edgeB.end);
+  Coordinate const edgeA_start = frameA.localToGlobalAbsolute(edgeA.start);
+  Coordinate const edgeA_end = frameA.localToGlobalAbsolute(edgeA.end);
+  Coordinate const edgeB_start = frameB.localToGlobalAbsolute(edgeB.start);
+  Coordinate const edgeB_end = frameB.localToGlobalAbsolute(edgeB.end);
 
   // 5. Compute closest points between two line segments
   auto [closestOnA, closestOnB] =

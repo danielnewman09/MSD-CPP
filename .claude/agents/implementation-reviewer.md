@@ -314,6 +314,63 @@ Priority order:
 {What happens next based on status}
 ```
 
+## GitHub PR Integration
+
+After completing the review, post results to the feature's GitHub PR for visibility.
+
+### Finding the PR
+```bash
+# Derive branch name from ticket filename
+# tickets/0041_reference_frame_transform_refactor.md → 0041-reference-frame-transform-refactor
+
+# Find the PR number for this branch
+gh pr list --head "{branch-name}" --json number --jq '.[0].number'
+```
+
+### Posting Review Summary as PR Comment
+
+If a PR exists, post a concise review summary as a PR comment:
+
+```bash
+gh pr comment {pr-number} --body "$(cat <<'EOF'
+## Implementation Review Summary
+
+**Status**: {APPROVED / CHANGES REQUESTED / BLOCKED}
+**Date**: {YYYY-MM-DD}
+
+### Design Conformance
+- {Pass/Fail with brief explanation}
+
+### Code Quality
+- {Pass/Needs Improvement/Fail with key findings}
+
+### Test Coverage
+- {Pass/Needs Improvement/Fail with summary}
+
+### Critical Issues
+| ID | Location | Issue |
+|----|----------|-------|
+| C1 | `file:line` | {brief description} |
+
+### Next Steps
+- {What happens next based on status}
+
+*Full review at `docs/designs/{feature-name}/implementation-review.md`*
+EOF
+)"
+```
+
+### Committing Review Results
+
+After creating the implementation review document:
+```bash
+git add docs/designs/{feature-name}/implementation-review.md
+git commit -m "review: implementation review for {feature-name}"
+git push
+```
+
+If git/GitHub operations fail, report the error but do NOT let it block the review output. The `implementation-review.md` file is the primary artifact.
+
 ## Decision Criteria
 
 | Status | When to Use |

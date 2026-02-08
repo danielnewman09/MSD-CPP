@@ -39,6 +39,27 @@ Revise an existing design based on reviewer feedback. This mode is triggered whe
 
 ## Process
 
+### 0.1 Create Feature Branch
+
+Before beginning design work, set up the feature branch:
+
+1. **Derive branch name** from the ticket filename:
+   - `tickets/0041_reference_frame_transform_refactor.md` → `0041-reference-frame-transform-refactor`
+   - Replace underscores with hyphens, strip the `.md` extension and `tickets/` prefix
+2. **Check if branch already exists**:
+   ```bash
+   git branch --list "{branch-name}"
+   ```
+3. **If branch does not exist**: Create from main and switch to it:
+   ```bash
+   git checkout -b {branch-name} main
+   ```
+4. **If branch exists**: Switch to it:
+   ```bash
+   git checkout {branch-name}
+   ```
+5. If git operations fail, report the error but proceed with design work — git integration is non-blocking.
+
 ### 1. Analyze Current Architecture
 Before designing, thoroughly examine:
 - **If math-formulation.md exists**: Read `docs/designs/{feature-name}/math-formulation.md` first
@@ -359,11 +380,80 @@ If any issues affected the architecture:
 2. List all Open Questions requiring human input, organized by category
 3. Specify which questions are blocking vs. informational
 4. The design will automatically proceed to design-reviewer for assessment
+5. **Commit design artifacts**:
+   ```bash
+   git add docs/designs/{feature-name}/design.md docs/designs/{feature-name}/{feature-name}.puml
+   git commit -m "design: initial architecture for {feature-name}"
+   ```
+6. **Push branch to remote**:
+   ```bash
+   git push -u origin {branch-name}
+   ```
+7. **Create draft PR** (idempotent — check first):
+   ```bash
+   # Check if PR already exists for this branch
+   existing_pr=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')
+
+   if [ -z "$existing_pr" ]; then
+     gh pr create --draft \
+       --title "{ticket-number}: {Feature Name}" \
+       --body "$(cat <<'PREOF'
+   ## Summary
+   - {One-line description of the feature}
+
+   ## Design Artifacts
+   - `docs/designs/{feature-name}/design.md`
+   - `docs/designs/{feature-name}/{feature-name}.puml`
+
+   ## Open Questions
+   - {List any blocking questions}
+
+   Part of #{issue-number}
+
+   ---
+   *Phase: Design | Status: Draft*
+   PREOF
+   )" \
+       --label "ticket:{NNNN}" --label "phase:design"
+   fi
+   ```
+8. **Post rendered PlantUML diagram** as a PR comment:
+   ```bash
+   pr_number=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')
+   gh pr comment $pr_number --body "$(cat <<'PUMLEOF'
+   ## Architecture Diagram
+
+   ![PlantUML Diagram](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/{owner}/{repo}/{branch-name}/docs/designs/{feature-name}/{feature-name}.puml&fmt=svg)
+
+   *Rendered from `docs/designs/{feature-name}/{feature-name}.puml`*
+   PUMLEOF
+   )"
+   ```
+
+If any git/GitHub operations fail, report the error but do NOT stop — the design documents are the primary output.
 
 ### After Revision (Mode 2):
 1. Confirm all reviewer issues have been addressed
 2. Summarize the changes made
 3. Note any issues that could not be fully addressed (and why)
 4. The design will return to design-reviewer for final assessment
+5. **Commit revised artifacts**:
+   ```bash
+   git add docs/designs/{feature-name}/design.md docs/designs/{feature-name}/{feature-name}.puml
+   git commit -m "design: revise architecture for {feature-name}"
+   git push
+   ```
+6. **Post updated PlantUML diagram** as a new PR comment (if diagram changed):
+   ```bash
+   pr_number=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')
+   gh pr comment $pr_number --body "$(cat <<'PUMLEOF'
+   ## Updated Architecture Diagram
+
+   ![PlantUML Diagram](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/{owner}/{repo}/{branch-name}/docs/designs/{feature-name}/{feature-name}.puml&fmt=svg)
+
+   *Updated after design revision*
+   PUMLEOF
+   )"
+   ```
 
 Your designs should be thorough enough that another developer could implement them without requiring additional architectural guidance.

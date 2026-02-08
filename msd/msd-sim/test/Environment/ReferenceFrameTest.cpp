@@ -4,7 +4,9 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
+#include "msd-sim/src/DataTypes/AngularRate.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Utils/utils.hpp"
 
@@ -108,7 +110,7 @@ TEST(ReferenceFrameTest, ConstructorFromAxes_90DegYaw)
 
   // Point at (1, 0, 0) in local frame should map to (0, 1, 0) in global
   Coordinate localPoint{1.0, 0.0, 0.0};
-  Coordinate globalPoint = frame.localToGlobal(localPoint);
+  Coordinate globalPoint = frame.localToGlobalAbsolute(localPoint);
 
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 1.0, 1e-9));
@@ -127,7 +129,7 @@ TEST(ReferenceFrameTest, ConstructorFromAxes_90DegPitch)
 
   // Point at (1, 0, 0) in local frame should map to (0, 0, -1) in global
   Coordinate localPoint{1.0, 0.0, 0.0};
-  Coordinate globalPoint = frame.localToGlobal(localPoint);
+  Coordinate globalPoint = frame.localToGlobalAbsolute(localPoint);
 
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 0.0, 1e-9));
@@ -145,7 +147,7 @@ TEST(ReferenceFrameTest, ConstructorFromAxes_UnnormalizedInputs)
 
   // Should still produce identity rotation (just with normalization)
   Coordinate localPoint{1.0, 2.0, 3.0};
-  Coordinate globalPoint = frame.localToGlobal(localPoint);
+  Coordinate globalPoint = frame.localToGlobalAbsolute(localPoint);
 
   // Expected: localPoint + origin = (6, 12, 18)
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 6.0, 1e-9));
@@ -205,8 +207,8 @@ TEST(ReferenceFrameTest, ConstructorFromAxes_RoundTrip)
   ReferenceFrame frame{origin, xDir, zDir};
 
   Coordinate original{100.0, 200.0, 300.0};
-  Coordinate local = frame.globalToLocal(original);
-  Coordinate backToGlobal = frame.localToGlobal(local);
+  Coordinate local = frame.globalToLocalAbsolute(original);
+  Coordinate backToGlobal = frame.localToGlobalAbsolute(local);
 
   EXPECT_TRUE(coordinatesEqual(backToGlobal, original, 1e-9));
 }
@@ -228,7 +230,7 @@ TEST(ReferenceFrameTest, ConstructorFromAxes_CollisionResponseUseCase)
 
   // Transform to contact frame
   msd_sim::Vector3D localVelocity =
-    contactFrame.globalToLocal(msd_sim::Vector3D{worldVelocity});
+    contactFrame.globalToLocalRelative(msd_sim::Vector3D{worldVelocity});
 
   // In contact frame:
   // - Z component should be the normal component (penetrating = negative)
@@ -399,7 +401,7 @@ TEST(ReferenceFrameTest, IdentityTransformGlobalToLocal)
   ReferenceFrame frame;  // Identity frame at origin
   Coordinate globalCoord{1.0, 2.0, 3.0};
 
-  Coordinate localCoord = frame.globalToLocal(globalCoord);
+  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
 
   EXPECT_TRUE(coordinatesEqual(localCoord, globalCoord));
 }
@@ -409,7 +411,7 @@ TEST(ReferenceFrameTest, IdentityTransformLocalToGlobal)
   ReferenceFrame frame;  // Identity frame at origin
   Coordinate localCoord{1.0, 2.0, 3.0};
 
-  Coordinate globalCoord = frame.localToGlobal(localCoord);
+  Coordinate globalCoord = frame.localToGlobalAbsolute(localCoord);
 
   EXPECT_TRUE(coordinatesEqual(globalCoord, localCoord));
 }
@@ -419,8 +421,8 @@ TEST(ReferenceFrameTest, IdentityRoundTrip)
   ReferenceFrame frame;
   Coordinate original{1.0, 2.0, 3.0};
 
-  Coordinate local = frame.globalToLocal(original);
-  Coordinate global = frame.localToGlobal(local);
+  Coordinate local = frame.globalToLocalAbsolute(original);
+  Coordinate global = frame.localToGlobalAbsolute(local);
 
   EXPECT_TRUE(coordinatesEqual(global, original));
 }
@@ -435,7 +437,7 @@ TEST(ReferenceFrameTest, TranslationOnlyGlobalToLocal)
   ReferenceFrame frame{origin};
 
   Coordinate globalCoord{15.0, 25.0, 35.0};
-  Coordinate localCoord = frame.globalToLocal(globalCoord);
+  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
 
   // Local coordinate should be global - origin
   EXPECT_DOUBLE_EQ(localCoord.x(), 5.0);
@@ -449,7 +451,7 @@ TEST(ReferenceFrameTest, TranslationOnlyLocalToGlobal)
   ReferenceFrame frame{origin};
 
   Coordinate localCoord{5.0, 5.0, 5.0};
-  Coordinate globalCoord = frame.localToGlobal(localCoord);
+  Coordinate globalCoord = frame.localToGlobalAbsolute(localCoord);
 
   // Global coordinate should be local + origin
   EXPECT_DOUBLE_EQ(globalCoord.x(), 15.0);
@@ -464,8 +466,8 @@ TEST(ReferenceFrameTest, TranslationOnlyRoundTrip)
 
   Coordinate original{150.0, 250.0, 350.0};
 
-  Coordinate local = frame.globalToLocal(original);
-  Coordinate global = frame.localToGlobal(local);
+  Coordinate local = frame.globalToLocalAbsolute(original);
+  Coordinate global = frame.localToGlobalAbsolute(local);
 
   EXPECT_TRUE(coordinatesEqual(global, original));
 }
@@ -486,7 +488,7 @@ TEST(ReferenceFrameTest, YawRotation90Degrees)
 
   // Point at (1, 0, 0) in global frame
   Coordinate globalCoord{1.0, 0.0, 0.0};
-  Coordinate localCoord = frame.globalToLocal(globalCoord);
+  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
 
   // After 90 degree yaw rotation, should be at (0, -1, 0) in local frame
   EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0, 1e-9));
@@ -507,7 +509,7 @@ TEST(ReferenceFrameTest, PitchRotation90Degrees)
 
   // Point at (1, 0, 0) in global frame
   Coordinate globalCoord{1.0, 0.0, 0.0};
-  Coordinate localCoord = frame.globalToLocal(globalCoord);
+  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
 
   // After 90 degree pitch rotation, should be at (0, 0, 1) in local frame
   EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0, 1e-9));
@@ -527,7 +529,7 @@ TEST(ReferenceFrameTest, RollRotation90Degrees)
 
   // Point at (0, 1, 0) in global frame
   Coordinate globalCoord{0.0, 1.0, 0.0};
-  Coordinate localCoord = frame.globalToLocal(globalCoord);
+  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
 
   // After 90 degree roll rotation, should be at (0, 0, -1) in local frame
   EXPECT_TRUE(msd_sim::almostEqual(localCoord.x(), 0.0, 1e-9));
@@ -546,8 +548,8 @@ TEST(ReferenceFrameTest, RotationOnlyRoundTrip)
 
   Coordinate original{1.5, 2.5, 3.5};
 
-  Coordinate local = frame.globalToLocal(original);
-  Coordinate global = frame.localToGlobal(local);
+  Coordinate local = frame.globalToLocalAbsolute(original);
+  Coordinate global = frame.localToGlobalAbsolute(local);
 
   EXPECT_TRUE(coordinatesEqual(global, original, 1e-9));
 }
@@ -568,7 +570,7 @@ TEST(ReferenceFrameTest, TranslationAndRotationGlobalToLocal)
 
   // Point at (11, 20, 30) in global frame
   Coordinate globalCoord{11.0, 20.0, 30.0};
-  Coordinate localCoord = frame.globalToLocal(globalCoord);
+  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
 
   // First translate: (11, 20, 30) - (10, 20, 30) = (1, 0, 0)
   // Then rotate 90 degrees about Z: (1, 0, 0) -> (0, -1, 0)
@@ -589,7 +591,7 @@ TEST(ReferenceFrameTest, TranslationAndRotationLocalToGlobal)
 
   // Point at (0, -1, 0) in local frame
   Coordinate localCoord{0.0, -1.0, 0.0};
-  Coordinate globalCoord = frame.localToGlobal(localCoord);
+  Coordinate globalCoord = frame.localToGlobalAbsolute(localCoord);
 
   // First rotate back: (0, -1, 0) -> (1, 0, 0)
   // Then translate: (1, 0, 0) + (10, 20, 30) = (11, 20, 30)
@@ -610,8 +612,8 @@ TEST(ReferenceFrameTest, ComplexTransformationRoundTrip)
 
   Coordinate original{100.0, 200.0, 300.0};
 
-  Coordinate local = frame.globalToLocal(original);
-  Coordinate global = frame.localToGlobal(local);
+  Coordinate local = frame.globalToLocalAbsolute(original);
+  Coordinate global = frame.localToGlobalAbsolute(local);
 
   EXPECT_TRUE(coordinatesEqual(global, original, 1e-9));
 }
@@ -626,7 +628,7 @@ TEST(ReferenceFrameTest, OriginPoint)
   ReferenceFrame frame{origin};
 
   // Transform the origin point itself
-  Coordinate localCoord = frame.globalToLocal(origin);
+  Coordinate localCoord = frame.globalToLocalAbsolute(origin);
 
   // Should be at (0, 0, 0) in local frame
   EXPECT_DOUBLE_EQ(localCoord.x(), 0.0);
@@ -640,7 +642,7 @@ TEST(ReferenceFrameTest, NegativeCoordinates)
   ReferenceFrame frame{origin};
 
   Coordinate globalCoord{-3.0, -8.0, -12.0};
-  Coordinate localCoord = frame.globalToLocal(globalCoord);
+  Coordinate localCoord = frame.globalToLocalAbsolute(globalCoord);
 
   EXPECT_DOUBLE_EQ(localCoord.x(), 2.0);
   EXPECT_DOUBLE_EQ(localCoord.y(), 2.0);
@@ -659,8 +661,8 @@ TEST(ReferenceFrameTest, LargeRotationAngles)
 
   Coordinate original{1.0, 2.0, 3.0};
 
-  Coordinate local = frame.globalToLocal(original);
-  Coordinate global = frame.localToGlobal(local);
+  Coordinate local = frame.globalToLocalAbsolute(original);
+  Coordinate global = frame.localToGlobalAbsolute(local);
 
   EXPECT_TRUE(coordinatesEqual(global, original, 1e-9));
 }
@@ -673,8 +675,8 @@ TEST(ReferenceFrameTest, ZeroVector)
 
   Coordinate zeroVec{0.0, 0.0, 0.0};
 
-  Coordinate local = frame.globalToLocal(zeroVec);
-  Coordinate global = frame.localToGlobal(local);
+  Coordinate local = frame.globalToLocalAbsolute(zeroVec);
+  Coordinate global = frame.localToGlobalAbsolute(local);
 
   EXPECT_TRUE(coordinatesEqual(global, zeroVec, 1e-9));
 }
@@ -698,13 +700,13 @@ TEST(ReferenceFrameTest, ChainedFrameTransformations)
   Coordinate globalPoint{20.0, 5.0, 0.0};
 
   // Transform to frame1
-  Coordinate inFrame1 = frame1.globalToLocal(globalPoint);
+  Coordinate inFrame1 = frame1.globalToLocalAbsolute(globalPoint);
 
   // The origin of frame2 in frame1's local coordinates
   Coordinate frame2Origin = origin2;
 
   // Transform back to global should match
-  Coordinate backToGlobal = frame1.localToGlobal(inFrame1);
+  Coordinate backToGlobal = frame1.localToGlobalAbsolute(inFrame1);
 
   EXPECT_TRUE(coordinatesEqual(backToGlobal, globalPoint, 1e-9));
 }
@@ -729,7 +731,7 @@ TEST(ReferenceFrameTest, AircraftBodyFrame)
   Coordinate pointInBody{10.0, 0.0, 0.0};
 
   // Transform to global frame
-  Coordinate pointInGlobal = bodyFrame.localToGlobal(pointInBody);
+  Coordinate pointInGlobal = bodyFrame.localToGlobalAbsolute(pointInBody);
 
   // Should be displaced from aircraft position
   Coordinate displacement = pointInGlobal - aircraftPos;
@@ -750,7 +752,7 @@ TEST(ReferenceFrameTest, SensorMountOnRobot)
   Coordinate sensorInRobotFrame{1.0, 0.0, 0.5};
 
   // Get sensor position in global frame
-  Coordinate sensorInGlobal = robotFrame.localToGlobal(sensorInRobotFrame);
+  Coordinate sensorInGlobal = robotFrame.localToGlobalAbsolute(sensorInRobotFrame);
 
   // Sensor should be roughly at (5, 6, 0.5) in global frame
   // (1 meter north of robot position)
@@ -795,7 +797,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_90DegYaw)
 
   // Point at (1, 0, 0) in local frame should map to (0, 1, 0) in global
   Coordinate localPoint{1.0, 0.0, 0.0};
-  Coordinate globalPoint = frame.localToGlobal(localPoint);
+  Coordinate globalPoint = frame.localToGlobalAbsolute(localPoint);
 
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 1.0, 1e-9));
@@ -813,7 +815,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_90DegPitch)
 
   // Point at (1, 0, 0) in local frame should map to (0, 0, -1) in global
   Coordinate localPoint{1.0, 0.0, 0.0};
-  Coordinate globalPoint = frame.localToGlobal(localPoint);
+  Coordinate globalPoint = frame.localToGlobalAbsolute(localPoint);
 
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 0.0, 1e-9));
@@ -831,7 +833,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_90DegRoll)
 
   // Point at (0, 1, 0) in local frame should map to (0, 0, 1) in global
   Coordinate localPoint{0.0, 1.0, 0.0};
-  Coordinate globalPoint = frame.localToGlobal(localPoint);
+  Coordinate globalPoint = frame.localToGlobalAbsolute(localPoint);
 
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 0.0, 1e-9));
@@ -875,8 +877,8 @@ TEST(ReferenceFrameTest, QuaternionConstructor_RoundTrip)
   ReferenceFrame frame{origin, quat};
 
   Coordinate original{100.0, 200.0, 300.0};
-  Coordinate local = frame.globalToLocal(original);
-  Coordinate backToGlobal = frame.localToGlobal(local);
+  Coordinate local = frame.globalToLocalAbsolute(original);
+  Coordinate backToGlobal = frame.localToGlobalAbsolute(local);
 
   EXPECT_TRUE(coordinatesEqual(backToGlobal, original, 1e-9));
 }
@@ -898,7 +900,7 @@ TEST(ReferenceFrameTest, QuaternionConstructor_UnnormalizedInput)
 
   // Should still produce correct rotation
   Coordinate localPoint{1.0, 0.0, 0.0};
-  Coordinate globalPoint = frame.localToGlobal(localPoint);
+  Coordinate globalPoint = frame.localToGlobalAbsolute(localPoint);
 
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.x(), 0.0, 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(globalPoint.y(), 1.0, 1e-9));
@@ -985,8 +987,8 @@ TEST(ReferenceFrameTest, QuaternionConstructor_GimbalLockPitchPositive)
 
   // Round-trip should still work
   Coordinate original{1.0, 2.0, 3.0};
-  Coordinate local = frame.globalToLocal(original);
-  Coordinate backToGlobal = frame.localToGlobal(local);
+  Coordinate local = frame.globalToLocalAbsolute(original);
+  Coordinate backToGlobal = frame.localToGlobalAbsolute(local);
 
   EXPECT_TRUE(coordinatesEqual(backToGlobal, original, 1e-9));
 
@@ -1018,8 +1020,8 @@ TEST(ReferenceFrameTest, QuaternionConstructor_GimbalLockPitchNegative)
 
   // Round-trip should still work
   Coordinate original{1.0, 2.0, 3.0};
-  Coordinate local = frame.globalToLocal(original);
-  Coordinate backToGlobal = frame.localToGlobal(local);
+  Coordinate local = frame.globalToLocalAbsolute(original);
+  Coordinate backToGlobal = frame.localToGlobalAbsolute(local);
 
   EXPECT_TRUE(coordinatesEqual(backToGlobal, original, 1e-9));
 
@@ -1072,4 +1074,206 @@ TEST(ReferenceFrameTest, EulerQuaternionConsistency)
         << R2(i, j);
     }
   }
+}
+
+// ============================================================================
+// Ticket 0041: Explicit Absolute/Relative Template API Tests
+// ============================================================================
+
+// AC1/AC6: globalToLocalRelative on Coordinate applies rotation ONLY (no
+// translation). This directly tests the bug that motivated the refactor.
+TEST(ReferenceFrameTest, globalToLocalRelative_Coordinate_RotationOnly)
+{
+  Coordinate origin{10.0, 20.0, 30.0};
+  Eigen::Quaterniond rotation{
+    Eigen::AngleAxisd{M_PI / 2, msd_sim::Vector3D::UnitZ()}};
+  ReferenceFrame frame{origin, rotation};
+
+  // A direction vector expressed as Coordinate
+  Coordinate direction{1.0, 0.0, 0.0};
+
+  // Relative transform: rotation only, NO translation
+  Coordinate result = frame.globalToLocalRelative(direction);
+
+  // 90deg rotation around Z: global X -> local Y
+  EXPECT_TRUE(msd_sim::almostEqual(result.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(result.y(), -1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(result.z(), 0.0, 1e-9));
+}
+
+// When frame is at origin, Relative and Absolute produce same result
+TEST(ReferenceFrameTest,
+     globalToLocalRelative_Vector3D_SameAsAbsolute_AtOrigin)
+{
+  Coordinate origin{0.0, 0.0, 0.0};
+  Eigen::Quaterniond rotation{
+    Eigen::AngleAxisd{M_PI / 4, msd_sim::Vector3D::UnitY()}};
+  ReferenceFrame frame{origin, rotation};
+
+  msd_sim::Vector3D vec{1.0, 2.0, 3.0};
+
+  msd_sim::Vector3D relative = frame.globalToLocalRelative(vec);
+  msd_sim::Vector3D absolute = frame.globalToLocalAbsolute(vec);
+
+  EXPECT_TRUE(msd_sim::almostEqual(relative.x(), absolute.x(), 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(relative.y(), absolute.y(), 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(relative.z(), absolute.z(), 1e-9));
+}
+
+// globalToLocalAbsolute applies rotation AND translation
+TEST(ReferenceFrameTest, globalToLocalAbsolute_Coordinate_IncludesTranslation)
+{
+  Coordinate origin{10.0, 0.0, 0.0};
+  Eigen::Quaterniond rotation{Eigen::Quaterniond::Identity()};
+  ReferenceFrame frame{origin, rotation};
+
+  Coordinate globalPoint{15.0, 0.0, 0.0};
+
+  // Identity rotation + origin at (10,0,0): result = point - origin = (5,0,0)
+  Coordinate result = frame.globalToLocalAbsolute(globalPoint);
+
+  EXPECT_TRUE(msd_sim::almostEqual(result.x(), 5.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(result.y(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(result.z(), 0.0, 1e-9));
+}
+
+// localToGlobalAbsolute applies rotation AND translation
+TEST(ReferenceFrameTest, localToGlobalAbsolute_Coordinate_IncludesTranslation)
+{
+  Coordinate origin{10.0, 0.0, 0.0};
+  Eigen::Quaterniond rotation{Eigen::Quaterniond::Identity()};
+  ReferenceFrame frame{origin, rotation};
+
+  Coordinate localPoint{5.0, 0.0, 0.0};
+
+  // Identity rotation + origin at (10,0,0): result = point + origin = (15,0,0)
+  Coordinate result = frame.localToGlobalAbsolute(localPoint);
+
+  EXPECT_TRUE(msd_sim::almostEqual(result.x(), 15.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(result.y(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(result.z(), 0.0, 1e-9));
+}
+
+// R5: globalToLocalRelative works with AngularRate
+TEST(ReferenceFrameTest, globalToLocalRelative_AngularRate)
+{
+  Coordinate origin{10.0, 20.0, 30.0};
+  Eigen::Quaterniond rotation{
+    Eigen::AngleAxisd{M_PI / 2, msd_sim::Vector3D::UnitZ()}};
+  ReferenceFrame frame{origin, rotation};
+
+  AngularRate globalOmega{1.0, 0.0, 0.0};
+
+  // Relative transform: rotation only
+  AngularRate localOmega = frame.globalToLocalRelative(globalOmega);
+
+  // 90deg rotation around Z: global X -> local Y
+  EXPECT_TRUE(msd_sim::almostEqual(localOmega.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localOmega.y(), -1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(localOmega.z(), 0.0, 1e-9));
+}
+
+// R5: localToGlobalRelative for AngularRate matches expected rotation
+TEST(ReferenceFrameTest, localToGlobalRelative_AngularRate_MatchesExisting)
+{
+  Coordinate origin{5.0, 10.0, 15.0};
+  Eigen::Quaterniond rotation{
+    Eigen::AngleAxisd{M_PI / 3, msd_sim::Vector3D::UnitX()}};
+  ReferenceFrame frame{origin, rotation};
+
+  AngularRate localOmega{0.0, 1.0, 0.0};
+
+  AngularRate globalOmega = frame.localToGlobalRelative(localOmega);
+
+  // R_x(60deg) * [0, 1, 0]^T = [0, cos60, sin60] = [0, 0.5, sqrt(3)/2]
+  EXPECT_TRUE(msd_sim::almostEqual(globalOmega.x(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(globalOmega.y(), 0.5, 1e-9));
+  EXPECT_TRUE(
+    msd_sim::almostEqual(globalOmega.z(), std::sqrt(3.0) / 2.0, 1e-9));
+}
+
+// Roundtrip: Absolute and Relative transforms roundtrip correctly
+TEST(ReferenceFrameTest, Absolute_Relative_Roundtrip)
+{
+  Coordinate origin{3.0, -7.0, 11.0};
+  Eigen::Quaterniond rotation{
+    Eigen::AngleAxisd{1.23, msd_sim::Vector3D{1.0, 1.0, 1.0}.normalized()}};
+  ReferenceFrame frame{origin, rotation};
+
+  // Absolute roundtrip with Coordinate
+  Coordinate point{42.0, -13.0, 7.5};
+  Coordinate localPoint = frame.globalToLocalAbsolute(point);
+  Coordinate recovered = frame.localToGlobalAbsolute(localPoint);
+  EXPECT_TRUE(msd_sim::almostEqual(point.x(), recovered.x(), 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(point.y(), recovered.y(), 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(point.z(), recovered.z(), 1e-9));
+
+  // Relative roundtrip with Vector3D
+  msd_sim::Vector3D dir{0.5, -0.3, 0.8};
+  msd_sim::Vector3D localDir = frame.globalToLocalRelative(dir);
+  msd_sim::Vector3D recoveredDir = frame.localToGlobalRelative(localDir);
+  EXPECT_TRUE(msd_sim::almostEqual(dir.x(), recoveredDir.x(), 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(dir.y(), recoveredDir.y(), 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(dir.z(), recoveredDir.z(), 1e-9));
+
+  // Relative roundtrip with AngularRate
+  AngularRate omega{1.5, -2.0, 0.7};
+  AngularRate localOmega = frame.globalToLocalRelative(omega);
+  AngularRate recoveredOmega = frame.localToGlobalRelative(localOmega);
+  EXPECT_TRUE(msd_sim::almostEqual(omega.x(), recoveredOmega.x(), 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(omega.y(), recoveredOmega.y(), 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(omega.z(), recoveredOmega.z(), 1e-9));
+}
+
+// AC2: Template deduction works for all types without explicit template args
+TEST(ReferenceFrameTest, TypeDeduction_AllTypes)
+{
+  ReferenceFrame frame{Coordinate{1.0, 2.0, 3.0},
+                       Eigen::Quaterniond::Identity()};
+
+  // Vector3D
+  msd_sim::Vector3D vec{1.0, 0.0, 0.0};
+  auto vecResult = frame.globalToLocalRelative(vec);
+  static_assert(std::is_same_v<decltype(vecResult), msd_sim::Vector3D>);
+
+  // Coordinate
+  Coordinate coord{1.0, 0.0, 0.0};
+  auto coordResult = frame.globalToLocalAbsolute(coord);
+  static_assert(std::is_same_v<decltype(coordResult), Coordinate>);
+
+  // AngularRate
+  AngularRate omega{1.0, 0.0, 0.0};
+  auto omegaResult = frame.localToGlobalRelative(omega);
+  static_assert(std::is_same_v<decltype(omegaResult), AngularRate>);
+
+  // Verify no compile error and reasonable results
+  EXPECT_TRUE(vecResult.norm() > 0.0);
+  EXPECT_TRUE(coordResult.norm() >= 0.0);
+  EXPECT_TRUE(omegaResult.norm() > 0.0);
+}
+
+// AC1/AC6: Relative does NOT apply translation even when given a Coordinate
+TEST(ReferenceFrameTest, Relative_Does_Not_Apply_Translation_Coordinate)
+{
+  Coordinate origin{100.0, 200.0, 300.0};
+  Eigen::Quaterniond rotation{Eigen::Quaterniond::Identity()};
+  ReferenceFrame frame{origin, rotation};
+
+  Coordinate direction{1.0, 0.0, 0.0};
+
+  // With identity rotation, Relative should return the direction unchanged
+  Coordinate relativeResult = frame.globalToLocalRelative(direction);
+
+  // With identity rotation, Absolute subtracts origin
+  Coordinate absoluteResult = frame.globalToLocalAbsolute(direction);
+
+  // Relative: direction unchanged (no translation)
+  EXPECT_TRUE(msd_sim::almostEqual(relativeResult.x(), 1.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(relativeResult.y(), 0.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(relativeResult.z(), 0.0, 1e-9));
+
+  // Absolute: direction - origin = (1-100, 0-200, 0-300)
+  EXPECT_TRUE(msd_sim::almostEqual(absoluteResult.x(), -99.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(absoluteResult.y(), -200.0, 1e-9));
+  EXPECT_TRUE(msd_sim::almostEqual(absoluteResult.z(), -300.0, 1e-9));
 }

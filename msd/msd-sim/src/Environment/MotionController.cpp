@@ -35,32 +35,32 @@ void MotionController::updateTransform(
   if (commands.moveForward)
   {
     // Move forward in local Z direction
-    newOrigin -= frame.localToGlobal(msd_sim::Vector3D{0, 0, scaledMoveSpeed});
+    newOrigin -= frame.localToGlobalRelative(msd_sim::Vector3D{0, 0, scaledMoveSpeed});
   }
   if (commands.moveBackward)
   {
     // Move backward in local Z direction
-    newOrigin += frame.localToGlobal(msd_sim::Vector3D{0, 0, scaledMoveSpeed});
+    newOrigin += frame.localToGlobalRelative(msd_sim::Vector3D{0, 0, scaledMoveSpeed});
   }
   if (commands.moveLeft)
   {
     // Move left in local X direction
-    newOrigin -= frame.localToGlobal(msd_sim::Vector3D{scaledMoveSpeed, 0, 0});
+    newOrigin -= frame.localToGlobalRelative(msd_sim::Vector3D{scaledMoveSpeed, 0, 0});
   }
   if (commands.moveRight)
   {
     // Move right in local X direction
-    newOrigin += frame.localToGlobal(msd_sim::Vector3D{scaledMoveSpeed, 0, 0});
+    newOrigin += frame.localToGlobalRelative(msd_sim::Vector3D{scaledMoveSpeed, 0, 0});
   }
   if (commands.moveUp)
   {
     // Move up in local Y direction
-    newOrigin += frame.localToGlobal(msd_sim::Vector3D{0, scaledMoveSpeed, 0});
+    newOrigin += frame.localToGlobalRelative(msd_sim::Vector3D{0, scaledMoveSpeed, 0});
   }
   if (commands.moveDown)
   {
     // Move down in local Y direction
-    newOrigin -= frame.localToGlobal(msd_sim::Vector3D{0, scaledMoveSpeed, 0});
+    newOrigin -= frame.localToGlobalRelative(msd_sim::Vector3D{0, scaledMoveSpeed, 0});
   }
 
   // Apply movement

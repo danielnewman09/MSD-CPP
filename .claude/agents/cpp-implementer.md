@@ -39,6 +39,26 @@ Check implementation ticket prerequisites:
 - Build system ready for new files
 - Development environment set up
 
+**1.3 Set Up Feature Branch**
+
+The feature branch should already exist from the design phase. Set it up:
+
+1. **Derive branch name** from the ticket filename (same convention as architect):
+   - `tickets/0041_reference_frame_transform_refactor.md` → `0041-reference-frame-transform-refactor`
+2. **Check if branch exists** (it should, from design phase):
+   ```bash
+   git branch --list "{branch-name}"
+   ```
+3. **If branch exists**: Switch to it:
+   ```bash
+   git checkout {branch-name}
+   ```
+4. **If branch does not exist** (unusual — design phase should have created it): Create from main:
+   ```bash
+   git checkout -b {branch-name} main
+   ```
+5. If git operations fail, report the error but proceed with implementation — git integration is non-blocking.
+
 **1.3 Create Implementation Plan**
 Map out file creation/modification order before writing code.
 
@@ -171,3 +191,68 @@ After completing implementation:
 2. Provide summary of files created/modified, test coverage status, any deviations
 3. Note areas warranting extra attention in review
 4. Human reviews implementation before Implementation Review proceeds
+5. **Commit implementation artifacts**:
+   ```bash
+   git add {all new and modified source files, test files, CMakeLists.txt changes}
+   git commit -m "impl: implement {feature-name}"
+   ```
+6. **Push to remote**:
+   ```bash
+   git push
+   ```
+7. **Create or update PR** (idempotent):
+   ```bash
+   # Check if PR already exists (should exist from design phase)
+   existing_pr=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')
+
+   if [ -z "$existing_pr" ]; then
+     # No PR exists — create one
+     gh pr create \
+       --title "{ticket-number}: {Feature Name}" \
+       --body "$(cat <<'PREOF'
+   ## Summary
+   - {One-line description of what was implemented}
+
+   ## Implementation
+   - {Key files created/modified}
+   - {Test coverage summary}
+
+   ## Design Artifacts
+   - `docs/designs/{feature-name}/design.md`
+   - `docs/designs/{feature-name}/implementation-notes.md`
+
+   Closes #{issue-number}
+
+   ---
+   *Phase: Implementation | Status: Ready for Review*
+   PREOF
+   )"
+   else
+     # PR exists from design phase — mark ready for review
+     gh pr ready $existing_pr
+
+     # Update PR body with implementation details
+     gh pr edit $existing_pr \
+       --title "{ticket-number}: {Feature Name}" \
+       --body "$(cat <<'PREOF'
+   ## Summary
+   - {One-line description of what was implemented}
+
+   ## Implementation
+   - {Key files created/modified}
+   - {Test coverage summary}
+
+   ## Design Artifacts
+   - `docs/designs/{feature-name}/design.md`
+   - `docs/designs/{feature-name}/implementation-notes.md`
+
+   Closes #{issue-number}
+
+   ---
+   *Phase: Implementation | Status: Ready for Review*
+   PREOF
+   )"
+   fi
+   ```
+
+If any git/GitHub operations fail, report the error but do NOT stop — the implementation code is the primary output.

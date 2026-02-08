@@ -39,19 +39,20 @@ Coordinate supportMinkowski(const AssetPhysical& assetA,
 
   // Transform search direction from world space to local space for asset A
   // (rotation only - direction vectors don't translate)
-  Coordinate const dirALocal = frameA.globalToLocal(dir);
+  Coordinate const dirALocal = frameA.globalToLocalRelative(dir);
 
   // Get support vertex in local space for asset A
   Coordinate const supportALocal = support(hullA, dirALocal);
 
   // Transform support vertex from local space to world space
   // (rotation + translation - positions transform fully)
-  Coordinate const supportAWorld = frameA.localToGlobal(supportALocal);
+  Coordinate const supportAWorld = frameA.localToGlobalAbsolute(supportALocal);
 
   // Same process for asset B with negated direction
-  Coordinate const dirBLocal = frameB.globalToLocal(msd_sim::Vector3D{-dir});
+  // Note: -dir is an Eigen expression, must wrap in Vector3D for template deduction
+  Coordinate const dirBLocal = frameB.globalToLocalRelative(msd_sim::Vector3D{-dir});
   Coordinate const supportBLocal = support(hullB, dirBLocal);
-  Coordinate const supportBWorld = frameB.localToGlobal(supportBLocal);
+  Coordinate const supportBWorld = frameB.localToGlobalAbsolute(supportBLocal);
 
   // Return Minkowski difference in world space
   return supportAWorld - supportBWorld;
@@ -68,19 +69,20 @@ SupportResult supportMinkowskiWithWitness(const AssetPhysical& assetA,
 
   // Transform search direction from world space to local space for asset A
   // (rotation only - direction vectors don't translate)
-  Coordinate const dirALocal = frameA.globalToLocal(dir);
+  Coordinate const dirALocal = frameA.globalToLocalRelative(dir);
 
   // Get support vertex in local space for asset A
   Coordinate const supportALocal = support(hullA, dirALocal);
 
   // Transform support vertex from local space to world space
   // (rotation + translation - positions transform fully)
-  Coordinate const supportAWorld = frameA.localToGlobal(supportALocal);
+  Coordinate const supportAWorld = frameA.localToGlobalAbsolute(supportALocal);
 
   // Same process for asset B with negated direction
-  Coordinate const dirBLocal = frameB.globalToLocal(msd_sim::Vector3D{-dir});
+  // Note: -dir is an Eigen expression, must wrap in Vector3D for template deduction
+  Coordinate const dirBLocal = frameB.globalToLocalRelative(msd_sim::Vector3D{-dir});
   Coordinate const supportBLocal = support(hullB, dirBLocal);
-  Coordinate const supportBWorld = frameB.localToGlobal(supportBLocal);
+  Coordinate const supportBWorld = frameB.localToGlobalAbsolute(supportBLocal);
 
   // Return Minkowski difference with witness points
   return SupportResult{supportAWorld - supportBWorld,  // Minkowski

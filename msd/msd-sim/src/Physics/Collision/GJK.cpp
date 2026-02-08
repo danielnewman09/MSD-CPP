@@ -85,8 +85,8 @@ bool GJK::intersects(int maxIterations)
   }
 
   // Initialize: pick initial search direction (from A toward B in world space)
-  const Coordinate centroidAWorld = frameA.localToGlobal(hullA.getCentroid());
-  const Coordinate centroidBWorld = frameB.localToGlobal(hullB.getCentroid());
+  const Coordinate centroidAWorld = frameA.localToGlobalAbsolute(hullA.getCentroid());
+  const Coordinate centroidBWorld = frameB.localToGlobalAbsolute(hullB.getCentroid());
   direction_ = centroidBWorld - centroidAWorld;
 
   // Handle edge case where centroids are identical

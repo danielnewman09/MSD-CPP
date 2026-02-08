@@ -277,6 +277,58 @@ Difference: {|computed - expected|} (tolerance: {tolerance})
 ---
 ```
 
+## GitHub PR Integration
+
+After completing the review, post results to the feature's GitHub PR for visibility.
+
+### Finding the PR
+```bash
+# Derive branch name from ticket filename
+# tickets/0041_reference_frame_transform_refactor.md → 0041-reference-frame-transform-refactor
+
+# Find the PR number for this branch
+gh pr list --head "{branch-name}" --json number --jq '.[0].number'
+```
+
+### Posting Review Summary as PR Comment
+
+If a PR exists, post a concise review summary as a PR comment:
+
+```bash
+gh pr comment {pr-number} --body "$(cat <<'EOF'
+## Math Review Summary
+
+**Status**: {APPROVED / APPROVED WITH NOTES / NEEDS REVISION / BLOCKED}
+**Date**: {YYYY-MM-DD}
+
+### Derivation Verification
+- {Summary of which derivations were verified and any issues found}
+
+### Numerical Stability
+- {Summary of stability analysis coverage}
+
+### Example Validation
+- {Which example was hand-verified, result}
+
+### Next Steps
+- {What happens next based on status}
+
+*Full review appended to `docs/designs/{feature-name}/math-formulation.md`*
+EOF
+)"
+```
+
+### Committing Review Results
+
+After appending the review to the formulation document:
+```bash
+git add docs/designs/{feature-name}/math-formulation.md
+git commit -m "review: math review for {feature-name}"
+git push
+```
+
+If git/GitHub operations fail, report the error but do NOT let it block the review output. The review appended to `math-formulation.md` is the primary artifact.
+
 ## Critical Constraints
 
 - **DO NOT** approve formulations with unverified derivations
