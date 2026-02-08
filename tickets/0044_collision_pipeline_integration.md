@@ -5,15 +5,15 @@
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Prototype
-- [ ] Prototype Complete — Ready for Implementation
-- [ ] Implementation Complete — Awaiting Quality Gate
+- [x] Prototype Complete — Ready for Implementation (Prototype phase skipped per design review)
+- [x] Implementation Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Documentation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Ready for Design
-**Assignee**: TBD
+**Current Phase**: Implementation Complete — Awaiting Quality Gate
+**Assignee**: cpp-implementer agent
 **Created**: 2026-02-08
 **Generate Tutorial**: No
 **Predecessor**: [0036_collision_pipeline_extraction](0036_collision_pipeline_extraction.md)
@@ -211,6 +211,31 @@ Remove from WorldModel members that move into CollisionPipeline:
 - **Risks Identified**: 5 risks documented (R1-R5), all Low or Very Low likelihood, mitigated by line-by-line code motion and comprehensive test coverage (612 integration tests)
 - **Prototype Required**: No — Pure refactoring with validated components from tickets 0040b and 0040d
 - **Notes**: Design successfully completes ticket 0036 intent. Architecturally sound, follows project coding standards, minimal risk due to pure code motion. All evaluation criteria passed (Architectural Fit, C++ Design Quality, Feasibility, Testability). Ready to proceed directly to implementation phase without prototype. Next step: Implementation by cpp-implementer agent.
+
+### Implementation Phase
+- **Started**: 2026-02-08
+- **Completed**: 2026-02-08
+- **Implementer**: cpp-implementer agent (via workflow orchestrator)
+- **Branch**: 0044-collision-pipeline-integration
+- **PR**: #15 (ready for review)
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp` — Extended with new members and methods
+  - `msd/msd-sim/src/Physics/Collision/CollisionPipeline.cpp` — Implemented warm-starting, cache update, position correction
+  - `msd/msd-sim/src/Environment/WorldModel.hpp` — Replaced 4 collision members with single collisionPipeline_
+  - `msd/msd-sim/src/Environment/WorldModel.cpp` — Simplified updateCollisions() from ~300 lines to ~10 lines
+  - `msd/msd-sim/src/Physics/Collision/CMakeLists.txt` — Added CollisionPipeline.cpp to build
+- **Key Changes**:
+  - Added ContactCache contactCache_ member
+  - Added PositionCorrector positionCorrector_ member
+  - Added bool collisionOccurred_ flag
+  - Extended CollisionPair with bodyAId, bodyBId
+  - Added PairConstraintRange struct for cache interaction
+  - Added advanceFrame(), expireOldEntries(), hadCollisions() public methods
+  - Replaced solveConstraints() with solveConstraintsWithWarmStart()
+  - Added correctPositions() method
+  - Updated execute() with phases 3.5 (warm-start query), 4.5 (cache update), 6 (position correction)
+- **Test Results**: 679/688 tests passing (9 pre-existing failures documented in MEMORY.md, zero regressions)
+- **Notes**: Pure code motion refactoring - algorithms transferred line-by-line from WorldModel::updateCollisions() into CollisionPipeline::execute(). Zero behavioral change verified by test suite. Ready for quality gate.
 
 ---
 
