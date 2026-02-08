@@ -376,3 +376,88 @@ All code will follow project coding standards:
 - **Current CollisionPipeline**: `msd-sim/src/Physics/Collision/CollisionPipeline.hpp/.cpp`
 - **ContactCache**: `msd-sim/src/Physics/Constraints/ContactCache.hpp`
 - **PositionCorrector**: `msd-sim/src/Physics/Constraints/PositionCorrector.hpp`
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-08
+**Status**: APPROVED
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | Follows project patterns: `camelCase` methods, `snake_case_` members, `PascalCase` types |
+| Namespace organization | ✓ | CollisionPipeline in `msd_sim::Physics::Collision`, consistent with existing code |
+| File structure | ✓ | Extends existing CollisionPipeline.hpp/.cpp in `msd-sim/src/Physics/Collision/` |
+| Dependency direction | ✓ | Pipeline depends on ContactCache/PositionCorrector (both in Physics/Constraints), no cycles |
+
+#### C++ Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | ✓ | ContactCache and PositionCorrector have value semantics, no manual resource management |
+| Smart pointer appropriateness | ✓ | Existing constraint ownership via `unique_ptr` unchanged, value members for cache/corrector |
+| Value/reference semantics | ✓ | Value members for ContactCache/PositionCorrector, references for span parameters |
+| Rule of 0/3/5 | ✓ | Deleted copy/move per NFR-1 (single-threaded), destructor defaulted |
+| Const correctness | ✓ | `hadCollisions()` is const, `advanceFrame()` non-const (modifies cache) |
+| Exception safety | ✓ | No new exception paths, delegates to ContactCache/PositionCorrector |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | Adds ContactCache.hpp, PositionCorrector.hpp includes, both already in codebase |
+| Template complexity | ✓ | No templates used, straightforward class extension |
+| Memory strategy | ✓ | `pairRanges_` cleared each frame, `contactCache_` frame-persistent (design intent) |
+| Thread safety | ✓ | Consistent with existing single-threaded design, no new thread-safety requirements |
+| Build integration | ✓ | Pure code motion refactoring, no CMake changes required (sources already built) |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | CollisionPipeline already has `friend class CollisionPipelineTest`, extensible to new phases |
+| Mockable dependencies | ✓ | ContactCache and PositionCorrector have concrete interfaces, no mocking needed (value types) |
+| Observable state | ✓ | `hadCollisions()` exposes collision-active flag, cache/corrector state observable via test friend |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | Behavioral regression from logic transfer (warm-starting, position correction) | Technical | Low | High | Line-by-line code motion from WorldModel, extensive integration tests (612 tests) | No |
+| R2 | Member lifetime issues during ownership transfer (ContactCache, PositionCorrector) | Technical | Very Low | Medium | Both have value semantics and default constructors, straightforward move | No |
+| R3 | Breaking CollisionPipeline unit tests due to new phases | Technical | Low | Low | Tests need updates for warm-starting/position correction, but existing logic unchanged | No |
+| R4 | Missing WorldModel access to moved members (collisionHandler_, contactSolver_, contactCache_, positionCorrector_) | Integration | Very Low | Medium | Compile-time error, grep for usage before removal | No |
+| R5 | Performance regression due to increased per-frame memory footprint (~11KB typical) | Performance | Very Low | Low | Memory increase negligible, runtime overhead measured at < 1% in ticket 0040b | No |
+
+### Prototype Guidance
+
+No prototypes required. This is a pure code motion refactoring with well-understood components:
+- ContactCache and PositionCorrector already validated in tickets 0040b and 0040d
+- Warm-starting algorithm already functional in WorldModel::updateCollisions()
+- Position correction already functional in WorldModel::updateCollisions()
+- Risk of behavioral change is low due to identical logic transfer
+
+### Summary
+
+The design successfully completes the original intent of ticket 0036 by bringing CollisionPipeline to feature parity with WorldModel::updateCollisions(). The extension is architecturally sound, follows project coding standards, and presents minimal risk due to the pure refactoring nature (line-by-line code motion).
+
+**Strengths**:
+- **Clean ownership transfer**: ContactCache and PositionCorrector move cleanly into CollisionPipeline as value members
+- **Backward compatibility**: WorldModel API unchanged, only internal delegation changes
+- **Comprehensive test coverage**: 612 existing collision tests provide regression detection
+- **Well-documented algorithm transfer**: Design document specifies exact line ranges from WorldModel to copy (lines 390-445 for warm-starting, 447-466 for cache update, 485-508 for position correction)
+- **Performance characteristics preserved**: No new algorithms, only code location change
+
+**Considerations**:
+- Open Question 1 (ContactCache/PositionCorrector exposure): Recommendation to keep private is sound — defer exposure until profiling shows need for tuning
+- Open Question 2 (advanceFrame/expireOldEntries merge): Recommendation to keep separate is correct — explicit lifecycle matches ticket 0040d design and provides clear control points
+- Open Question 3 (hadCollisions count vs boolean): Recommendation for boolean is appropriate — sufficient for energy tracking, count accessor can be added later if needed
+
+**Next Steps**: Proceed to prototype phase (skipped per design, go directly to implementation). Design is approved for implementation without revision.
