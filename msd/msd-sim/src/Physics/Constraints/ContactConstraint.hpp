@@ -5,7 +5,8 @@
 #define MSD_SIM_PHYSICS_CONTACT_CONSTRAINT_HPP
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include "msd-sim/src/Physics/Constraints/LambdaBounds.hpp"
 
 namespace msd_sim
 {
@@ -46,7 +47,7 @@ namespace msd_sim
  * prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
  * @ticket 0032_contact_constraint_refactor
  */
-class ContactConstraint : public TwoBodyConstraint
+class ContactConstraint : public Constraint
 {
 public:
   /**
@@ -80,61 +81,42 @@ public:
 
   ~ContactConstraint() override = default;
 
-  // ===== TwoBodyConstraint interface =====
+  // ===== Constraint interface =====
 
   [[nodiscard]] int dimension() const override
   {
     return 1;
   }
 
-  [[nodiscard]] Eigen::VectorXd evaluateTwoBody(
+  [[nodiscard]] Eigen::VectorXd evaluate(
     const InertialState& stateA,
     const InertialState& stateB,
     double time) const override;
 
-  [[nodiscard]] Eigen::MatrixXd jacobianTwoBody(
+  [[nodiscard]] Eigen::MatrixXd jacobian(
     const InertialState& stateA,
     const InertialState& stateB,
     double time) const override;
 
-  [[nodiscard]] bool isActiveTwoBody(
+  [[nodiscard]] bool isActive(
     const InertialState& stateA,
     const InertialState& stateB,
     double time) const override;
+
+  [[nodiscard]] LambdaBounds lambdaBounds() const override
+  {
+    return LambdaBounds::unilateral();
+  }
+
+  [[nodiscard]] int bodyCount() const override
+  {
+    return 2;
+  }
 
   [[nodiscard]] std::string typeName()
     const override
   {
     return "ContactConstraint";
-  }
-
-  /**
-   * @brief Baumgarte position error gain (ERP formulation)
-   *
-   * Uses Error Reduction Parameter (ERP) = 0.2 by default.
-   * Conversion: alpha = ERP / dt² (velocity-level bias formula).
-   *
-   * The implementation uses velocity-level bias: b += (ERP/dt) ·
-   * penetration_depth This is NOT the acceleration-level formulation b += α·C +
-   * β·Ċ.
-   *
-   * @return ERP value (dimensionless, 0 to 1)
-   */
-  [[nodiscard]] double alpha() const override
-  {
-    return erp_;
-  }
-
-  /**
-   * @brief Baumgarte velocity error gain (not used in ERP formulation)
-   *
-   * The ERP formulation does not use a separate velocity term.
-   *
-   * @return 0.0 (velocity term not used)
-   */
-  [[nodiscard]] double beta() const override
-  {
-    return 0.0;
   }
 
   // ===== Accessors =====
@@ -181,7 +163,6 @@ private:
   double penetration_depth_;          // Overlap distance [m]
   double restitution_;                // Coefficient of restitution [0, 1]
   double pre_impact_rel_vel_normal_;  // For restitution RHS [m/s]
-  double erp_{0.2};  // Error Reduction Parameter (default from P1)
 };
 
 }  // namespace msd_sim

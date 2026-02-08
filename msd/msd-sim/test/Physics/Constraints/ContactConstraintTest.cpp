@@ -7,7 +7,7 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 using namespace msd_sim;
@@ -45,7 +45,7 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
   Eigen::MatrixXd J_numerical(1, 12);
 
   // Baseline evaluation
-  Eigen::VectorXd C0 = constraint.evaluateTwoBody(stateA, stateB, time);
+  Eigen::VectorXd C0 = constraint.evaluate(stateA, stateB, time);
 
   // Perturb each velocity component
   InertialState stateA_perturbed = stateA;
@@ -57,7 +57,7 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
     stateA_perturbed = stateA;
     stateA_perturbed.velocity[i] += epsilon;
     Eigen::VectorXd C_plus =
-      constraint.evaluateTwoBody(stateA_perturbed, stateB, time + epsilon);
+      constraint.evaluate(stateA_perturbed, stateB, time + epsilon);
     J_numerical(0, i) = (C_plus(0) - C0(0)) / epsilon;
   }
 
@@ -77,7 +77,7 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
     stateA_perturbed.position =
       stateA.position + rotation * msd_sim::Vector3D::Zero();
     Eigen::VectorXd C_plus =
-      constraint.evaluateTwoBody(stateA_perturbed, stateB, time + epsilon);
+      constraint.evaluate(stateA_perturbed, stateB, time + epsilon);
     J_numerical(0, 3 + i) = (C_plus(0) - C0(0)) / epsilon;
   }
 
@@ -87,7 +87,7 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
     stateB_perturbed = stateB;
     stateB_perturbed.velocity[i] += epsilon;
     Eigen::VectorXd C_plus =
-      constraint.evaluateTwoBody(stateA, stateB_perturbed, time + epsilon);
+      constraint.evaluate(stateA, stateB_perturbed, time + epsilon);
     J_numerical(0, 6 + i) = (C_plus(0) - C0(0)) / epsilon;
   }
 
@@ -103,7 +103,7 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
     stateB_perturbed.position =
       stateB.position + rotation * msd_sim::Vector3D::Zero();
     Eigen::VectorXd C_plus =
-      constraint.evaluateTwoBody(stateA, stateB_perturbed, time + epsilon);
+      constraint.evaluate(stateA, stateB_perturbed, time + epsilon);
     J_numerical(0, 9 + i) = (C_plus(0) - C0(0)) / epsilon;
   }
 
@@ -147,7 +147,7 @@ TEST(ContactConstraintTest,
   InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0});
 
-  Eigen::VectorXd C = constraint.evaluateTwoBody(stateA, stateB, 0.0);
+  Eigen::VectorXd C = constraint.evaluate(stateA, stateB, 0.0);
 
   ASSERT_EQ(1, C.size());
   // C = (x_B - x_A) · n = (0.4 - 0.5) = -0.1
@@ -171,7 +171,7 @@ TEST(ContactConstraintTest,
   InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0});
 
-  Eigen::VectorXd C = constraint.evaluateTwoBody(stateA, stateB, 0.0);
+  Eigen::VectorXd C = constraint.evaluate(stateA, stateB, 0.0);
 
   ASSERT_EQ(1, C.size());
   // C = (x_B - x_A) · n = (0.7 - 0.5) = 0.2
@@ -194,7 +194,7 @@ TEST(ContactConstraintTest, JacobianTwoBody_LinearComponents_0032a)
   InertialState stateA = createDefaultState();
   InertialState stateB = createDefaultState();
 
-  Eigen::MatrixXd J = constraint.jacobianTwoBody(stateA, stateB, 0.0);
+  Eigen::MatrixXd J = constraint.jacobian(stateA, stateB, 0.0);
 
   ASSERT_EQ(1, J.rows());
   ASSERT_EQ(12, J.cols());
@@ -225,7 +225,7 @@ TEST(ContactConstraintTest, JacobianTwoBody_AngularComponents_0032a)
   InertialState stateA = createDefaultState();
   InertialState stateB = createDefaultState();
 
-  Eigen::MatrixXd J = constraint.jacobianTwoBody(stateA, stateB, 0.0);
+  Eigen::MatrixXd J = constraint.jacobian(stateA, stateB, 0.0);
 
   // Lever arm A: contactA - comA = (1, 0, 0)
   // r_A × n = (1, 0, 0) × (0, 0, 1) = (0, -1, 0)
@@ -260,7 +260,7 @@ TEST(ContactConstraintTest, JacobianTwoBody_NumericalVerification_0032a)
 
   // Analytical Jacobian
   Eigen::MatrixXd J_analytical =
-    constraint.jacobianTwoBody(stateA, stateB, 0.0);
+    constraint.jacobian(stateA, stateB, 0.0);
 
   // The Jacobian is constant (doesn't depend on velocity), so we can verify
   // by checking that the constraint function is linear in position
@@ -300,7 +300,7 @@ TEST(ContactConstraintTest, JacobianTwoBody_NumericalVerification_0032a)
 
 TEST(ContactConstraintTest, IsActiveTwoBody_PenetratingPair_ReturnsTrue_0032a)
 {
-  // Test: isActiveTwoBody returns true for penetrating bodies
+  // Test: isActive returns true for penetrating bodies
   Coordinate normal{0, 0, 1};
   Coordinate contactA{0, 0, 0.5};
   Coordinate contactB{0, 0, 0.4};  // Penetrating
@@ -313,12 +313,12 @@ TEST(ContactConstraintTest, IsActiveTwoBody_PenetratingPair_ReturnsTrue_0032a)
   InertialState stateA = createDefaultState();
   InertialState stateB = createDefaultState();
 
-  EXPECT_TRUE(constraint.isActiveTwoBody(stateA, stateB, 0.0));
+  EXPECT_TRUE(constraint.isActive(stateA, stateB, 0.0));
 }
 
 TEST(ContactConstraintTest, IsActiveTwoBody_SeparatedPair_ReturnsFalse_0032a)
 {
-  // Test: isActiveTwoBody returns false for clearly separated bodies
+  // Test: isActive returns false for clearly separated bodies
   Coordinate normal{0, 0, 1};
   Coordinate contactA{0, 0, 0.5};
   Coordinate contactB{0, 0, 0.7};  // Separated by 0.2m (> threshold)
@@ -331,7 +331,7 @@ TEST(ContactConstraintTest, IsActiveTwoBody_SeparatedPair_ReturnsFalse_0032a)
   InertialState stateA = createDefaultState();
   InertialState stateB = createDefaultState();
 
-  EXPECT_FALSE(constraint.isActiveTwoBody(stateA, stateB, 0.0));
+  EXPECT_FALSE(constraint.isActive(stateA, stateB, 0.0));
 }
 
 TEST(ContactConstraintTest, BaumgarteParameters_DefaultERP_0032a)
@@ -363,57 +363,6 @@ TEST(ContactConstraintTest, TypeName_ReturnsContactConstraint_0032a)
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
 
   EXPECT_EQ("ContactConstraint", constraint.typeName());
-}
-
-TEST(ContactConstraintTest, SingleBodyEvaluate_ThrowsLogicError_0032a)
-{
-  // Test: Single-body evaluate() throws logic_error (misuse guard)
-  Coordinate normal{0, 0, 1};
-  Coordinate contactA{0, 0, 0};
-  Coordinate contactB{0, 0, 0.1};
-  Coordinate comA{0, 0, 0};
-  Coordinate comB{0, 0, 0};
-
-  ContactConstraint constraint{
-    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
-
-  InertialState state = createDefaultState();
-
-  EXPECT_THROW(constraint.evaluate(state, 0.0), std::logic_error);
-}
-
-TEST(ContactConstraintTest, SingleBodyJacobian_ThrowsLogicError_0032a)
-{
-  // Test: Single-body jacobian() throws logic_error (misuse guard)
-  Coordinate normal{0, 0, 1};
-  Coordinate contactA{0, 0, 0};
-  Coordinate contactB{0, 0, 0.1};
-  Coordinate comA{0, 0, 0};
-  Coordinate comB{0, 0, 0};
-
-  ContactConstraint constraint{
-    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
-
-  InertialState state = createDefaultState();
-
-  EXPECT_THROW(constraint.jacobian(state, 0.0), std::logic_error);
-}
-
-TEST(ContactConstraintTest, SingleBodyIsActive_ThrowsLogicError_0032a)
-{
-  // Test: Single-body isActive() throws logic_error (misuse guard)
-  Coordinate normal{0, 0, 1};
-  Coordinate contactA{0, 0, 0};
-  Coordinate contactB{0, 0, 0.1};
-  Coordinate comA{0, 0, 0};
-  Coordinate comB{0, 0, 0};
-
-  ContactConstraint constraint{
-    0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0};
-
-  InertialState state = createDefaultState();
-
-  EXPECT_THROW(constraint.isActive(state, 0.0), std::logic_error);
 }
 
 TEST(ContactConstraintTest,

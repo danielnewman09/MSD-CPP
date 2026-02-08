@@ -15,42 +15,47 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
 {
 
 void PositionCorrector::correctPositions(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
-    std::vector<InertialState*>& states,
-    const std::vector<double>& inverseMasses,
-    const std::vector<Eigen::Matrix3d>& inverseInertias,
-    size_t numBodies,
-    size_t numInertial,
-    double dt)
+  const std::vector<Constraint*>& contactConstraints,
+  std::vector<InertialState*>& states,
+  const std::vector<double>& inverseMasses,
+  const std::vector<Eigen::Matrix3d>& inverseInertias,
+  size_t numBodies,
+  size_t numInertial,
+  double dt)
 {
   Config const config{};
-  correctPositions(contactConstraints, states, inverseMasses,
-                   inverseInertias, numBodies, numInertial, dt, config);
+  correctPositions(contactConstraints,
+                   states,
+                   inverseMasses,
+                   inverseInertias,
+                   numBodies,
+                   numInertial,
+                   dt,
+                   config);
 }
 
 void PositionCorrector::correctPositions(
-    const std::vector<TwoBodyConstraint*>& contactConstraints,
-    std::vector<InertialState*>& states,
-    const std::vector<double>& inverseMasses,
-    const std::vector<Eigen::Matrix3d>& inverseInertias,
-    size_t numBodies,
-    size_t numInertial,
-    double dt,
-    const Config& config)
+  const std::vector<Constraint*>& contactConstraints,
+  std::vector<InertialState*>& states,
+  const std::vector<double>& inverseMasses,
+  const std::vector<Eigen::Matrix3d>& inverseInertias,
+  size_t numBodies,
+  size_t numInertial,
+  double dt,
+  const Config& config)
 {
   if (contactConstraints.empty() || dt <= 0.0)
   {
     return;
   }
 
-  const size_t c = contactConstraints.size();
+  const auto c = contactConstraints.size();
 
   // ===== Step 1: Build position-level RHS =====
   // b_pos_i = (beta / dt) * max(depth_i - slop, 0)
@@ -61,7 +66,7 @@ void PositionCorrector::correctPositions(
   for (size_t i = 0; i < c; ++i)
   {
     const auto* contact =
-        dynamic_cast<const ContactConstraint*>(contactConstraints[i]);
+      dynamic_cast<const ContactConstraint*>(contactConstraints[i]);
     if (contact == nullptr)
     {
       continue;
@@ -72,8 +77,7 @@ void PositionCorrector::correctPositions(
 
     if (correctedDepth > 0.0)
     {
-      bPos(static_cast<Eigen::Index>(i)) =
-          (config.beta / dt) * correctedDepth;
+      bPos(static_cast<Eigen::Index>(i)) = (config.beta / dt) * correctedDepth;
       anyCorrection = true;
     }
   }
@@ -90,10 +94,9 @@ void PositionCorrector::correctPositions(
   for (size_t i = 0; i < c; ++i)
   {
     const auto* constraint = contactConstraints[i];
-    size_t const bodyA = constraint->getBodyAIndex();
-    size_t const bodyB = constraint->getBodyBIndex();
-    jacobians[i] = constraint->jacobianTwoBody(
-        *states[bodyA], *states[bodyB], 0.0);
+    size_t const bodyA = constraint->bodyAIndex();
+    size_t const bodyB = constraint->bodyBIndex();
+    jacobians[i] = constraint->jacobian(*states[bodyA], *states[bodyB], 0.0);
   }
 
   // ===== Step 3: Build effective mass matrix A = J * M^-1 * J^T =====
@@ -103,30 +106,28 @@ void PositionCorrector::correctPositions(
   {
     bodyMInv[k] = Eigen::Matrix<double, 6, 6>::Zero();
     bodyMInv[k].block<3, 3>(0, 0) =
-        inverseMasses[k] * Eigen::Matrix3d::Identity();
+      inverseMasses[k] * Eigen::Matrix3d::Identity();
     bodyMInv[k].block<3, 3>(3, 3) = inverseInertias[k];
   }
 
-  Eigen::MatrixXd a{Eigen::MatrixXd::Zero(
-      static_cast<Eigen::Index>(c), static_cast<Eigen::Index>(c))};
+  Eigen::MatrixXd a{Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(c),
+                                          static_cast<Eigen::Index>(c))};
 
   for (size_t i = 0; i < c; ++i)
   {
-    size_t const bodyAI = contactConstraints[i]->getBodyAIndex();
-    size_t const bodyBI = contactConstraints[i]->getBodyBIndex();
+    size_t const bodyAI = contactConstraints[i]->bodyAIndex();
+    size_t const bodyBI = contactConstraints[i]->bodyBIndex();
 
     Eigen::Matrix<double, 1, 6> const jIA = jacobians[i].block<1, 6>(0, 0);
     Eigen::Matrix<double, 1, 6> const jIB = jacobians[i].block<1, 6>(0, 6);
 
     for (size_t j = i; j < c; ++j)
     {
-      size_t const bodyAJ = contactConstraints[j]->getBodyAIndex();
-      size_t const bodyBJ = contactConstraints[j]->getBodyBIndex();
+      size_t const bodyAJ = contactConstraints[j]->bodyAIndex();
+      size_t const bodyBJ = contactConstraints[j]->bodyBIndex();
 
-      Eigen::Matrix<double, 1, 6> const jJA =
-          jacobians[j].block<1, 6>(0, 0);
-      Eigen::Matrix<double, 1, 6> const jJB =
-          jacobians[j].block<1, 6>(0, 6);
+      Eigen::Matrix<double, 1, 6> const jJA = jacobians[j].block<1, 6>(0, 0);
+      Eigen::Matrix<double, 1, 6> const jJB = jacobians[j].block<1, 6>(0, 6);
 
       double aIj = 0.0;
 
@@ -156,7 +157,7 @@ void PositionCorrector::correctPositions(
   for (size_t i = 0; i < c; ++i)
   {
     a(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(i)) +=
-        kRegularizationEpsilon;
+      kRegularizationEpsilon;
   }
 
   // ===== Step 4: Solve with ASM (lambda_pos >= 0) =====
@@ -243,7 +244,7 @@ void PositionCorrector::correctPositions(
     for (int i = 0; i < numConstraints; ++i)
     {
       bool const isActive =
-          std::ranges::find(activeIndices, i) != activeIndices.end();
+        std::ranges::find(activeIndices, i) != activeIndices.end();
       if (isActive)
       {
         continue;
@@ -265,8 +266,7 @@ void PositionCorrector::correctPositions(
       break;  // All KKT conditions satisfied
     }
 
-    auto insertPos =
-        std::ranges::lower_bound(activeIndices, maxViolationIndex);
+    auto insertPos = std::ranges::lower_bound(activeIndices, maxViolationIndex);
     activeIndices.insert(insertPos, maxViolationIndex);
   }
 
@@ -280,8 +280,8 @@ void PositionCorrector::correctPositions(
       continue;
     }
 
-    size_t const bodyA = contactConstraints[i]->getBodyAIndex();
-    size_t const bodyB = contactConstraints[i]->getBodyBIndex();
+    size_t const bodyA = contactConstraints[i]->bodyAIndex();
+    size_t const bodyB = contactConstraints[i]->bodyBIndex();
 
     Eigen::Matrix<double, 1, 6> const jIA = jacobians[i].block<1, 6>(0, 0);
     Eigen::Matrix<double, 1, 6> const jIB = jacobians[i].block<1, 6>(0, 6);
@@ -294,24 +294,24 @@ void PositionCorrector::correctPositions(
       // Pseudo-velocity = M^-1 * J^T * lambda
       Eigen::Matrix<double, 6, 1> pseudoImpulseA = jIA.transpose() * lambda;
       Eigen::Vector3d dvLinearA =
-          inverseMasses[bodyA] * pseudoImpulseA.head<3>();
+        inverseMasses[bodyA] * pseudoImpulseA.head<3>();
       Eigen::Vector3d dwAngularA =
-          inverseInertias[bodyA] * pseudoImpulseA.tail<3>();
+        inverseInertias[bodyA] * pseudoImpulseA.tail<3>();
 
       // Position change = pseudo-velocity * dt
       Eigen::Vector3d dxA = dvLinearA * dt;
       Eigen::Vector3d dthetaA = dwAngularA * dt;
 
       // Apply linear position correction
-      states[bodyA]->position +=
-          Coordinate{dxA(0), dxA(1), dxA(2)};
+      states[bodyA]->position += Coordinate{dxA(0), dxA(1), dxA(2)};
 
       // Apply angular orientation correction via quaternion update
       double const halfAngle = dthetaA.norm() * 0.5;
       if (halfAngle > 1e-12)
       {
         Eigen::Vector3d axis = dthetaA.normalized();
-        QuaternionD dq{Eigen::Quaterniond{Eigen::AngleAxisd{dthetaA.norm(), axis}}};
+        QuaternionD dq{
+          Eigen::Quaterniond{Eigen::AngleAxisd{dthetaA.norm(), axis}}};
         states[bodyA]->orientation = dq * states[bodyA]->orientation;
         states[bodyA]->orientation.normalize();
       }
@@ -322,21 +322,21 @@ void PositionCorrector::correctPositions(
     {
       Eigen::Matrix<double, 6, 1> pseudoImpulseB = jIB.transpose() * lambda;
       Eigen::Vector3d dvLinearB =
-          inverseMasses[bodyB] * pseudoImpulseB.head<3>();
+        inverseMasses[bodyB] * pseudoImpulseB.head<3>();
       Eigen::Vector3d dwAngularB =
-          inverseInertias[bodyB] * pseudoImpulseB.tail<3>();
+        inverseInertias[bodyB] * pseudoImpulseB.tail<3>();
 
       Eigen::Vector3d dxB = dvLinearB * dt;
       Eigen::Vector3d dthetaB = dwAngularB * dt;
 
-      states[bodyB]->position +=
-          Coordinate{dxB(0), dxB(1), dxB(2)};
+      states[bodyB]->position += Coordinate{dxB(0), dxB(1), dxB(2)};
 
       double const halfAngleB = dthetaB.norm() * 0.5;
       if (halfAngleB > 1e-12)
       {
         Eigen::Vector3d axisB = dthetaB.normalized();
-        QuaternionD dqB{Eigen::Quaterniond{Eigen::AngleAxisd{dthetaB.norm(), axisB}}};
+        QuaternionD dqB{
+          Eigen::Quaterniond{Eigen::AngleAxisd{dthetaB.norm(), axisB}}};
         states[bodyB]->orientation = dqB * states[bodyB]->orientation;
         states[bodyB]->orientation.normalize();
       }
@@ -345,4 +345,4 @@ void PositionCorrector::correctPositions(
   // Pseudo-velocities are local variables — discarded here, never become KE
 }
 
-} // namespace msd_sim
+}  // namespace msd_sim

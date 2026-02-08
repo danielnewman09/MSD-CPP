@@ -12,9 +12,9 @@
 
 #include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
@@ -168,8 +168,9 @@ protected:
    * @param inertialAssets Dynamic objects (mutable span)
    * @param solveResult Solver output with per-body forces
    */
-  static void applyForces(std::span<AssetInertial> inertialAssets,
-                   const ConstraintSolver::MultiBodySolveResult& solveResult);
+  static void applyForces(
+    std::span<AssetInertial> inertialAssets,
+    const ConstraintSolver::MultiBodySolveResult& solveResult);
 
 private:
   /**

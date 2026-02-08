@@ -28,7 +28,7 @@ namespace {
     constexpr double h = 1e-7;
     const int dim = constraint.dimension();
     Eigen::MatrixXd J_numerical = Eigen::MatrixXd::Zero(dim, 12);
-    Eigen::VectorXd C_base = constraint.evaluateTwoBody(stateA, stateB, time);
+    Eigen::VectorXd C_base = constraint.evaluate(stateA, stateB, time);
 
     for (int col = 0; col < 12; ++col) {
       InertialState perturbedA = stateA;
@@ -48,7 +48,7 @@ namespace {
         perturbedB.setAngularVelocity(omegaB);
       }
 
-      Eigen::VectorXd C_perturbed = constraint.evaluateTwoBody(perturbedA, perturbedB, time);
+      Eigen::VectorXd C_perturbed = constraint.evaluate(perturbedA, perturbedB, time);
       J_numerical.col(col) = (C_perturbed - C_base) / h;
     }
 
@@ -82,7 +82,7 @@ TEST(FrictionConstraint, JacobianDimensionsAreTwoByTwelve)
   InertialState stateA = createTestState(comA, Coordinate{0, 0, 0}, Coordinate{0, 0, 0});
   InertialState stateB = createTestState(comB, Coordinate{0, 0, 0}, Coordinate{0, 0, 0});
 
-  Eigen::MatrixXd J = constraint.jacobianTwoBody(stateA, stateB, 0.0);
+  Eigen::MatrixXd J = constraint.jacobian(stateA, stateB, 0.0);
   EXPECT_EQ(J.rows(), 2);
   EXPECT_EQ(J.cols(), 12);
 }
@@ -100,7 +100,7 @@ TEST(FrictionConstraint, JacobianRow1MatchesFiniteDifference)
   InertialState stateA = createTestState(comA, Coordinate{1.0, 2.0, 0.0}, Coordinate{0.1, 0.0, 0.0});
   InertialState stateB = createTestState(comB, Coordinate{0.5, 1.0, 0.0}, Coordinate{0.0, 0.1, 0.0});
 
-  Eigen::MatrixXd J_analytical = constraint.jacobianTwoBody(stateA, stateB, 0.0);
+  Eigen::MatrixXd J_analytical = constraint.jacobian(stateA, stateB, 0.0);
   Eigen::MatrixXd J_numerical = computeNumericalJacobian(constraint, stateA, stateB, 0.0);
 
   constexpr double kTolerance = 1e-5;
@@ -122,7 +122,7 @@ TEST(FrictionConstraint, JacobianRow2MatchesFiniteDifference)
   InertialState stateA = createTestState(comA, Coordinate{1.0, 2.0, 0.0}, Coordinate{0.1, 0.0, 0.0});
   InertialState stateB = createTestState(comB, Coordinate{0.5, 1.0, 0.0}, Coordinate{0.0, 0.1, 0.0});
 
-  Eigen::MatrixXd J_analytical = constraint.jacobianTwoBody(stateA, stateB, 0.0);
+  Eigen::MatrixXd J_analytical = constraint.jacobian(stateA, stateB, 0.0);
   Eigen::MatrixXd J_numerical = computeNumericalJacobian(constraint, stateA, stateB, 0.0);
 
   constexpr double kTolerance = 1e-5;
@@ -144,7 +144,7 @@ TEST(FrictionConstraint, JacobianStructureMatches)
   InertialState stateA = createTestState(comA, Coordinate{0, 0, 0}, Coordinate{0, 0, 0});
   InertialState stateB = createTestState(comB, Coordinate{0, 0, 0}, Coordinate{0, 0, 0});
 
-  Eigen::MatrixXd J = constraint.jacobianTwoBody(stateA, stateB, 0.0);
+  Eigen::MatrixXd J = constraint.jacobian(stateA, stateB, 0.0);
 
   Coordinate t1 = constraint.getTangent1();
   Coordinate t2 = constraint.getTangent2();
@@ -273,7 +273,7 @@ TEST(FrictionConstraint, ActiveWhenFrictionCoefficientAndNormalForcePositive)
   InertialState stateB = createTestState(comB, Coordinate{0, 0, 0}, Coordinate{0, 0, 0});
 
   constraint.setNormalLambda(100.0);
-  EXPECT_TRUE(constraint.isActiveTwoBody(stateA, stateB, 0.0));
+  EXPECT_TRUE(constraint.isActive(stateA, stateB, 0.0));
 }
 
 TEST(FrictionConstraint, InactiveWhenFrictionCoefficientIsZero)
@@ -290,7 +290,7 @@ TEST(FrictionConstraint, InactiveWhenFrictionCoefficientIsZero)
   InertialState stateB = createTestState(comB, Coordinate{0, 0, 0}, Coordinate{0, 0, 0});
 
   constraint.setNormalLambda(100.0);
-  EXPECT_FALSE(constraint.isActiveTwoBody(stateA, stateB, 0.0));
+  EXPECT_FALSE(constraint.isActive(stateA, stateB, 0.0));
 }
 
 TEST(FrictionConstraint, InactiveWhenNormalForceIsZero)
@@ -307,7 +307,7 @@ TEST(FrictionConstraint, InactiveWhenNormalForceIsZero)
   InertialState stateB = createTestState(comB, Coordinate{0, 0, 0}, Coordinate{0, 0, 0});
 
   constraint.setNormalLambda(0.0);
-  EXPECT_FALSE(constraint.isActiveTwoBody(stateA, stateB, 0.0));
+  EXPECT_FALSE(constraint.isActive(stateA, stateB, 0.0));
 }
 
 TEST(FrictionConstraint, ConstructionWithNonUnitNormalThrows)

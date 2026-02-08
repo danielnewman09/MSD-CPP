@@ -13,9 +13,9 @@
 #include <random>
 #include <vector>
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 using namespace msd_sim;
@@ -60,7 +60,7 @@ TEST(ConstraintSolverASMTest, ActiveSetResult_DefaultConstruction_Zeroed_0034)
   ConstraintSolver solver;
 
   // Solve with empty contacts to get a default-like result
-  std::vector<TwoBodyConstraint*> constraints;
+  std::vector<Constraint*> constraints;
   std::vector<std::reference_wrapper<const InertialState>> states;
   std::vector<double> inverseMasses;
   std::vector<Eigen::Matrix3d> inverseInertias;
@@ -85,8 +85,8 @@ TEST(ConstraintSolverASMTest,
   ConstraintSolver solver;
 
   // Ticket: 0040b — Split impulse: use approaching velocity for positive RHS
-  InertialState stateA = createDefaultState(
-    Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};
@@ -98,7 +98,7 @@ TEST(ConstraintSolverASMTest,
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -128,8 +128,8 @@ TEST(ConstraintSolverASMTest,
   ConstraintSolver solver;
 
   // Ticket: 0040b — Split impulse: use approaching velocity for positive RHS
-  InertialState stateA = createDefaultState(
-    Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};
@@ -188,14 +188,12 @@ TEST(ConstraintSolverASMTest,
                                                createIdentityInertia()};
 
   // Order 1: [contact1, contact2]
-  std::vector<TwoBodyConstraint*> constraints1{contact1a.get(),
-                                               contact2a.get()};
+  std::vector<Constraint*> constraints1{contact1a.get(), contact2a.get()};
   auto result1 = solver.solveWithContacts(
     constraints1, states, inverseMasses, inverseInertias, 2, 0.016);
 
   // Order 2: [contact2, contact1]
-  std::vector<TwoBodyConstraint*> constraints2{contact2b.get(),
-                                               contact1b.get()};
+  std::vector<Constraint*> constraints2{contact2b.get(), contact1b.get()};
   auto result2 = solver.solveWithContacts(
     constraints2, states, inverseMasses, inverseInertias, 2, 0.016);
 
@@ -218,8 +216,8 @@ TEST(ConstraintSolverASMTest, HighMassRatio_1e6_Converges_0034)
   ConstraintSolver solver;
 
   // Ticket: 0040b — Split impulse: use approaching velocity for positive RHS
-  InertialState stateA = createDefaultState(
-    Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};
@@ -231,7 +229,7 @@ TEST(ConstraintSolverASMTest, HighMassRatio_1e6_Converges_0034)
   auto contact = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 1e6, 1.0 / 1.0};  // 1e6:1 ratio
@@ -287,7 +285,7 @@ TEST(ConstraintSolverASMTest, AllSeparating_EmptyActiveSet_0034)
                                                       0.0,
                                                       -4.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
+  std::vector<Constraint*> constraints{contact1.get(), contact2.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -313,8 +311,8 @@ TEST(ConstraintSolverASMTest, AllCompressive_FullActiveSet_0034)
   ConstraintSolver solver;
 
   // Ticket: 0040b — Split impulse: use approaching velocity for positive RHS
-  InertialState stateA = createDefaultState(
-    Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};
@@ -344,7 +342,7 @@ TEST(ConstraintSolverASMTest, AllCompressive_FullActiveSet_0034)
                                         0.5,
                                         0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
+  std::vector<Constraint*> constraints{contact1.get(), contact2.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -410,7 +408,7 @@ TEST(ConstraintSolverASMTest, MixedActiveInactive_CorrectPartition_0034)
                                                       0.0,
                                                       -5.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
+  std::vector<Constraint*> constraints{contact1.get(), contact2.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -444,8 +442,8 @@ TEST(ConstraintSolverASMTest,
   ConstraintSolver solver;
 
   // Ticket: 0040b — Split impulse: use approaching velocity for positive RHS
-  InertialState stateA = createDefaultState(
-    Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
 
   Coordinate normal{0, 0, 1};
@@ -460,7 +458,7 @@ TEST(ConstraintSolverASMTest,
   auto contact2 = std::make_unique<ContactConstraint>(
     0, 1, normal, contactA, contactB, 0.1, comA, comB, 0.5, 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
+  std::vector<Constraint*> constraints{contact1.get(), contact2.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -524,7 +522,7 @@ TEST(ConstraintSolverASMTest, SafetyCapReached_ReportsNotConverged_0034)
                                                       0.0,
                                                       0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
+  std::vector<Constraint*> constraints{contact1.get(), contact2.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -587,7 +585,7 @@ TEST(ConstraintSolverASMTest, KKTConditions_VerifiedPostSolve_0034)
                                                       0.0,
                                                       -5.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
+  std::vector<Constraint*> constraints{contact1.get(), contact2.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -674,8 +672,7 @@ TEST(ConstraintSolverASMTest, IterationCount_WithinTwoCBound_0034)
                                                 0.5,
                                                 0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{
-    c1.get(), c2.get(), c3.get(), c4.get()};
+  std::vector<Constraint*> constraints{c1.get(), c2.get(), c3.get(), c4.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
@@ -731,7 +728,7 @@ TEST(ConstraintSolverASMTest, ActiveSetSize_ReportedCorrectly_0034)
                                                       0.5,
                                                       0.0);
 
-  std::vector<TwoBodyConstraint*> constraints{contact1.get(), contact2.get()};
+  std::vector<Constraint*> constraints{contact1.get(), contact2.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                   stateB};
   std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};

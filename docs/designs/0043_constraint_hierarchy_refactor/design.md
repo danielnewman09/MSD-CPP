@@ -1,0 +1,584 @@
+# Design: Constraint Hierarchy Refactor
+
+## Summary
+
+Flatten the 4-level constraint inheritance hierarchy (Constraint -> BilateralConstraint/UnilateralConstraint -> TwoBodyConstraint -> ContactConstraint/FrictionConstraint) to a 2-level hierarchy where all four concrete constraint classes inherit directly from a redesigned `Constraint` base class. This eliminates the empty `BilateralConstraint` marker class, the trivial `UnilateralConstraint` intermediate class, and the LSP-violating `TwoBodyConstraint` class, while reducing `dynamic_cast` usage in the solver from 6 to 2.
+
+## Architecture Changes
+
+### PlantUML Diagram
+See: `./0043_constraint_hierarchy_refactor.puml`
+
+### Key Design Decisions
+
+#### D1: Unified Evaluation Signature (Two-Body for All)
+
+**Decision**: All constraints use a two-body evaluation signature: `evaluate(stateA, stateB, time)` and `jacobian(stateA, stateB, time)`.
+
+**Rationale**: The current split between single-body (`evaluate(state, time)`) and two-body (`evaluateTwoBody(stateA, stateB, time)`) is the root cause of the LSP violation. TwoBodyConstraint overrides the single-body methods to throw `std::logic_error`, which means callers cannot safely call `evaluate()` on any `Constraint*` without first checking the type.
+
+By making all constraints accept two states, single-body constraints simply ignore `stateB`. This is already the standard approach in physics engines (Bullet, ODE) -- a single-body constraint is modeled as a constraint between the body and an implicit "world" body with zero inverse mass.
+
+**Jacobian width**: Two-body constraints currently return a 12-column Jacobian (6 DOF per body in velocity space), while single-body constraints return a 7-column Jacobian (position-level DOFs). These are fundamentally different spaces and cannot be unified into a single column count.
+
+**Resolution**: Rather than forcing a single Jacobian width, the base interface documents that the Jacobian column count depends on the constraint type:
+- Single-body constraints return `dimension() x 7` (position-level DOFs: X(3), Q(4))
+- Two-body constraints return `dimension() x 12` (velocity-level DOFs: v_A(3), omega_A(3), v_B(3), omega_B(3))
+
+The solver already dispatches on body count when building the effective mass matrix (single-body path uses 7x7 mass matrix; two-body path uses 6x6 per-body blocks). The `bodyCount()` method on the base class provides this dispatch without any `dynamic_cast`.
+
+#### D2: Multiplier Bounds via LambdaBounds Value Type
+
+**Decision**: Introduce a `LambdaBounds` struct with `lower` and `upper` fields, returned by `Constraint::lambdaBounds()`. Factory methods provide semantic construction: `LambdaBounds::bilateral()` returns `(-inf, +inf)`, `LambdaBounds::unilateral()` returns `(0, +inf)`, and `LambdaBounds::boxConstrained(lo, hi)` returns `(lo, hi)`.
+
+**Rationale**: An enum would require the solver to map enum values to actual bound values. Returning the bounds directly is simpler, more extensible (new bound types need no enum update), and provides the solver with exactly the data it needs. The factory methods preserve the semantic meaning for documentation and debugging.
+
+**Query methods**: `isBilateral()`, `isUnilateral()`, and `isBoxConstrained()` are provided for solver dispatch (e.g., routing to ECOS when box constraints are present) without needing `dynamic_cast` on the constraint type.
+
+#### D3: Body Indices and Count in Base Class
+
+**Decision**: Move `body_a_index_` and `body_b_index_` from `TwoBodyConstraint` into the `Constraint` base class. Add a virtual `bodyCount()` method (returns 1 or 2).
+
+**Rationale**: Body indices are needed by the solver for every constraint type. Single-body constraints use `bodyAIndex()` to identify which body they act on; `bodyBIndex()` is unused (set to 0 by convention, ignored by solver when `bodyCount() == 1`). This eliminates the need to cast to `TwoBodyConstraint*` to access body indices.
+
+**Constructor**: The base `Constraint` constructor takes `bodyAIndex` and `bodyBIndex` with defaults of 0. Single-body constraints pass only `bodyAIndex`. Two-body constraints pass both.
+
+#### D4: Activation Query in Base Class
+
+**Decision**: Add `isActive(stateA, stateB, time)` to the base `Constraint` class with a default implementation that returns `true`.
+
+**Rationale**: Currently, only `UnilateralConstraint` declares `isActive()`. By moving it to the base with a default `true`, bilateral constraints are always active (correct behavior), and unilateral/box-constrained constraints can override. This eliminates the need for the `UnilateralConstraint` intermediate class entirely.
+
+#### D5: Contact/Friction-Specific Accessors Remain on Concrete Classes
+
+**Decision**: Keep `getContactNormal()`, `getPenetrationDepth()`, `getRestitution()`, `getFrictionCoefficient()`, etc., on their respective concrete classes. The 2 remaining `dynamic_cast`s that access these are acceptable and targeted.
+
+**Rationale**: These accessors are physics-specific data that only makes sense for their concrete type. Promoting them to the base class would bloat the interface with methods that throw or return nonsense values for irrelevant constraint types -- recreating the same LSP violation we are eliminating.
+
+The ticket acceptance criteria allows up to 2 `dynamic_cast`s. The remaining casts are:
+1. `ConstraintSolver::assembleContactRHS()` -- casts to `ContactConstraint*` to access restitution and penetration for RHS computation
+2. `WorldModel::updateCollisions()` -- casts to `ContactConstraint*` to access contact normal for gravity compensation
+
+These are both in contact-specific code paths where the cast is a reasonable type-narrowing operation.
+
+### New Components
+
+#### LambdaBounds
+- **Purpose**: Value type representing the lower and upper bounds on a constraint's Lagrange multiplier
+- **Header location**: `msd/msd-sim/src/Physics/Constraints/LambdaBounds.hpp`
+- **Source location**: Header-only (all methods are trivial)
+- **Key interfaces**:
+  ```cpp
+  struct LambdaBounds {
+      double lower;
+      double upper;
+
+      static LambdaBounds bilateral() {
+          return {-std::numeric_limits<double>::infinity(),
+                   std::numeric_limits<double>::infinity()};
+      }
+
+      static LambdaBounds unilateral() {
+          return {0.0, std::numeric_limits<double>::infinity()};
+      }
+
+      static LambdaBounds boxConstrained(double lo, double hi) {
+          return {lo, hi};
+      }
+
+      [[nodiscard]] bool isBilateral() const {
+          return lower == -std::numeric_limits<double>::infinity() &&
+                 upper ==  std::numeric_limits<double>::infinity();
+      }
+
+      [[nodiscard]] bool isUnilateral() const {
+          return lower == 0.0 &&
+                 upper == std::numeric_limits<double>::infinity();
+      }
+
+      [[nodiscard]] bool isBoxConstrained() const {
+          return !isBilateral() && !isUnilateral();
+      }
+  };
+  ```
+- **Dependencies**: `<limits>` only
+- **Thread safety**: Immutable value type; trivially thread-safe
+- **Error handling**: None (struct with public fields)
+
+### Modified Components
+
+#### Constraint (base class)
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/Constraint.hpp`, `Constraint.cpp`
+- **Changes required**:
+  1. **Add body index storage**: `body_a_index_` and `body_b_index_` as protected members, with public accessors `bodyAIndex()` and `bodyBIndex()`. Note: the existing TwoBodyConstraint used `getBodyAIndex()`/`getBodyBIndex()`. The new names drop the "get" prefix to match the project naming convention (camelCase without "get" for simple accessors). All call sites (8 in ConstraintSolver.cpp, 8 in PositionCorrector.cpp, call sites in CollisionPipeline.cpp and tests) must be updated.
+  2. **Add `bodyCount()` virtual method**: Default returns 1; two-body constraints override to return 2
+  3. **Change evaluation signature**: `evaluate(const InertialState& stateA, const InertialState& stateB, double time)` replaces `evaluate(const InertialState& state, double time)`
+  4. **Change Jacobian signature**: `jacobian(const InertialState& stateA, const InertialState& stateB, double time)` replaces `jacobian(const InertialState& state, double time)`
+  5. **Add `lambdaBounds()` pure virtual**: Returns `LambdaBounds` specifying multiplier bound semantics
+  6. **Add `isActive()` virtual**: Default returns `true`; signature is `isActive(const InertialState& stateA, const InertialState& stateB, double time)`
+  7. **Update constructor**: Accept `bodyAIndex` (default 0), `bodyBIndex` (default 0), `alpha` (default 10.0), and `beta` (default 10.0) as protected constructor parameters. Defaults of 10.0 preserve backward compatibility with the existing virtual `alpha()`/`beta()` defaults.
+  8. **Move Baumgarte parameters to base**: `alpha_` and `beta_` become protected members of `Constraint` with non-virtual `alpha()` and `beta()` accessors. Currently these are duplicated as private members in UnitQuaternionConstraint, DistanceConstraint, and ContactConstraint. Since Baumgarte stabilization is universal to all constraint types, the base class owns the storage and provides `setAlpha()`/`setBeta()` mutators. Concrete constraints pass their default values through the base constructor. ContactConstraint passes its ERP-derived alpha value; FrictionConstraint passes `alpha=0.0, beta=0.0` to override the defaults (friction has no Baumgarte stabilization).
+  9. **Remove `partialTimeDerivative` default**: Keep the virtual method but move it to the interface (remains with a default implementation returning zero)
+- **Backward compatibility**: Breaking change -- all consumers of the old single-body `evaluate()`/`jacobian()` signatures must be updated. This is acceptable because:
+  - The ticket explicitly removes intermediate classes
+  - All consumers are internal to msd-sim
+  - No external API is exposed
+
+#### UnitQuaternionConstraint
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp`, `.cpp`
+- **Changes required**:
+  1. Change base class from `BilateralConstraint` to `Constraint`
+  2. Update `evaluate()` signature to take two `InertialState&` parameters (ignores `stateB`)
+  3. Update `jacobian()` signature to take two `InertialState&` parameters (ignores `stateB`)
+  4. Add `lambdaBounds()` override returning `LambdaBounds::bilateral()`
+  5. Remove `#include "BilateralConstraint.hpp"`, add `#include "Constraint.hpp"`
+  6. Constructor passes `bodyAIndex` and Baumgarte parameters (`alpha`, `beta`) to base constructor
+  7. Remove private `alpha_` and `beta_` members (now in base class)
+  8. Remove `alpha()`/`beta()` overrides and `setAlpha()`/`setBeta()` methods (now provided by base)
+
+#### DistanceConstraint
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/DistanceConstraint.hpp`, `.cpp`
+- **Changes required**:
+  1. Change base class from `BilateralConstraint` to `Constraint`
+  2. Update `evaluate()` signature to take two `InertialState&` parameters (ignores `stateB`)
+  3. Update `jacobian()` signature to take two `InertialState&` parameters (ignores `stateB`)
+  4. Add `lambdaBounds()` override returning `LambdaBounds::bilateral()`
+  5. Remove `#include "BilateralConstraint.hpp"`, add `#include "Constraint.hpp"`
+  6. Constructor passes `bodyAIndex` and Baumgarte parameters (`alpha`, `beta`) to base constructor
+  7. Remove private `alpha_` and `beta_` members (now in base class)
+  8. Remove `alpha()`/`beta()` overrides (now provided by base)
+
+#### ContactConstraint
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/ContactConstraint.hpp`, `.cpp`
+- **Changes required**:
+  1. Change base class from `TwoBodyConstraint` to `Constraint`
+  2. Rename `evaluateTwoBody()` to `evaluate()` (matching new base signature)
+  3. Rename `jacobianTwoBody()` to `jacobian()` (matching new base signature)
+  4. Rename `isActiveTwoBody()` to `isActive()` (matching new base signature)
+  5. Add `lambdaBounds()` override returning `LambdaBounds::unilateral()`
+  6. Add `bodyCount()` override returning 2
+  7. Remove `#include "TwoBodyConstraint.hpp"`, add `#include "Constraint.hpp"` and `#include "LambdaBounds.hpp"`
+  8. Constructor passes `bodyAIndex`, `bodyBIndex`, and ERP-derived Baumgarte `alpha` to base constructor
+  9. Remove body index members from this class (moved to base)
+  10. Remove `erp_` member and `alpha()`/`beta()` overrides — ERP is converted to an `alpha` value at construction time and stored in the base class
+
+#### FrictionConstraint
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/FrictionConstraint.hpp`, `.cpp`
+- **Changes required**:
+  1. Change base class from `TwoBodyConstraint` to `Constraint`
+  2. Rename `evaluateTwoBody()` to `evaluate()` (matching new base signature)
+  3. Rename `jacobianTwoBody()` to `jacobian()` (matching new base signature)
+  4. Rename `isActiveTwoBody()` to `isActive()` (matching new base signature)
+  5. Add `lambdaBounds()` override returning `LambdaBounds::boxConstrained(lo, hi)` where bounds are computed from `normal_lambda_` and `friction_coefficient_`
+  6. Add `bodyCount()` override returning 2
+  7. Remove `#include "TwoBodyConstraint.hpp"`, add `#include "Constraint.hpp"` and `#include "LambdaBounds.hpp"`
+  8. Constructor passes both `bodyAIndex` and `bodyBIndex` to base
+  9. Remove body index members from this class (moved to base)
+
+#### ConstraintSolver
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.hpp`, `.cpp`
+- **Changes required**:
+  1. **`solveWithContacts()` parameter type**: Change from `std::vector<TwoBodyConstraint*>` to `std::vector<Constraint*>`. All contact/friction constraints are now just `Constraint*`.
+  2. **Remove friction detection cast**: Replace `dynamic_cast<const FrictionConstraint*>` loop (line 315) with `lambdaBounds().isBoxConstrained()` query. No cast needed.
+  3. **Remove contact counting cast**: Replace `dynamic_cast<const ContactConstraint*>` loop (line 346) with `lambdaBounds().isUnilateral()` count. No cast needed.
+  4. **`assembleContactJacobians()`**: Change parameter from `TwoBodyConstraint*` to `Constraint*`. Rename `jacobianTwoBody()` calls to `jacobian()`. Rename `getBodyAIndex()`/`getBodyBIndex()` calls to `bodyAIndex()`/`bodyBIndex()`.
+  5. **`assembleContactEffectiveMass()`**: Change parameter from `TwoBodyConstraint*` to `Constraint*`.
+  6. **`assembleContactRHS()`**: Change parameter from `TwoBodyConstraint*` to `Constraint*`. The `dynamic_cast<const ContactConstraint*>` at line 498 is **retained** (one of the 2 allowed casts) because it accesses contact-specific restitution and penetration data.
+  7. **`extractContactBodyForces()`**: Change parameter from `TwoBodyConstraint*` to `Constraint*`.
+  8. **`buildFrictionConeSpec()`**: Change parameter from `TwoBodyConstraint*` to `Constraint*`. The `dynamic_cast<const FrictionConstraint*>` at line 817 is **retained** (second of the 2 allowed casts) because it accesses friction-specific coefficient data.
+  9. **Remove `#include "TwoBodyConstraint.hpp"`** from header, as it is no longer needed.
+  10. **Update single-body solver path**: The `assembleConstraintMatrix()` and `assembleRHS()` internal methods (used by `ConstraintSolver::solve()` for single-body constraints) call `constraint->evaluate(state, time)` and `constraint->jacobian(state, time)`. These must be updated to the new two-body signature using the convenience overload or passing the same state twice.
+
+#### PositionCorrector
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/PositionCorrector.hpp`, `.cpp`
+- **Changes required**:
+  1. **Parameter type**: Change from `std::vector<TwoBodyConstraint*>` to `std::vector<Constraint*>`
+  2. **Rename method calls**: Rename `jacobianTwoBody()` calls to `jacobian()`. Rename `getBodyAIndex()`/`getBodyBIndex()` calls to `bodyAIndex()`/`bodyBIndex()`.
+  3. **Retain dynamic_cast**: The `dynamic_cast<const ContactConstraint*>` at line 64 is retained (accesses `getPenetrationDepth()`, which is contact-specific). Since PositionCorrector only processes contacts with penetration, it can check `lambdaBounds().isUnilateral()` as a filter and then use `dynamic_cast<const ContactConstraint*>` only on the matching constraints. This reduces the cast to a targeted narrowing operation on already-filtered constraints. Count: this is a 3rd cast site but operates on the same narrowing pattern as the solver.
+
+**Note on PositionCorrector cast count**: The PositionCorrector's `dynamic_cast<const ContactConstraint*>` is the same pattern as the solver's -- accessing `getPenetrationDepth()` on a contact constraint. The AC4 acceptance criterion says "dynamic_cast usage in ConstraintSolver reduced from 6+ to <= 2". The PositionCorrector is a separate class. If the human considers this a 3rd site that must be eliminated, the penetration depth could be promoted to the base class or passed via a separate parameter. See Open Questions.
+
+#### ContactConstraintFactory
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp`, `.cpp`
+- **Changes required**:
+  1. Return type remains `std::vector<std::unique_ptr<ContactConstraint>>` (no change needed -- the factory creates concrete ContactConstraint objects)
+  2. No functional changes required
+
+#### WorldModel
+- **Current location**: `msd/msd-sim/src/Environment/WorldModel.cpp`
+- **Changes required**:
+  1. **Constraint pointer vector**: Change `std::vector<TwoBodyConstraint*> constraintPtrs` to `std::vector<Constraint*> constraintPtrs`. The existing code already creates `ContactConstraint` objects and stores them in `allConstraints`; the change is only to the non-owning pointer vector passed to the solver.
+  2. **Gravity compensation cast**: The `dynamic_cast<const ContactConstraint*>` at line 560 is **retained** (it accesses `getContactNormal()` for post-solve gravity compensation). This is in WorldModel, not ConstraintSolver, so it does not count against AC4.
+
+#### CollisionPipeline
+- **Current location**: `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp`, `.cpp`
+- **Changes required**:
+  1. **Member type**: Change `std::vector<TwoBodyConstraint*> constraintPtrs_` to `std::vector<Constraint*> constraintPtrs_`
+  2. **Include**: Remove `#include "TwoBodyConstraint.hpp"`, add `#include "Constraint.hpp"` (if not already included)
+  3. **`solveConstraints()`**: Update to build `Constraint*` vector when passing constraints to `constraintSolver_.solveWithContacts()`
+  4. **Method renames**: Rename any `getBodyAIndex()`/`getBodyBIndex()` calls to `bodyAIndex()`/`bodyBIndex()`
+
+### Removed Components
+
+#### BilateralConstraint
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/BilateralConstraint.hpp`
+- **Reason for removal**: Empty marker class with zero methods and zero data members. Its semantic purpose (marking bilateral constraints) is now served by `Constraint::lambdaBounds()` returning `LambdaBounds::bilateral()`.
+- **Migration**: Subclasses change base to `Constraint` and implement `lambdaBounds()`.
+
+#### UnilateralConstraint
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/UnilateralConstraint.hpp`
+- **Reason for removal**: Added only `isActive()` -- a single pure virtual method does not justify an inheritance layer. This method is now on the `Constraint` base class with a default `true` implementation.
+- **Migration**: Subclasses change base to `Constraint` and override `isActive()`.
+
+#### TwoBodyConstraint
+- **Current location**: `msd/msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp`, `TwoBodyConstraint.cpp`
+- **Reason for removal**: Violated LSP by overriding base class methods to throw `std::logic_error`. Its two-body evaluation methods (`evaluateTwoBody`, `jacobianTwoBody`, `isActiveTwoBody`) become the unified methods on the base class. Its body index storage moves to the base class.
+- **Migration**: Subclasses change base to `Constraint`, rename `evaluateTwoBody`/`jacobianTwoBody`/`isActiveTwoBody` to `evaluate`/`jacobian`/`isActive`, and rely on base class body index storage.
+
+### Integration Points
+
+| New Component | Existing Component | Integration Type | Notes |
+|---------------|-------------------|------------------|-------|
+| LambdaBounds | Constraint | Composition (return type) | `Constraint::lambdaBounds()` returns a `LambdaBounds` |
+| LambdaBounds | ConstraintSolver | Query | Solver queries `isBoxConstrained()` to route to ECOS |
+| LambdaBounds | PositionCorrector | Query | Corrector queries `isUnilateral()` to filter contacts |
+
+### dynamic_cast Elimination Summary
+
+| Location | Current Cast | New Approach | Status |
+|----------|-------------|-------------|--------|
+| ConstraintSolver.cpp:315 | `FrictionConstraint*` (friction detection) | `lambdaBounds().isBoxConstrained()` | **Eliminated** |
+| ConstraintSolver.cpp:346 | `ContactConstraint*` (normal count) | `lambdaBounds().isUnilateral()` | **Eliminated** |
+| ConstraintSolver.cpp:498 | `ContactConstraint*` (restitution, penetration) | Retained -- contact-specific data | **Retained** (1 of 2) |
+| ConstraintSolver.cpp:817 | `FrictionConstraint*` (friction coefficient) | Retained -- friction-specific data | **Retained** (2 of 2) |
+| PositionCorrector.cpp:64 | `ContactConstraint*` (penetration depth) | Retained -- contact-specific data | **Retained** (separate class) |
+| WorldModel.cpp:560 | `ContactConstraint*` (contact normal) | Retained -- contact-specific data | **Retained** (separate class) |
+
+**Net reduction in ConstraintSolver**: 4 casts eliminated, 2 retained (meets AC4: <= 2).
+
+## Test Impact
+
+### Existing Tests Affected
+
+| Test File | Test Case | Impact | Action Required |
+|-----------|-----------|--------|------------------|
+| `ConstraintSolverContactTest.cpp` | All 24 tests | `TwoBodyConstraint*` parameter type change | Update vector type from `TwoBodyConstraint*` to `Constraint*` |
+| `ContactConstraintFactoryTest.cpp` | All tests | No functional change | Update includes (remove `TwoBodyConstraint.hpp`) |
+| `JacobianLinearTest.cpp` | All tests | `evaluateTwoBody`/`jacobianTwoBody` renamed | Rename method calls to `evaluate`/`jacobian` |
+| `SplitImpulseTest.cpp` | All tests | `TwoBodyConstraint*` parameter type change | Update vector type from `TwoBodyConstraint*` to `Constraint*` |
+| `ConstraintTest.cpp` | BilateralConstraint tests | Base class removed | Update to test against `Constraint` directly; remove bilateral-specific tests |
+| `ConstraintTest.cpp` | UnilateralConstraint tests | Base class removed | Update to test against `Constraint` directly; remove unilateral-specific tests |
+| `ConstraintTest.cpp` | TwoBodyConstraint LSP tests | Class removed | Remove tests that verified the throwing behavior |
+| `TwoBodyConstraintTest.cpp` | All tests (body index accessors) | Class removed | Delete file; body index tests covered by new `bodyAIndex_accessible_from_base` test |
+| `ConstraintSolverASMTest.cpp` | All tests | `TwoBodyConstraint*` parameter type change | Update vector types, includes, and method renames |
+| `FrictionConstraintTest.cpp` | All tests | `evaluateTwoBody`/`jacobianTwoBody` renamed | Rename method calls to `evaluate`/`jacobian` |
+| `RotationalCollisionTest.cpp` | Collision integration tests | Indirect via WorldModel | No changes expected (tests go through WorldModel API) |
+
+### New Tests Required
+
+#### Unit Tests
+
+| Component | Test Case | What It Validates |
+|-----------|-----------|-------------------|
+| LambdaBounds | `bilateral_returns_infinite_bounds` | `bilateral()` returns (-inf, +inf) |
+| LambdaBounds | `unilateral_returns_nonnegative_bounds` | `unilateral()` returns (0, +inf) |
+| LambdaBounds | `box_constrained_returns_custom_bounds` | `boxConstrained(-5, 5)` returns (-5, 5) |
+| LambdaBounds | `isBilateral_correct` | Query matches factory method |
+| LambdaBounds | `isUnilateral_correct` | Query matches factory method |
+| LambdaBounds | `isBoxConstrained_correct` | Query matches factory method |
+| Constraint | `bodyCount_single_body_returns_1` | UnitQuaternionConstraint reports bodyCount == 1 |
+| Constraint | `bodyCount_two_body_returns_2` | ContactConstraint reports bodyCount == 2 |
+| Constraint | `bodyAIndex_accessible_from_base` | Body index accessible through base class pointer |
+| Constraint | `isActive_default_returns_true` | Bilateral constraint returns true |
+| Constraint | `lambdaBounds_bilateral_from_base` | UnitQuaternionConstraint returns bilateral bounds through base pointer |
+| Constraint | `lambdaBounds_unilateral_from_base` | ContactConstraint returns unilateral bounds through base pointer |
+| Constraint | `evaluate_unified_signature_single_body` | Single-body constraint evaluates correctly with two-state signature |
+| Constraint | `evaluate_unified_signature_two_body` | Two-body constraint evaluates correctly with two-state signature |
+
+#### Integration Tests
+
+| Test Case | Components Involved | What It Validates |
+|-----------|---------------------|-------------------|
+| `solver_handles_mixed_constraint_types` | ConstraintSolver, ContactConstraint, FrictionConstraint | Solver correctly routes mixed bilateral/unilateral/box constraints |
+| `position_corrector_with_flattened_hierarchy` | PositionCorrector, ContactConstraint | Position correction works identically before and after refactor |
+| `full_simulation_behavioral_parity` | WorldModel, all constraints | 678 existing tests still pass with identical simulation output |
+
+## Open Questions
+
+### Design Decisions (Human Input Needed)
+
+1. **PositionCorrector dynamic_cast count**
+   - The PositionCorrector retains a `dynamic_cast<const ContactConstraint*>` to access `getPenetrationDepth()`. The ticket's AC4 says "dynamic_cast usage in ConstraintSolver reduced from 6+ to <= 2", which technically only covers ConstraintSolver. PositionCorrector is a separate class.
+   - Option A: Accept the PositionCorrector cast as-is (it is in a separate class, outside AC4 scope) -- **zero additional complexity**
+   - Option B: Promote `getPenetrationDepth()` to the base class as a virtual method returning 0.0 by default -- **slight interface bloat**
+   - Option C: Pass penetration depth as a separate vector alongside constraints -- **API change to PositionCorrector**
+   - Recommendation: Option A. The cast is targeted, type-safe, and in a specific contact-processing code path. Promoting penetration depth to the base class adds a physics-specific method to a general-purpose interface.
+
+2. **Single-body evaluate() with stateB parameter**
+   - Single-body constraints will accept `stateB` but ignore it. The caller must pass something for `stateB`.
+   - Option A: Caller passes the same state as both `stateA` and `stateB` (e.g., `constraint->evaluate(state, state, time)`) -- **simplest**
+   - Option B: Make `stateB` a `const InertialState*` (nullable pointer) -- **introduces raw pointer in public interface (violates coding standards)**
+   - Option C: Provide a convenience overload `evaluate(const InertialState& state, double time)` on the base that delegates to `evaluate(state, state, time)` -- **dual signatures, but zero-cost and backward-compatible for callers**
+   - Recommendation: Option C. A non-virtual convenience overload on the base class provides the cleanest caller experience for single-body constraints while the virtual dispatch always goes through the two-body signature. This avoids polluting callers with the "pass the same state twice" pattern.
+
+3. **Jacobian column count documentation**
+   - Single-body constraints return 7-column Jacobians (position-level DOFs: X(3), Q(4)).
+   - Two-body constraints return 12-column Jacobians (velocity-level DOFs: v_A(3), omega_A(3), v_B(3), omega_B(3)).
+   - The solver already handles these differently based on whether it is the single-body path (`ConstraintSolver::solve()`) or the multi-body path (`ConstraintSolver::solveWithContacts()`).
+   - Option A: Document the convention but enforce no compile-time check -- **current approach, no risk**
+   - Option B: Add a `jacobianColumns()` virtual method returning 7 or 12 -- **redundant with bodyCount()**
+   - Recommendation: Option A. The `bodyCount()` method already provides the necessary dispatch information. Jacobian column count is derivable: `bodyCount() == 1 ? 7 : 12`.
+
+### Prototype Required
+
+None. This is a pure refactoring with no algorithmic changes. The acceptance criterion is behavioral parity (all 678 tests pass with identical output).
+
+### Requirements Clarification
+
+1. **Friction constraint in WorldModel**: Currently, `WorldModel::updateCollisions()` does not create `FrictionConstraint` instances -- friction is only exercised through unit tests and the ECOS solver tests. Should the refactor maintain this status quo, or should the refactor also wire up friction in WorldModel? **Recommendation**: Maintain status quo. Wiring up friction in WorldModel is a separate feature ticket, not part of this refactoring.
+
+---
+
+## Implementation Ordering
+
+The following incremental implementation order minimizes risk of regressions:
+
+### Step 1: Add LambdaBounds (additive, no breaking changes)
+Create `LambdaBounds.hpp`. No existing code is modified.
+
+### Step 2: Extend Constraint base class (breaking change)
+1. Add body index storage, `bodyCount()`, `lambdaBounds()`, `isActive()` to `Constraint`
+2. Change `evaluate()` and `jacobian()` signatures to accept two states
+3. Add single-body convenience overloads
+
+### Step 3: Update concrete constraints (one at a time)
+1. Update `UnitQuaternionConstraint` to inherit from `Constraint` directly
+2. Update `DistanceConstraint` to inherit from `Constraint` directly
+3. Update `ContactConstraint` to inherit from `Constraint` directly
+4. Update `FrictionConstraint` to inherit from `Constraint` directly
+
+### Step 4: Update consumers
+1. Update `ConstraintSolver` parameter types, method renames (`jacobianTwoBody`→`jacobian`, `evaluateTwoBody`→`evaluate`, `getBodyAIndex`→`bodyAIndex`, `getBodyBIndex`→`bodyBIndex`), single-body solver path signature updates, and remove unnecessary casts
+2. Update `PositionCorrector` parameter types and method renames
+3. Update `CollisionPipeline` member type, includes, and method renames
+4. Update `WorldModel` constraint pointer vector types
+
+### Step 5: Remove intermediate classes
+1. Delete `BilateralConstraint.hpp`
+2. Delete `UnilateralConstraint.hpp`
+3. Delete `TwoBodyConstraint.hpp` and `TwoBodyConstraint.cpp`
+4. Update `CMakeLists.txt` to remove deleted sources
+
+### Step 6: Update tests
+1. Update all test files for renamed methods and changed parameter types (including ConstraintSolverASMTest.cpp)
+2. Remove tests for deleted classes (BilateralConstraint, UnilateralConstraint, TwoBodyConstraint throwing behavior)
+3. Delete `TwoBodyConstraintTest.cpp` and remove from test CMakeLists.txt
+4. Add new tests for LambdaBounds and base class features
+
+### Step 7: Update documentation
+1. Update `Constraints/CLAUDE.md` with new hierarchy
+2. Update PlantUML diagrams
+3. Update `msd-sim/CLAUDE.md` references
+
+---
+
+## Files Summary
+
+### Files to Create
+
+| File | Description |
+|------|-------------|
+| `msd-sim/src/Physics/Constraints/LambdaBounds.hpp` | Multiplier bounds value type |
+
+### Files to Modify
+
+| File | Description |
+|------|-------------|
+| `msd-sim/src/Physics/Constraints/Constraint.hpp` | Redesigned base interface |
+| `msd-sim/src/Physics/Constraints/Constraint.cpp` | Default implementations |
+| `msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp` | Change base class |
+| `msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.cpp` | Update signatures |
+| `msd-sim/src/Physics/Constraints/DistanceConstraint.hpp` | Change base class |
+| `msd-sim/src/Physics/Constraints/DistanceConstraint.cpp` | Update signatures |
+| `msd-sim/src/Physics/Constraints/ContactConstraint.hpp` | Change base class, rename methods |
+| `msd-sim/src/Physics/Constraints/ContactConstraint.cpp` | Update signatures |
+| `msd-sim/src/Physics/Constraints/FrictionConstraint.hpp` | Change base class, rename methods |
+| `msd-sim/src/Physics/Constraints/FrictionConstraint.cpp` | Update signatures |
+| `msd-sim/src/Physics/Constraints/ConstraintSolver.hpp` | Update parameter types |
+| `msd-sim/src/Physics/Constraints/ConstraintSolver.cpp` | Remove casts, update types |
+| `msd-sim/src/Physics/Constraints/PositionCorrector.hpp` | Update parameter types |
+| `msd-sim/src/Physics/Constraints/PositionCorrector.cpp` | Update parameter types |
+| `msd-sim/src/Physics/Constraints/CMakeLists.txt` | Remove deleted sources |
+| `msd-sim/src/Environment/WorldModel.cpp` | Update constraint pointer types |
+| `msd-sim/src/Physics/Collision/CollisionPipeline.hpp` | Update member type, remove TwoBodyConstraint include |
+| `msd-sim/src/Physics/Collision/CollisionPipeline.cpp` | Update constraint vector building, method renames |
+
+### Files to Delete
+
+| File | Reason |
+|------|--------|
+| `msd-sim/src/Physics/Constraints/BilateralConstraint.hpp` | Empty marker class eliminated |
+| `msd-sim/src/Physics/Constraints/UnilateralConstraint.hpp` | Trivial intermediate class eliminated |
+| `msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp` | LSP-violating class eliminated |
+| `msd-sim/src/Physics/Constraints/TwoBodyConstraint.cpp` | Implementation of deleted class |
+
+### Test Files to Modify
+
+| File | Description |
+|------|-------------|
+| `msd-sim/test/Physics/Constraints/ConstraintSolverContactTest.cpp` | Update parameter types |
+| `msd-sim/test/Physics/Constraints/ContactConstraintFactoryTest.cpp` | Update includes |
+| `msd-sim/test/Physics/Constraints/JacobianLinearTest.cpp` | Rename method calls |
+| `msd-sim/test/Physics/Constraints/SplitImpulseTest.cpp` | Update parameter types |
+| `msd-sim/test/Physics/Constraints/FrictionConstraintTest.cpp` | Rename method calls |
+| `msd-sim/test/Physics/Constraints/ECOS/ECOSSolveTest.cpp` | Update parameter types |
+| `msd-sim/test/Physics/Constraints/ConstraintSolverASMTest.cpp` | Update parameter types and includes (14+ `TwoBodyConstraint*` references) |
+| `msd-sim/test/Physics/Constraints/TwoBodyConstraintTest.cpp` | **Delete** — class removed; body index tests covered by new `bodyAIndex_accessible_from_base` test |
+
+---
+
+## Design Review -- Initial Assessment
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-08
+**Status**: REVISION_REQUESTED
+**Iteration**: 0 of 1
+
+### Issues Requiring Revision
+
+| ID | Issue | Category | Required Change |
+|----|-------|----------|-----------------|
+| I1 | CollisionPipeline missing from affected files | Architectural | Add CollisionPipeline.hpp and CollisionPipeline.cpp to Files to Modify and to the Modified Components section |
+| I2 | ConstraintSolverASMTest.cpp missing from affected test files | Architectural | Add to Test Files to Modify table |
+| I3 | TwoBodyConstraintTest.cpp missing from test impact and files tables | Architectural | Add to Existing Tests Affected table (file to delete or restructure) and Test Files to Modify |
+| I4 | Body index accessor naming inconsistency | C++ Quality | Design must be explicit about renaming getBodyAIndex()/getBodyBIndex() to bodyAIndex()/bodyBIndex() or preserving existing names |
+| I5 | PositionCorrector calls jacobianTwoBody() directly -- not mentioned | Architectural | Add jacobianTwoBody() rename to PositionCorrector changes |
+| I6 | ConstraintSolver.cpp calls jacobianTwoBody() directly -- not mentioned | Architectural | Add jacobianTwoBody()/evaluateTwoBody() renames to ConstraintSolver changes |
+| I7 | Baumgarte parameter default value mismatch | C++ Quality | Design says alpha default is 0.0 in base constructor, but existing bilateral constraints default to 10.0 |
+| I8 | SemiImplicitEulerIntegrator does not call evaluate/jacobian directly | Feasibility | The design incorrectly states the integrator calls constraint->evaluate() -- it calls ConstraintSolver::solve() which calls them internally |
+
+### Revision Instructions for Architect
+
+The following changes must be made before final review:
+
+1. **Issue I1 -- CollisionPipeline**: `CollisionPipeline.hpp` (line 207: `std::vector<TwoBodyConstraint*> constraintPtrs_` member, line 17: `#include "TwoBodyConstraint.hpp"`) and `CollisionPipeline.cpp` (line 200-204: builds `TwoBodyConstraint*` vector, line 95: calls `constraint->jacobianTwoBody()` indirectly via solver) are significant consumers of TwoBodyConstraint. Add a new "CollisionPipeline" entry to the Modified Components section specifying: (a) change `constraintPtrs_` member type from `std::vector<TwoBodyConstraint*>` to `std::vector<Constraint*>`, (b) update `solveConstraints()` to build `Constraint*` vector, (c) remove `#include "TwoBodyConstraint.hpp"`, (d) add to Files to Modify table, and (e) add to Step 4 of Implementation Ordering.
+
+2. **Issue I2 -- ConstraintSolverASMTest.cpp**: This test file contains 14+ references to `std::vector<TwoBodyConstraint*>` and `#include "TwoBodyConstraint.hpp"`. Add it to the Test Files to Modify table with description "Update parameter types and includes".
+
+3. **Issue I3 -- TwoBodyConstraintTest.cpp**: This test file (`test/Physics/Constraints/TwoBodyConstraintTest.cpp`) tests TwoBodyConstraint-specific behavior (body index accessors via the old class). It is listed in CMakeLists.txt for constraints tests. Add it to the Existing Tests Affected table (action: delete file since the class is removed; body index tests are covered by the new `bodyAIndex_accessible_from_base` test). Also add it to the test CMakeLists.txt change in Step 5 or Step 6.
+
+4. **Issue I4 -- Body index accessor naming**: The design proposes `bodyAIndex()` and `bodyBIndex()` as accessor names on the base class, but the existing codebase uses `getBodyAIndex()` and `getBodyBIndex()` across ConstraintSolver.cpp (8 call sites), PositionCorrector.cpp (8 call sites), and test files (3 call sites in TwoBodyConstraintTest). The design must explicitly state whether the accessors are being renamed (dropping the "get" prefix to match CLAUDE.md camelCase convention) or preserving the existing names. If renaming, all call sites must be listed as requiring update. Recommendation: Rename to `bodyAIndex()`/`bodyBIndex()` to match the project naming conventions (camelCase without "get" prefix for simple accessors), and note the call-site updates required.
+
+5. **Issue I5 -- PositionCorrector jacobianTwoBody() call**: PositionCorrector.cpp line 95 calls `constraint->jacobianTwoBody()` directly (not through the solver). The PositionCorrector changes section only mentions parameter type changes and the dynamic_cast, but omits this method rename. Add: "Rename `jacobianTwoBody()` calls to `jacobian()` and `getBodyAIndex()`/`getBodyBIndex()` calls to `bodyAIndex()`/`bodyBIndex()`".
+
+6. **Issue I6 -- ConstraintSolver jacobianTwoBody() call**: ConstraintSolver.cpp line 395 calls `contact->jacobianTwoBody()` directly. The ConstraintSolver changes section mentions parameter type changes but does not explicitly call out the method renames needed in `assembleContactJacobians()`. Add explicit mention that `jacobianTwoBody()` becomes `jacobian()`.
+
+7. **Issue I7 -- Baumgarte parameter default values**: The base constructor specification (item 7 under Constraint changes) says `alpha` default is 0.0 and `beta` default is 0.0. However, the current base class virtual `alpha()` returns 10.0 and `beta()` returns 10.0 by default. If the base constructor defaults are 0.0, then UnitQuaternionConstraint and DistanceConstraint must explicitly pass 10.0 to the base constructor (which the design already notes). However, this changes the semantics for any future constraint that does not pass Baumgarte parameters -- the old default was 10.0, the new default would be 0.0. This should be documented as a deliberate semantic change, or the defaults should remain 10.0 to match the existing behavior. Recommendation: Change the constructor defaults to `alpha = 10.0` and `beta = 10.0` to preserve backward compatibility for future constraint implementations.
+
+8. **Issue I8 -- SemiImplicitEulerIntegrator correction**: The SemiImplicitEulerIntegrator section claims changes are needed to "update calls to `constraint->evaluate(state, time)`". Examination of the actual implementation (`SemiImplicitEulerIntegrator.cpp`) shows the integrator does NOT call `evaluate()` or `jacobian()` directly -- it calls `ConstraintSolver::solve()` which internally calls these methods. The integrator itself needs zero changes beyond what the ConstraintSolver changes already cover. The design should either remove the SemiImplicitEulerIntegrator from the Modified Components section or correct the description to reflect reality. Examining `ConstraintSolver::solve()` (the single-body solver), it calls `evaluate()` and `jacobian()` on constraints. These calls are in `assembleConstraintMatrix()` and `assembleRHS()`. The signature change from `evaluate(state, time)` to `evaluate(stateA, stateB, time)` means these internal solver methods need updating, NOT the integrator itself. Update the ConstraintSolver changes to include `assembleConstraintMatrix()` and `assembleRHS()` internal method updates for the single-body path.
+
+### Items Passing Review (No Changes Needed)
+
+The following criteria passed review and the architect should not modify these:
+
+- **D1: Unified Evaluation Signature** -- Sound approach; matches industry standard (Bullet, ODE). The Jacobian width distinction (7 vs 12 columns) with bodyCount() dispatch is practical and avoids over-engineering.
+- **D2: LambdaBounds Value Type** -- Well-designed. Public fields with static factory methods is clean for a simple value type. The query methods (isBilateral, isUnilateral, isBoxConstrained) provide clean solver dispatch.
+- **D3: Body Indices in Base Class** -- Correct level of abstraction. bodyBIndex() being unused for single-body constraints is acceptable (0 by convention).
+- **D4: Activation Query in Base Class** -- Clean approach with default true. Eliminates the UnilateralConstraint layer entirely.
+- **D5: Contact/Friction Accessors on Concrete Classes** -- Correct decision. Promoting physics-specific accessors to the base would recreate the LSP problem.
+- **Open Question 1 (PositionCorrector cast)** -- Option A recommendation is sound.
+- **Open Question 2 (Convenience overload)** -- Option C recommendation is excellent.
+- **Open Question 3 (Jacobian column documentation)** -- Option A recommendation is correct.
+- **Implementation Ordering** -- The step-by-step approach minimizes regression risk.
+- **LambdaBounds struct design** -- Fits project standards for simple value types.
+- **PlantUML diagram** -- Accurately reflects the proposed architecture.
+- **Test plan** -- Thorough coverage of new functionality via unit and integration tests.
+
+---
+
+## Design Review -- Final Assessment
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-08
+**Status**: APPROVED WITH NOTES
+**Iteration**: 1 of 1
+
+### Issue Resolution Verification
+
+All 8 issues from the initial assessment have been addressed:
+
+| ID | Issue | Resolution | Verified |
+|----|-------|------------|----------|
+| I1 | CollisionPipeline missing from affected files | Added CollisionPipeline section under Modified Components (lines 213-219), added to Files to Modify table (lines 413-414), added to Step 4 of Implementation Ordering (line 363) | PASS |
+| I2 | ConstraintSolverASMTest.cpp missing from test files | Added to Test Files to Modify table (line 435) with description noting 14+ TwoBodyConstraint references | PASS |
+| I3 | TwoBodyConstraintTest.cpp missing from test impact | Added to Existing Tests Affected table (line 272, action: delete) and Test Files to Modify table (line 436, marked as Delete). Step 6 updated to include deletion and CMakeLists.txt removal (line 375) | PASS |
+| I4 | Body index accessor naming inconsistency | Explicitly documented rename from getBodyAIndex()/getBodyBIndex() to bodyAIndex()/bodyBIndex() in Constraint changes (line 113) with call site counts (8 in ConstraintSolver, 8 in PositionCorrector, CollisionPipeline, and tests). Propagated to ConstraintSolver (line 184), PositionCorrector (line 196), and CollisionPipeline (line 219) | PASS |
+| I5 | PositionCorrector jacobianTwoBody() rename missing | Added explicit rename instructions to PositionCorrector changes section (line 196): "Rename jacobianTwoBody() calls to jacobian(). Rename getBodyAIndex()/getBodyBIndex() calls to bodyAIndex()/bodyBIndex()." | PASS |
+| I6 | ConstraintSolver jacobianTwoBody() rename missing | Added explicit rename in assembleContactJacobians() description (line 184): "Rename jacobianTwoBody() calls to jacobian(). Rename getBodyAIndex()/getBodyBIndex() calls to bodyAIndex()/bodyBIndex()." | PASS |
+| I7 | Baumgarte parameter default value mismatch | Base constructor defaults changed to alpha=10.0, beta=10.0 (line 119), preserving backward compatibility with existing virtual alpha()/beta() defaults. FrictionConstraint explicitly passes alpha=0.0, beta=0.0 to override. | PASS |
+| I8 | SemiImplicitEulerIntegrator incorrectly listed as modified | SemiImplicitEulerIntegrator removed from Modified Components. ConstraintSolver changes now include item 10 (line 190): "Update single-body solver path: The assembleConstraintMatrix() and assembleRHS() internal methods call constraint->evaluate(state, time) and constraint->jacobian(state, time). These must be updated to the new two-body signature." | PASS |
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | PASS | bodyAIndex()/bodyBIndex() follows camelCase without "get" prefix per CLAUDE.md. LambdaBounds uses PascalCase. Protected members use snake_case_ |
+| Namespace organization | PASS | All components remain in msd_sim namespace. No new namespaces introduced |
+| File structure | PASS | LambdaBounds.hpp in Constraints/ directory follows existing pattern. No cross-module dependencies added |
+| Dependency direction | PASS | Dependencies flow correctly: concrete constraints -> Constraint base. LambdaBounds is a leaf dependency. No cycles introduced |
+
+#### C++ Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | PASS | No new resource ownership. unique_ptr ownership patterns unchanged |
+| Smart pointer appropriateness | PASS | ContactConstraintFactory still returns unique_ptr<ContactConstraint>. Non-owning vector<Constraint*> for solver interfaces |
+| Value/reference semantics | PASS | LambdaBounds is a value type with public fields (appropriate for simple struct). Body indices stored by value |
+| Rule of 0/3/5 | PASS | LambdaBounds follows Rule of Zero (trivial struct). Constraint base retains protected Rule of Five with =default |
+| Const correctness | PASS | lambdaBounds(), isActive(), bodyAIndex(), bodyBIndex(), bodyCount() all marked [[nodiscard]] const |
+| Exception safety | PASS | lambdaBounds() is noexcept-safe (returns value). isActive() default returns true (no throw). No new exception paths |
+| Baumgarte parameter defaults | PASS | Base defaults of 10.0 match existing virtual alpha()/beta() defaults. ContactConstraint passes ERP-derived alpha. FrictionConstraint passes 0.0/0.0. Backward compatible |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | PASS | Removing BilateralConstraint.hpp, UnilateralConstraint.hpp, TwoBodyConstraint.hpp eliminates 3 headers. LambdaBounds.hpp adds 1. Net reduction: 2 headers |
+| Template complexity | PASS | No templates introduced. LambdaBounds is a plain struct |
+| Memory strategy | PASS | No new heap allocations. Body indices (2 size_t) added to base class -- trivial memory increase per constraint |
+| Thread safety | PASS | LambdaBounds is immutable value type. Base class additions (body indices, alpha/beta) are set at construction. No new mutable state |
+| Build integration | PASS | CMakeLists.txt changes are straightforward: remove 3 source files (TwoBodyConstraint.cpp, headers), add 1 header (LambdaBounds.hpp) |
+| Single-body solver path | PASS | Design correctly identifies that assembleConstraintMatrix() and assembleRHS() call evaluate()/jacobian() with single-body signature and documents the required update (convenience overload or explicit two-state call) |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | PASS | LambdaBounds testable in complete isolation (no dependencies). bodyCount(), lambdaBounds() testable through any concrete constraint |
+| Mockable dependencies | PASS | Constraint is abstract -- test mocks can implement the interface directly. No hidden dependencies |
+| Observable state | PASS | bodyAIndex(), bodyBIndex(), bodyCount(), lambdaBounds(), isActive() all provide observable query methods |
+| Test coverage plan | PASS | 14 new unit tests + 3 integration tests specified. Existing 678 tests serve as regression baseline |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | WorldModel gravity compensation cast references code from ticket 0042b that may not be merged | Integration | Med | Low | The design references a dynamic_cast in WorldModel.cpp for "gravity compensation" (line 560). This code does not exist in the current main branch -- it is part of the in-progress 0042b ticket. If 0042b merges first, the design is correct. If 0043 merges first, that cast is simply absent and the WorldModel changes are simpler. Either ordering works. | No |
+| R2 | PositionCorrector dynamic_cast count ambiguity | Maintenance | Low | Low | The design notes PositionCorrector retains a dynamic_cast but argues it is outside AC4 scope (which specifies ConstraintSolver only). This is a reasonable interpretation. Open Question 1 defers the decision to human review. | No |
+| R3 | Convenience overload for single-body evaluate() may cause confusion | Maintenance | Low | Low | Open Question 2 recommends Option C (non-virtual convenience overload). This is the cleanest approach but requires documentation that the virtual dispatch always goes through the two-body signature. The design documents this correctly. | No |
+
+### Notes for Implementation
+
+1. **WorldModel gravity compensation cast**: The design references a `dynamic_cast<const ContactConstraint*>` at WorldModel.cpp line 560 for post-solve gravity compensation. This code does not currently exist on the main branch -- it appears to be from ticket 0042b (rotational coupling accuracy), which is in progress. The implementer should verify whether 0042b has merged by the time 0043 implementation begins. If the gravity compensation code is present, follow the design as written. If not, the WorldModel changes are simpler (no retained cast in WorldModel).
+
+2. **ConstraintSolver cast count verification**: After implementation, verify exactly 2 `dynamic_cast` sites remain in ConstraintSolver.cpp (line ~498 for ContactConstraint restitution/penetration, and line ~818 for FrictionConstraint friction coefficient). The PositionCorrector retains its own cast but is a separate class.
+
+3. **Baumgarte parameter migration**: The design consolidates alpha_/beta_ from three separate classes (UnitQuaternionConstraint, DistanceConstraint, ContactConstraint) into the base Constraint class. This is a well-motivated change that eliminates duplication. The constructor delegation pattern (concrete constraints pass their specific defaults through the base constructor) is clean and preserves per-constraint-type semantics.
+
+4. **PlantUML diagram accuracy**: The diagram correctly shows alpha_/beta_ as protected members of the base Constraint class, with the note "erp_ replaced by alpha_ in base" on ContactConstraint. This accurately reflects the Baumgarte parameter consolidation.
+
+### Summary
+
+All 8 issues from the initial review have been thoroughly addressed. The design is architecturally sound, follows C++ best practices and project coding standards, and provides a clear implementation path with well-defined acceptance criteria. The one observation (WorldModel gravity compensation cast referencing not-yet-merged 0042b code) is a low-risk integration concern that does not block approval. The design is ready for human review and, pending approval, implementation can proceed following the 7-step incremental ordering specified in the document.

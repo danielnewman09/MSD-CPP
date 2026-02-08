@@ -831,7 +831,7 @@ struct SolveResult
  * @param dt Integration timestep [s]
  * @return SolveResult with forces and convergence status
  */
-SolveResult solveConstraints(const std::vector<Constraint*>& constraints,
+SolveResult solveConstraints(const std::vector<Constraint&>& constraints,
                              const RigidBodyState& state,
                              const Vec3& externalForce,
                              double mass,
@@ -1074,7 +1074,7 @@ int main()
   // 2. Distance constraint: keeps |X| = 5m (sphere orbit)
   DistanceConstraint distConstraint{5.0, 10.0, 10.0};
 
-  std::vector<Constraint*> constraints = {&quatConstraint, &distConstraint};
+  std::vector<Constraint&> constraints = {quatConstraint, distConstraint};
 
   // ========== Simulation Loop ==========
   std::cout << "Initial state:\n";

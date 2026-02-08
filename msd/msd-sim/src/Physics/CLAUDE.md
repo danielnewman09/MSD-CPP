@@ -191,7 +191,7 @@ For complete potential energy system architecture, implementation requirements, 
 ### Constraint System
 
 **Location**: `Constraints/` (see [`Constraints/CLAUDE.md`](Constraints/CLAUDE.md) for detailed documentation)
-**Diagram**: [`generalized-constraints.puml`](../../../../../docs/msd/msd-sim/Physics/generalized-constraints.puml)
+**Diagram**: [`0043_constraint_hierarchy_refactor.puml`](../../../../../docs/designs/0043_constraint_hierarchy_refactor/0043_constraint_hierarchy_refactor.puml)
 **Type**: Sub-module
 
 #### Overview
@@ -199,9 +199,10 @@ For complete potential energy system architecture, implementation requirements, 
 The Constraints sub-module provides an extensible constraint framework using Lagrange multipliers. Users define arbitrary constraints by implementing the `Constraint` interface, with all constraints enforced by a unified solver infrastructure.
 
 **Key components**:
-- **Constraint hierarchy**: Abstract `Constraint` interface with `BilateralConstraint` and `UnilateralConstraint` specializations
+- **Constraint hierarchy**: Flat 2-level design where all concrete constraints inherit directly from `Constraint` base class (ticket 0043 eliminated intermediate `BilateralConstraint`, `UnilateralConstraint`, and `TwoBodyConstraint` classes)
+- **LambdaBounds**: Value type encoding constraint multiplier semantics (bilateral/unilateral/box-constrained) via factory methods
 - **ConstraintSolver**: Computes Lagrange multipliers for bilateral constraints using direct LLT solve (O(n³), suitable for n < 100); computes contact constraint forces using Active Set Method for exact LCP solution
-- **Concrete implementations**: `UnitQuaternionConstraint` (unit quaternion normalization), `DistanceConstraint` (fixed distance from origin), `ContactConstraint` (two-body non-penetration with restitution)
+- **Concrete implementations**: `UnitQuaternionConstraint` (single-body unit quaternion normalization), `DistanceConstraint` (single-body fixed distance from origin), `ContactConstraint` (two-body non-penetration with restitution), `FrictionConstraint` (two-body Coulomb friction with box constraints)
 - **Deprecated**: `QuaternionConstraint` (ticket 0030) — use `UnitQuaternionConstraint` instead
 
 #### Integration
@@ -213,16 +214,30 @@ Every `AssetInertial` owns a vector of constraints (`std::vector<std::unique_ptr
 #### Adding Custom Constraints
 
 ```cpp
-class MyJointConstraint : public BilateralConstraint {
+// Single-body constraint
+class MyConstraint : public Constraint {
 public:
-  int dimension() const override { return 3; }
-  Eigen::VectorXd evaluate(const InertialState& state, double time) const override;
-  Eigen::MatrixXd jacobian(const InertialState& state, double time) const override;
-  std::string typeName() const override { return "MyJointConstraint"; }
+  MyConstraint(size_t bodyIndex) : Constraint(bodyIndex) {}
+
+  int dimension() const override { return 1; }
+
+  Eigen::VectorXd evaluate(const InertialState& stateA,
+                           const InertialState& /* stateB */,
+                           double time) const override;
+
+  Eigen::MatrixXd jacobian(const InertialState& stateA,
+                           const InertialState& /* stateB */,
+                           double time) const override;
+
+  LambdaBounds lambdaBounds() const override {
+    return LambdaBounds::bilateral();
+  }
+
+  std::string typeName() const override { return "MyConstraint"; }
 };
 
 // Add to asset
-asset.addConstraint(std::make_unique<MyJointConstraint>(/* args */));
+asset.addConstraint(std::make_unique<MyConstraint>(assetIndex));
 ```
 
 #### Detailed Documentation

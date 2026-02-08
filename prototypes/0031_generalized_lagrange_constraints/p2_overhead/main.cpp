@@ -165,7 +165,7 @@ public:
     bool converged{false};
   };
 
-  SolveResult solve(const std::vector<Constraint*>& constraints,
+  SolveResult solve(const std::vector<Constraint&>& constraints,
                     MockInertialState& state,
                     double mass,
                     const Eigen::Matrix3d& inverseInertia,
@@ -319,7 +319,7 @@ int main()
     [&]()
     {
       UnitQuaternionConstraint constraint;
-      Constraint* c = &constraint;
+      Constraint& c = &constraint;
       auto result = c->evaluate(state, 0.0);
       eval_sink = result(0);
     },
@@ -358,7 +358,7 @@ int main()
     [&]()
     {
       UnitQuaternionConstraint constraint;
-      Constraint* c = &constraint;
+      Constraint& c = &constraint;
       auto C = c->evaluate(state, 0.0);
       auto J = c->jacobian(state, 0.0);
       jac_sink = C(0) + J.norm();
@@ -404,7 +404,7 @@ int main()
     [&]()
     {
       UnitQuaternionConstraint constraint;
-      Constraint* c = &constraint;
+      Constraint& c = &constraint;
       auto C = c->evaluate(state, 0.0);
       auto J = c->jacobian(state, 0.0);
       double a = c->alpha();
@@ -434,7 +434,7 @@ int main()
     {
       UnitQuaternionConstraint constraint;
       ConstraintSolver solver;
-      std::vector<Constraint*> constraints{&constraint};
+      std::vector<Constraint&> constraints{&constraint};
       MockInertialState testState = state;
       auto result =
         solver.solve(constraints, testState, mass, inverseInertia, dt);

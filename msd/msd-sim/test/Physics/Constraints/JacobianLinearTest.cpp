@@ -9,9 +9,9 @@
 #include "msd-sim/src/DataTypes/AngularRate.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
+#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/TwoBodyConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 using namespace msd_sim;
@@ -63,7 +63,7 @@ TEST(ContactConstraintJacobian, LinearComponentsSymmetric)
   InertialState stateA = createDefaultState();
   InertialState stateB = createDefaultState();
 
-  Eigen::MatrixXd J = constraint.jacobianTwoBody(stateA, stateB, 0.0);
+  Eigen::MatrixXd J = constraint.jacobian(stateA, stateB, 0.0);
 
   ASSERT_EQ(1, J.rows());
   ASSERT_EQ(12, J.cols());
@@ -109,9 +109,8 @@ TEST(ContactConstraintJacobian, LinearComponentsUnitNormal)
     Coordinate{0.0, 1.0, 0.0},
     Coordinate{0.0, 0.0, 1.0},
     Coordinate{1.0 / std::sqrt(2.0), 1.0 / std::sqrt(2.0), 0.0},
-    Coordinate{1.0 / std::sqrt(3.0),
-               1.0 / std::sqrt(3.0),
-               1.0 / std::sqrt(3.0)},
+    Coordinate{
+      1.0 / std::sqrt(3.0), 1.0 / std::sqrt(3.0), 1.0 / std::sqrt(3.0)},
   };
 
   for (const auto& normal : normals)
@@ -127,7 +126,7 @@ TEST(ContactConstraintJacobian, LinearComponentsUnitNormal)
     InertialState stateA = createDefaultState();
     InertialState stateB = createDefaultState();
 
-    Eigen::MatrixXd J = constraint.jacobianTwoBody(stateA, stateB, 0.0);
+    Eigen::MatrixXd J = constraint.jacobian(stateA, stateB, 0.0);
 
     // Body A linear part: columns 0-2
     Eigen::Vector3d linearA = J.block<1, 3>(0, 0).transpose();
@@ -151,8 +150,9 @@ TEST(ContactConstraintJacobian, LinearComponentsUnitNormal)
 
 TEST(EffectiveMass, SingleBody_InverseMassOnly)
 {
-  // For a single dynamic body (A) colliding with a static body (B, inverseMass=0),
-  // with no rotation (lever arm = 0), the effective mass matrix should be:
+  // For a single dynamic body (A) colliding with a static body (B,
+  // inverseMass=0), with no rotation (lever arm = 0), the effective mass matrix
+  // should be:
   //   A = J * M_inv * J^T = (1/m_A) * n^T * n + 0 = 1/m_A
   //
   // Ticket: 0040b — Split impulse: velocity RHS no longer contains Baumgarte.
@@ -175,13 +175,20 @@ TEST(EffectiveMass, SingleBody_InverseMassOnly)
   double const preVelNormal = 0.0;
   double const dt = 1.0 / 60.0;
 
-  auto contact = std::make_unique<ContactConstraint>(
-    0, 1, normal, contactA, contactB, penetration, comA, comB,
-    restitution, preVelNormal);
+  auto contact = std::make_unique<ContactConstraint>(0,
+                                                     1,
+                                                     normal,
+                                                     contactA,
+                                                     contactB,
+                                                     penetration,
+                                                     comA,
+                                                     comB,
+                                                     restitution,
+                                                     preVelNormal);
 
   // Body A moving upward into static body B
-  InertialState stateA = createDefaultState(
-    Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 2.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 2.0});
   InertialState stateB = createDefaultState();
 
   // A = J * M_inv * J^T = (1/m_A) + eps (single body, linear only)
@@ -197,9 +204,9 @@ TEST(EffectiveMass, SingleBody_InverseMassOnly)
   double const expectedLambda = expectedB / expectedA;
 
   ConstraintSolver solver;
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                   stateB};
+                                                                  stateB};
   std::vector<double> inverseMasses{inverseMassA, inverseMassB};
 
   // Use zero inverse inertia to isolate linear contribution
@@ -211,7 +218,8 @@ TEST(EffectiveMass, SingleBody_InverseMassOnly)
 
   ASSERT_TRUE(result.converged);
   ASSERT_EQ(1, result.lambdas.size());
-  EXPECT_GT(result.lambdas(0), 0.0) << "Lambda should be positive (compressive)";
+  EXPECT_GT(result.lambdas(0), 0.0)
+    << "Lambda should be positive (compressive)";
 
   // Verify lambda matches expected value from effective mass computation
   EXPECT_NEAR(expectedLambda, result.lambdas(0), 1e-6)
@@ -241,15 +249,22 @@ TEST(EffectiveMass, TwoBody_EqualMass_HalfEffective)
   double const preVelNormal = 0.0;
   double const dt = 1.0 / 60.0;
 
-  auto contact = std::make_unique<ContactConstraint>(
-    0, 1, normal, contactA, contactB, penetration, comA, comB,
-    restitution, preVelNormal);
+  auto contact = std::make_unique<ContactConstraint>(0,
+                                                     1,
+                                                     normal,
+                                                     contactA,
+                                                     contactB,
+                                                     penetration,
+                                                     comA,
+                                                     comB,
+                                                     restitution,
+                                                     preVelNormal);
 
   // Body A approaching B along Z
-  InertialState stateA = createDefaultState(
-    Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 2.0});
-  InertialState stateB = createDefaultState(
-    Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, -2.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 2.0});
+  InertialState stateB =
+    createDefaultState(Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, -2.0});
 
   // Expected effective mass matrix entry:
   // A = (1/m) + (1/m) + eps = 2/m + eps
@@ -263,9 +278,9 @@ TEST(EffectiveMass, TwoBody_EqualMass_HalfEffective)
   double const expectedLambda = expectedB / expectedA;
 
   ConstraintSolver solver;
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                   stateB};
+                                                                  stateB};
   std::vector<double> inverseMasses{inverseMass, inverseMass};
 
   Eigen::Matrix3d zeroInertia = Eigen::Matrix3d::Zero();
@@ -320,14 +335,21 @@ TEST(ContactRHS, RestitutionTerm_CorrectSign)
   double const preVelNormal = -3.0;  // Bodies approaching at 3 m/s
 
   // Body A moving up at 3 m/s, Body B stationary
-  InertialState stateA = createDefaultState(
-    Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 3.0});
-  InertialState stateB = createDefaultState(
-    Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 0.0});
+  InertialState stateA =
+    createDefaultState(Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 3.0});
+  InertialState stateB =
+    createDefaultState(Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 0.0});
 
-  auto contact = std::make_unique<ContactConstraint>(
-    0, 1, normal, contactA, contactB, penetration, comA, comB,
-    restitution, preVelNormal);
+  auto contact = std::make_unique<ContactConstraint>(0,
+                                                     1,
+                                                     normal,
+                                                     contactA,
+                                                     contactB,
+                                                     penetration,
+                                                     comA,
+                                                     comB,
+                                                     restitution,
+                                                     preVelNormal);
 
   // Manually compute expected RHS:
   // J * v = [-n^T * v_A] + [n^T * v_B] = -1*3 + 0 = -3.0
@@ -342,9 +364,9 @@ TEST(ContactRHS, RestitutionTerm_CorrectSign)
   double const expectedLambda = expectedB / effectiveA;
 
   ConstraintSolver solver;
-  std::vector<TwoBodyConstraint*> constraints{contact.get()};
+  std::vector<Constraint*> constraints{contact.get()};
   std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                   stateB};
+                                                                  stateB};
   std::vector<double> inverseMasses{inverseMass, inverseMass};
 
   Eigen::Matrix3d zeroInertia = Eigen::Matrix3d::Zero();
@@ -381,8 +403,10 @@ TEST(ContactRHS, SlopCorrectionGatedByApproachVelocity)
   //   b = -(1+e) * jv + slopCorrection
   //
   // Key behaviors:
-  // - Resting contacts (|jv| ≈ 0) get gentle position recovery via slop correction
-  // - Impacts (|jv| > 0.5) get pure restitution, no slop (restitution handles bounce)
+  // - Resting contacts (|jv| ≈ 0) get gentle position recovery via slop
+  // correction
+  // - Impacts (|jv| > 0.5) get pure restitution, no slop (restitution handles
+  // bounce)
   // - Slop correction capped at 1.0 m/s to prevent energy injection
 
   double const mass = 10.0;
@@ -403,13 +427,14 @@ TEST(ContactRHS, SlopCorrectionGatedByApproachVelocity)
   std::vector<double> inverseMasses{inverseMass, inverseMass};
   std::vector<Eigen::Matrix3d> inverseInertias{zeroInertia, zeroInertia};
 
-  // Case 1: Resting contact (zero velocity, pen > slop) — slop correction active
+  // Case 1: Resting contact (zero velocity, pen > slop) — slop correction
+  // active
   {
     double const penetration = 0.1;
     InertialState stateA = createDefaultState();
     InertialState stateB = createDefaultState();
     std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                     stateB};
+                                                                    stateB};
 
     auto contact = std::make_unique<ContactConstraint>(
       0, 1, normal, contactA, contactB, penetration, comA, comB, 0.8, 0.0);
@@ -420,7 +445,7 @@ TEST(ContactRHS, SlopCorrectionGatedByApproachVelocity)
     double const expectedB = 1.0;  // -(1+0.8)*0 + 1.0 = 1.0
     double const expectedLambda = expectedB / effectiveA;
 
-    std::vector<TwoBodyConstraint*> constraints{contact.get()};
+    std::vector<Constraint*> constraints{contact.get()};
     auto result = solver.solveWithContacts(
       constraints, states, inverseMasses, inverseInertias, 2, dt);
 
@@ -441,19 +466,26 @@ TEST(ContactRHS, SlopCorrectionGatedByApproachVelocity)
       Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, approachSpeed});
     InertialState stateB = createDefaultState();
     std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                     stateB};
+                                                                    stateB};
 
     double const e = 0.8;
-    auto contact = std::make_unique<ContactConstraint>(
-      0, 1, normal, contactA, contactB, penetration, comA, comB, e,
-      preImpactVel);
+    auto contact = std::make_unique<ContactConstraint>(0,
+                                                       1,
+                                                       normal,
+                                                       contactA,
+                                                       contactB,
+                                                       penetration,
+                                                       comA,
+                                                       comB,
+                                                       e,
+                                                       preImpactVel);
 
     // |jv| = 1.0 > 0.5, so slopCorrection = 0
     double const jv = -approachSpeed;
     double const expectedB = -(1.0 + e) * jv;  // -(1.8)*(-1.0) = 1.8
     double const expectedLambda = expectedB / effectiveA;
 
-    std::vector<TwoBodyConstraint*> constraints{contact.get()};
+    std::vector<Constraint*> constraints{contact.get()};
     auto result = solver.solveWithContacts(
       constraints, states, inverseMasses, inverseInertias, 2, dt);
 
@@ -473,19 +505,26 @@ TEST(ContactRHS, SlopCorrectionGatedByApproachVelocity)
       Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, approachSpeed});
     InertialState stateB = createDefaultState();
     std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                     stateB};
+                                                                    stateB};
 
     double const e = 0.8;
-    auto contact = std::make_unique<ContactConstraint>(
-      0, 1, normal, contactA, contactB, penetration, comA, comB, e,
-      preImpactVel);
+    auto contact = std::make_unique<ContactConstraint>(0,
+                                                       1,
+                                                       normal,
+                                                       contactA,
+                                                       contactB,
+                                                       penetration,
+                                                       comA,
+                                                       comB,
+                                                       e,
+                                                       preImpactVel);
 
     // |jv| = 5.0 > 0.5, so slopCorrection = 0
     double const jv = -approachSpeed;
     double const expectedB = -(1.0 + e) * jv;  // -(1.8)*(-5.0) = 9.0
     double const expectedLambda = expectedB / effectiveA;
 
-    std::vector<TwoBodyConstraint*> constraints{contact.get()};
+    std::vector<Constraint*> constraints{contact.get()};
     auto result = solver.solveWithContacts(
       constraints, states, inverseMasses, inverseInertias, 2, dt);
 

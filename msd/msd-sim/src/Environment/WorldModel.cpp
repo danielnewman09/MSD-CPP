@@ -225,10 +225,10 @@ void WorldModel::updateCollisions(double dt)
 
   struct CollisionPair
   {
-    size_t bodyAIndex;       // Solver body index
-    size_t bodyBIndex;       // Solver body index
-    uint32_t bodyAId;        // Unique body ID for cache keying
-    uint32_t bodyBId;        // Unique body ID for cache keying
+    size_t bodyAIndex;  // Solver body index
+    size_t bodyBIndex;  // Solver body index
+    uint32_t bodyAId;   // Unique body ID for cache keying
+    uint32_t bodyBId;   // Unique body ID for cache keying
     CollisionResult result;
     double restitution;
   };
@@ -256,13 +256,12 @@ void WorldModel::updateCollisions(double dt)
         inertialAssets_[i].getCoefficientOfRestitution(),
         inertialAssets_[j].getCoefficientOfRestitution());
 
-      collisions.push_back(
-        {i,
-         j,
-         inertialAssets_[i].getInstanceId(),
-         inertialAssets_[j].getInstanceId(),
-         *result,
-         combinedE});
+      collisions.push_back({i,
+                            j,
+                            inertialAssets_[i].getInstanceId(),
+                            inertialAssets_[j].getInstanceId(),
+                            *result,
+                            combinedE});
     }
   }
 
@@ -347,8 +346,7 @@ void WorldModel::updateCollisions(double dt)
       allConstraints.push_back(std::move(c));
     }
 
-    pairRanges.push_back(
-      {rangeStart, allConstraints.size() - rangeStart, p});
+    pairRanges.push_back({rangeStart, allConstraints.size() - rangeStart, p});
   }
 
   if (allConstraints.empty())
@@ -382,7 +380,7 @@ void WorldModel::updateCollisions(double dt)
   }
 
   // Build non-owning TwoBodyConstraint* vector for solver
-  std::vector<TwoBodyConstraint*> constraintPtrs;
+  std::vector<Constraint*> constraintPtrs;
   constraintPtrs.reserve(allConstraints.size());
   for (auto& c : allConstraints)
   {
@@ -391,8 +389,8 @@ void WorldModel::updateCollisions(double dt)
 
   // ===== Phase 3.5: Warm-Start from Contact Cache (Ticket 0040d) =====
   const size_t totalConstraints = allConstraints.size();
-  Eigen::VectorXd initialLambda = Eigen::VectorXd::Zero(
-    static_cast<Eigen::Index>(totalConstraints));
+  Eigen::VectorXd initialLambda =
+    Eigen::VectorXd::Zero(static_cast<Eigen::Index>(totalConstraints));
 
   // Helper: extract contact world-space points for a collision pair's
   // constraint range.  Contact point ≈ comA + leverArmA.
@@ -410,8 +408,7 @@ void WorldModel::updateCollisions(double dt)
           ? inertialAssets_[pair.bodyAIndex].getInertialState()
           : environmentalAssets_[pair.bodyAIndex - numInertial]
               .getInertialState();
-      points.push_back(
-        Coordinate{stateA.position + contact->getLeverArmA()});
+      points.push_back(Coordinate{stateA.position + contact->getLeverArmA()});
     }
     return points;
   };
@@ -423,9 +420,8 @@ void WorldModel::updateCollisions(double dt)
     auto currentPoints = extractContactPoints(range, pair);
 
     // Look up cache
-    Vector3D const normalVec{pair.result.normal.x(),
-                             pair.result.normal.y(),
-                             pair.result.normal.z()};
+    Vector3D const normalVec{
+      pair.result.normal.x(), pair.result.normal.y(), pair.result.normal.z()};
     auto cachedLambdas = contactCache_.getWarmStart(
       pair.bodyAId, pair.bodyBId, normalVec, currentPoints);
 
@@ -440,9 +436,13 @@ void WorldModel::updateCollisions(double dt)
   }
 
   // ===== Phase 4: Solve with warm-starting =====
-  auto solveResult = contactSolver_.solveWithContacts(
-    constraintPtrs, states, inverseMasses, inverseInertias, numBodies, dt,
-    initialLambda);
+  auto solveResult = contactSolver_.solveWithContacts(constraintPtrs,
+                                                      states,
+                                                      inverseMasses,
+                                                      inverseInertias,
+                                                      numBodies,
+                                                      dt,
+                                                      initialLambda);
 
   // ===== Phase 4.5: Update Contact Cache (Ticket 0040d) =====
   for (const auto& range : pairRanges)
@@ -454,15 +454,13 @@ void WorldModel::updateCollisions(double dt)
     for (size_t ci = 0; ci < range.count; ++ci)
     {
       solvedLambdas.push_back(
-        solveResult.lambdas(
-          static_cast<Eigen::Index>(range.startIdx + ci)));
+        solveResult.lambdas(static_cast<Eigen::Index>(range.startIdx + ci)));
     }
 
     auto contactPoints = extractContactPoints(range, pair);
 
-    Vector3D const normalVec{pair.result.normal.x(),
-                             pair.result.normal.y(),
-                             pair.result.normal.z()};
+    Vector3D const normalVec{
+      pair.result.normal.x(), pair.result.normal.y(), pair.result.normal.z()};
     contactCache_.update(
       pair.bodyAId, pair.bodyBId, normalVec, solvedLambdas, contactPoints);
   }
@@ -498,12 +496,16 @@ void WorldModel::updateCollisions(double dt)
     // Environment states are conceptually immutable, but position corrector
     // handles this via zero inverse mass (no position change applied)
     mutableStates.push_back(
-        const_cast<InertialState*>(&envAsset.getInertialState()));
+      const_cast<InertialState*>(&envAsset.getInertialState()));
   }
 
-  positionCorrector_.correctPositions(
-      constraintPtrs, mutableStates, inverseMasses, inverseInertias,
-      numBodies, numInertial, dt);
+  positionCorrector_.correctPositions(constraintPtrs,
+                                      mutableStates,
+                                      inverseMasses,
+                                      inverseInertias,
+                                      numBodies,
+                                      numInertial,
+                                      dt);
   // Ticket: 0032_contact_constraint_refactor
   // Constraint forces accumulated here are integrated in updatePhysics()
 }
@@ -576,13 +578,11 @@ void WorldModel::recordCurrentFrame()
   auto& energyDAO = dataRecorder_->getDAO<msd_transfer::EnergyRecord>();
   for (const auto& asset : inertialAssets_)
   {
-    auto bodyEnergy = EnergyTracker::computeBodyEnergy(
-      asset.getInertialState(),
-      asset.getMass(),
-      asset.getInertiaTensor(),
-      potentialEnergies_);
-    auto energyRecord =
-      bodyEnergy.toRecord(frameId, asset.getInstanceId());
+    auto bodyEnergy = EnergyTracker::computeBodyEnergy(asset.getInertialState(),
+                                                       asset.getMass(),
+                                                       asset.getInertiaTensor(),
+                                                       potentialEnergies_);
+    auto energyRecord = bodyEnergy.toRecord(frameId, asset.getInstanceId());
     energyDAO.addToBuffer(energyRecord);
   }
 

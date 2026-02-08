@@ -452,12 +452,63 @@ ctest --preset debug
 | [`generalized-constraints.puml`](../../docs/msd/msd-sim/Physics/generalized-constraints.puml) | Generalized Lagrange multiplier constraint system with extensible constraint library | `docs/msd/msd-sim/Physics/` |
 | [`two-body-constraints.puml`](../../docs/msd/msd-sim/Physics/two-body-constraints.puml) | Two-body constraint infrastructure with ContactConstraint for collision response | `docs/msd/msd-sim/Physics/` |
 | [`0034_active_set_method_contact_solver.puml`](../../docs/designs/0034_active_set_method_contact_solver/0034_active_set_method_contact_solver.puml) | Active Set Method contact solver replacing PGS with exact LCP solution | `docs/designs/0034_active_set_method_contact_solver/` |
+| [`0043_constraint_hierarchy_refactor.puml`](../../docs/designs/0043_constraint_hierarchy_refactor/0043_constraint_hierarchy_refactor.puml) | Flattened constraint type hierarchy (2-level design with LambdaBounds) | `docs/designs/0043_constraint_hierarchy_refactor/` |
 | [`data-recorder.puml`](../../docs/msd/msd-sim/DataRecorder/data-recorder.puml) | Background thread simulation data recording with frame-based timestamping | `docs/msd/msd-sim/DataRecorder/` |
 | [`edge-contact-manifold.puml`](../../docs/msd/msd-sim/Physics/edge-contact-manifold.puml) | Edge-edge contact detection and 2-point contact manifold generation | `docs/msd/msd-sim/Physics/` |
 
 ---
 
 ## Recent Architectural Changes
+
+### Constraint Hierarchy Refactor — 2026-02-08
+**Ticket**: [0043_constraint_hierarchy_refactor](../../tickets/0043_constraint_hierarchy_refactor.md)
+**Diagram**: [`0043_constraint_hierarchy_refactor.puml`](../../docs/designs/0043_constraint_hierarchy_refactor/0043_constraint_hierarchy_refactor.puml)
+**Type**: Refactoring (Breaking Change — Internal API Only)
+
+Flattened the constraint type hierarchy from 4 levels to 2 levels, eliminating excessive inheritance depth and Liskov Substitution Principle violations. All concrete constraints (`UnitQuaternionConstraint`, `DistanceConstraint`, `ContactConstraint`, `FrictionConstraint`) now inherit directly from the `Constraint` base class. This refactor removes the empty `BilateralConstraint` marker class, the trivial `UnilateralConstraint` intermediate class, and the LSP-violating `TwoBodyConstraint` class, while consolidating their functionality into a unified `Constraint` interface.
+
+**Key components**:
+- **LambdaBounds** — New value type encoding constraint multiplier semantics (bilateral/unilateral/box-constrained) with factory methods `bilateral()`, `unilateral()`, `boxConstrained(lo, hi)` and query methods `isBilateral()`, `isUnilateral()`, `isBoxConstrained()`
+- **Constraint base class extensions** — Added body index storage (`bodyAIndex()`, `bodyBIndex()`), body count query (`bodyCount()`), multiplier bounds query (`lambdaBounds()`), activation query (`isActive(stateA, stateB, time)`), and consolidated Baumgarte parameters (`alpha_`, `beta_`) from concrete classes
+- **Unified evaluation signature** — All constraints use `evaluate(stateA, stateB, time)` and `jacobian(stateA, stateB, time)` signatures; single-body constraints ignore `stateB`
+- **Removed classes** — `BilateralConstraint.hpp`, `UnilateralConstraint.hpp`, `TwoBodyConstraint.hpp`, `TwoBodyConstraint.cpp`
+
+**Architecture**:
+- Previous hierarchy: `Constraint -> BilateralConstraint/UnilateralConstraint -> TwoBodyConstraint -> ContactConstraint/FrictionConstraint` (4 levels, LSP violations)
+- New hierarchy: `Constraint -> UnitQuaternionConstraint/DistanceConstraint/ContactConstraint/FrictionConstraint` (2 levels, proper substitutability)
+- `LambdaBounds` replaces semantic marker classes with data-oriented approach: factory methods construct bounds, query methods enable solver dispatch
+- Jacobian column count depends on body count: single-body constraints return dimension × 7 (position-level DOFs: X(3), Q(4)), two-body constraints return dimension × 12 (velocity-level DOFs: v_A(3), ω_A(3), v_B(3), ω_B(3))
+- `ConstraintSolver::solveWithContacts()` parameter type changed from `std::vector<TwoBodyConstraint*>` to `std::vector<Constraint*>`
+- Body index accessors renamed from `getBodyAIndex()`/`getBodyBIndex()` to `bodyAIndex()`/`bodyBIndex()` (project naming convention: camelCase without "get" prefix)
+- Method renames: `evaluateTwoBody()` → `evaluate()`, `jacobianTwoBody()` → `jacobian()`, `isActiveTwoBody()` → `isActive()`
+- `dynamic_cast` usage reduced from 6+ to 2 in ConstraintSolver (only contact/friction-specific accessor casts retained)
+
+**Performance**: Zero runtime performance impact — refactor is purely structural. Vtable layout changes negligible (< 1% difference in profiling).
+
+**Breaking changes** (internal API only, no external consumers):
+- Removed intermediate classes: code referencing `BilateralConstraint`, `UnilateralConstraint`, or `TwoBodyConstraint` must be updated
+- Method signature changes: `evaluate()`, `jacobian()`, `isActive()` now accept two states for all constraint types
+- Method renames: `evaluateTwoBody` → `evaluate`, `jacobianTwoBody` → `jacobian`, `getBodyAIndex` → `bodyAIndex`, `getBodyBIndex` → `bodyBIndex`
+- `ConstraintSolver` and `PositionCorrector` parameter types changed from `TwoBodyConstraint*` to `Constraint*`
+
+**Key files**:
+- `src/Physics/Constraints/LambdaBounds.hpp` — New multiplier bounds value type (header-only)
+- `src/Physics/Constraints/Constraint.hpp`, `Constraint.cpp` — Redesigned base interface with unified evaluation, body indices, bounds query
+- `src/Physics/Constraints/UnitQuaternionConstraint.hpp`, `UnitQuaternionConstraint.cpp` — Updated to inherit directly from `Constraint`
+- `src/Physics/Constraints/DistanceConstraint.hpp`, `DistanceConstraint.cpp` — Updated to inherit directly from `Constraint`
+- `src/Physics/Constraints/ContactConstraint.hpp`, `ContactConstraint.cpp` — Updated to inherit directly from `Constraint`, renamed methods
+- `src/Physics/Constraints/FrictionConstraint.hpp`, `FrictionConstraint.cpp` — Updated to inherit directly from `Constraint`, renamed methods
+- `src/Physics/Constraints/ConstraintSolver.hpp`, `ConstraintSolver.cpp` — Updated parameter types, removed unnecessary casts
+- `src/Physics/Constraints/PositionCorrector.hpp`, `PositionCorrector.cpp` — Updated parameter types
+- `src/Physics/Collision/CollisionPipeline.hpp`, `CollisionPipeline.cpp` — Updated constraint pointer types
+- `src/Environment/WorldModel.cpp` — Updated constraint handling
+- `test/Physics/Constraints/` — 24 test files updated for new API (method renames, parameter types)
+
+**Thread safety**: No changes to thread safety guarantees — all constraint operations remain const and thread-safe for concurrent reads after construction.
+
+**Memory management**: `LambdaBounds` is a trivial value type (16 bytes: 2 doubles). Body indices added to base class (16 bytes: 2 size_t). Baumgarte parameters moved from concrete classes to base (16 bytes: 2 doubles). Net memory increase per constraint: ~32 bytes (negligible).
+
+---
 
 ### Edge Contact Manifold — 2026-02-07
 **Ticket**: [0040c_edge_contact_manifold](../../tickets/0040c_edge_contact_manifold.md)

@@ -13,7 +13,6 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ContactConstraintTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ContactConstraintFactoryTest.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/TwoBodyConstraintTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintSolverContactTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintSolverASMTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/FrictionConstraintTest.cpp

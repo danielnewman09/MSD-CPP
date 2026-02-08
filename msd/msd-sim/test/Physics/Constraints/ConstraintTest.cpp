@@ -7,11 +7,12 @@
 #include <vector>
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Physics/Constraints/BilateralConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
+#include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/DistanceConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/UnilateralConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/LambdaBounds.hpp"
 #include "msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp"
 #include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
@@ -161,7 +162,8 @@ TEST(UnitQuaternionConstraintTest, BaumgarteParameters_DefaultValues)
 TEST(UnitQuaternionConstraintTest, BaumgarteParameters_CustomValues)
 {
   // Test: Constructor accepts custom Baumgarte parameters
-  UnitQuaternionConstraint constraint{20.0, 15.0};
+  UnitQuaternionConstraint constraint{
+    0, 20.0, 15.0};  // bodyAIndex=0, alpha=20.0, beta=15.0
 
   EXPECT_DOUBLE_EQ(20.0, constraint.alpha());
   EXPECT_DOUBLE_EQ(15.0, constraint.beta());
@@ -184,6 +186,162 @@ TEST(UnitQuaternionConstraintTest, TypeName)
   // Test: typeName() returns correct identifier
   UnitQuaternionConstraint constraint;
   EXPECT_EQ("UnitQuaternionConstraint", constraint.typeName());
+}
+
+// ============================================================================
+// LambdaBounds Tests [0043_constraint_hierarchy_refactor]
+// ============================================================================
+
+TEST(LambdaBoundsTest, bilateral_returns_infinite_bounds)
+{
+  auto bounds = LambdaBounds::bilateral();
+  EXPECT_EQ(-std::numeric_limits<double>::infinity(), bounds.lower);
+  EXPECT_EQ(std::numeric_limits<double>::infinity(), bounds.upper);
+}
+
+TEST(LambdaBoundsTest, unilateral_returns_nonnegative_bounds)
+{
+  auto bounds = LambdaBounds::unilateral();
+  EXPECT_EQ(0.0, bounds.lower);
+  EXPECT_EQ(std::numeric_limits<double>::infinity(), bounds.upper);
+}
+
+TEST(LambdaBoundsTest, box_constrained_returns_custom_bounds)
+{
+  auto bounds = LambdaBounds::boxConstrained(-5.0, 5.0);
+  EXPECT_DOUBLE_EQ(-5.0, bounds.lower);
+  EXPECT_DOUBLE_EQ(5.0, bounds.upper);
+}
+
+TEST(LambdaBoundsTest, isBilateral_correct)
+{
+  EXPECT_TRUE(LambdaBounds::bilateral().isBilateral());
+  EXPECT_FALSE(LambdaBounds::unilateral().isBilateral());
+  EXPECT_FALSE(LambdaBounds::boxConstrained(-1.0, 1.0).isBilateral());
+}
+
+TEST(LambdaBoundsTest, isUnilateral_correct)
+{
+  EXPECT_TRUE(LambdaBounds::unilateral().isUnilateral());
+  EXPECT_FALSE(LambdaBounds::bilateral().isUnilateral());
+  EXPECT_FALSE(LambdaBounds::boxConstrained(-1.0, 1.0).isUnilateral());
+}
+
+TEST(LambdaBoundsTest, isBoxConstrained_correct)
+{
+  EXPECT_TRUE(LambdaBounds::boxConstrained(-1.0, 1.0).isBoxConstrained());
+  EXPECT_FALSE(LambdaBounds::bilateral().isBoxConstrained());
+  EXPECT_FALSE(LambdaBounds::unilateral().isBoxConstrained());
+}
+
+// ============================================================================
+// Base Class Feature Tests [0043_constraint_hierarchy_refactor]
+// ============================================================================
+
+TEST(ConstraintBaseTest, bodyCount_single_body_returns_1)
+{
+  UnitQuaternionConstraint constraint;
+  Constraint* base = &constraint;
+  EXPECT_EQ(1, base->bodyCount());
+}
+
+TEST(ConstraintBaseTest, bodyCount_two_body_returns_2)
+{
+  // Create a minimal ContactConstraint
+  ContactConstraint constraint{
+    0,
+    1,
+    Coordinate{0.0, 0.0, 1.0},   // normal
+    Coordinate{0.0, 0.0, 0.0},   // contactPointA
+    Coordinate{0.0, 0.0, 0.0},   // contactPointB
+    0.01,                        // penetration
+    Coordinate{0.0, 0.0, -0.5},  // comA
+    Coordinate{0.0, 0.0, 0.5},   // comB
+    0.5,                         // restitution
+    -1.0                         // preImpactRelVelNormal
+  };
+  Constraint* base = &constraint;
+  EXPECT_EQ(2, base->bodyCount());
+}
+
+TEST(ConstraintBaseTest, bodyAIndex_accessible_from_base)
+{
+  UnitQuaternionConstraint constraint{5};  // bodyAIndex=5
+  Constraint* base = &constraint;
+  EXPECT_EQ(5u, base->bodyAIndex());
+}
+
+TEST(ConstraintBaseTest, isActive_default_returns_true)
+{
+  UnitQuaternionConstraint constraint;
+  Constraint* base = &constraint;
+  InertialState state = createDefaultState();
+  EXPECT_TRUE(base->isActive(state, state, 0.0));
+}
+
+TEST(ConstraintBaseTest, lambdaBounds_bilateral_from_base)
+{
+  UnitQuaternionConstraint constraint;
+  Constraint* base = &constraint;
+  auto bounds = base->lambdaBounds();
+  EXPECT_TRUE(bounds.isBilateral());
+}
+
+TEST(ConstraintBaseTest, lambdaBounds_unilateral_from_base)
+{
+  ContactConstraint constraint{0,
+                               1,
+                               Coordinate{0.0, 0.0, 1.0},
+                               Coordinate{0.0, 0.0, 0.0},
+                               Coordinate{0.0, 0.0, 0.0},
+                               0.01,
+                               Coordinate{0.0, 0.0, -0.5},
+                               Coordinate{0.0, 0.0, 0.5},
+                               0.5,
+                               -1.0};
+  Constraint* base = &constraint;
+  auto bounds = base->lambdaBounds();
+  EXPECT_TRUE(bounds.isUnilateral());
+}
+
+TEST(ConstraintBaseTest, evaluate_unified_signature_single_body)
+{
+  // Single-body constraint evaluates correctly with two-state signature
+  UnitQuaternionConstraint constraint;
+  InertialState state = createDefaultState();
+  state.orientation = Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};
+
+  // Two-state signature (stateB ignored for single-body)
+  InertialState dummyStateB = createDefaultState();
+  Eigen::VectorXd C = constraint.evaluate(state, dummyStateB, 0.0);
+
+  ASSERT_EQ(1, C.size());
+  EXPECT_NEAR(0.0, C(0), 1e-10);  // Unit quaternion → zero violation
+}
+
+TEST(ConstraintBaseTest, evaluate_unified_signature_two_body)
+{
+  // Two-body constraint evaluates correctly with two-state signature
+  ContactConstraint constraint{0,
+                               1,
+                               Coordinate{0.0, 0.0, 1.0},  // normal pointing up
+                               Coordinate{0.0, 0.0, 0.0},  // contactPointA
+                               Coordinate{0.0, 0.0, 0.0},  // contactPointB
+                               0.01,                       // penetration
+                               Coordinate{0.0, 0.0, -0.5},  // comA below
+                               Coordinate{0.0, 0.0, 0.5},   // comB above
+                               0.5,
+                               -1.0};
+
+  InertialState stateA = createDefaultState();
+  InertialState stateB = createDefaultState();
+  stateA.position = Coordinate{0.0, 0.0, -0.5};
+  stateB.position = Coordinate{0.0, 0.0, 0.5};
+
+  Eigen::VectorXd C = constraint.evaluate(stateA, stateB, 0.0);
+  ASSERT_EQ(1, C.size());
+  // The constraint evaluates to the signed distance along the normal
+  EXPECT_TRUE(std::isfinite(C(0)));
 }
 
 // ============================================================================
