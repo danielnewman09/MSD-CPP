@@ -4,7 +4,7 @@
 - [x] Draft
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Prototype
+- [x] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
 - [ ] Implementation Complete — Awaiting Quality Gate
@@ -12,7 +12,7 @@
 - [ ] Approved — Ready to Merge
 - [ ] Merged / Complete
 
-**Current Phase**: Design Complete — Awaiting Review
+**Current Phase**: Design Approved — Ready for Prototype
 **Assignee**: TBD
 **Created**: 2026-02-09
 **Generate Tutorial**: No
@@ -123,6 +123,18 @@ Full test suite results showing B3, H3 fixed with no regressions.
   - `docs/designs/0051_restitution_gravity_coupling/0051_restitution_gravity_coupling.puml`
 - **Design Decisions**:
   - **DD-0051-001**: Use velocity-bias instead of direct mutation (decouples restitution from gravity)
-  - **DD-0051-002**: SpatialVector as simple aggregate (Rule of Zero, clear intent)
+  - **DD-0051-002**: Reuse InertialState for velocity bias (zero new types, consistent extraction pattern)
   - **DD-0051-003**: Remove direct velocity mutation from WorldModel (single source of truth)
-- **Notes**: Design validates velocity-bias approach. New component: SpatialVector (6-DOF spatial velocity bias). Modified components: ConstraintSolver (add velocityBias parameter to solve/assembleRHS), CollisionPipeline (thread bias through execute), WorldModel (compute bias from potential energies, remove direct mutation). No prototype needed (straightforward threading of parameter).
+- **Notes**: Design validates velocity-bias approach. Reuses existing InertialState for bias (DD-0051-002). Modified components: ConstraintSolver (add velocityBias parameter to solve/assembleRHS), CollisionPipeline (thread bias through execute), WorldModel (compute bias from potential energies, remove direct mutation). No prototype needed (straightforward threading of parameter).
+
+### Design Review Phase
+- **Started**: 2026-02-09
+- **Completed**: 2026-02-09
+- **Reviewer**: Design Review Agent
+- **Status**: APPROVED (after 1 iteration)
+- **Branch**: 0051-restitution-gravity-coupling
+- **PR**: #19 (draft) — Review summary posted
+- **Autonomous Iteration**:
+  - **Iteration 0**: Found 2 issues (PlantUML diagram showed SpatialVector instead of InertialState, return type inconsistencies)
+  - **Iteration 1**: Architect revised diagram to align with DD-0051-002, all issues resolved
+- **Notes**: All architectural fit, C++ quality, feasibility, and testability criteria pass. No high-impact risks identified. Design is straightforward parameter threading with clear implementation path. Estimated 2-4 hours for implementation + tests. Design is ready for human review and prototyping phase (though prototype may be skipped per ticket notes).
