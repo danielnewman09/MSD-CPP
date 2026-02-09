@@ -457,125 +457,28 @@ TEST(DistanceConstraintTest, TypeName)
 // ConstraintSolver Tests
 // ============================================================================
 
-TEST(ConstraintSolverTest, EmptyConstraintSet_ReturnsZeroForces)
-{
-  // Test: Empty constraint set returns zero forces and converged=true
-  ConstraintSolver solver;
-  InertialState state = createDefaultState();
-  std::vector<Constraint*> constraints;
-
-  auto result = solver.solve(constraints,
-                             state,
-                             Coordinate{0.0, 0.0, 0.0},  // external force
-                             Coordinate{0.0, 0.0, 0.0},  // external torque
-                             1.0,                        // mass
-                             createIdentityInertia(),    // inverse inertia
-                             0.016);                     // dt
-
-  EXPECT_TRUE(result.converged);
-  EXPECT_EQ(0, result.lambdas.size());
-  EXPECT_NEAR(0.0, result.linearConstraintForce.x(), 1e-10);
-  EXPECT_NEAR(0.0, result.linearConstraintForce.y(), 1e-10);
-  EXPECT_NEAR(0.0, result.linearConstraintForce.z(), 1e-10);
-  EXPECT_NEAR(0.0, result.angularConstraintForce.x(), 1e-10);
-  EXPECT_NEAR(0.0, result.angularConstraintForce.y(), 1e-10);
-  EXPECT_NEAR(0.0, result.angularConstraintForce.z(), 1e-10);
-}
-
-TEST(ConstraintSolverTest, SingleQuaternionConstraint_Converges)
-{
-  // Test: Single quaternion constraint produces valid Lagrange multiplier
-  ConstraintSolver solver;
-  InertialState state = createDefaultState();
-  state.orientation =
-    Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};  // Unit quaternion
-
-  auto constraint = std::make_unique<UnitQuaternionConstraint>();
-  std::vector<Constraint*> constraints{constraint.get()};
-
-  auto result = solver.solve(constraints,
-                             state,
-                             Coordinate{0.0, 0.0, -9.81},  // gravity
-                             Coordinate{0.0, 0.0, 0.0},
-                             1.0,
-                             createIdentityInertia(),
-                             0.016);
-
-  EXPECT_TRUE(result.converged);
-  EXPECT_EQ(1, result.lambdas.size());
-  // Condition number should be finite and reasonable
-  EXPECT_TRUE(std::isfinite(result.conditionNumber));
-  EXPECT_LT(result.conditionNumber, 1e12);
-}
-
-TEST(ConstraintSolverTest, MultipleConstraints_Converges)
-{
-  // Test: Multiple constraints are correctly solved together
-  ConstraintSolver solver;
-  InertialState state = createDefaultState();
-  state.position = Coordinate{3.0, 4.0, 0.0};  // |X| = 5
-  state.orientation = Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};
-
-  auto quatConstraint = std::make_unique<UnitQuaternionConstraint>();
-  auto distConstraint = std::make_unique<DistanceConstraint>(5.0);
-  std::vector<Constraint*> constraints{quatConstraint.get(),
-                                       distConstraint.get()};
-
-  auto result = solver.solve(constraints,
-                             state,
-                             Coordinate{0.0, 0.0, -9.81},
-                             Coordinate{0.0, 0.0, 0.0},
-                             1.0,
-                             createIdentityInertia(),
-                             0.016);
-
-  EXPECT_TRUE(result.converged);
-  EXPECT_EQ(
-    2, result.lambdas.size());  // Two constraints = two Lagrange multipliers
-  EXPECT_TRUE(std::isfinite(result.conditionNumber));
-}
-
-TEST(ConstraintSolverTest, ConditionNumber_WellConditioned)
-{
-  // Test: Typical constraint combination produces reasonable condition number
-  ConstraintSolver solver;
-  InertialState state = createDefaultState();
-  state.position = Coordinate{3.0, 4.0, 0.0};
-  state.orientation = Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};
-
-  auto quatConstraint = std::make_unique<UnitQuaternionConstraint>();
-  std::vector<Constraint*> constraints{quatConstraint.get()};
-
-  auto result = solver.solve(constraints,
-                             state,
-                             Coordinate{0.0, 0.0, 0.0},
-                             Coordinate{0.0, 0.0, 0.0},
-                             1.0,
-                             createIdentityInertia(),
-                             0.016);
-
-  // Condition number should be small for well-conditioned system
-  EXPECT_TRUE(result.converged);
-  EXPECT_LT(result.conditionNumber, 100.0);
-}
+// ===========================================================================
+// NOTE: Tests for single-body ConstraintSolver::solve() removed in ticket 0045
+// Quaternion normalization now handled by integrator via state.orientation.normalize()
+// ===========================================================================
 
 // ============================================================================
 // AssetInertial Constraint Management Tests
 // ============================================================================
 
-TEST(AssetInertialConstraintTest, DefaultConstraint_IsUnitQuaternion)
+TEST(AssetInertialConstraintTest, DefaultConstraint_EmptyList)
 {
-  // Test: AssetInertial automatically has UnitQuaternionConstraint
+  // Test: AssetInertial now defaults to empty constraint list
+  // Ticket 0045: Removed default UnitQuaternionConstraint
   auto cubePoints = createCubePoints(1.0);
   ConvexHull hull{cubePoints};
   ReferenceFrame frame{Coordinate{0.0, 0.0, 0.0}};
 
   AssetInertial asset{0, 0, hull, 10.0, frame};
 
-  EXPECT_EQ(1, asset.getConstraintCount());
+  EXPECT_EQ(0, asset.getConstraintCount());
   auto constraints = asset.getConstraints();
-  ASSERT_EQ(1, constraints.size());
-  EXPECT_EQ("UnitQuaternionConstraint", constraints[0]->typeName());
+  EXPECT_EQ(0, constraints.size());
 }
 
 TEST(AssetInertialConstraintTest, AddConstraint)
@@ -590,7 +493,8 @@ TEST(AssetInertialConstraintTest, AddConstraint)
   auto distConstraint = std::make_unique<DistanceConstraint>(5.0);
   asset.addConstraint(std::move(distConstraint));
 
-  EXPECT_EQ(2, asset.getConstraintCount());  // Default + new
+  // Ticket 0045: No default constraint, so count is 1 not 2
+  EXPECT_EQ(1, asset.getConstraintCount());
 }
 
 TEST(AssetInertialConstraintTest, RemoveConstraint)
@@ -604,10 +508,11 @@ TEST(AssetInertialConstraintTest, RemoveConstraint)
 
   auto distConstraint = std::make_unique<DistanceConstraint>(5.0);
   asset.addConstraint(std::move(distConstraint));
-  EXPECT_EQ(2, asset.getConstraintCount());
-
-  asset.removeConstraint(1);  // Remove DistanceConstraint
+  // Ticket 0045: No default constraint
   EXPECT_EQ(1, asset.getConstraintCount());
+
+  asset.removeConstraint(0);  // Remove DistanceConstraint (now at index 0)
+  EXPECT_EQ(0, asset.getConstraintCount());
 }
 
 TEST(AssetInertialConstraintTest, ClearConstraints)
@@ -627,11 +532,15 @@ TEST(AssetInertialConstraintTest, ClearConstraints)
 TEST(AssetInertialConstraintTest, GetConstraints_ReturnsNonOwningPointers)
 {
   // Test: getConstraints() returns pointers for use in solver
+  // Ticket 0045: Default constraint list is now empty
   auto cubePoints = createCubePoints(1.0);
   ConvexHull hull{cubePoints};
   ReferenceFrame frame{Coordinate{0.0, 0.0, 0.0}};
 
   AssetInertial asset{0, 0, hull, 10.0, frame};
+
+  // Add a constraint for testing
+  asset.addConstraint(std::make_unique<UnitQuaternionConstraint>());
 
   auto constraints = asset.getConstraints();
 
@@ -660,13 +569,12 @@ TEST(ConstraintIntegrationTest, QuaternionRemainNormalized_10Steps)
 
   for (int i = 0; i < steps; ++i)
   {
-    auto constraints = asset.getConstraints();
+    // Ticket 0045: Removed constraints parameter
     integrator.step(asset.getInertialState(),
                     Coordinate{0.0, 0.0, -98.1},  // gravity on 10kg
                     Coordinate{0.0, 0.0, 0.0},
                     asset.getMass(),
                     asset.getInverseInertiaTensor(),
-                    constraints,
                     dt);
   }
 
@@ -694,13 +602,12 @@ TEST(ConstraintIntegrationTest, QuaternionRemainNormalized_1000Steps)
 
   for (int i = 0; i < steps; ++i)
   {
-    auto constraints = asset.getConstraints();
+    // Ticket 0045: Removed constraints parameter
     integrator.step(asset.getInertialState(),
                     Coordinate{0.0, 0.0, -98.1},
                     Coordinate{0.1, 0.0, 0.0},  // Small torque
                     asset.getMass(),
                     asset.getInverseInertiaTensor(),
-                    constraints,
                     dt);
   }
 
@@ -731,13 +638,12 @@ TEST(ConstraintIntegrationTest, MultipleConstraints_BothEnforced)
 
   for (int i = 0; i < steps; ++i)
   {
-    auto constraints = asset.getConstraints();
+    // Ticket 0045: Removed constraints parameter
     integrator.step(asset.getInertialState(),
                     Coordinate{0.0, 0.0, -98.1},
                     Coordinate{0.0, 0.0, 0.0},
                     asset.getMass(),
                     asset.getInverseInertiaTensor(),
-                    constraints,
                     dt);
   }
 

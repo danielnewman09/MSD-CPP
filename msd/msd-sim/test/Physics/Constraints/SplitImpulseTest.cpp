@@ -111,7 +111,7 @@ TEST(SplitImpulse, VelocityRHS_NoBaumgarteBias)
     Eigen::Matrix3d::Identity() * 0.1, Eigen::Matrix3d::Identity() * 0.1};
 
   ConstraintSolver solver;
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, dt);
 
   // With zero relative velocity, e=0, and 10mm penetration (5mm above slop):
@@ -170,7 +170,7 @@ TEST(SplitImpulse, VelocityRHS_RestitutionOnly)
     Eigen::Matrix3d::Identity() * 0.1, Eigen::Matrix3d::Zero()};
 
   ConstraintSolver solver;
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 1.0 / 60.0);
 
   // Lambda should be positive (restitution active)

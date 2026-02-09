@@ -2,7 +2,6 @@
 
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
-#include "msd-sim/src/Physics/Constraints/UnitQuaternionConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialCalculations.hpp"
@@ -41,10 +40,9 @@ AssetInertial::AssetInertial(uint32_t assetId,
   dynamicState_.quaternionRate = Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
   // Ticket: 0030_lagrangian_quaternion_physics
 
-  // Add default UnitQuaternionConstraint for quaternion normalization
-  constraints_.push_back(
-    std::make_unique<UnitQuaternionConstraint>(10.0, 10.0));
-  // Ticket: 0031_generalized_lagrange_constraints
+  // Ticket: 0045_constraint_solver_unification
+  // Removed default UnitQuaternionConstraint - quaternion normalization
+  // now handled by integrator via state.orientation.normalize()
 }
 
 AssetInertial::AssetInertial(uint32_t assetId,
@@ -87,10 +85,9 @@ AssetInertial::AssetInertial(uint32_t assetId,
   dynamicState_.quaternionRate = Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
   // Ticket: 0030_lagrangian_quaternion_physics
 
-  // Add default UnitQuaternionConstraint for quaternion normalization
-  constraints_.push_back(
-    std::make_unique<UnitQuaternionConstraint>(10.0, 10.0));
-  // Ticket: 0031_generalized_lagrange_constraints
+  // Ticket: 0045_constraint_solver_unification
+  // Removed default UnitQuaternionConstraint - quaternion normalization
+  // now handled by integrator via state.orientation.normalize()
 }
 
 double AssetInertial::getMass() const

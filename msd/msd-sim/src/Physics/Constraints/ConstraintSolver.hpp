@@ -54,68 +54,13 @@ class ConstraintSolver
 {
 public:
   /**
-   * @brief Result of constraint solve containing Lagrange multipliers and
-   * forces
-   *
-   * Provides diagnostic information (condition number, convergence) alongside
-   * forces for solver health monitoring.
-   */
-  struct SolveResult
-  {
-    Eigen::VectorXd lambdas;            // Lagrange multipliers
-    Coordinate linearConstraintForce;   // Net linear force [N]
-    Coordinate angularConstraintForce;  // Net angular torque [N·m]
-    bool converged{false};              // Solver convergence flag
-    double conditionNumber{
-      std::numeric_limits<double>::quiet_NaN()};  // Matrix conditioning
-
-    SolveResult() = default;
-
-    SolveResult(Eigen::VectorXd l,
-                Coordinate linForce,
-                Coordinate angForce,
-                bool conv,
-                double cond)
-      : lambdas{std::move(l)},
-        linearConstraintForce{std::move(linForce)},
-        angularConstraintForce{std::move(angForce)},
-        converged{conv},
-        conditionNumber{cond}
-    {
-    }
-  };
-
-  /**
    * @brief Construct solver
    */
   ConstraintSolver() = default;
 
   ~ConstraintSolver() = default;
 
-  /**
-   * @brief Solve constraint system for Lagrange multipliers
-   *
-   * Computes constraint forces that satisfy all constraints simultaneously.
-   * Returns converged=false for singular/ill-conditioned matrices.
-   *
-   * @param constraints Vector of constraint pointers (non-owning)
-   * @param state Current inertial state (position, orientation, velocities)
-   * @param externalForce Net external force in world frame [N]
-   * @param externalTorque Net external torque in world frame [N·m]
-   * @param mass Object mass [kg]
-   * @param inverseInertia Inverse inertia tensor in world frame [1/(kg·m²)]
-   * @param dt Timestep [s]
-   * @return SolveResult with forces and convergence status
-   */
-  static SolveResult solve(const std::vector<Constraint*>& constraints,
-                           const InertialState& state,
-                           const Coordinate& externalForce,
-                           const Coordinate& externalTorque,
-                           double mass,
-                           const Eigen::Matrix3d& inverseInertia,
-                           double dt);
-
-  // ===== Multi-Body Contact Constraint Solver (Ticket 0032) =====
+  // ===== Multi-Body Contact Constraint Solver (Ticket 0032, 0045) =====
 
   /**
    * @brief Per-body constraint forces from multi-body solve
@@ -133,9 +78,10 @@ public:
   };
 
   /**
-   * @brief Result of multi-body contact constraint solve
+   * @brief Result of multi-body constraint solve
+   * @ticket 0045_constraint_solver_unification
    */
-  struct MultiBodySolveResult
+  struct SolveResult
   {
     std::vector<BodyForces> bodyForces;  // Per-body constraint forces
     Eigen::VectorXd lambdas;             // Lagrange multipliers
@@ -143,7 +89,7 @@ public:
     int iterations{0};                   // Active set changes performed
     double residual{std::numeric_limits<double>::quiet_NaN()};
 
-    MultiBodySolveResult() = default;
+    SolveResult() = default;
   };
 
   /**
@@ -171,13 +117,14 @@ public:
    *        If non-empty, must have size == contactConstraints.size().
    *        Non-zero entries initialize the ASM active set for faster
    *        convergence on persistent contacts.
-   * @return MultiBodySolveResult with per-body forces
+   * @return SolveResult with per-body forces
    *
    * @ticket 0032_contact_constraint_refactor
    * @ticket 0034_active_set_method_contact_solver
    * @ticket 0040d_contact_persistence_warm_starting
+   * @ticket 0045_constraint_solver_unification
    */
-  MultiBodySolveResult solveWithContacts(
+  SolveResult solve(
     const std::vector<Constraint*>& contactConstraints,
     const std::vector<std::reference_wrapper<const InertialState>>& states,
     const std::vector<double>& inverseMasses,
@@ -324,54 +271,7 @@ public:
   ConstraintSolver& operator=(ConstraintSolver&&) noexcept = default;
 
 private:
-  /**
-   * @brief Assemble constraint matrix A = J·M^-1·J^T
-   *
-   * Stacks all constraint Jacobians and computes the symmetric positive
-   * definite constraint matrix used in the linear solve.
-   *
-   * @return Constraint matrix (n × n) where n = total constraint dimension
-   */
-  [[nodiscard]] static Eigen::MatrixXd assembleConstraintMatrix(
-    const std::vector<Constraint*>& constraints,
-    const InertialState& state,
-    double time,
-    double mass,
-    const Eigen::Matrix3d& inverseInertia);
-
-  /**
-   * @brief Assemble RHS vector b = -J·M^-1·F_ext - α·C - β·Ċ
-   *
-   * Builds the right-hand side of the linear system incorporating external
-   * forces, constraint violations, and Baumgarte stabilization.
-   *
-   * @return RHS vector (n × 1) where n = total constraint dimension
-   */
-  [[nodiscard]] static Eigen::VectorXd assembleRHS(
-    const std::vector<Constraint*>& constraints,
-    const InertialState& state,
-    const Coordinate& externalForce,
-    const Coordinate& externalTorque,
-    double mass,
-    const Eigen::Matrix3d& inverseInertia,
-    double time,
-    double dt);
-
-  /**
-   * @brief Extract constraint forces from Lagrange multipliers
-   *
-   * Computes F_constraint = J^T·λ and separates into linear and angular
-   * components based on Jacobian structure.
-   *
-   * @return Pair of (linear force, angular torque)
-   */
-  [[nodiscard]] static std::pair<Coordinate, Coordinate>
-  extractConstraintForces(const Eigen::VectorXd& lambdas,
-                          const std::vector<Constraint*>& constraints,
-                          const InertialState& state,
-                          double time);
-
-  // ===== Contact solver helpers (Ticket 0032, 0034) =====
+  // ===== Contact solver helpers (Ticket 0032, 0034, 0045) =====
 
   /**
    * @brief Compute per-contact 1×12 Jacobians
@@ -380,8 +280,9 @@ private:
    * velocity-level formulation [v_A, ω_A, v_B, ω_B].
    *
    * @return Vector of per-contact Jacobian matrices (C entries, each 1×12)
+   * @ticket 0045_constraint_solver_unification
    */
-  [[nodiscard]] static std::vector<Eigen::MatrixXd> assembleContactJacobians(
+  [[nodiscard]] static std::vector<Eigen::MatrixXd> assembleJacobians(
     const std::vector<Constraint*>& contactConstraints,
     const std::vector<std::reference_wrapper<const InertialState>>& states);
 
@@ -393,8 +294,9 @@ private:
    * diagonal.
    *
    * @return Effective mass matrix (C × C)
+   * @ticket 0045_constraint_solver_unification
    */
-  [[nodiscard]] static Eigen::MatrixXd assembleContactEffectiveMass(
+  [[nodiscard]] static Eigen::MatrixXd assembleEffectiveMass(
     const std::vector<Constraint*>& contactConstraints,
     const std::vector<Eigen::MatrixXd>& jacobians,
     const std::vector<double>& inverseMasses,
@@ -407,8 +309,9 @@ private:
    * b_i = -(1 + e_i) · (J_i · v⁻) + (ERP_i / dt) · penetration_i
    *
    * @return RHS vector (C × 1)
+   * @ticket 0045_constraint_solver_unification
    */
-  [[nodiscard]] static Eigen::VectorXd assembleContactRHS(
+  [[nodiscard]] static Eigen::VectorXd assembleRHS(
     const std::vector<Constraint*>& contactConstraints,
     const std::vector<Eigen::MatrixXd>& jacobians,
     const std::vector<std::reference_wrapper<const InertialState>>& states,
@@ -460,8 +363,9 @@ private:
    * contacts.
    *
    * @return Per-body constraint forces (numBodies entries)
+   * @ticket 0045_constraint_solver_unification
    */
-  [[nodiscard]] static std::vector<BodyForces> extractContactBodyForces(
+  [[nodiscard]] static std::vector<BodyForces> extractBodyForces(
     const std::vector<Constraint*>& contactConstraints,
     const std::vector<Eigen::MatrixXd>& jacobians,
     const Eigen::VectorXd& lambda,
@@ -491,8 +395,6 @@ private:
   [[nodiscard]] static FrictionConeSpec buildFrictionConeSpec(
     const std::vector<Constraint*>& contactConstraints,
     int numContacts);
-
-  static constexpr size_t kNumStates{7};
 
   // Active Set Method configuration (Ticket 0034)
   int max_safety_iterations_{

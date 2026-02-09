@@ -57,7 +57,7 @@ TEST(ConstraintSolverContactTest, EmptyContactSet_ReturnsConverged_0033)
   std::vector<double> inverseMasses;
   std::vector<Eigen::Matrix3d> inverseInertias;
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 0, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -92,7 +92,7 @@ TEST(ConstraintSolverContactTest, SingleContact_Converges_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -171,7 +171,7 @@ TEST(ConstraintSolverContactTest, MultipleContacts_Converges_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -237,7 +237,7 @@ TEST(ConstraintSolverContactTest, MaxIterationsReached_ReportsNotConverged_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   // With safety cap = min(2*2, 1) = 1, ASM can only do 1 iteration.
@@ -286,7 +286,7 @@ TEST(ConstraintSolverContactTest, SeparatingBodies_LambdaZero_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -329,7 +329,7 @@ TEST(ConstraintSolverContactTest, ApproachingBodies_LambdaPositive_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -366,7 +366,7 @@ TEST(ConstraintSolverContactTest, RestingContact_LambdaNonNegative_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -404,7 +404,7 @@ TEST(ConstraintSolverContactTest, EqualMass_SymmetricForces_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -449,7 +449,7 @@ TEST(ConstraintSolverContactTest, StaticBody_ZeroForceOnStatic_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{Eigen::Matrix3d::Zero(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -488,7 +488,7 @@ TEST(ConstraintSolverContactTest, ForceDirection_AlongContactNormal_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -531,7 +531,7 @@ TEST(ConstraintSolverContactTest, AngularForces_LeverArmProducesTorque_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -578,7 +578,7 @@ TEST(ConstraintSolverContactTest,
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -622,7 +622,7 @@ TEST(ConstraintSolverContactTest, SlopCorrection_CappedToApproachVelocity_0033)
     std::vector<Constraint*> constraints{contact.get()};
     std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                     stateB};
-    auto result = solver.solveWithContacts(
+    auto result = solver.solve(
       constraints, states, inverseMasses, inverseInertias, 2, dt);
 
     EXPECT_TRUE(result.converged);
@@ -643,7 +643,7 @@ TEST(ConstraintSolverContactTest, SlopCorrection_CappedToApproachVelocity_0033)
     std::vector<Constraint*> constraints{contact.get()};
     std::vector<std::reference_wrapper<const InertialState>> states{stateA,
                                                                     stateB};
-    auto result = solver.solveWithContacts(
+    auto result = solver.solve(
       constraints, states, inverseMasses, inverseInertias, 2, dt);
 
     EXPECT_TRUE(result.converged);
@@ -680,7 +680,7 @@ TEST(ConstraintSolverContactTest, Restitution_ZeroBounce_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -713,7 +713,7 @@ TEST(ConstraintSolverContactTest, Restitution_FullBounce_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -749,7 +749,7 @@ TEST(ConstraintSolverContactTest,
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -785,7 +785,7 @@ TEST(ConstraintSolverContactTest, BothBodiesStatic_AllLambdasZero_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{Eigen::Matrix3d::Zero(),
                                                Eigen::Matrix3d::Zero()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   // Should handle gracefully (may or may not converge, but should not crash)
@@ -842,7 +842,7 @@ TEST(ConstraintSolverContactTest, ParallelContacts_SameNormal_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -892,7 +892,7 @@ TEST(ConstraintSolverContactTest, OrthogonalContacts_IndependentResolution_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -926,7 +926,7 @@ TEST(ConstraintSolverContactTest, HighMassRatio_Converges_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -965,7 +965,7 @@ TEST(ConstraintSolverContactTest, ZeroPenetration_NoBias_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);
@@ -1002,7 +1002,7 @@ TEST(ConstraintSolverContactTest, SetMaxIterations_Respected_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_LE(result.iterations, 5);  // Should not exceed max iterations
@@ -1039,9 +1039,9 @@ TEST(ConstraintSolverContactTest, SetConvergenceTolerance_EarlyExit_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto resultTight = solverTight.solveWithContacts(
+  auto resultTight = solverTight.solve(
     constraintsTight, states, inverseMasses, inverseInertias, 2, 0.016);
-  auto resultLoose = solverLoose.solveWithContacts(
+  auto resultLoose = solverLoose.solve(
     constraintsLoose, states, inverseMasses, inverseInertias, 2, 0.016);
 
   // Tight tolerance should need more iterations (or at least not fewer)
@@ -1072,7 +1072,7 @@ TEST(ConstraintSolverContactTest, DefaultConfiguration_ReasonableDefaults_0033)
   std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
                                                createIdentityInertia()};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, 0.016);
 
   EXPECT_TRUE(result.converged);

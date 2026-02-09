@@ -1,9 +1,11 @@
 // Ticket: 0031_generalized_lagrange_constraints
 // Ticket: 0032_contact_constraint_refactor
 // Ticket: 0035b4_ecos_solve_integration
+// Ticket: 0045_constraint_solver_unification
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0035b_box_constrained_asm_solver/design.md
+// Design: docs/designs/0045_constraint_solver_unification/design.md
 
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include <Eigen/src/Cholesky/LLT.h>
@@ -34,254 +36,7 @@
 namespace msd_sim
 {
 
-ConstraintSolver::SolveResult ConstraintSolver::solve(
-  const std::vector<Constraint*>& constraints,
-  const InertialState& state,
-  const Coordinate& externalForce,
-  const Coordinate& externalTorque,
-  double mass,
-  const Eigen::Matrix3d& inverseInertia,
-  double dt)
-{
-  // Handle empty constraint set
-  if (constraints.empty())
-  {
-    return SolveResult{Eigen::VectorXd{},
-                       Coordinate{0.0, 0.0, 0.0},
-                       Coordinate{0.0, 0.0, 0.0},
-                       true,  // converged (vacuously)
-                       1.0};  // condition number
-  }
-
-  // Current simulation time (not used by current constraints, but part of
-  // interface)
-  double const time = 0.0;  // WorldModel doesn't track absolute time yet
-
-  // Assemble constraint matrix A = J·M^-1·J^T
-  Eigen::MatrixXd a =
-    assembleConstraintMatrix(constraints, state, time, mass, inverseInertia);
-
-  // Assemble RHS b = -J·M^-1·F_ext - α·C - β·Ċ
-  Eigen::VectorXd const b = assembleRHS(constraints,
-                                        state,
-                                        externalForce,
-                                        externalTorque,
-                                        mass,
-                                        inverseInertia,
-                                        time,
-                                        dt);
-
-  // Compute condition number for diagnostics
-  Eigen::JacobiSVD<Eigen::MatrixXd> const svd(a);
-  double const conditionNumber =
-    svd.singularValues()(0) /
-    svd.singularValues()(svd.singularValues().size() - 1);
-
-  // Solve A·λ = b using LLT decomposition (assumes positive definite)
-  Eigen::LLT<Eigen::MatrixXd> const llt(a);
-  if (llt.info() != Eigen::Success)
-  {
-    // Matrix is not positive definite (singular or ill-conditioned)
-    return SolveResult{Eigen::VectorXd{},
-                       Coordinate{0.0, 0.0, 0.0},
-                       Coordinate{0.0, 0.0, 0.0},
-                       false,  // not converged
-                       conditionNumber};
-  }
-
-  Eigen::VectorXd const lambdas = llt.solve(b);
-
-  // Extract constraint forces F_c = J^T·λ
-  auto [linearForce, angularTorque] =
-    extractConstraintForces(lambdas, constraints, state, time);
-
-  return SolveResult{lambdas,
-                     linearForce,
-                     angularTorque,
-                     true,  // converged
-                     conditionNumber};
-}
-
-Eigen::MatrixXd ConstraintSolver::assembleConstraintMatrix(
-  const std::vector<Constraint*>& constraints,
-  const InertialState& state,
-  double time,
-  double mass,
-  const Eigen::Matrix3d& inverseInertia)
-{
-  // Compute total constraint dimension
-  int totalDim = 0;
-  for (const auto* constraint : constraints)
-  {
-    totalDim += constraint->dimension();
-  }
-
-  // Assemble stacked Jacobian J (totalDim × 7)
-  Eigen::MatrixXd j(totalDim, kNumStates);
-  int rowOffset = 0;
-  for (const auto* constraint : constraints)
-  {
-    int const dim = constraint->dimension();
-    // Single-body convenience overload: state parameter doubled for
-    // compatibility
-    j.block(rowOffset, 0, dim, kNumStates) =
-      constraint->jacobian(state, state, time);
-    rowOffset += dim;
-  }
-
-  // Construct mass matrix inverse M^-1 (7 × 7 block diagonal)
-  Eigen::MatrixXd mInv = Eigen::MatrixXd::Zero(kNumStates, kNumStates);
-
-  // Linear mass inverse: (1/m)·I₃
-  mInv.block<3, 3>(0, 0) = (1.0 / mass) * Eigen::Matrix3d::Identity();
-
-  // Angular mass inverse: I^-1 (inverse inertia tensor)
-  mInv.block<3, 3>(3, 3) = inverseInertia;
-
-  // Note: Quaternion components don't have a direct "mass" in configuration
-  // space, but the inertia tensor relates angular velocity to quaternion rate
-  // via ω = 2·Q̄⊗Q̇. The 4×4 block should technically be derived from the
-  // quaternion kinetic energy metric, but for the quaternion constraint (which
-  // only cares about normalization), we use the identity for the remaining
-  // component.
-  mInv(6, 6) = 1.0;  // Quaternion scalar component (simplified)
-
-  // Compute constraint matrix A = J·M^-1·J^T
-  Eigen::MatrixXd a = j * mInv * j.transpose();
-
-  return a;
-}
-
-Eigen::VectorXd ConstraintSolver::assembleRHS(
-  const std::vector<Constraint*>& constraints,
-  const InertialState& state,
-  const Coordinate& externalForce,
-  const Coordinate& externalTorque,
-  double mass,
-  const Eigen::Matrix3d& inverseInertia,
-  double time,
-  double /* dt */)
-{
-  // Compute total constraint dimension
-  int totalDim = 0;
-  for (const auto* constraint : constraints)
-  {
-    totalDim += constraint->dimension();
-  }
-
-  // Assemble stacked Jacobian J (totalDim × 7)
-  Eigen::MatrixXd j(totalDim, kNumStates);
-  int rowOffset = 0;
-  for (const auto* constraint : constraints)
-  {
-    int const dim = constraint->dimension();
-    // Single-body convenience overload: state parameter doubled for
-    // compatibility
-    j.block(rowOffset, 0, dim, kNumStates) =
-      constraint->jacobian(state, state, time);
-    rowOffset += dim;
-  }
-
-  // Construct mass matrix inverse M^-1 (7 × 7 block diagonal)
-  Eigen::MatrixXd mInv = Eigen::MatrixXd::Zero(kNumStates, kNumStates);
-  mInv.block<3, 3>(0, 0) = (1.0 / mass) * Eigen::Matrix3d::Identity();
-  mInv.block<3, 3>(3, 3) = inverseInertia;
-  mInv(kNumStates - 1, kNumStates - 1) = 1.0;
-
-  // External forces in generalized coordinates (7 × 1)
-  Eigen::VectorXd fExt(kNumStates);
-  fExt.segment<3>(0) =
-    Vector3D{externalForce.x(), externalForce.y(), externalForce.z()};
-  fExt.segment<3>(3) =
-    Vector3D{externalTorque.x(), externalTorque.y(), externalTorque.z()};
-  fExt(6) = 0.0;  // No external force on quaternion scalar component
-
-  // Assemble constraint violation C and time derivative Ċ
-  Eigen::VectorXd c(totalDim);
-  Eigen::VectorXd cDot(totalDim);
-  Eigen::VectorXd alphaVec(totalDim);
-  Eigen::VectorXd betaVec(totalDim);
-  rowOffset = 0;
-  for (const auto* constraint : constraints)
-  {
-    int const dim = constraint->dimension();
-    // Single-body convenience overload: state parameter doubled for
-    // compatibility
-    c.segment(rowOffset, dim) = constraint->evaluate(state, state, time);
-    cDot.segment(rowOffset, dim) =
-      constraint->partialTimeDerivative(state, time);
-
-    // Baumgarte parameters (per-constraint)
-    for (int i = 0; i < dim; ++i)
-    {
-      alphaVec(rowOffset + i) = constraint->alpha();
-      betaVec(rowOffset + i) = constraint->beta();
-    }
-
-    rowOffset += dim;
-  }
-
-  // Compute velocity-level constraint violation Ċ = J·q̇
-  // For holonomic constraints, Ċ = J·q̇ + ∂C/∂t
-  // State velocity vector (7 × 1)
-  Eigen::VectorXd qDot(kNumStates);
-  qDot.segment<3>(0) =
-    Vector3D{state.velocity.x(), state.velocity.y(), state.velocity.z()};
-
-  // Quaternion rate Q̇
-  qDot.segment<4>(3) = state.quaternionRate;
-
-  Eigen::VectorXd const jQDot = j * qDot;
-  Eigen::VectorXd const cDotTotal = jQDot + cDot;
-
-  // RHS: b = -J·M^-1·F_ext - α·C - β·Ċ
-  Eigen::VectorXd b = -j * mInv * fExt - alphaVec.cwiseProduct(c) -
-                      betaVec.cwiseProduct(cDotTotal);
-
-  return b;
-}
-
-std::pair<Coordinate, Coordinate> ConstraintSolver::extractConstraintForces(
-  const Eigen::VectorXd& lambdas,
-  const std::vector<Constraint*>& constraints,
-  const InertialState& state,
-  double time)
-{
-  // Compute total constraint dimension
-  int totalDim = 0;
-  for (const auto* constraint : constraints)
-  {
-    totalDim += constraint->dimension();
-  }
-
-  // Assemble stacked Jacobian J (totalDim × 7)
-  Eigen::MatrixXd j(totalDim, kNumStates);
-  int rowOffset = 0;
-  for (const auto* constraint : constraints)
-  {
-    int const dim = constraint->dimension();
-    // Single-body convenience overload: state parameter doubled for
-    // compatibility
-    j.block(rowOffset, 0, dim, kNumStates) =
-      constraint->jacobian(state, state, time);
-    rowOffset += dim;
-  }
-
-  // Constraint forces: F_c = J^T·λ (7 × 1)
-  Eigen::VectorXd fC = j.transpose() * lambdas;
-
-  // Extract linear force (first 3 components)
-  Coordinate const linearForce{fC(0), fC(1), fC(2)};
-
-  // Extract angular torque (next 3 components)
-  // Note: Component 6 is the quaternion scalar force, which we ignore
-  // (it contributes to quaternion normalization but not angular dynamics)
-  Coordinate const angularTorque{fC(3), fC(4), fC(5)};
-
-  return {linearForce, angularTorque};
-}
-
-// ===== Multi-Body Contact Constraint Solver (Ticket 0032, 0034) =====
+// ===== Multi-Body Contact Constraint Solver (Ticket 0032, 0034, 0045) =====
 //
 // Implements Active Set Method (ASM) for contact constraints with λ ≥ 0.
 // Replaced PGS (Ticket 0032b) with ASM (Ticket 0034) for exact convergence.
@@ -293,7 +48,7 @@ std::pair<Coordinate, Coordinate> ConstraintSolver::extractConstraintForces(
 // See:
 // prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
 
-ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
+ConstraintSolver::SolveResult ConstraintSolver::solve(
   const std::vector<Constraint*>& contactConstraints,
   const std::vector<std::reference_wrapper<const InertialState>>& states,
   const std::vector<double>& inverseMasses,
@@ -302,7 +57,7 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
   double dt,
   const std::optional<Eigen::VectorXd>& initialLambda)
 {
-  MultiBodySolveResult result;
+  SolveResult result;
   result.bodyForces.resize(
     numBodies,
     BodyForces{Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 0.0}});
@@ -329,14 +84,14 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
   }
 
   // Step 1: Compute per-contact Jacobians
-  auto jacobians = assembleContactJacobians(contactConstraints, states);
+  auto jacobians = assembleJacobians(contactConstraints, states);
 
   // Step 2+3: Build effective mass matrix A = J·M⁻¹·Jᵀ
-  auto a = assembleContactEffectiveMass(
+  auto a = assembleEffectiveMass(
     contactConstraints, jacobians, inverseMasses, inverseInertias, numBodies);
 
   // Step 4: Assemble RHS vector
-  auto b = assembleContactRHS(contactConstraints, jacobians, states, dt);
+  auto b = assembleRHS(contactConstraints, jacobians, states, dt);
 
   // Step 5: Solve — dispatch based on friction presence (Ticket 0035b4)
   const int numConstraintRows = static_cast<int>(contactConstraints.size());
@@ -373,7 +128,7 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
   }
 
   // Step 6: Extract per-body forces
-  result.bodyForces = extractContactBodyForces(
+  result.bodyForces = extractBodyForces(
     contactConstraints, jacobians, asmResult.lambda, numBodies, dt);
 
   result.lambdas = asmResult.lambda;
@@ -389,7 +144,7 @@ ConstraintSolver::MultiBodySolveResult ConstraintSolver::solveWithContacts(
 
 // ===== Contact solver helper implementations =====
 
-std::vector<Eigen::MatrixXd> ConstraintSolver::assembleContactJacobians(
+std::vector<Eigen::MatrixXd> ConstraintSolver::assembleJacobians(
   const std::vector<Constraint*>& contactConstraints,
   const std::vector<std::reference_wrapper<const InertialState>>& states)
 {
@@ -408,7 +163,7 @@ std::vector<Eigen::MatrixXd> ConstraintSolver::assembleContactJacobians(
   return jacobians;
 }
 
-Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
+Eigen::MatrixXd ConstraintSolver::assembleEffectiveMass(
   const std::vector<Constraint*>& contactConstraints,
   const std::vector<Eigen::MatrixXd>& jacobians,
   const std::vector<double>& inverseMasses,
@@ -485,7 +240,7 @@ Eigen::MatrixXd ConstraintSolver::assembleContactEffectiveMass(
   return a;
 }
 
-Eigen::VectorXd ConstraintSolver::assembleContactRHS(
+Eigen::VectorXd ConstraintSolver::assembleRHS(
   const std::vector<Constraint*>& contactConstraints,
   const std::vector<Eigen::MatrixXd>& jacobians,
   const std::vector<std::reference_wrapper<const InertialState>>& states,
@@ -751,7 +506,7 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
 }
 
 std::vector<ConstraintSolver::BodyForces>
-ConstraintSolver::extractContactBodyForces(
+ConstraintSolver::extractBodyForces(
   const std::vector<Constraint*>& contactConstraints,
   const std::vector<Eigen::MatrixXd>& jacobians,
   const Eigen::VectorXd& lambda,
