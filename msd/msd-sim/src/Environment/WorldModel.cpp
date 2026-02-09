@@ -120,9 +120,34 @@ void WorldModel::update(std::chrono::milliseconds simTime)
     platform.update(simTime);
   }
 
+  // Ticket: 0047_face_contact_manifold_generation
+  //
+  // Pre-apply external forces (gravity) to velocities before collision solving.
+  // This is the standard Box2D/Bullet approach: the constraint solver sees
+  // gravity-augmented velocities and can produce non-zero support force even
+  // when bodies are at rest (v≈0 → v_temp = g*dt → solver counteracts it).
+  //
+  // Without this, a resting cube with v=0 produces RHS b = -(1+e)*J*v = 0
+  // → λ = 0 → no support force → micro-bounce oscillation every 2 frames.
+  //
+  // Note: This couples gravity with restitution in the solver's RHS:
+  //   b = -(1+e) * J * (v + g*dt)
+  // The extra e*J*g*dt term is bounded (≈ e*9.81*0.016 ≈ 0.08 m/s) and
+  // acceptable for the simulation fidelity required.
+  for (auto& asset : inertialAssets_)
+  {
+    InertialState& state = asset.getInertialState();
+    double const mass = asset.getMass();
+
+    for (const auto& potential : potentialEnergies_)
+    {
+      Coordinate const force = potential->computeForce(state, mass);
+      state.velocity += force / mass * dt;
+    }
+  }
+
   // IMPORTANT: Contact constraint forces BEFORE physics integration
-  // Order matters: constraint forces must be accumulated before velocity
-  // integration so they are included in the force-based integration step
+  // Solver sees gravity-augmented velocities from the pre-apply above
   // Ticket: 0032_contact_constraint_refactor
   updateCollisions(dt);
 
@@ -146,23 +171,28 @@ void WorldModel::updatePhysics(double dt)
 {
   for (auto& asset : inertialAssets_)
   {
-    // ===== Step 1: Compute Generalized Forces from Potential Energies =====
-    Coordinate netForce{0.0, 0.0, 0.0};
+    // Ticket: 0047_face_contact_manifold_generation
+    //
+    // Potential energy FORCES (gravity) already applied to velocities in
+    // update() before collision solving. Only accumulated forces (from
+    // collisions, thrusters, etc.) remain to be integrated here.
+    //
+    // Potential energy TORQUES are still applied here since they were NOT
+    // pre-applied (gravity torque = 0 for uniform fields, so this is a
+    // no-op currently, but correct for future non-uniform potentials).
+    Coordinate netForce = asset.getAccumulatedForce();
     Coordinate netTorque{0.0, 0.0, 0.0};
 
     InertialState& state = asset.getInertialState();
-    double const mass = asset.getMass();
     const Eigen::Matrix3d& inertiaTensor = asset.getInertiaTensor();
 
     for (const auto& potential : potentialEnergies_)
     {
-      netForce += potential->computeForce(state, mass);
       netTorque += potential->computeTorque(state, inertiaTensor);
     }
 
-    // Add accumulated forces (from collisions, thrusters, etc.)
-    netForce += asset.getAccumulatedForce();
     netTorque += asset.getAccumulatedTorque();
+    double const mass = asset.getMass();
 
     // ===== Step 2: Delegate Integration to Integrator =====
     // Integrator handles: velocity update, position update, quaternion

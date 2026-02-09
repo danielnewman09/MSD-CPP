@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 
@@ -59,6 +60,42 @@ public:
   ~CollisionHandler() = default;
 
 private:
+  /// @brief SAT result: minimum penetration depth and corresponding normal
+  ///
+  /// Ticket: 0047_face_contact_manifold_generation
+  struct SATResult
+  {
+    double depth;
+    Vector3D normal;
+  };
+
+  /// @brief Compute minimum penetration depth and direction using SAT
+  ///
+  /// Ticket: 0047_face_contact_manifold_generation
+  ///
+  /// Iterates over all unique face normals of both hulls and computes the
+  /// overlap (penetration depth) along each. Returns the minimum depth and
+  /// the corresponding face normal.
+  ///
+  /// Used to validate and correct EPA results — EPA can produce wrong
+  /// results at zero or near-zero penetration when the Minkowski difference
+  /// origin is on the boundary.
+  [[nodiscard]] SATResult computeSATMinPenetration(
+    const AssetPhysical& assetA,
+    const AssetPhysical& assetB) const;
+
+  /// @brief Build a CollisionResult from SAT data when EPA fails
+  ///
+  /// Ticket: 0047_face_contact_manifold_generation
+  ///
+  /// When EPA picks the wrong face (depth wildly inconsistent with SAT),
+  /// construct a valid contact using the SAT normal and depth with witness
+  /// points from the support function.
+  [[nodiscard]] CollisionResult buildSATContact(
+    const AssetPhysical& assetA,
+    const AssetPhysical& assetB,
+    const SATResult& sat) const;
+
   double epsilon_;
 };
 
