@@ -325,3 +325,95 @@ The following changes must be made before final review:
 - **Observable state**: ✓ Pass — Solver RHS can be inspected via existing debug/test hooks
 
 ---
+
+## Design Review — Final Assessment
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-09
+**Status**: APPROVED
+**Iteration**: 1 of 1
+
+### Summary of Autonomous Iteration
+
+The architect successfully addressed both issues from the initial review:
+- **I1 resolved**: PlantUML diagram now correctly shows `InertialState` (marked `<<reused>>`) instead of the incorrect `SpatialVector`. The diagram includes a detailed note explaining that only velocity fields are populated for bias.
+- **I2 resolved**: All type references now consistently use `std::vector<InertialState>` for the bias parameter.
+
+The revision aligns the diagram with design decision DD-0051-002 (reuse InertialState for velocity bias).
+
+### Criteria Assessment — Final Review
+
+#### Architectural Fit
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | `computeVelocityBias`, `assembleRHS`, `execute` follow project camelCase |
+| Namespace organization | ✓ | Changes within existing `msd_sim` namespace |
+| File structure | ✓ | Modifications stay within `msd/msd-sim/src/` hierarchy |
+| Dependency direction | ✓ | Bias flows WorldModel → CollisionPipeline → ConstraintSolver (correct) |
+
+#### C++ Design Quality
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | ✓ | InertialState is simple aggregate, no resource management |
+| Smart pointer appropriateness | ✓ | `std::vector` for bias storage (value semantics), `std::optional` wrapper per CLAUDE.md |
+| Value/reference semantics | ✓ | `std::vector<InertialState>` passed by value, then by `const std::optional<...>&` to solver |
+| Rule of 0/3/5 | ✓ | InertialState uses compiler-generated special members (Rule of Zero) |
+| Const correctness | ✓ | Bias is `const` after creation, solver receives `const std::optional<...>&` |
+| Exception safety | ✓ | No exceptions thrown; bias computation is basic arithmetic |
+| Initialization | ✓ | Code examples use brace initialization `bias[i].velocity = ...` |
+| Return values | ✓ | `computeVelocityBias()` returns value (not output parameter) per CLAUDE.md |
+
+#### Feasibility
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | No new headers; InertialState already known to all components |
+| Template complexity | ✓ | No templates involved |
+| Memory strategy | ✓ | `std::vector<InertialState>` allocated once per frame, ~100 bytes/body overhead is negligible |
+| Thread safety | ✓ | No threading concerns (bias is local to frame) |
+| Build integration | ✓ | No build system changes needed |
+
+#### Testability
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | Each component testable independently with mock bias inputs |
+| Mockable dependencies | ✓ | Bias is data, easily mocked as `std::vector<InertialState>{...}` |
+| Observable state | ✓ | Solver RHS inspectable via existing test hooks |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | H3 test may require assertion update | Integration | High | Low | Test suite includes H3 update as acceptance criterion AC2 | No |
+| R2 | Memory overhead (~100 bytes/body) | Performance | Low | Low | Negligible for typical body counts (< 1000 bodies) | No |
+
+### Prototype Guidance
+
+**No prototypes required.** This design is a straightforward parameter threading task with no high-uncertainty risks.
+
+The only uncertainty is H3 test behavior (R1), but this is a test expectation issue, not a design risk. The acceptance criteria already address this via AC2 ("H3 passes or test is updated").
+
+### Required Revisions
+
+None. All initial issues have been resolved.
+
+### Design Approval Summary
+
+**Decision**: APPROVED for human review and prototyping phase.
+
+**Rationale**:
+1. All architectural fit criteria pass (naming, namespaces, file structure, dependencies)
+2. All C++ design quality criteria pass (follows CLAUDE.md standards)
+3. Implementation is feasible with no build system or integration challenges
+4. Design is highly testable with clear isolation boundaries
+5. No high-impact risks identified
+6. PlantUML diagram correctly reflects design decisions
+7. Design decision DD-0051-002 (reuse InertialState) is well-reasoned and correctly applied
+
+**Next Steps**:
+1. Human reviews design and diagram
+2. If approved, advance to "Design Approved — Ready for Prototype"
+3. Ticket notes "No prototype needed (straightforward threading)" — human may skip directly to implementation
+
+**Implementation Estimate**: Low complexity. Parameter threading through 3 components with RHS assembly logic change. Estimated 2-4 hours for implementation + tests.
+
+---
