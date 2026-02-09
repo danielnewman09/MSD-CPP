@@ -2,6 +2,7 @@
 skinparam class {
     BackgroundColor<<new>> LightGreen
     BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<reused>> LightBlue
 }
 
 title Restitution-Gravity Coupling Fix: Velocity-Bias Architecture
@@ -10,7 +11,7 @@ package "WorldModel" {
   class WorldModel <<modified>> {
     +update(dt: double): void
     --
-    {method} NEW: computeVelocityBias(dt: double): std::vector<SpatialVector>
+    {method} NEW: computeVelocityBias(dt: double): std::vector<InertialState>
   }
 
   note right of WorldModel::computeVelocityBias
@@ -20,19 +21,24 @@ package "WorldModel" {
     v_bias = (F_potential / m) * dt
     ω_bias = (I^-1 * τ_potential) * dt
 
+    Returns std::vector<InertialState> with
+    only velocity fields populated.
+    Position/orientation remain at defaults.
+
     No direct velocity mutation!
   end note
 }
 
 package "CollisionPipeline" {
   class CollisionPipeline <<modified>> {
-    +execute(inertialAssets, environmentalAssets, dt): void
+    +execute(inertialAssets, environmentalAssets, dt, velocityBias): void
     --
     {method} MODIFIED: solveConstraintsWithWarmStart(dt, velocityBias): SolveResult
   }
 
   note right of CollisionPipeline::solveConstraintsWithWarmStart
-    Passes velocityBias to ConstraintSolver
+    Passes velocityBias (std::optional<std::vector<InertialState>>)
+    to ConstraintSolver
   end note
 }
 
@@ -48,32 +54,46 @@ package "ConstraintSolver" {
 
     b_i = -(1+e_i) * J_i * v⁻_i  -  J_i * v_bias_i
 
+    Extracts velocity from InertialState:
+    - v_bias_i.velocity (linear)
+    - v_bias_i.getAngularVelocity() (angular)
+
     Bias term NOT multiplied by (1+e), preventing
     restitution-gravity coupling.
   end note
 }
 
-package "ValueTypes" {
-  struct SpatialVector <<new>> {
-    +linear: Vector3D
-    +angular: Vector3D
+package "msd-sim Types" {
+  struct InertialState <<reused>> {
+    +position: Coordinate
+    +velocity: Vector3D
+    +acceleration: Vector3D
+    +orientation: QuaternionD
+    +quaternionRate: Vector4D
+    +angularAcceleration: AngularRate
+    --
+    +getAngularVelocity(): AngularRate
+    +setAngularVelocity(omega: AngularRate): void
   }
 
-  note right of SpatialVector
-    Represents 6-DOF spatial velocity bias:
-    [v_x, v_y, v_z, ω_x, ω_y, ω_z]
+  note right of InertialState
+    REUSED for velocity bias (DD-0051-002)
 
-    Used to pass gravity pre-application
-    through the pipeline without mutating
-    actual velocities.
+    When used as bias:
+    - velocity field populated
+    - angular velocity via setAngularVelocity()
+    - position, orientation, acceleration unused
+
+    Benefit: Zero new types, consistent
+    extraction pattern, future extensibility
   end note
 }
 
 ' Relationships
 WorldModel --> CollisionPipeline : execute(dt, velocityBias)
 CollisionPipeline --> ConstraintSolver : solve(dt, velocityBias)
-WorldModel ..> SpatialVector : creates
-CollisionPipeline ..> SpatialVector : passes
-ConstraintSolver ..> SpatialVector : uses
+WorldModel ..> InertialState : creates (for bias)
+CollisionPipeline ..> InertialState : passes (for bias)
+ConstraintSolver ..> InertialState : extracts velocity (for bias)
 
 @enduml

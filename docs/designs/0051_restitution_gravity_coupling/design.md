@@ -29,6 +29,17 @@ See: `./0051_restitution_gravity_coupling.puml`
 
 None. The velocity bias reuses the existing `InertialState` struct (see DD-0051-002).
 
+### Revision Notes (2026-02-09 — Iteration 1)
+
+**Issues Addressed**:
+- **I1**: Updated PlantUML diagram to show `InertialState` (reused, marked `<<reused>>`) instead of `SpatialVector` (removed)
+- **I2**: Corrected all return type references to use `std::vector<InertialState>` consistently
+
+**Changes Made**:
+1. PlantUML: Removed `SpatialVector` struct, added `InertialState` with `<<reused>>` stereotype and detailed note
+2. PlantUML: Updated all relationships to show components working with `InertialState` for bias
+3. Design doc: Verified all code snippets use `std::vector<InertialState>` (already correct in body)
+
 ### Modified Components
 
 #### ConstraintSolver
