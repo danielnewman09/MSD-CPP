@@ -240,7 +240,7 @@ void CollisionPipeline::assembleSolverInput(
   }
 }
 
-ConstraintSolver::MultiBodySolveResult
+ConstraintSolver::SolveResult
 CollisionPipeline::solveConstraintsWithWarmStart(double dt)
 {
   // Build non-owning Constraint* vector for solver
@@ -296,13 +296,13 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
   }
 
   // ===== Phase 4: Solve with warm-starting =====
-  auto solveResult = constraintSolver_.solveWithContacts(constraintPtrs_,
-                                                          states_,
-                                                          inverseMasses_,
-                                                          inverseInertias_,
-                                                          states_.size(),
-                                                          dt,
-                                                          initialLambda);
+  auto solveResult = constraintSolver_.solve(constraintPtrs_,
+                                              states_,
+                                              inverseMasses_,
+                                              inverseInertias_,
+                                              states_.size(),
+                                              dt,
+                                              initialLambda);
 
   // ===== Phase 4.5: Update Contact Cache =====
   for (const auto& range : pairRanges_)
@@ -331,7 +331,7 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
 
 void CollisionPipeline::applyForces(
   std::span<AssetInertial> inertialAssets,
-  const ConstraintSolver::MultiBodySolveResult& solveResult)
+  const ConstraintSolver::SolveResult& solveResult)
 {
   // Environment bodies (indices >= numInertial) are skipped because they
   // have infinite mass and cannot be moved.

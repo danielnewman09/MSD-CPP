@@ -48,19 +48,19 @@ public:
    * @param torque Net torque in world frame [N·m]
    * @param mass Object mass [kg]
    * @param inverseInertia Inverse inertia tensor in body frame [1/(kg·m²)]
-   * @param constraints Vector of constraint pointers (non-owning)
    * @param dt Timestep [s]
    *
-   * Ticket 0031 breaking change: Parameter changed from single
-   * QuaternionConstraint& to std::vector<Constraint*>& to support multiple
-   * constraints per object.
+   * Ticket 0045 breaking change: Removed constraints parameter.
+   * Quaternion normalization is now handled via state.orientation.normalize()
+   * instead of UnitQuaternionConstraint.
+   *
+   * @ticket 0045_constraint_solver_unification
    */
   virtual void step(InertialState& state,
                     const Coordinate& force,
                     const Coordinate& torque,
                     double mass,
                     const Eigen::Matrix3d& inverseInertia,
-                    const std::vector<Constraint*>& constraints,
                     double dt) = 0;
 
 protected:

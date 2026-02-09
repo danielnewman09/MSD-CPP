@@ -189,14 +189,14 @@ protected:
   /**
    * @brief Phase 4: Solve contact constraint system with warm-starting
    *
-   * Invokes ConstraintSolver::solveWithContacts() with initial lambda from
+   * Invokes ConstraintSolver::solve() with initial lambda from
    * ContactCache for faster convergence on persistent contacts.
    *
    * @param dt Timestep [s]
-   * @return MultiBodySolveResult with per-body forces
+   * @return SolveResult with per-body forces
+   * @ticket 0045_constraint_solver_unification
    */
-  ConstraintSolver::MultiBodySolveResult solveConstraintsWithWarmStart(
-    double dt);
+  ConstraintSolver::SolveResult solveConstraintsWithWarmStart(double dt);
 
   /**
    * @brief Phase 5: Apply constraint forces to inertial bodies
@@ -207,10 +207,11 @@ protected:
    *
    * @param inertialAssets Dynamic objects (mutable span)
    * @param solveResult Solver output with per-body forces
+   * @ticket 0045_constraint_solver_unification
    */
   static void applyForces(
     std::span<AssetInertial> inertialAssets,
-    const ConstraintSolver::MultiBodySolveResult& solveResult);
+    const ConstraintSolver::SolveResult& solveResult);
 
   /**
    * @brief Phase 6: Position correction via split-impulse method

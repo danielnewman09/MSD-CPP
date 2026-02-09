@@ -164,22 +164,19 @@ void WorldModel::updatePhysics(double dt)
     netForce += asset.getAccumulatedForce();
     netTorque += asset.getAccumulatedTorque();
 
-    // ===== Step 2: Gather Constraints =====
-    // Get all constraints attached to this asset
-    std::vector<Constraint*> const constraints = asset.getConstraints();
-
-    // ===== Step 3: Delegate Integration to Integrator =====
-    // Integrator handles: velocity update, position update, constraint
-    // enforcement
+    // ===== Step 2: Delegate Integration to Integrator =====
+    // Integrator handles: velocity update, position update, quaternion
+    // normalization
+    // Ticket 0045: Removed constraint gathering - quaternion normalization
+    // now handled via state.orientation.normalize()
     integrator_->step(state,
                       netForce,
                       netTorque,
                       mass,
                       asset.getInverseInertiaTensorWorld(),
-                      constraints,
                       dt);
 
-    // ===== Step 4: Synchronize ReferenceFrame =====
+    // ===== Step 3: Synchronize ReferenceFrame =====
     // ReferenceFrame must match InertialState for collision detection and
     // rendering
     ReferenceFrame& frame = asset.getReferenceFrame();

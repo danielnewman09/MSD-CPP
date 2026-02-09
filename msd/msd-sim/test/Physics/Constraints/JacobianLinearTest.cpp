@@ -213,7 +213,7 @@ TEST(EffectiveMass, SingleBody_InverseMassOnly)
   Eigen::Matrix3d zeroInertia = Eigen::Matrix3d::Zero();
   std::vector<Eigen::Matrix3d> inverseInertias{zeroInertia, zeroInertia};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, dt);
 
   ASSERT_TRUE(result.converged);
@@ -286,7 +286,7 @@ TEST(EffectiveMass, TwoBody_EqualMass_HalfEffective)
   Eigen::Matrix3d zeroInertia = Eigen::Matrix3d::Zero();
   std::vector<Eigen::Matrix3d> inverseInertias{zeroInertia, zeroInertia};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, dt);
 
   ASSERT_TRUE(result.converged);
@@ -372,7 +372,7 @@ TEST(ContactRHS, RestitutionTerm_CorrectSign)
   Eigen::Matrix3d zeroInertia = Eigen::Matrix3d::Zero();
   std::vector<Eigen::Matrix3d> inverseInertias{zeroInertia, zeroInertia};
 
-  auto result = solver.solveWithContacts(
+  auto result = solver.solve(
     constraints, states, inverseMasses, inverseInertias, 2, dt);
 
   ASSERT_TRUE(result.converged);
@@ -446,7 +446,7 @@ TEST(ContactRHS, SlopCorrectionGatedByApproachVelocity)
     double const expectedLambda = expectedB / effectiveA;
 
     std::vector<Constraint*> constraints{contact.get()};
-    auto result = solver.solveWithContacts(
+    auto result = solver.solve(
       constraints, states, inverseMasses, inverseInertias, 2, dt);
 
     ASSERT_TRUE(result.converged);
@@ -486,7 +486,7 @@ TEST(ContactRHS, SlopCorrectionGatedByApproachVelocity)
     double const expectedLambda = expectedB / effectiveA;
 
     std::vector<Constraint*> constraints{contact.get()};
-    auto result = solver.solveWithContacts(
+    auto result = solver.solve(
       constraints, states, inverseMasses, inverseInertias, 2, dt);
 
     ASSERT_TRUE(result.converged);
@@ -525,7 +525,7 @@ TEST(ContactRHS, SlopCorrectionGatedByApproachVelocity)
     double const expectedLambda = expectedB / effectiveA;
 
     std::vector<Constraint*> constraints{contact.get()};
-    auto result = solver.solveWithContacts(
+    auto result = solver.solve(
       constraints, states, inverseMasses, inverseInertias, 2, dt);
 
     ASSERT_TRUE(result.converged);
