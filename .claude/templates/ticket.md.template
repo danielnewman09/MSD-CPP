@@ -106,11 +106,21 @@
 - **Reviewer Notes**:
 
 ### Design Phase
-- **Started**: 
-- **Completed**: 
-- **Artifacts**: 
+- **Started**:
+- **Completed**:
+- **Artifacts**:
   - `docs/designs/{feature-name}/design.md`
   - `docs/designs/{feature-name}/{feature-name}.puml`
+- **Design Decisions**: {Add structured DD blocks to design.md using the format below}
+  ```
+  ### DD-{NNNN}-{NNN}: {Short imperative title}
+  - **Affects**: {Comma-separated qualified class/function names}
+  - **Rationale**: {Why this approach was chosen}
+  - **Alternatives Considered**:
+    - {Alternative A}: {Why rejected}
+  - **Trade-offs**: {Known compromises}
+  - **Status**: active
+  ```
 - **Notes**: 
 
 ### Design Review Phase

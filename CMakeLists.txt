@@ -175,6 +175,49 @@ else()
   message(STATUS "Doxygen not found - documentation target will not be available")
 endif()
 
+# Traceability database targets
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+  set(TRACEABILITY_DB ${CMAKE_BINARY_DIR}/docs/traceability.db)
+  set(TRACE_VENV ${CMAKE_SOURCE_DIR}/scripts/.venv/bin/python3)
+
+  add_custom_target(trace-git
+    COMMAND ${TRACE_VENV} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_git_history.py
+            ${TRACEABILITY_DB}
+            --repo ${CMAKE_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Indexing git history into traceability database"
+    VERBATIM
+  )
+
+  add_custom_target(trace-symbols
+    COMMAND ${TRACE_VENV} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_symbols.py
+            ${TRACEABILITY_DB}
+            --repo ${CMAKE_SOURCE_DIR}
+    DEPENDS trace-git
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Indexing symbol snapshots into traceability database"
+    VERBATIM
+  )
+
+  add_custom_target(trace-decisions
+    COMMAND ${TRACE_VENV} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_decisions.py
+            ${TRACEABILITY_DB}
+            --repo ${CMAKE_SOURCE_DIR}
+    DEPENDS trace-git
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Indexing design decisions into traceability database"
+    VERBATIM
+  )
+
+  add_custom_target(traceability
+    DEPENDS trace-git trace-symbols trace-decisions
+    COMMENT "Building complete traceability database"
+  )
+
+  message(STATUS "Traceability targets available: trace-git, trace-symbols, trace-decisions, traceability")
+endif()
+
 # Always include the test directory first to define testing functions
 # This ensures the testing framework is available to all modules
 if(BUILD_TESTING)

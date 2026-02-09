@@ -197,6 +197,15 @@
             "targets": [
                 "doxygen-db"
             ]
+        },
+        {
+            "name": "debug-traceability",
+            "displayName": "Build Traceability Database (Debug)",
+            "description": "Index git history, symbols, and design decisions into traceability.db",
+            "configurePreset": "conan-debug",
+            "targets": [
+                "traceability"
+            ]
         }
     ]
 }

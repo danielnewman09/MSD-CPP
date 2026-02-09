@@ -32,6 +32,9 @@ MSD-CPP/
 ├── tickets/                  # Feature tickets (see Ticketing System below)
 ├── prototypes/               # Prototype code for design validation
 │
+├── scripts/                  # Tooling and automation
+│   └── traceability/         # Design decision traceability (see scripts/traceability/README.md)
+│
 ├── analysis/                 # Performance analysis infrastructure (see analysis/CLAUDE.md)
 │   ├── scripts/              # Benchmarking and profiling scripts
 │   ├── benchmark_baselines/  # Golden baselines for benchmark comparison
@@ -246,6 +249,24 @@ cmake --build build/Debug --target doxygen-db
 ```
 
 Database is generated at `build/{build_type}/docs/codebase.db`.
+
+### Traceability Database
+
+Indexes design decisions from ticket artifacts, snapshots symbol locations at each git commit, and correlates both with git history. Exposed as MCP tools alongside the codebase database.
+
+```bash
+# Build the full traceability database (~30s from scratch, seconds for incremental updates)
+cmake --build --preset debug-traceability
+
+# Or run indexers individually
+cmake --build build/Debug --target trace-git         # Git history
+cmake --build build/Debug --target trace-symbols      # Symbol snapshots (tree-sitter)
+cmake --build build/Debug --target trace-decisions     # Design decision extraction
+```
+
+Database is generated at `build/{build_type}/docs/traceability.db` (gitignored, rebuilt from repo contents). Requires `tree-sitter` and `tree-sitter-cpp` in `scripts/.venv`.
+
+**Full documentation**: [`scripts/traceability/README.md`](scripts/traceability/README.md)
 
 ---
 
@@ -537,6 +558,7 @@ private:
 2. See [`msd/CLAUDE.md`](msd/CLAUDE.md) for library architecture and component details
 3. Check `tickets/` for feature history and requirements
 4. Check `docs/designs/{feature}/design.md` for detailed design rationale
+5. Use traceability MCP tools (`search_decisions`, `why_symbol`, `get_ticket_impact`) to trace design decisions to code
 
 ### For Developers
 
@@ -545,3 +567,4 @@ private:
 - Profiling guide: [`docs/profiling.md`](docs/profiling.md)
 - Design documents: `docs/designs/`
 - Tickets with full context: `tickets/`
+- Traceability tools: [`scripts/traceability/README.md`](scripts/traceability/README.md)
