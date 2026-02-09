@@ -226,3 +226,87 @@ This phased approach allows running tests between each step to catch issues earl
 | Quaternion normalization works | Existing integration tests pass |
 | All tests pass (minus deleted ones) | Full test suite passes |
 | Zero collision behavioral change | Collision test outputs unchanged (bit-exact) |
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-08
+**Status**: APPROVED
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | Proposed renames follow project patterns: `solve()` (camelCase method), `SolveResult` (PascalCase struct), helper methods use camelCase |
+| Namespace organization | ✓ | All changes within existing `msd_sim` namespace, no new namespaces introduced |
+| File structure | ✓ | Modifications to existing files only, follows `msd/msd-sim/src/Physics/` structure |
+| Dependency direction | ✓ | **Improves** dependency structure: removes circular dependency where integrator owned solver but solver is used by collision pipeline. After refactor, solver is only instantiated in CollisionPipeline, integrator is dependency-free |
+
+#### C++ Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | ✓ | No resource ownership changes, existing RAII patterns preserved |
+| Smart pointer appropriateness | ✓ | No changes to ownership model, existing `unique_ptr<Constraint>` in AssetInertial unchanged |
+| Value/reference semantics | ✓ | No changes to parameter passing conventions, existing patterns maintained |
+| Rule of 0/3/5 | ✓ | ConstraintSolver already uses Rule of Zero with `= default` declarations, no changes needed |
+| Const correctness | ✓ | Helper methods remain static, const qualifiers preserved where appropriate |
+| Exception safety | ✓ | No changes to error handling model, existing `converged` boolean return pattern unchanged |
+| Initialization | ✓ | No new member variables requiring initialization |
+| Return values | ✓ | Design improves consistency: single `SolveResult` return type instead of two separate result structs |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | **Simplifies** dependencies: removes `#include "ConstraintSolver.hpp"` from `SemiImplicitEulerIntegrator.hpp`, no new includes added |
+| Template complexity | ✓ | No templates involved, pure method removal + rename |
+| Memory strategy | ✓ | No changes to memory allocation patterns |
+| Thread safety | ✓ | ConstraintSolver remains stateless (local matrices), thread safety properties unchanged |
+| Build integration | ✓ | Phased implementation strategy minimizes intermediate build failures, no CMake changes required |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | **Improves** testability: integrator can be tested in isolation without needing to mock ConstraintSolver |
+| Mockable dependencies | ✓ | Removes unnecessary dependency, no new dependencies added |
+| Observable state | ✓ | No changes to state visibility |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | Quaternion drift accumulation in long-running simulations | Technical | Low | Low | Position-level `normalize()` is mathematically sufficient for ||Q|| = 1 constraint. The removed velocity-level correction was redundant since normalization re-projects after integration anyway. Monitor integration tests for sub-epsilon differences. | No |
+| R2 | Test suite churn (58 test cases updated) | Maintenance | Med | Low | Phased implementation allows running tests between steps. Changes are mechanical renames, not algorithmic modifications. Risk is typos, not logic errors. | No |
+| R3 | Intermediate build failures during phased implementation | Integration | Low | Low | Design provides 4-phase implementation strategy. Phase 1 creates temporary aliases to allow incremental migration. Tests can run after each phase. | No |
+
+### Prototype Guidance
+
+No prototypes required. This is straightforward refactoring with clear acceptance criteria:
+
+1. **Dead code removal**: The single-body `solve()` path is provably unused except by integrator, and integrator's usage is redundant with normalization
+2. **Behavioral equivalence**: Removing constraint forces that are immediately overwritten by normalization has zero observable effect
+3. **Rename safety**: All renames are within a single translation unit (ConstraintSolver), aided by static typing and compiler verification
+
+### Summary
+
+**Verdict**: APPROVED for implementation.
+
+This design represents exemplary technical debt reduction. The refactoring:
+
+1. **Eliminates redundancy**: Removes ~250 lines of dead code (single-body solver path) that computes constraint forces immediately superseded by quaternion normalization
+2. **Improves naming clarity**: Drops misleading "Contact" prefix from multi-body solver methods that now operate on generic `Constraint*` after ticket 0043 unification
+3. **Simplifies architecture**: Removes unnecessary integrator ↔ solver coupling, making integrator a pure numerical integration component
+4. **Zero behavioral risk**: The removed `UnitQuaternionConstraint` forces were mathematically redundant with the existing `state.orientation.normalize()` call
+
+The phased implementation strategy is sound and will minimize intermediate build failures. The design correctly identifies that this is a pure refactoring with no algorithmic changes, requiring no prototypes.
+
+**Key architectural insight**: The current dual-solver-path design is a vestige of the pre-0043 era when `TwoBodyConstraint` existed as a separate class hierarchy. After 0043 unified all constraints under a common interface, the single-body path became an orphaned code path serving only the redundant `UnitQuaternionConstraint`. This design completes the unification by removing the orphaned infrastructure.
+
+No revisions required. Ready to proceed directly to implementation.
