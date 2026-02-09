@@ -1,6 +1,6 @@
 # Ticket 0048: EPA Convergence Robustness
 
-## Status: Investigation Complete
+## Status: Complete
 
 ## Type: Bug Fix
 
@@ -73,6 +73,24 @@ but large enough to break EPA.
 ### Approach C: EPA convergence criterion improvement
 Modify the EPA convergence check to detect stalling (same closest face for N
 iterations) and terminate early with the current best result.
+
+## Fix Applied: Approach A — Graceful EPA Degradation
+
+When `expandPolytope()` reaches max iterations without converging, EPA now returns
+the best result from the closest polytope face found so far instead of throwing
+`std::runtime_error`. This matches standard practice in production physics engines
+(Bullet, PhysX, Box2D all use best-effort EPA results).
+
+### Changes
+- `EPA::computeContactInfo()`: Removed exception throw on `expandPolytope()` failure.
+  The function now falls through to extract contact info from the best face regardless.
+- `EPA.hpp`: Updated `@throws` documentation to reflect the change.
+
+### Test Results
+- **Before**: 681/688 passing (7 failing)
+- **After**: 683/688 passing (5 failing)
+- **Net**: +2 tests fixed (H6_SimulationFrameByFrame, H6_ZeroGravity_RestingContact_Stable)
+- **Regressions**: 0
 
 ## Dependencies
 - **Ticket 0047** (face contact manifold generation): May depend on this fix.

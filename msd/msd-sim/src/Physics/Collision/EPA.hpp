@@ -85,9 +85,10 @@ public:
    *
    * @param simplex GJK terminating simplex (4 vertices in Minkowski space)
    * @param maxIterations Maximum expansion iterations (default: 64)
-   * @return CollisionResult with penetration depth, normal, contact point
+   * @return CollisionResult with penetration depth, normal, contact point.
+   *         If EPA does not fully converge, returns the best approximation
+   *         from the closest polytope face found so far.
    * @throws std::invalid_argument if simplex size != 4
-   * @throws std::runtime_error if expansion fails to converge
    */
   CollisionResult computeContactInfo(const std::vector<Coordinate>& simplex,
                                      int maxIterations = 64);
