@@ -2,12 +2,17 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Investigation
-- [ ] Investigation Complete
+- [x] Ready for Design
+- [ ] Design Complete — Awaiting Review
+- [ ] Design Approved — Ready for Prototype
+- [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
+- [ ] Implementation Complete — Awaiting Quality Gate
+- [ ] Quality Gate Passed — Awaiting Review
+- [ ] Approved — Ready to Merge
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Ready for Design
 **Assignee**: TBD
 **Created**: 2026-02-09
 **Generate Tutorial**: No
@@ -102,3 +107,8 @@ Full test suite results showing B3, H3 fixed with no regressions.
 - **Timestamp**: 2026-02-09
 - **Action**: Created as follow-on from ticket 0047
 - **Notes**: B3 and H3 regressions from gravity pre-apply in 0047. Root cause identified: restitution-gravity coupling in solver RHS.
+
+### Transition to Design
+- **Timestamp**: 2026-02-09
+- **Action**: Advanced to Ready for Design (skipped Investigation as problem is well-understood)
+- **Notes**: Ticket restructured to follow standard workflow. Proposed solution (velocity-bias approach) to be validated during design phase.

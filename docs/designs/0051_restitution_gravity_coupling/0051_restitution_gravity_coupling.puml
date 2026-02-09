@@ -1,0 +1,79 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+title Restitution-Gravity Coupling Fix: Velocity-Bias Architecture
+
+package "WorldModel" {
+  class WorldModel <<modified>> {
+    +update(dt: double): void
+    --
+    {method} NEW: computeVelocityBias(dt: double): std::vector<SpatialVector>
+  }
+
+  note right of WorldModel::computeVelocityBias
+    Computes per-body velocity bias from
+    potential energies (gravity):
+
+    v_bias = (F_potential / m) * dt
+    ω_bias = (I^-1 * τ_potential) * dt
+
+    No direct velocity mutation!
+  end note
+}
+
+package "CollisionPipeline" {
+  class CollisionPipeline <<modified>> {
+    +execute(inertialAssets, environmentalAssets, dt): void
+    --
+    {method} MODIFIED: solveConstraintsWithWarmStart(dt, velocityBias): SolveResult
+  }
+
+  note right of CollisionPipeline::solveConstraintsWithWarmStart
+    Passes velocityBias to ConstraintSolver
+  end note
+}
+
+package "ConstraintSolver" {
+  class ConstraintSolver <<modified>> {
+    +solve(constraints, states, ..., dt, initialLambda, velocityBias): SolveResult
+    --
+    {method} MODIFIED: assembleRHS(constraints, jacobians, states, dt, velocityBias): Eigen::VectorXd
+  }
+
+  note right of ConstraintSolver::assembleRHS
+    RHS with velocity bias (no restitution coupling):
+
+    b_i = -(1+e_i) * J_i * v⁻_i  -  J_i * v_bias_i
+
+    Bias term NOT multiplied by (1+e), preventing
+    restitution-gravity coupling.
+  end note
+}
+
+package "ValueTypes" {
+  struct SpatialVector <<new>> {
+    +linear: Vector3D
+    +angular: Vector3D
+  }
+
+  note right of SpatialVector
+    Represents 6-DOF spatial velocity bias:
+    [v_x, v_y, v_z, ω_x, ω_y, ω_z]
+
+    Used to pass gravity pre-application
+    through the pipeline without mutating
+    actual velocities.
+  end note
+}
+
+' Relationships
+WorldModel --> CollisionPipeline : execute(dt, velocityBias)
+CollisionPipeline --> ConstraintSolver : solve(dt, velocityBias)
+WorldModel ..> SpatialVector : creates
+CollisionPipeline ..> SpatialVector : passes
+ConstraintSolver ..> SpatialVector : uses
+
+@enduml
