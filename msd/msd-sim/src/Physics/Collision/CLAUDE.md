@@ -52,6 +52,14 @@ When GJK confirms intersection, we need penetration depth and contact normal. EP
 
 **Edge contact manifold** (Ticket 0040c): Edge-edge contacts (where Sutherland-Hodgman clipping produces < 3 points) generate 2 contact points with geometric extent along the contact edge segment, enabling torque generation from edge impacts. Uses `ConvexHull::findClosestEdge()` to identify contacting edges and a segment-segment closest point algorithm (Ericson 2004, Section 5.1.9) to compute contact point placement. Falls back to single-point contact if edge detection produces degenerate results.
 
+### SAT Fallback for EPA Validation
+
+**Ticket 0047**: When EPA produces incorrect results at zero or near-zero penetration (origin on Minkowski boundary), `CollisionHandler` validates the EPA result against the true minimum penetration computed via Separating Axis Theorem (SAT). If EPA's depth is wildly inconsistent (>10× SAT depth), the handler discards EPA's result and builds a contact using SAT-derived normal and depth.
+
+**Why needed**: At zero penetration, GJK's simplex becomes degenerate and EPA may select an arbitrary face with incorrect depth. SAT iterates over all face normals to find the true minimum penetration direction.
+
+**Implementation**: `computeSATMinPenetration()` computes overlap along all unique face normals, `buildSATContact()` constructs fallback contact from SAT data.
+
 ### Why std::optional<CollisionResult>?
 
 Collision is inherently optional—most object pairs don't collide. Using `std::optional` makes the API self-documenting and eliminates the need for a separate `intersecting` boolean field.

@@ -725,6 +725,21 @@ for (size_t idx : world.getRenderObjectIndices()) {
 world.update(std::chrono::milliseconds{16});  // ~60 FPS
 ```
 
+#### Update Order
+
+**Ticket 0047**: WorldModel performs the following sequence during each `update()` call:
+
+1. **Platform updates** — Agent logic and visual synchronization
+2. **Pre-apply gravity** — Apply potential energy forces (gravity) to velocities BEFORE collision solving
+3. **Collision solving** — Constraint-based collision response (sees gravity-augmented velocities)
+4. **Physics integration** — Integrate velocities/positions (skips gravity forces, already applied in step 2)
+5. **Update time** — Advance simulation clock
+6. **Record frame** — Optional data recording if enabled
+
+**Rationale for gravity pre-apply**: Standard Box2D/Bullet approach. The constraint solver sees gravity-augmented velocities `v_temp = v + g*dt` and produces non-zero support forces even for resting bodies (v≈0). Without this, resting bodies with v=0 would produce zero RHS in the constraint solver, leading to micro-bounce oscillation.
+
+**Trade-off accepted**: Gravity pre-apply couples restitution with gravity in the solver RHS: `b = -(1+e)*J*(v+g*dt)`, adding an extra `e*J*g*dt` term. This is bounded (≈ e*9.81*0.016 ≈ 0.08 m/s for typical restitution) and acceptable for current simulation fidelity. Future work (ticket 0051) may decouple this via velocity-bias threading.
+
 #### Thread Safety
 **Not thread-safe** — Single-threaded simulation assumed.
 
