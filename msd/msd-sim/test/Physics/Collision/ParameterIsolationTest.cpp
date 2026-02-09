@@ -1,8 +1,10 @@
 // Ticket: 0039d_parameter_isolation_root_cause
-// Test: Systematic parameter isolation to identify root cause of energy injection
+// Test: Systematic parameter isolation to identify root cause of energy
+// injection
 //
-// DIAGNOSTIC TEST SUITE: These tests systematically disable parameters to isolate
-// the root cause of the severe energy injection bug in rotational collision scenarios.
+// DIAGNOSTIC TEST SUITE: These tests systematically disable parameters to
+// isolate the root cause of the severe energy injection bug in rotational
+// collision scenarios.
 //
 // Key hypotheses:
 //   H1: Baumgarte ERP term injects energy via (ERP/dt) * penetration
@@ -69,8 +71,8 @@ EnergyTracker::SystemEnergy computeSystemEnergyBreakdown(
   potentials.push_back(
     std::make_unique<GravityPotential>(Coordinate{0.0, 0.0, -9.81}));
 
-  return EnergyTracker::computeSystemEnergy(
-    world.getInertialAssets(), potentials);
+  return EnergyTracker::computeSystemEnergy(world.getInertialAssets(),
+                                            potentials);
 }
 
 /// Compute total system energy scalar with gravity
@@ -84,8 +86,8 @@ EnergyTracker::SystemEnergy computeSystemEnergyNoGravity(
   const WorldModel& world)
 {
   std::vector<std::unique_ptr<PotentialEnergy>> noPotentials;
-  return EnergyTracker::computeSystemEnergy(
-    world.getInertialAssets(), noPotentials);
+  return EnergyTracker::computeSystemEnergy(world.getInertialAssets(),
+                                            noPotentials);
 }
 
 /// Run a resting-cube-on-floor simulation for a given number of frames
@@ -103,12 +105,11 @@ struct SimulationResult
   bool nanDetected;
 };
 
-SimulationResult runRestingCubeSimulation(
-  double cubeStartZ,
-  double restitution,
-  int numFrames,
-  int frameStepMs,
-  bool useGravity = true)
+SimulationResult runRestingCubeSimulation(double cubeStartZ,
+                                          double restitution,
+                                          int numFrames,
+                                          int frameStepMs,
+                                          bool useGravity = true)
 {
   WorldModel world;
 
@@ -134,9 +135,9 @@ SimulationResult runRestingCubeSimulation(
   // Start at rest
   world.getObject(cubeId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
 
-  double const initialEnergy =
-    useGravity ? computeSystemEnergy(world)
-               : computeSystemEnergyNoGravity(world).total();
+  double const initialEnergy = useGravity
+                                 ? computeSystemEnergy(world)
+                                 : computeSystemEnergyNoGravity(world).total();
 
   SimulationResult result{};
   result.initialEnergy = initialEnergy;
@@ -181,8 +182,7 @@ SimulationResult runRestingCubeSimulation(
 
     result.maxRotationalKE =
       std::max(result.maxRotationalKE, sysEnergy.totalRotationalKE);
-    result.maxLinearKE =
-      std::max(result.maxLinearKE, sysEnergy.totalLinearKE);
+    result.maxLinearKE = std::max(result.maxLinearKE, sysEnergy.totalLinearKE);
 
     prevEnergy = totalEnergy;
   }
@@ -221,25 +221,23 @@ TEST(ParameterIsolation, H1_DisableRestitution_RestingCube)
   // If energy is stable, restitution was the problem.
 
   auto result = runRestingCubeSimulation(
-    0.5,    // z position: cube center at 0.5, bottom at 0.0 (touching floor)
-    0.0,    // e = 0 (fully inelastic)
-    200,    // frames
-    16);    // 16ms per frame
+    0.5,  // z position: cube center at 0.5, bottom at 0.0 (touching floor)
+    0.0,  // e = 0 (fully inelastic)
+    200,  // frames
+    16);  // 16ms per frame
 
   ASSERT_FALSE(result.nanDetected)
     << "DIAGNOSTIC [H1]: NaN detected in zero-restitution resting cube test";
 
   // The KEY question: does energy grow even without restitution?
-  double const energyGrowthPercent =
-    (result.maxGrowthRatio - 1.0) * 100.0;
+  double const energyGrowthPercent = (result.maxGrowthRatio - 1.0) * 100.0;
 
   bool const energyGrew = result.maxEnergy > result.initialEnergy * 1.01;
 
   EXPECT_FALSE(energyGrew)
     << "DIAGNOSTIC [H1]: ENERGY GROWS EVEN WITH e=0. "
     << "This proves Baumgarte/ERP is the primary energy source. "
-    << "Initial=" << result.initialEnergy
-    << " Max=" << result.maxEnergy
+    << "Initial=" << result.initialEnergy << " Max=" << result.maxEnergy
     << " Growth=" << energyGrowthPercent << "% "
     << "MaxRotKE=" << result.maxRotationalKE
     << " GrowthFrames=" << result.energyGrowthFrameCount
@@ -283,11 +281,11 @@ TEST(ParameterIsolation, H2_MinimalPenetration_NoEnergyGrowth)
     << "DIAGNOSTIC [H2]: NaN detected in minimal penetration test";
 
   // Compare with cube sitting exactly at floor level
-  auto contactResult = runRestingCubeSimulation(
-    0.5,    // Exactly at floor (touching)
-    0.0,    // e=0
-    50,     // same frame count
-    16);
+  auto contactResult =
+    runRestingCubeSimulation(0.5,  // Exactly at floor (touching)
+                             0.0,  // e=0
+                             50,   // same frame count
+                             16);
 
   ASSERT_FALSE(contactResult.nanDetected)
     << "DIAGNOSTIC [H2]: NaN detected in contact case";
@@ -330,7 +328,7 @@ TEST(ParameterIsolation, H3_TimestepSensitivity_ERPAmplification)
   // Run same scenario at different timesteps
   // Use same total simulation time (~3.2 seconds)
   auto result8ms = runRestingCubeSimulation(
-    0.5, 0.0, 400, 8);   // 400 frames * 8ms = 3.2s, ERP/dt = 25.0
+    0.5, 0.0, 400, 8);  // 400 frames * 8ms = 3.2s, ERP/dt = 25.0
 
   auto result16ms = runRestingCubeSimulation(
     0.5, 0.0, 200, 16);  // 200 frames * 16ms = 3.2s, ERP/dt = 12.5
@@ -338,8 +336,7 @@ TEST(ParameterIsolation, H3_TimestepSensitivity_ERPAmplification)
   auto result32ms = runRestingCubeSimulation(
     0.5, 0.0, 100, 32);  // 100 frames * 32ms = 3.2s, ERP/dt = 6.25
 
-  ASSERT_FALSE(result8ms.nanDetected)
-    << "DIAGNOSTIC [H3]: NaN at 8ms timestep";
+  ASSERT_FALSE(result8ms.nanDetected) << "DIAGNOSTIC [H3]: NaN at 8ms timestep";
   ASSERT_FALSE(result16ms.nanDetected)
     << "DIAGNOSTIC [H3]: NaN at 16ms timestep";
   ASSERT_FALSE(result32ms.nanDetected)
@@ -363,8 +360,9 @@ TEST(ParameterIsolation, H3_TimestepSensitivity_ERPAmplification)
     << "maxE=" << result16ms.maxEnergy << "\n"
     << "  dt=32ms (ERP/dt=6.25): " << growth32ms << "% energy growth, "
     << "maxE=" << result32ms.maxEnergy << "\n"
-    << (erpPattern ? "CONFIRMED: Smaller dt = worse growth (ERP/dt is the cause)"
-                   : "NOT CONFIRMED: No clear ERP/dt correlation");
+    << (erpPattern
+          ? "CONFIRMED: Smaller dt = worse growth (ERP/dt is the cause)"
+          : "NOT CONFIRMED: No clear ERP/dt correlation");
 
   // Additional diagnostic: the ratio of energy growths should roughly
   // match the ratio of ERP/dt values if the relationship is linear
@@ -414,7 +412,8 @@ TEST(ParameterIsolation, H4_SingleContactPoint_TorqueDiagnostic)
   ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
 
   // Create AssetPhysical-like objects for collision check
-  // Use AssetInertial and AssetEnvironment since CollisionHandler needs AssetPhysical
+  // Use AssetInertial and AssetEnvironment since CollisionHandler needs
+  // AssetPhysical
   AssetInertial cubeAsset{1, 1, cubeHull, 10.0, cubeFrame};
   AssetEnvironment floorAsset{2, 1, floorHull, floorFrame};
 
@@ -448,10 +447,9 @@ TEST(ParameterIsolation, H4_SingleContactPoint_TorqueDiagnostic)
   for (size_t i = 0; i < contactCount; ++i)
   {
     Coordinate const& contactA = collisionResult->contacts[i].pointA;
-    Eigen::Vector3d leverArm{
-      contactA.x() - cubeCOM.x(),
-      contactA.y() - cubeCOM.y(),
-      contactA.z() - cubeCOM.z()};
+    Eigen::Vector3d leverArm{contactA.x() - cubeCOM.x(),
+                             contactA.y() - cubeCOM.y(),
+                             contactA.z() - cubeCOM.z()};
 
     Eigen::Vector3d n{normal.x(), normal.y(), normal.z()};
     Eigen::Vector3d angJacobian = -(leverArm.cross(n));
@@ -459,13 +457,12 @@ TEST(ParameterIsolation, H4_SingleContactPoint_TorqueDiagnostic)
     totalAngularJacobian += angJacobian;
 
     // Report each contact point's contribution
-    EXPECT_TRUE(true)
-      << "Contact " << i << ": point=("
-      << contactA.x() << ", " << contactA.y() << ", " << contactA.z()
-      << "), leverArm=(" << leverArm.x() << ", " << leverArm.y()
-      << ", " << leverArm.z() << "), angJacobian=("
-      << angJacobian.x() << ", " << angJacobian.y() << ", "
-      << angJacobian.z() << ")";
+    EXPECT_TRUE(true) << "Contact " << i << ": point=(" << contactA.x() << ", "
+                      << contactA.y() << ", " << contactA.z() << "), leverArm=("
+                      << leverArm.x() << ", " << leverArm.y() << ", "
+                      << leverArm.z() << "), angJacobian=(" << angJacobian.x()
+                      << ", " << angJacobian.y() << ", " << angJacobian.z()
+                      << ")";
   }
 
   double const totalAngularMagnitude = totalAngularJacobian.norm();
@@ -475,19 +472,16 @@ TEST(ParameterIsolation, H4_SingleContactPoint_TorqueDiagnostic)
   // If it doesn't cancel, asymmetric contact placement creates net torque.
   EXPECT_LT(totalAngularMagnitude, 0.1)
     << "DIAGNOSTIC [H4]: TOTAL angular Jacobian magnitude = "
-    << totalAngularMagnitude
-    << " (should be ~0 for symmetric contacts). "
-    << "Total=(" << totalAngularJacobian.x() << ", "
-    << totalAngularJacobian.y() << ", " << totalAngularJacobian.z() << "). "
+    << totalAngularMagnitude << " (should be ~0 for symmetric contacts). "
+    << "Total=(" << totalAngularJacobian.x() << ", " << totalAngularJacobian.y()
+    << ", " << totalAngularJacobian.z() << "). "
     << "Non-zero means Baumgarte correction generates net torque! "
-    << "ContactCount=" << contactCount
-    << ", Normal=(" << normal.x() << ", " << normal.y() << ", "
-    << normal.z() << ")";
+    << "ContactCount=" << contactCount << ", Normal=(" << normal.x() << ", "
+    << normal.y() << ", " << normal.z() << ")";
 
   // Report penetration depth for context
   EXPECT_GT(collisionResult->penetrationDepth, 0.0)
-    << "DIAGNOSTIC [H4]: penetrationDepth="
-    << collisionResult->penetrationDepth
+    << "DIAGNOSTIC [H4]: penetrationDepth=" << collisionResult->penetrationDepth
     << " (expected ~0.001 for 1mm overlap)";
 }
 
@@ -566,8 +560,8 @@ TEST(ParameterIsolation, H5_ContactPointCount_EvolutionDiagnostic)
   // CRITICAL: If single contact dominates, the manifold is under-constrained
   EXPECT_GT(multiContactFrames, singleContactFrames)
     << "DIAGNOSTIC [H5]: Single-contact frames dominate ("
-    << singleContactFrames << " single vs " << multiContactFrames
-    << " multi, " << noContactFrames << " none). "
+    << singleContactFrames << " single vs " << multiContactFrames << " multi, "
+    << noContactFrames << " none). "
     << "Max contact count seen: " << maxContacts << ". "
     << "Single contacts cannot provide torque-balanced support for a cube.";
 
@@ -602,7 +596,7 @@ TEST(ParameterIsolation, H6_ZeroGravity_RestingContact_Stable)
 
   // Place them with a tiny overlap (0.01m penetration)
   ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
-  ReferenceFrame frameB{Coordinate{0.99, 0.0, 0.0}};
+  ReferenceFrame frameB{Coordinate{0.49, 0.0, 0.0}};
 
   world.spawnObject(1, hullA, 10.0, frameA);
   world.spawnObject(2, hullB, 10.0, frameB);
@@ -680,28 +674,27 @@ TEST(ParameterIsolation, H7_GravityComparison_BaumgarteAmplification)
   // Ticket: 0039d_parameter_isolation_root_cause
 
   // With gravity: cube pushed into floor continuously
-  auto withGravity = runRestingCubeSimulation(
-    0.5,    // resting on floor
-    0.0,    // e=0
-    200,    // frames
-    16,     // 16ms
-    true);  // gravity ON
+  auto withGravity = runRestingCubeSimulation(0.5,    // resting on floor
+                                              0.0,    // e=0
+                                              200,    // frames
+                                              16,     // 16ms
+                                              true);  // gravity ON
 
   // Without gravity: cube just resting (initial penetration only)
   // Slightly overlapping at z=0.499 to create initial contact
-  auto noGravity = runRestingCubeSimulation(
-    0.499,  // slight penetration
-    0.0,    // e=0
-    200,    // frames
-    16,     // 16ms
-    false); // gravity OFF
+  auto noGravity = runRestingCubeSimulation(0.499,   // slight penetration
+                                            0.0,     // e=0
+                                            200,     // frames
+                                            16,      // 16ms
+                                            false);  // gravity OFF
 
   ASSERT_FALSE(withGravity.nanDetected)
     << "DIAGNOSTIC [H7]: NaN in gravity case";
   ASSERT_FALSE(noGravity.nanDetected)
     << "DIAGNOSTIC [H7]: NaN in no-gravity case";
 
-  // Compare absolute energy injected (not ratios, since no-gravity starts at ~0)
+  // Compare absolute energy injected (not ratios, since no-gravity starts at
+  // ~0)
   double const gravityInjected =
     withGravity.maxEnergy - withGravity.initialEnergy;
   double const noGravityInjected =
@@ -719,8 +712,7 @@ TEST(ParameterIsolation, H7_GravityComparison_BaumgarteAmplification)
     << " initialE=" << withGravity.initialEnergy
     << " rotKE=" << withGravity.maxRotationalKE << "\n"
     << "  WITHOUT gravity: injected=" << noGravityInjected << " J, "
-    << "maxE=" << noGravity.maxEnergy
-    << " initialE=" << noGravity.initialEnergy
+    << "maxE=" << noGravity.maxEnergy << " initialE=" << noGravity.initialEnergy
     << " rotKE=" << noGravity.maxRotationalKE << "\n"
     << (gravityAmplifies
           ? "CONFIRMED: Gravity continuously drives penetration, "
@@ -802,7 +794,8 @@ TEST(ParameterIsolation, H8_TiltedCube_FeedbackLoop)
       growthStreak = 0;
     }
 
-    // If angular velocity grows for 20+ consecutive frames, that's a feedback loop
+    // If angular velocity grows for 20+ consecutive frames, that's a feedback
+    // loop
     if (growthStreak > 20)
     {
       diverging = true;
@@ -811,8 +804,7 @@ TEST(ParameterIsolation, H8_TiltedCube_FeedbackLoop)
     prevAngVel = angVelMag;
   }
 
-  double const energyGrowthPercent =
-    (maxEnergy / initialEnergy - 1.0) * 100.0;
+  double const energyGrowthPercent = (maxEnergy / initialEnergy - 1.0) * 100.0;
 
   EXPECT_FALSE(diverging)
     << "DIAGNOSTIC [H8]: FEEDBACK LOOP DETECTED. "
@@ -824,8 +816,7 @@ TEST(ParameterIsolation, H8_TiltedCube_FeedbackLoop)
   EXPECT_LT(energyGrowthPercent, 10.0)
     << "DIAGNOSTIC [H8]: Tilted cube energy grew " << energyGrowthPercent
     << "% (threshold: 10%). "
-    << "MaxAngVel=" << maxAngVel
-    << " MaxEnergy=" << maxEnergy
+    << "MaxAngVel=" << maxAngVel << " MaxEnergy=" << maxEnergy
     << " InitialEnergy=" << initialEnergy;
 }
 

@@ -3,11 +3,11 @@
 ## Status
 - [x] Draft
 - [x] Ready for Investigation
-- [ ] Investigation Complete
+- [x] Investigation Complete
 - [ ] Ready for Implementation
 - [ ] Merged / Complete
 
-**Current Phase**: Ready for Investigation
+**Current Phase**: Investigation Complete
 **Assignee**: TBD
 **Created**: 2026-02-09
 **Generate Tutorial**: No
@@ -118,3 +118,20 @@ Full test suite results showing D1, D4, H1 passing with no regressions.
 - **Timestamp**: 2026-02-09 (workflow orchestrator)
 - **Action**: Ticket advanced to Ready for Investigation
 - **Notes**: Investigation ticket ready for prototyping agent to execute investigation plan (Phases 1-4)
+
+### Investigation Phase
+- **Started**: 2026-02-09
+- **Completed**: 2026-02-09
+- **Branch**: 0047-face-contact-manifold-generation
+- **PR**: N/A (not yet created)
+- **Artifacts**:
+  - `docs/designs/0047_face_contact_manifold_generation/investigation-findings.md`
+- **Notes**:
+  - Analyzed EPA contact manifold generation code path (EPA.cpp:513-660)
+  - Examined `getFacetsAlignedWith()` alignment detection (ConvexHull.cpp:62-85)
+  - Examined `buildPolygonFromFacets()` vertex collection (EPA.cpp:368-430)
+  - Identified degenerate-case branch (lines 573-586) as fallthrough path
+  - Confirmed Sutherland-Hodgman implementation matches industry standard
+  - Developed 3 hypotheses requiring diagnostic testing to confirm root cause
+  - Created diagnostic test outline for prototype phase
+  - **Conclusion**: Investigation narrowed search space, prototype phase required to confirm exact root cause via runtime diagnostics
