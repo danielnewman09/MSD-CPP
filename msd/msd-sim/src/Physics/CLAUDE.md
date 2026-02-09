@@ -114,7 +114,7 @@ if (result) {
 
   // Create and solve contact constraint (see Collision/CLAUDE.md for details)
   auto constraint = ContactConstraintFactory::createFromCollision(*result, assetA, assetB);
-  constraintSolver.solveWithContacts({constraint.get()}, {&assetA, &assetB});
+  constraintSolver.solve({constraint.get()}, {&assetA, &assetB});
 }
 ```
 

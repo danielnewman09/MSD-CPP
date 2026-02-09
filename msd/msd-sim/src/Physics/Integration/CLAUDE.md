@@ -8,10 +8,12 @@
 ```
 Integrator (Abstract interface)
     └── SemiImplicitEulerIntegrator (Symplectic, velocity-first)
-        └── ConstraintSolver (Lagrange multipliers)
+        └── Quaternion normalization via state.orientation.normalize()
 
 WorldModel owns Integrator via std::unique_ptr (Strategy pattern)
 ```
+
+**Note**: As of ticket 0045, the integrator no longer owns a `ConstraintSolver` or accepts constraints. Quaternion drift correction is handled via direct normalization.
 
 ---
 
@@ -32,16 +34,16 @@ The abstract `Integrator` interface enables:
 - Isolated testing of integration mathematics
 - WorldModel remains a pure orchestrator
 
-### Constraint Integration
+### Quaternion Normalization
 
-The integrator uses `ConstraintSolver` to compute Lagrange multipliers:
-1. Compute unconstrained accelerations: `a_free = F_ext / m`
-2. Solve constraint system: `solver.solve(constraints, ...)`
-3. Apply total accelerations: `a_total = a_free + F_constraint / m`
-4. Update velocities and positions
-5. Normalize quaternion (implicit constraint enforcement)
+The integrator maintains quaternion normalization via direct normalization:
+1. Compute accelerations: `a = F_ext / m`, `α = I⁻¹ * τ_ext`
+2. Update velocities: `v_new = v_old + a*dt`, `ω_new = ω_old + α*dt`
+3. Update positions: `x_new = x_old + v_new*dt`
+4. Update quaternion: `Q_new = Q_old + Q̇*dt` (where `Q̇ = ½*Q⊗[0,ω]`)
+5. **Normalize quaternion**: `Q_new.normalize()` — Maintains `|Q| = 1` within machine precision
 
-**Graceful degradation**: If solver doesn't converge, integration proceeds without constraint forces rather than crashing.
+**Historical note**: Prior to ticket 0045, the integrator used `ConstraintSolver` to enforce `UnitQuaternionConstraint` via Lagrange multipliers. This was removed as redundant with direct normalization, eliminating ~250 lines of solver code and the integrator's ConstraintSolver dependency.
 
 ---
 
@@ -51,11 +53,11 @@ The integrator uses `ConstraintSolver` to compute Lagrange multipliers:
 WorldModel::updatePhysics()
     ├── Compute external forces (gravity, user forces)
     └── For each AssetInertial:
-        ├── Gather constraints (quaternion normalization, joints, etc.)
-        └── integrator_->step(state, force, torque, mass, inertia, constraints, dt)
+        └── integrator_->step(state, force, torque, mass, inertia, dt)
+            └── Normalizes quaternion via state.orientation.normalize()
 ```
 
-Every `AssetInertial` automatically includes `UnitQuaternionConstraint` to maintain `|Q| = 1`.
+**Note**: As of ticket 0045, the integrator no longer accepts a `constraints` parameter. WorldModel does not gather or pass constraints to the integrator. Quaternion normalization is the integrator's responsibility via direct `normalize()` call.
 
 ---
 

@@ -460,6 +460,41 @@ ctest --preset debug
 
 ## Recent Architectural Changes
 
+### Constraint Solver Unification — 2026-02-08
+**Ticket**: [0045_constraint_solver_unification](../../tickets/0045_constraint_solver_unification.md)
+**Diagram**: [`0045_constraint_solver_unification.puml`](../../docs/designs/0045_constraint_solver_unification/0045_constraint_solver_unification.puml)
+**Type**: Refactoring (Zero Behavioral Change)
+
+Unified the `ConstraintSolver` by eliminating the redundant single-body solver path and removing constraint solving from the integrator. The solver now has a single public interface (`solve()`) for multi-body constraints, and the integrator no longer depends on `ConstraintSolver` or accepts constraints parameters.
+
+**Key changes**:
+- **Removed single-body solver path** — Deleted ~250 lines including `solve()` static method, `SolveResult` struct, `assembleConstraintMatrix()`, position-level RHS assembly, and `extractConstraintForces()`. The single-body path existed solely to enforce `UnitQuaternionConstraint`, which was redundant with quaternion normalization via `state.orientation.normalize()`.
+- **Renamed multi-body methods** — `solveWithContacts()` → `solve()`, `MultiBodySolveResult` → `SolveResult`, `assembleContactJacobians()` → `assembleJacobians()`, `assembleContactEffectiveMass()` → `assembleEffectiveMass()`, `assembleContactRHS()` → `assembleRHS()`, `extractContactBodyForces()` → `extractBodyForces()`. Methods now use generic names without "Contact" prefix.
+- **Removed constraint solving from integrator** — `SemiImplicitEulerIntegrator` no longer owns a `ConstraintSolver` instance or accepts a `constraints` parameter in `step()`. Quaternion normalization is now the sole Q drift correction mechanism via direct `normalize()` call.
+- **Removed default UnitQuaternionConstraint** — `AssetInertial` constructors no longer add `UnitQuaternionConstraint` by default. The class itself remains for standalone testing.
+- **Removed constraint gathering from WorldModel** — `WorldModel::updatePhysics()` no longer gathers constraints or passes them to the integrator.
+
+**Architecture**:
+- Previous: ConstraintSolver had dual solver paths (single-body position-level LLT solve + multi-body velocity-level ASM solve), integrator owned ConstraintSolver and accepted constraints parameter, AssetInertial defaulted to UnitQuaternionConstraint, WorldModel gathered constraints for integrator
+- New: ConstraintSolver has single unified interface for multi-body constraints, integrator is pure unconstrained integration with quaternion normalization, AssetInertial constraint list defaults to empty, WorldModel has no integrator constraint interaction
+- Method renames eliminate "Contact" prefix since methods now accept generic `Constraint*` (not contact-specific types)
+- `CollisionPipeline` updated to use renamed types (`SolveResult`, `solve()`)
+
+**Key files**:
+- `src/Physics/Constraints/ConstraintSolver.hpp`, `ConstraintSolver.cpp` — Removed single-body path (~250 lines), renamed multi-body methods
+- `src/Physics/Integration/Integrator.hpp` — Removed `constraints` parameter from `step()` signature
+- `src/Physics/Integration/SemiImplicitEulerIntegrator.hpp`, `SemiImplicitEulerIntegrator.cpp` — Removed `ConstraintSolver` dependency, removed constraint solving, simplified to pure integration
+- `src/Physics/RigidBody/AssetInertial.cpp` — Removed default `UnitQuaternionConstraint`
+- `src/Environment/WorldModel.cpp` — Removed constraint gathering for integrator
+- `src/Physics/Collision/CollisionPipeline.hpp`, `CollisionPipeline.cpp` — Updated to use renamed types and methods
+- `test/Physics/Constraints/` — 5 test files updated for renamed API (28 + 12 + 6 + 2 + 4 tests)
+
+**Behavioral guarantee**: Zero behavioral change — quaternion normalization via `state.orientation.normalize()` already handled drift correction, making `UnitQuaternionConstraint` forces redundant. All collision response behavior preserved through `CollisionPipeline::solve()` (renamed from `solveWithContacts()`).
+
+**Performance**: Negligible improvement — removed redundant constraint force computation (~10-20 FLOPs per frame per object) that was immediately overwritten by normalization. Memory reduction: ~100 bytes per `SemiImplicitEulerIntegrator` instance (removed `ConstraintSolver` member).
+
+---
+
 ### Collision Pipeline Integration — 2026-02-08
 **Ticket**: [0044_collision_pipeline_integration](../../tickets/0044_collision_pipeline_integration.md)
 **Diagram**: [`0044_collision_pipeline_integration.puml`](../../docs/designs/0044_collision_pipeline_integration/0044_collision_pipeline_integration.puml)

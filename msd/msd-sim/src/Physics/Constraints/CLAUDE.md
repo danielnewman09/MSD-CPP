@@ -8,18 +8,22 @@
 ```
 AssetInertial (Owns constraints)
     └── std::vector<std::unique_ptr<Constraint>>
-        ├── UnitQuaternionConstraint (default)
         ├── DistanceConstraint
         └── ... (user-defined constraints)
 
-SemiImplicitEulerIntegrator
+CollisionPipeline
     └── ConstraintSolver
-        ├── Bilateral constraints → LLT direct solve
         ├── Contacts (no friction) → Active Set Method
         └── Contacts (with friction) → ECOS SOCP solver
+
+SemiImplicitEulerIntegrator
+    └── (No ConstraintSolver dependency)
+        └── Quaternion normalization via state.orientation.normalize()
 ```
 
 **Key benefit**: New constraint types (joints, limits) can be added by implementing the `Constraint` interface without modifying the solver.
+
+**Note**: As of ticket 0045, the integrator no longer uses `ConstraintSolver` or accepts constraints. Quaternion drift is corrected via direct normalization. Constraint solving is now exclusively used by `CollisionPipeline` for contact response.
 
 ---
 
@@ -51,9 +55,10 @@ Prevents constraint drift by adding feedback:
 
 | Constraint Type | Method | Complexity | Notes |
 |-----------------|--------|------------|-------|
-| Bilateral (single-body) | LLT direct | O(n³) | n < 100 for real-time |
 | Contact (no friction) | Active Set Method | Finite iterations | Exact LCP solution |
 | Contact (with friction) | ECOS SOCP | ~5-30 iterations | Exact friction cone |
+
+**Note**: Bilateral single-body solver path was removed in ticket 0045. The integrator no longer uses `ConstraintSolver`. Contact constraints are solved exclusively by `CollisionPipeline`.
 
 ### Active Set Method (Tickets 0032b, 0034)
 
@@ -197,10 +202,11 @@ worldModel.addConstraint(std::make_unique<MyJointConstraint>(indexA, indexB));
 ## Integration with Physics Pipeline
 
 1. **Ownership**: AssetInertial owns constraints via `unique_ptr`
-2. **Default**: Every AssetInertial includes UnitQuaternionConstraint
-3. **Gathering**: WorldModel collects constraints from all assets
-4. **Solving**: SemiImplicitEulerIntegrator invokes ConstraintSolver
-5. **Application**: Constraint forces added before integration
+2. **Default** (as of ticket 0045): AssetInertial constraint list is empty by default. No automatic UnitQuaternionConstraint added.
+3. **Contact solving**: CollisionPipeline creates ContactConstraints from collision manifolds and invokes `ConstraintSolver::solve()`
+4. **Quaternion normalization**: SemiImplicitEulerIntegrator enforces quaternion normalization via direct `state.orientation.normalize()` call (not constraint-based)
+
+**Historical note**: Prior to ticket 0045, every AssetInertial included a default UnitQuaternionConstraint, and the integrator owned a ConstraintSolver instance. This was removed as redundant with direct quaternion normalization.
 
 ---
 
