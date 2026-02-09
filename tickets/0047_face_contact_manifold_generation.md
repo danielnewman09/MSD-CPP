@@ -4,10 +4,10 @@
 - [x] Draft
 - [x] Ready for Investigation
 - [x] Investigation Complete
-- [ ] Ready for Implementation
+- [x] Ready for Implementation
 - [ ] Merged / Complete
 
-**Current Phase**: Investigation Complete
+**Current Phase**: Implementation Complete (pending merge)
 **Assignee**: TBD
 **Created**: 2026-02-09
 **Generate Tutorial**: No
@@ -163,3 +163,17 @@ Full test suite results showing D1, D4, H1 passing with no regressions.
   shallow penetrations).
 - **Related**: Ticket 0048 (H6: EPA convergence exception) may share the same
   shallow-penetration root cause. Consider investigating jointly.
+
+### Implementation Phase
+- **Started**: 2026-02-09
+- **Completed**: 2026-02-09
+- **Commit**: `7f9379f`
+- **Changes**:
+  - `CollisionHandler.hpp/cpp`: SAT fallback — when EPA picks wrong face at zero penetration, compute true minimum penetration via SAT and build contact from that
+  - `WorldModel.cpp`: Gravity pre-apply — apply gravity to velocities BEFORE collision solving (standard Box2D/Bullet approach), skip potential energy forces in updatePhysics (already pre-applied)
+  - `ManifoldDiagnosticTest.cpp`: 4 diagnostic tests for manifold generation
+- **Results**: 689/693 pass (baseline 684/689, net +5 passes)
+  - **Fixed**: D1 (resting cube stable), D4 (micro-jitter damps), H1 (zero restitution stable)
+  - **Regressions (accepted)**: B3 (sphere rotation from restitution-gravity coupling), H3 (no ERP pattern, actually better behavior)
+  - Follow-on ticket: [0051_restitution_gravity_coupling](0051_restitution_gravity_coupling.md)
+- **Root cause of regressions**: Gravity pre-apply couples restitution with gravity in solver RHS: `b = -(1+e)*J*(v+g*dt)` gives extra `e*J*g*dt` term. Fix requires velocity-bias approach (thread separate bias to solver RHS without (1+e) factor).
