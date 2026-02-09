@@ -226,21 +226,17 @@ Testing strategy to be defined when test framework is added.
 
 ---
 
-## Recent Architectural Changes
+## Change History
 
-### Initial Asset Generator Implementation — 2025-12-28
-Initial implementation of the asset generation tool.
+For architectural change history, design decision rationale, and symbol-level evolution, use the traceability database MCP tools:
 
-**Key files added**:
-- `src/generate_assets.cpp` — Main executable implementing cube and pyramid asset generation
-- `src/CMakeLists.txt` — Build configuration
-- `CLAUDE.md` — This architectural documentation
+- `get_ticket_impact("NNNN")` — All commits, file changes, and decisions for a ticket
+- `search_decisions("query")` — Search design decision rationale and trade-offs
+- `why_symbol("qualified_name")` — Design decision(s) that created or modified a symbol
+- `get_symbol_history("qualified_name")` — Timeline of changes to a symbol across commits
+- `get_commit_context("sha")` — Full context for a commit (ticket, phase, file/symbol changes)
 
-**Capabilities**:
-- Creates SQLite database with primitive assets
-- Generates cube and pyramid geometries
-- Stores visual and collision mesh data
-- Links geometry via ObjectRecord foreign keys
+See [`scripts/traceability/README.md`](../../scripts/traceability/README.md) for details.
 
 ---
 

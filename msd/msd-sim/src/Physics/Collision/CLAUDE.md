@@ -106,20 +106,6 @@ void WorldModel::updateCollisions(double dt) {
 
 ---
 
-## Historical Context: CollisionResponse Removal
-
-**Removed**: Ticket 0032d (2026-01-31)
-
-The original `CollisionResponse` namespace provided impulse-based collision response but was removed because:
-1. Duplicated constraint solver logic
-2. Inconsistent with Lagrangian mechanics formulation
-3. Could not extend to friction or multi-contact stability
-4. Made collision a special case rather than a general constraint
-
-**Migration**: All functionality now in ContactConstraint + ConstraintSolver.
-
----
-
 ## Limitations and Future Work
 
 ### Current Limitations
