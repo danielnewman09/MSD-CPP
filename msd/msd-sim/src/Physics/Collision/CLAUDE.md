@@ -52,8 +52,6 @@ When GJK confirms intersection, we need penetration depth and contact normal. EP
 
 **Edge contact manifold** (Ticket 0040c): Edge-edge contacts (where Sutherland-Hodgman clipping produces < 3 points) generate 2 contact points with geometric extent along the contact edge segment, enabling torque generation from edge impacts. Uses `ConvexHull::findClosestEdge()` to identify contacting edges and a segment-segment closest point algorithm (Ericson 2004, Section 5.1.9) to compute contact point placement. Falls back to single-point contact if edge detection produces degenerate results.
 
-**Graceful degradation** (Ticket 0048): When EPA reaches max iterations without converging, it returns the best available result (closest polytope face found so far) instead of throwing an exception. This handles near-degenerate geometry where identical micro-rotations cause EPA to stall. Matches standard practice in production physics engines.
-
 ### Why std::optional<CollisionResult>?
 
 Collision is inherently optional—most object pairs don't collide. Using `std::optional` makes the API self-documenting and eliminates the need for a separate `intersecting` boolean field.
