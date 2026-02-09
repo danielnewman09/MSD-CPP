@@ -3,7 +3,7 @@
 ## Status
 - [x] Draft
 - [x] Ready for Design
-- [ ] Design Complete — Awaiting Review
+- [x] Design Complete — Awaiting Review
 - [ ] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
@@ -12,7 +12,7 @@
 - [ ] Approved — Ready to Merge
 - [ ] Merged / Complete
 
-**Current Phase**: Ready for Design
+**Current Phase**: Design Complete — Awaiting Review
 **Assignee**: TBD
 **Created**: 2026-02-09
 **Generate Tutorial**: No
@@ -112,3 +112,17 @@ Full test suite results showing B3, H3 fixed with no regressions.
 - **Timestamp**: 2026-02-09
 - **Action**: Advanced to Ready for Design (skipped Investigation as problem is well-understood)
 - **Notes**: Ticket restructured to follow standard workflow. Proposed solution (velocity-bias approach) to be validated during design phase.
+
+### Design Phase
+- **Started**: 2026-02-09
+- **Completed**: 2026-02-09
+- **Branch**: 0051-restitution-gravity-coupling
+- **PR**: #19 (draft)
+- **Artifacts**:
+  - `docs/designs/0051_restitution_gravity_coupling/design.md`
+  - `docs/designs/0051_restitution_gravity_coupling/0051_restitution_gravity_coupling.puml`
+- **Design Decisions**:
+  - **DD-0051-001**: Use velocity-bias instead of direct mutation (decouples restitution from gravity)
+  - **DD-0051-002**: SpatialVector as simple aggregate (Rule of Zero, clear intent)
+  - **DD-0051-003**: Remove direct velocity mutation from WorldModel (single source of truth)
+- **Notes**: Design validates velocity-bias approach. New component: SpatialVector (6-DOF spatial velocity bias). Modified components: ConstraintSolver (add velocityBias parameter to solve/assembleRHS), CollisionPipeline (thread bias through execute), WorldModel (compute bias from potential energies, remove direct mutation). No prototype needed (straightforward threading of parameter).
