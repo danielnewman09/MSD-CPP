@@ -144,12 +144,13 @@ CollisionResult EPA::computeContactInfo(const std::vector<Coordinate>& simplex,
   addFace(1, 3, 2);  // BDC
 
   // Expand polytope until convergence
-  if (!expandPolytope(maxIterations))
-  {
-    throw std::runtime_error("EPA failed to converge within max iterations");
-  }
+  // Ticket: 0048 — graceful degradation: use best result when max iterations
+  // reached instead of throwing. This handles near-degenerate geometry where
+  // EPA stalls (e.g., identical micro-rotations from PositionCorrector).
+  expandPolytope(maxIterations);
 
-  // Extract contact information from closest face
+  // Extract contact information from closest face (best approximation if not
+  // fully converged)
   size_t const closestFaceIndex = findClosestFace();
   const Facet& closestFace = faces_[closestFaceIndex];
 

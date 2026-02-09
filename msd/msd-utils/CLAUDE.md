@@ -212,29 +212,17 @@ ctest --test-dir build -L integration     # Integration tests
 
 ---
 
-## Recent Architectural Changes
+## Change History
 
-### LRU Query Cache — 2024-01-20
-**Ticket**: [lru-cache](tickets/lru-cache.md)  
-**Diagram**: [`docs/designs/lru-cache/lru-cache.puml`](docs/designs/lru-cache/lru-cache.puml)
+For architectural change history, design decision rationale, and symbol-level evolution, use the traceability database MCP tools:
 
-Added template-based LRU cache with TTL support to reduce duplicate database queries. Profiling showed 40% of queries were duplicates within a 5-second window.
+- `get_ticket_impact("NNNN")` — All commits, file changes, and decisions for a ticket
+- `search_decisions("query")` — Search design decision rationale and trade-offs
+- `why_symbol("qualified_name")` — Design decision(s) that created or modified a symbol
+- `get_symbol_history("qualified_name")` — Timeline of changes to a symbol across commits
+- `get_commit_context("sha")` — Full context for a commit (ticket, phase, file/symbol changes)
 
-**Key files added**:
-- `include/cache/lru_cache.hpp` — Generic LRU cache template
-- `include/cache/query_cache.hpp` — Query-specific cache wrapper
-- `src/cache/query_cache.cpp` — Implementation
-- `test/unit/cache/lru_cache_test.cpp` — Unit tests
-
-### Connection Pool — 2024-01-10
-**Ticket**: [connection-pool](tickets/connection-pool.md)  
-**Diagram**: [`docs/designs/connection-pool/connection-pool.puml`](docs/designs/connection-pool/connection-pool.puml)
-
-Introduced connection pooling to reduce connection establishment overhead. Initial implementation supports fixed pool size with configurable timeout.
-
-**Key files added**:
-- `include/database/connection_pool.hpp` — Pool interface and implementation
-- `include/database/pooled_connection.hpp` — RAII connection wrapper
+See [`scripts/traceability/README.md`](../../scripts/traceability/README.md) for details.
 
 ---
 

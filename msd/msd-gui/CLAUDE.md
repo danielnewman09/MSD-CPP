@@ -893,70 +893,17 @@ Currently focused on integration testing through the main executable (`msd_exe`)
 
 ---
 
-## Recent Architectural Changes
+## Change History
 
-### Simulation-GPU Integration Refactor — 2026-01-18
+For architectural change history, design decision rationale, and symbol-level evolution, use the traceability database MCP tools:
 
-Refactored the GUI layer to integrate directly with `msd_sim::Engine` and `msd_sim::AssetInertial` objects instead of using mock object vectors. Introduced `InstanceManager` to separate instance data management from GPU resource management.
+- `get_ticket_impact("NNNN")` — All commits, file changes, and decisions for a ticket
+- `search_decisions("query")` — Search design decision rationale and trade-offs
+- `why_symbol("qualified_name")` — Design decision(s) that created or modified a symbol
+- `get_symbol_history("qualified_name")` — Timeline of changes to a symbol across commits
+- `get_commit_context("sha")` — Full context for a commit (ticket, phase, file/symbol changes)
 
-**Key changes**:
-- `msd/msd-gui/src/GPUInstanceManager.hpp` — New `InstanceManager<ShaderPolicy>` template class for instance data management
-- `msd/msd-gui/src/SDLGPUManager.hpp` — Refactored to own `InstanceManager`, dynamic geometry registration via asset IDs
-- `msd/msd-gui/src/SDLApp.hpp/.cpp` — Removed mock object storage, added `registerAssets()` for asset-to-geometry mapping
-- `msd/msd-gui/src/ShaderPolicy.hpp/.cpp` — `buildInstanceData()` now takes `AssetInertial` + explicit color instead of `Object`
-
-**Design decisions**:
-- **InstanceManager separation**: Decouples instance data lifecycle (add/remove/update) from GPU pipeline management
-- **Asset ID mapping**: `GPUManager` maintains `assetIdToGeometryIndex_` map for O(1) geometry lookup from simulation objects
-- **Direct simulation integration**: `GPUManager::update(engine)` pulls transforms directly from `msd_sim::Engine::WorldModel`
-- **Emscripten removal**: Removed browser/WebAssembly support to simplify codebase (native-only)
-- **Color externalization**: Object color now passed as parameters rather than stored on simulation objects
-
-**API changes**:
-- `GPUManager::addObject()` now takes `AssetInertial&` instead of `Object`
-- `GPUManager::updateObjects()` replaced with `GPUManager::update(engine)`
-- `GPUManager::registerGeometry()` now uses `uint32_t assetId` instead of `string name`
-- Removed `GPUManager::removeObject()` and `GPUManager::clearObjects()` (use `InstanceManager` directly)
-
----
-
-### Input State Management System — 2026-01-05
-**Ticket**: [0004_gui_framerate](../../tickets/0004_gui_framerate.md)
-**Diagram**: [`docs/designs/input-state-management/input-state-management.puml`](../../docs/designs/input-state-management/input-state-management.puml)
-
-Introduced comprehensive input management system that separates input state tracking from input handling logic. This enables flexible control of both camera and simulation objects via keyboard input with support for multiple input modes (Continuous, TriggerOnce, Interval, PressAndHold).
-
-**Key changes**:
-- `msd/msd-gui/src/InputState.hpp/.cpp` — Keyboard state tracking with timestamp information
-- `msd/msd-gui/src/InputHandler.hpp/.cpp` — Binding management and processing with InputMode support
-- `msd/msd-gui/src/CameraController.hpp/.cpp` — Camera movement encapsulation with delta-time scaling
-- `msd/msd-gui/src/SDLApp.hpp/.cpp` — Integrated new input system, added frame timing
-
-**Design decisions**:
-- Separation of concerns: InputState (tracking) vs InputHandler (processing) vs CameraController (application)
-- TriggerOnce bindings execute immediately in handleSDLEvent (not deferred to processInput)
-- Frame-rate independence through delta time tracking
-- Non-owning camera reference in CameraController (owned by GPUManager)
-- Extensible InputMode enum for future input behaviors
-
-### Shader Policy System — 2026-01-03
-**Ticket**: [0002_remove_rotation_from_gpu](../../tickets/0002_remove_rotation_from_gpu.md)
-**Diagram**: [`docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml`](../../docs/designs/modularize-gpu-shader-system/modularize-gpu-shader-system.puml)
-
-Refactored GPUManager to support multiple shader types through a compile-time template-based policy system. This enables switching between position-only rendering (32-byte instance data) and full transform rendering (96-byte instance data with 4x4 matrices) without runtime overhead.
-
-**Key changes**:
-- `msd/msd-gui/src/ShaderPolicy.hpp` — Shader policy interface and implementations
-- `msd/msd-gui/src/ShaderPolicy.cpp` — Policy method implementations
-- `msd/msd-gui/src/SDLGPUManager.hpp` — Template-ized with ShaderPolicy parameter
-- `msd/msd-gui/src/SDLApp.hpp` — Type alias for AppGPUManager with default policy
-- `msd/msd-gui/test/unit/shader_policy_test.cpp` — Unit tests for shader policies
-
-**Design decisions**:
-- Compile-time template approach for zero-cost abstraction
-- 16-byte aligned instance data for GPU efficiency
-- PositionOnlyShaderPolicy as default for simplified debugging
-- Future extensibility for additional shader types (textured, normal-mapped, etc.)
+See [`scripts/traceability/README.md`](../../scripts/traceability/README.md) for details.
 
 ---
 
