@@ -1,0 +1,176 @@
+@startuml
+skinparam class {
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<removed>> LightGray
+}
+
+package "Physics/Constraints" {
+    class ConstraintSolver <<modified>> {
+        - max_safety_iterations_: int
+        - convergence_tolerance_: double
+        - ecos_abs_tol_: double
+        - ecos_rel_tol_: double
+        - ecos_max_iters_: int
+        --
+        + ConstraintSolver()
+        + ~ConstraintSolver()
+        --
+        {method} <b>+ solve()</b> → SolveResult
+        {method} <s>- solveWithContacts()</s>
+        {method} <s>- MultiBodySolveResult</s>
+        --
+        + setMaxIterations(int): void
+        + setConvergenceTolerance(double): void
+        + setECOSTolerance(double, double): void
+        + setECOSMaxIterations(int): void
+        + getECOSTolerance(): pair<double, double>
+        + getECOSMaxIterations(): int
+        --
+        {method} <b>- assembleJacobians()</b> → vector<MatrixXd>
+        {method} <b>- assembleEffectiveMass()</b> → MatrixXd
+        {method} <b>- assembleRHS()</b> → VectorXd
+        {method} <b>- extractBodyForces()</b> → vector<BodyForces>
+        {method} <s>- assembleContactJacobians()</s>
+        {method} <s>- assembleContactEffectiveMass()</s>
+        {method} <s>- assembleContactRHS()</s>
+        {method} <s>- extractContactBodyForces()</s>
+        --
+        - solveActiveSet(): ActiveSetResult
+        - solveWithECOS(): ActiveSetResult
+        - buildFrictionConeSpec(): FrictionConeSpec
+        --
+        {method} <s>- solve() [single-body]</s>
+        {method} <s>- assembleConstraintMatrix()</s>
+        {method} <s>- assembleRHS() [single-body]</s>
+        {method} <s>- extractConstraintForces()</s>
+        {method} <s>- kNumStates: size_t</s>
+    }
+
+    struct SolveResult <<modified>> {
+        + bodyForces: vector<BodyForces>
+        + iterations: int
+        + converged: bool
+        --
+        Note: Renamed from MultiBodySolveResult
+    }
+
+    struct "MultiBodySolveResult" as MBR <<removed>> {
+        Deleted
+    }
+
+    struct "SolveResult [old]" as SR_old <<removed>> {
+        Deleted: single-body version
+    }
+
+    ConstraintSolver --> SolveResult : returns
+    ConstraintSolver ..> MBR : deletes
+    ConstraintSolver ..> SR_old : deletes
+}
+
+package "Physics/Integration" {
+    class Integrator <<modified>> {
+        {method} <b>+ step(state, forces, dt)</b>
+        {method} <s>- step(..., constraints)</s>
+        --
+        Note: Removed constraints parameter
+    }
+
+    class SemiImplicitEulerIntegrator <<modified>> {
+        {method} <s>- solver_: ConstraintSolver</s>
+        {method} <s>- SemiImplicitEulerIntegrator(ConstraintSolver)</s>
+        --
+        + SemiImplicitEulerIntegrator() = default
+        {method} <b>+ step(state, forces, dt)</b>
+        {method} <s>- step(..., constraints)</s>
+        --
+        Note: Constraint solving removed
+        Note: Quaternion normalize() remains
+    }
+
+    Integrator <|-- SemiImplicitEulerIntegrator
+}
+
+package "Physics/RigidBody" {
+    class AssetInertial <<modified>> {
+        - constraints_: vector<unique_ptr<Constraint>>
+        --
+        Note: Empty by default
+        Note: No UnitQuaternionConstraint
+    }
+}
+
+package "Environment" {
+    class WorldModel <<modified>> {
+        - integrator_: unique_ptr<Integrator>
+        --
+        + updatePhysics(dt): void
+        --
+        Note: No constraint gathering
+        Note: integrator_->step() without constraints
+    }
+}
+
+package "Physics/Collision" {
+    class CollisionPipeline <<modified>> {
+        - solver_: ConstraintSolver
+        --
+        + solveConstraintsWithWarmStart(): void
+        --
+        Note: Uses renamed solve()
+        Note: Uses renamed SolveResult
+    }
+
+    CollisionPipeline --> ConstraintSolver : uses
+}
+
+WorldModel --> Integrator : uses
+WorldModel --> AssetInertial : manages
+CollisionPipeline ..> ConstraintSolver : delegates to
+
+note right of ConstraintSolver
+  <b>Unified Solver Path</b>
+
+  Before:
+  • solve() - single-body, 7-DOF position-level
+  • solveWithContacts() - multi-body, 12-DOF velocity-level
+  • SolveResult vs MultiBodySolveResult
+  • "Contact" prefix on multi-body helpers
+
+  After:
+  • solve() - unified multi-body velocity-level
+  • SolveResult - single result type
+  • Generic helper names (no "Contact" prefix)
+  • Single-body path deleted (dead code)
+end note
+
+note right of SemiImplicitEulerIntegrator
+  <b>Simplified Integration</b>
+
+  Before:
+  • Owned ConstraintSolver instance
+  • Accepted constraints parameter
+  • Solved UnitQuaternionConstraint
+  • Normalized quaternion (redundant)
+
+  After:
+  • No ConstraintSolver dependency
+  • No constraints parameter
+  • Pure integration logic
+  • Quaternion normalize() is the sole drift correction
+end note
+
+note right of AssetInertial
+  <b>Default Constraints</b>
+
+  Before:
+  • constraints_ = [UnitQuaternionConstraint]
+  • Constraint forces computed but immediately
+    superseded by quaternion normalize()
+
+  After:
+  • constraints_ = [] (empty by default)
+  • Users can add custom constraints if needed
+  • UnitQuaternionConstraint class kept for testing
+end note
+
+@enduml
