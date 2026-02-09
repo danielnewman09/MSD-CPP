@@ -231,35 +231,61 @@ If the degenerate case is triggered legitimately (e.g., cube corner contacts), e
 
 ---
 
+## Phase 5: Runtime Diagnostic Results (2026-02-09)
+
+A hands-on diagnostic test (`ManifoldDiagnosticTest.cpp`) was implemented to verify the manifold generation at runtime.
+
+### Test Setup
+Exact D1 scenario: 1m cube (center z=0.49, bottom at z=-0.01) resting on 100m floor (center z=-50, top at z=0). Penetration = 0.01m.
+
+### Results
+
+**All three original hypotheses are REFUTED.** The manifold generation works correctly at 0.01m penetration:
+
+```
+Cube facets aligned with (0,0,-1): 2  (correct — 2 triangular facets per quad face)
+Floor facets aligned with (0,0,1): 2  (correct)
+
+Contact count: 4  (correct!)
+Normal: (0, 0, -1)
+Penetration depth: 0.01
+
+Contact 0: pointA=(0.5, 0.5, -0.01)   pointB=(0.5, 0.5, 0)    depth=0.01
+Contact 1: pointA=(0.5, -0.5, -0.01)  pointB=(0.5, -0.5, 0)   depth=0.01
+Contact 2: pointA=(-0.5, -0.5, -0.01) pointB=(-0.5, -0.5, 0)  depth=0.01
+Contact 3: pointA=(-0.5, 0.5, -0.01)  pointB=(-0.5, 0.5, 0)   depth=0.01
+```
+
+### Revised Understanding
+
+The manifold generation algorithm is **architecturally correct and fully functional** at moderate penetration depths. The original problem statement (EPA always produces 1 contact for face-face) is **wrong**.
+
+The actual root cause of D1/D4/H1 failures must be in a different regime:
+- **Very shallow penetrations** (depth approaching EPA epsilon ~1e-6) encountered during resting contact simulation after PositionCorrector pushes bodies apart
+- **Zero or near-zero penetration** where EPA's polytope expansion may produce degenerate geometry
+- **Frame-to-frame manifold instability** where contact count or positions oscillate between frames
+
+### Potential Coupling with Ticket 0048
+
+Ticket 0048 (H6: EPA convergence exception) fails with shallow 0.01m penetration between two inertial cubes. The shared pattern is **EPA instability at shallow penetrations**. These two tickets likely share a root cause and should be investigated jointly.
+
+### Next Steps
+
+1. **Investigate EPA behavior at penetration depths from 0.01m down to 1e-6m** — sweep penetration depth and record contact count, positions, and whether EPA converges
+2. **Capture per-frame manifold data during D1 simulation** — log contact count and positions at each frame to identify when manifold degrades
+3. **Joint investigation with 0048** — the shallow-penetration EPA robustness issue may resolve both tickets
+
+---
+
 ## Conclusions and Recommendations
 
-### Investigation Summary
+### Investigation Summary (Updated)
 
-After code analysis of the contact manifold generation pipeline, I have identified the degenerate-case branch (lines 573-586 in EPA.cpp) as the fallthrough path for axis-aligned cube-on-plane contacts. However, the exact reason for this fallthrough cannot be determined without running diagnostic tests to observe actual runtime behavior.
+The manifold generation algorithm works correctly for moderate penetrations. The failures in D1/D4/H1 are **not** caused by a broken manifold algorithm, but by EPA behavior at very shallow penetration depths encountered during resting contact. This is likely the same root cause as ticket 0048's EPA convergence failure.
 
-The manifold generation algorithm is architecturally sound and matches industry-standard implementations (Sutherland-Hodgman clipping). The issue is likely a subtle numerical or geometric edge case in:
-- Qhull facet triangulation patterns
-- Alignment detection thresholds
-- Vertex collection logic
-- Floating-point precision in transformations
+### Recommendation: Joint Investigation with Ticket 0048
 
-### Recommendation: Proceed to Prototype Phase
-
-The investigation has narrowed the search space and identified three concrete hypotheses. The next step is to:
-
-1. **Implement diagnostic test** (Phase 3 outline above) to capture runtime values
-2. **Log intermediate data**:
-   - Number of aligned facets returned by `getFacetsAlignedWith()`
-   - Size of `refVerts` and `incidentPoly` vectors
-   - Whether degenerate branch triggers
-   - Actual contact point count in `CollisionResult`
-3. **Confirm root cause** based on logged data
-4. **Prototype fix** based on confirmed failure mode
-5. **Validate** with D1, D4, H1 passing
-
-### Next Action
-
-Advance ticket to "Investigation Complete" and prepare for prototype phase with diagnostic test implementation.
+Investigate EPA behavior across a range of shallow penetration depths (0.01m to 1e-6m) to identify the threshold where manifold quality degrades or EPA fails to converge. This single investigation may resolve both 0047 (D1/D4/H1 instability) and 0048 (H6 convergence exception).
 
 ---
 

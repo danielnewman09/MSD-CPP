@@ -11,14 +11,14 @@
 **Assignee**: TBD
 **Created**: 2026-02-09
 **Generate Tutorial**: No
-**Related Tickets**: [0046_slop_correction_evaluation](0046_slop_correction_evaluation.md), [0040c_edge_contact_manifold](0040c_edge_contact_manifold.md), [0027a_expanding_polytope_algorithm](0027a_expanding_polytope_algorithm.md)
+**Related Tickets**: [0046_slop_correction_evaluation](0046_slop_correction_evaluation.md), [0040c_edge_contact_manifold](0040c_edge_contact_manifold.md), [0027a_expanding_polytope_algorithm](0027a_expanding_polytope_algorithm.md), [0048_epa_convergence_robustness](0048_epa_convergence_robustness.md) (potential shared root cause: shallow penetration EPA instability)
 **Type**: Investigation / Feature Enhancement
 
 ---
 
 ## Problem Statement
 
-EPA's `extractContactManifold()` produces a **single contact point** for face-on-face contact scenarios. When two axis-aligned cube faces are in contact (e.g., a cube resting on a flat floor), the manifold should produce 4 contact points (one at each corner of the contact region), but instead produces 1 point at an offset location. This single offset contact point creates a non-zero lever arm `r x n != 0`, generating spurious torque that destabilizes resting contacts.
+EPA's `extractContactManifold()` produces unstable contact manifolds during resting contact simulation, leading to spurious rotation and energy injection in long-running resting contact scenarios.
 
 ### Affected Tests (3 tests)
 
@@ -28,13 +28,18 @@ EPA's `extractContactManifold()` produces a **single contact point** for face-on
 | `D4_MicroJitter_DampsOut` | ContactManifoldStabilityTest | Micro-jitter amplified 26.6x (threshold 10x), vel@50 = 0.16 (threshold 0.087) | Perturbation of 0.017 m/s amplifies instead of damping |
 | `H1_DisableRestitution_RestingCube` | ParameterIsolation | Energy grows 10.6% with e=0 (should be stable), rotKE = 2.66 J (threshold 0.01) | Energy growth 26x better than pre-0046 baseline but still present |
 
-### Root Cause Analysis
+### Root Cause Analysis (Updated)
 
-The Sutherland-Hodgman clipping algorithm in `EPA::extractContactManifold()` is intended to produce multi-point contact manifolds for face-face contacts. However, for axis-aligned cube-on-plane scenarios, the algorithm falls through to the degenerate-case branch (< 3 clipped points) and produces a single contact point. This single point is positioned at the EPA witness point, which is typically offset from the center of mass, creating a lever arm that converts normal force into torque.
+**Key finding**: The Sutherland-Hodgman clipping algorithm in `EPA::extractContactManifold()` **works correctly** for moderate penetrations. A diagnostic test confirmed that with 0.01m penetration, EPA correctly produces 4 contact points at the 4 corners of the cube's bottom face with correct normals and depths.
 
-**Why this matters**: With 4 contact points symmetrically positioned around the face, the torques from normal forces cancel out (sum of `r_i x F_i = 0` for symmetric `r_i`). With 1 offset contact point, every frame of resting contact injects rotational energy into the system.
+**Revised hypothesis**: The manifold generation degrades during **shallow or zero-depth penetration** — the exact regime encountered during resting contact simulation. As the cube rests on the floor, PositionCorrector pushes it to near-zero penetration. At very shallow penetration depths (approaching EPA's epsilon = 1e-6), the manifold generation may:
+1. Fall through to the degenerate branch due to numerical precision issues
+2. Produce fewer contact points as the clipping region shrinks to near-zero area
+3. Generate unstable contact geometry that varies frame-to-frame
 
-**Evidence from 0046 investigation**: After removing slop correction, D1/H1 dramatically improved (26x less energy injection for H1) but still fail because the residual energy injection comes from the single-contact-point torque mechanism, not from slop.
+**Potential coupling with ticket 0048**: EPA throws a convergence exception for shallow (0.01m) penetrations in the H6 test case (zero-gravity, two axis-aligned cubes). The same shallow-penetration EPA instability may be the shared root cause for both tickets 0047 (manifold quality degradation) and 0048 (convergence failure).
+
+**Evidence from 0046 investigation**: After removing slop correction, D1/H1 dramatically improved (26x less energy injection for H1) but still fail because the residual energy injection comes from the manifold instability at shallow penetration depths.
 
 ---
 
@@ -135,3 +140,26 @@ Full test suite results showing D1, D4, H1 passing with no regressions.
   - Developed 3 hypotheses requiring diagnostic testing to confirm root cause
   - Created diagnostic test outline for prototype phase
   - **Conclusion**: Investigation narrowed search space, prototype phase required to confirm exact root cause via runtime diagnostics
+
+### Diagnostic Phase (Hands-on)
+- **Started**: 2026-02-09
+- **Status**: Paused — shallow penetration investigation pending
+- **Artifacts**:
+  - `msd-sim/test/Physics/Collision/ManifoldDiagnosticTest.cpp` — runtime diagnostic test
+- **Key Finding**: EPA manifold generation **works correctly at 0.01m penetration**.
+  Diagnostic test confirmed:
+  - `getFacetsAlignedWith()` correctly returns 2 triangular facets per cube face
+  - `buildPolygonFromFacets()` correctly collects 4 unique vertices per face
+  - `extractContactManifold()` produces 4 contact points at correct positions
+  - Contact points are at 4 corners: (+-0.5, +-0.5) with correct depths
+  - Normal is (0, 0, -1) as expected
+- **Implication**: The original hypothesis (manifold always produces 1 contact) is **refuted**.
+  The manifold generation algorithm is architecturally correct and functional.
+  The problem occurs at a different penetration regime — likely very shallow
+  or zero penetration encountered during resting contact simulation.
+- **Next Step**: Investigate EPA behavior at very shallow penetrations (depth << 0.01m),
+  which is the regime PositionCorrector maintains during resting contact.
+  This may share a root cause with ticket 0048 (EPA convergence failure for
+  shallow penetrations).
+- **Related**: Ticket 0048 (H6: EPA convergence exception) may share the same
+  shallow-penetration root cause. Consider investigating jointly.
