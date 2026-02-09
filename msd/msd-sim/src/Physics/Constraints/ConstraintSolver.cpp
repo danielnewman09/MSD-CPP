@@ -42,9 +42,10 @@ namespace msd_sim
 // Replaced PGS (Ticket 0032b) with ASM (Ticket 0034) for exact convergence.
 //
 // CRITICAL notes from prototype debugging:
-// - Baumgarte uses ERP formulation: b += (ERP/dt) · penetration_depth
-// - Restitution RHS: b = -(1+e) · J·v_minus (for system A·λ = b)
+// - Velocity-level RHS: b = -(1+e) · J·v_minus (for system A·λ = b)
 // - DO NOT use -(1+e)·v as target velocity directly (causes energy injection)
+// - DO NOT add position-correction terms to RHS (causes energy injection, Ticket 0046)
+// - Penetration correction handled by PositionCorrector using pseudo-velocities
 // See:
 // prototypes/0032_contact_constraint_refactor/p2_energy_conservation/Debug_Findings.md
 
@@ -248,9 +249,12 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
 {
   const size_t c = contactConstraints.size();
 
-  // b_i = -(1 + e_i) · (J_i · v_minus) + (ERP_i / dt) · penetration_i
+  // b_i = -(1 + e_i) · (J_i · v_minus)
   //
-  // CRITICAL: The -(1+e) factor is correct for the PGS system A·λ = b.
+  // Ticket 0046: No position-correction terms in velocity-level RHS.
+  // Penetration resolved by PositionCorrector (pseudo-velocities, no KE injection).
+  //
+  // CRITICAL: The -(1+e) factor is correct for the system A·λ = b.
   // This differs from the target velocity formulation v_target = -e · v_pre.
   // See P2 Debug Findings for explanation.
   Eigen::VectorXd b(static_cast<Eigen::Index>(c));
@@ -279,45 +283,17 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
     double const jv =
       (jacobians[i] * v)(0);  // Scalar: relative velocity along constraint
 
-    // Restitution term with velocity-level slop correction (no Baumgarte bias)
+    // Restitution term (Ticket 0046: no velocity-level position correction)
     if (contact != nullptr)
     {
       double const e = contact->getRestitution();
 
-      // Ticket: 0040b — Split impulse: velocity-only RHS.
+      // Ticket: 0046 — Removed velocity-level slop correction.
       //
-      // Standard formula: b = -(1+e) * jv
-      // where jv = J·v (current relative velocity along constraint normal).
-      //
-      // For resting contacts (small jv, significant penetration), add gentle
-      // position correction velocity to prevent sinking under gravity.
-      // This replaces Baumgarte stabilization without injecting energy into
-      // high-speed impacts.
-      double const penetration = contact->getPenetrationDepth();
-
-      // Slop correction: only for resting contacts with significant penetration
-      double slopCorrection = 0.0;
-      constexpr double kSlop = 0.005;  // 5mm penetration allowed
-      if (penetration > kSlop)
-      {
-        // Velocity needed to resolve penetration over one frame
-        double const correctionVel = (penetration - kSlop) / dt;
-        // Scale down to avoid overcorrection (0.2 = ERP-like factor)
-        slopCorrection = 0.2 * correctionVel;
-        // Cap: never exceed 1 m/s correction to prevent energy injection
-        slopCorrection = std::min(slopCorrection, 1.0);
-        // Further cap: correction must not exceed approach speed to prevent
-        // energy injection during impacts. For resting contacts (jv ≈ 0),
-        // the slopCorrection dominates. For impacts, restitution dominates.
-        double const approachSpeed = std::abs(jv);
-        if (approachSpeed > 0.5)
-        {
-          // During impacts, restitution handles everything; no slop needed
-          slopCorrection = 0.0;
-        }
-      }
-
-      b(static_cast<Eigen::Index>(i)) = -(1.0 + e) * jv + slopCorrection;
+      // Pure velocity-level RHS: b = -(1+e) * jv
+      // Penetration correction is handled exclusively by PositionCorrector
+      // (ticket 0040b) using pseudo-velocities that don't inject kinetic energy.
+      b(static_cast<Eigen::Index>(i)) = -(1.0 + e) * jv;
     }
     else
     {

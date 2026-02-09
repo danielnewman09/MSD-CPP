@@ -103,9 +103,9 @@ public:
    * LLT decomposition until all KKT conditions are satisfied.
    *
    * CRITICAL implementation notes from prototype debugging:
-   * - Uses ERP formulation for Baumgarte stabilization (not alpha/beta)
    * - Restitution RHS: b = -(1+e) · J·v_minus (correct for system A·λ = b)
-   * - Baumgarte RHS: b += (ERP/dt) · penetration_depth
+   * - No position-correction terms in velocity RHS (Ticket 0046: causes energy injection)
+   * - Penetration resolved by PositionCorrector (pseudo-velocities, no KE injection)
    *
    * @param contactConstraints Two-body contact constraints (non-owning)
    * @param states Inertial states of all bodies
@@ -252,7 +252,7 @@ public:
    *   ||[λ_t1, λ_t2]|| <= μ * λ_n
    *
    * @param A Effective mass matrix (3C x 3C), symmetric positive semi-definite
-   * @param b RHS vector (3C x 1) with restitution and Baumgarte terms
+   * @param b RHS vector (3C x 1) with restitution terms
    * @param coneSpec Friction cone specification (μ per contact, normal indices)
    * @param numContacts Number of contacts (C)
    * @return ActiveSetResult with lambda, convergence info, ECOS diagnostics
@@ -304,12 +304,14 @@ private:
     size_t numBodies);
 
   /**
-   * @brief Assemble RHS vector with restitution and Baumgarte terms
+   * @brief Assemble RHS vector with restitution terms
    *
-   * b_i = -(1 + e_i) · (J_i · v⁻) + (ERP_i / dt) · penetration_i
+   * b_i = -(1 + e_i) · (J_i · v⁻)
+   *
+   * No position-correction terms — penetration handled by PositionCorrector.
    *
    * @return RHS vector (C × 1)
-   * @ticket 0045_constraint_solver_unification
+   * @ticket 0045_constraint_solver_unification, 0046_slop_correction_evaluation
    */
   [[nodiscard]] static Eigen::VectorXd assembleRHS(
     const std::vector<Constraint*>& contactConstraints,
@@ -338,7 +340,7 @@ private:
    * Safety cap: min(2*C, max_safety_iterations_) to prevent cycling.
    *
    * @param A Effective mass matrix (C x C), symmetric positive semi-definite
-   * @param b RHS vector (C x 1) with restitution and Baumgarte terms
+   * @param b RHS vector (C x 1) with restitution terms
    * @param numContacts Number of contacts (used for safety iteration cap =
    * 2*C). Note: numContacts == b.size() by construction (one constraint row per
    * contact). Passed explicitly rather than derived from b.size() to document

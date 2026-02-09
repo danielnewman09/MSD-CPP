@@ -63,80 +63,9 @@ std::vector<Coordinate> createCubePoints(double size)
 
 }  // anonymous namespace
 
-// ============================================================================
-// Velocity RHS Tests — Verify Baumgarte Removal
-// ============================================================================
-
-TEST(SplitImpulse, VelocityRHS_NoBaumgarteBias)
-{
-  // A resting contact (v_rel ~= 0) should have a MUCH smaller RHS than
-  // the old Baumgarte formula, but not exactly zero due to gentle slop
-  // correction for resting contacts with penetration > 5mm slop.
-  //
-  // Set up a contact with 10mm penetration but zero relative velocity.
-  // Old Baumgarte: RHS = (0.2/dt)*pen = (0.2/0.0167)*0.01 = 0.12 m/s
-  // New slop correction: 0.2 * (0.01 - 0.005) / (1/60) = 0.06 m/s (2× smaller)
-  //
-  // We compare lambda values (impulse magnitudes) to verify the improvement.
-
-  Coordinate normal{0.0, 0.0, 1.0};
-  Coordinate contactA{0.0, 0.0, 0.0};
-  Coordinate contactB{0.0, 0.0, 0.0};
-  Coordinate comA{0.0, 0.0, -0.5};
-  Coordinate comB{0.0, 0.0, 0.5};
-  double const penetration = 0.01;  // 10mm
-  double const restitution = 0.0;   // No restitution
-  double const dt = 1.0 / 60.0;
-
-  ContactConstraint constraint{0,
-                               1,
-                               normal,
-                               contactA,
-                               contactB,
-                               penetration,
-                               comA,
-                               comB,
-                               restitution,
-                               0.0};  // preImpactVel = 0 (resting)
-
-  std::vector<Constraint*> constraints{&constraint};
-
-  InertialState stateA = createDefaultState(Coordinate{0.0, 0.0, -0.5});
-  InertialState stateB = createDefaultState(Coordinate{0.0, 0.0, 0.5});
-  std::vector<std::reference_wrapper<const InertialState>> states{
-    std::cref(stateA), std::cref(stateB)};
-
-  std::vector<double> inverseMasses{0.1, 0.1};  // 10 kg each
-  std::vector<Eigen::Matrix3d> inverseInertias{
-    Eigen::Matrix3d::Identity() * 0.1, Eigen::Matrix3d::Identity() * 0.1};
-
-  ConstraintSolver solver;
-  auto result = solver.solve(
-    constraints, states, inverseMasses, inverseInertias, 2, dt);
-
-  // With zero relative velocity, e=0, and 10mm penetration (5mm above slop):
-  // slopCorrection = 0.2 * (0.01 - 0.005) / dt = 0.06
-  // RHS = -(1+0)*0 + 0.06 = 0.06 (small but positive)
-  //
-  // Old Baumgarte: b = (0.2/dt)*pen = 0.12 — 2× larger RHS
-  //
-  // Lambda from new formula should be about half of old Baumgarte lambda.
-  // Verify lambda is positive but small (gentle correction, not injection).
-  ASSERT_TRUE(result.converged);
-  ASSERT_GT(result.lambdas.size(), 0);
-
-  double const newLambda = result.lambdas(0);
-  double const oldBaumgarteRHS = (0.2 / dt) * penetration;  // 0.12
-  double const newSlopRHS = 0.06;  // 0.2 * (0.01 - 0.005) / dt
-
-  // Lambda is positive (slop correction active for resting contact)
-  EXPECT_GT(newLambda, 0.0)
-    << "Resting contact with penetration should get gentle slop correction";
-
-  // New RHS should be less than old Baumgarte RHS
-  EXPECT_LT(newSlopRHS, oldBaumgarteRHS)
-    << "New slop correction should be smaller than old Baumgarte bias";
-}
+// Ticket 0046: Removed VelocityRHS_NoBaumgarteBias test.
+// Slop correction was removed from velocity-level RHS as it injected energy.
+// Penetration correction now handled exclusively by PositionCorrector.
 
 TEST(SplitImpulse, VelocityRHS_RestitutionOnly)
 {

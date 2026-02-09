@@ -585,74 +585,9 @@ TEST(ConstraintSolverContactTest,
   EXPECT_GT(result.lambdas(0), 0.0);  // Repulsive force
 }
 
-TEST(ConstraintSolverContactTest, SlopCorrection_CappedToApproachVelocity_0033)
-{
-  // Ticket: 0040b — Split impulse with min-capped slop correction.
-  //
-  // slopRecovery = min(max(pen - 0.005, 0) / dt, |jv|)
-  //
-  // With approaching velocity and penetration, the slop correction adds
-  // bounce recovery capped to the approach velocity. At zero velocity,
-  // slopRecovery is capped to 0 and position correction is deferred
-  // to PositionCorrector.
-  ConstraintSolver solver;
-
-  Coordinate normal{0, 0, 1};
-  Coordinate contactA{0, 0, 0.5};
-  Coordinate contactB{0, 0, 0.3};
-  Coordinate comA{0, 0, 0};
-  Coordinate comB{0, 0, 0};
-
-  double const penetration = 0.2;
-  double const dt = 0.016;
-
-  std::vector<double> inverseMasses{1.0 / 10.0, 1.0 / 10.0};
-  std::vector<Eigen::Matrix3d> inverseInertias{createIdentityInertia(),
-                                               createIdentityInertia()};
-
-  // Case 1: Bodies approaching — elastic contact produces slop correction
-  {
-    InertialState stateA =
-      createDefaultState(Coordinate{0, 0, 0}, Coordinate{0, 0, 2.0});
-    InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
-
-    auto contact = std::make_unique<ContactConstraint>(
-      0, 1, normal, contactA, contactB, penetration, comA, comB, 0.5, 0.0);
-
-    std::vector<Constraint*> constraints{contact.get()};
-    std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                    stateB};
-    auto result = solver.solve(
-      constraints, states, inverseMasses, inverseInertias, 2, dt);
-
-    EXPECT_TRUE(result.converged);
-    EXPECT_GT(result.lambdas(0), 0.0)
-      << "Approaching elastic contact produces positive lambda";
-  }
-
-  // Case 2: Bodies at rest — slop correction provides gentle position recovery
-  // (Ticket: 0040b — resting contacts get small correction in velocity RHS
-  //  to prevent sinking, in addition to PositionCorrector)
-  {
-    InertialState stateA = createDefaultState(Coordinate{0, 0, 0});
-    InertialState stateB = createDefaultState(Coordinate{0, 0, 0.9});
-
-    auto contact = std::make_unique<ContactConstraint>(
-      0, 1, normal, contactA, contactB, penetration, comA, comB, 0.5, 0.0);
-
-    std::vector<Constraint*> constraints{contact.get()};
-    std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                    stateB};
-    auto result = solver.solve(
-      constraints, states, inverseMasses, inverseInertias, 2, dt);
-
-    EXPECT_TRUE(result.converged);
-    // Resting contact with penetration > slop produces small positive lambda
-    // from velocity-level slop correction (0.2 * (pen - 0.005) / dt)
-    EXPECT_GT(result.lambdas(0), 0.0)
-      << "Resting contact with penetration gets slop correction";
-  }
-}
+// Ticket 0046: Removed SlopCorrection_CappedToApproachVelocity_0033 test.
+// Slop correction was removed from velocity-level RHS as it injected energy.
+// Penetration correction now handled exclusively by PositionCorrector.
 
 TEST(ConstraintSolverContactTest, Restitution_ZeroBounce_0033)
 {

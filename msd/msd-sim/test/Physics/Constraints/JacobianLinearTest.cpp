@@ -311,14 +311,12 @@ TEST(EffectiveMass, TwoBody_EqualMass_HalfEffective)
 
 TEST(ContactRHS, RestitutionTerm_CorrectSign)
 {
-  // Ticket: 0040b — Split impulse with approach-velocity-gated slop correction.
+  // Ticket: 0040b, 0046 — Pure restitution RHS (no velocity-level slop).
   //
-  // RHS formula:
-  //   For impacts (|jv| > 0.5): b = -(1+e) * jv  (pure restitution)
-  //   For resting (|jv| <= 0.5): b = -(1+e) * jv + slopCorrection
+  // RHS formula: b = -(1+e) * jv
   //
-  // This test verifies the impact case: approach speed 3 m/s >> 0.5 threshold,
-  // so slop correction is zero and RHS is purely restitution-driven.
+  // This test verifies the restitution term produces the correct sign and
+  // magnitude for an impact with approach speed 3 m/s.
 
   double const mass = 10.0;
   double const inverseMass = 1.0 / mass;
@@ -354,7 +352,7 @@ TEST(ContactRHS, RestitutionTerm_CorrectSign)
   // Manually compute expected RHS:
   // J * v = [-n^T * v_A] + [n^T * v_B] = -1*3 + 0 = -3.0
   double const jv = -3.0;
-  // |jv| = 3.0 > 0.5 (impact), so slopCorrection = 0
+  // Pure restitution: b = -(1+e) * jv
   double const expectedB = -(1.0 + restitution) * jv;
   // expectedB = -(1.7) * (-3.0) = 5.1
 
@@ -391,146 +389,6 @@ TEST(ContactRHS, RestitutionTerm_CorrectSign)
     << "RHS b should be positive for approaching bodies (negative Jv)";
 }
 
-TEST(ContactRHS, SlopCorrectionGatedByApproachVelocity)
-{
-  // Ticket: 0040b — Split impulse with approach-velocity-gated slop correction.
-  //
-  // Slop correction formula:
-  //   if pen > 0.005 and |jv| <= 0.5:
-  //     slopCorrection = min(0.2 * (pen - 0.005) / dt, 1.0)
-  //   else:
-  //     slopCorrection = 0
-  //   b = -(1+e) * jv + slopCorrection
-  //
-  // Key behaviors:
-  // - Resting contacts (|jv| ≈ 0) get gentle position recovery via slop
-  // correction
-  // - Impacts (|jv| > 0.5) get pure restitution, no slop (restitution handles
-  // bounce)
-  // - Slop correction capped at 1.0 m/s to prevent energy injection
-
-  double const mass = 10.0;
-  double const inverseMass = 1.0 / mass;
-  double const dt = 1.0 / 60.0;
-
-  Coordinate normal{0.0, 0.0, 1.0};
-  Coordinate contactA{0.0, 0.0, 0.0};
-  Coordinate contactB{0.0, 0.0, 0.0};
-  Coordinate comA{0.0, 0.0, 0.0};
-  Coordinate comB{0.0, 0.0, 0.0};
-
-  double const kRegEps = 1e-8;
-  double const effectiveA = 2.0 * inverseMass + kRegEps;
-
-  ConstraintSolver solver;
-  Eigen::Matrix3d zeroInertia = Eigen::Matrix3d::Zero();
-  std::vector<double> inverseMasses{inverseMass, inverseMass};
-  std::vector<Eigen::Matrix3d> inverseInertias{zeroInertia, zeroInertia};
-
-  // Case 1: Resting contact (zero velocity, pen > slop) — slop correction
-  // active
-  {
-    double const penetration = 0.1;
-    InertialState stateA = createDefaultState();
-    InertialState stateB = createDefaultState();
-    std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                    stateB};
-
-    auto contact = std::make_unique<ContactConstraint>(
-      0, 1, normal, contactA, contactB, penetration, comA, comB, 0.8, 0.0);
-
-    // |jv| = 0 <= 0.5, pen 0.1 > 0.005
-    // slopCorrection = min(0.2 * (0.1 - 0.005) / (1/60), 1.0)
-    //                = min(0.2 * 5.7, 1.0) = min(1.14, 1.0) = 1.0
-    double const expectedB = 1.0;  // -(1+0.8)*0 + 1.0 = 1.0
-    double const expectedLambda = expectedB / effectiveA;
-
-    std::vector<Constraint*> constraints{contact.get()};
-    auto result = solver.solve(
-      constraints, states, inverseMasses, inverseInertias, 2, dt);
-
-    ASSERT_TRUE(result.converged);
-    EXPECT_GT(result.lambdas(0), 0.0)
-      << "Resting contact with penetration should get slop correction";
-    EXPECT_NEAR(expectedLambda, result.lambdas(0), 1e-6)
-      << "Lambda should match capped slop correction (1.0 m/s)";
-  }
-
-  // Case 2: Impact (approaching at 1 m/s) — no slop correction
-  {
-    double const penetration = 0.1;
-    double const approachSpeed = 1.0;
-    double const preImpactVel = -approachSpeed;
-
-    InertialState stateA = createDefaultState(
-      Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, approachSpeed});
-    InertialState stateB = createDefaultState();
-    std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                    stateB};
-
-    double const e = 0.8;
-    auto contact = std::make_unique<ContactConstraint>(0,
-                                                       1,
-                                                       normal,
-                                                       contactA,
-                                                       contactB,
-                                                       penetration,
-                                                       comA,
-                                                       comB,
-                                                       e,
-                                                       preImpactVel);
-
-    // |jv| = 1.0 > 0.5, so slopCorrection = 0
-    double const jv = -approachSpeed;
-    double const expectedB = -(1.0 + e) * jv;  // -(1.8)*(-1.0) = 1.8
-    double const expectedLambda = expectedB / effectiveA;
-
-    std::vector<Constraint*> constraints{contact.get()};
-    auto result = solver.solve(
-      constraints, states, inverseMasses, inverseInertias, 2, dt);
-
-    ASSERT_TRUE(result.converged);
-    EXPECT_GT(result.lambdas(0), 0.0);
-    EXPECT_NEAR(expectedLambda, result.lambdas(0), 1e-6)
-      << "Impact: lambda should use pure restitution (no slop correction)";
-  }
-
-  // Case 3: Fast impact (approaching at 5 m/s) — no slop correction
-  {
-    double const penetration = 0.01;
-    double const approachSpeed = 5.0;
-    double const preImpactVel = -approachSpeed;
-
-    InertialState stateA = createDefaultState(
-      Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, approachSpeed});
-    InertialState stateB = createDefaultState();
-    std::vector<std::reference_wrapper<const InertialState>> states{stateA,
-                                                                    stateB};
-
-    double const e = 0.8;
-    auto contact = std::make_unique<ContactConstraint>(0,
-                                                       1,
-                                                       normal,
-                                                       contactA,
-                                                       contactB,
-                                                       penetration,
-                                                       comA,
-                                                       comB,
-                                                       e,
-                                                       preImpactVel);
-
-    // |jv| = 5.0 > 0.5, so slopCorrection = 0
-    double const jv = -approachSpeed;
-    double const expectedB = -(1.0 + e) * jv;  // -(1.8)*(-5.0) = 9.0
-    double const expectedLambda = expectedB / effectiveA;
-
-    std::vector<Constraint*> constraints{contact.get()};
-    auto result = solver.solve(
-      constraints, states, inverseMasses, inverseInertias, 2, dt);
-
-    ASSERT_TRUE(result.converged);
-    EXPECT_GT(result.lambdas(0), 0.0);
-    EXPECT_NEAR(expectedLambda, result.lambdas(0), 1e-6)
-      << "Fast impact: lambda should use pure restitution (no slop correction)";
-  }
-}
+// Ticket 0046: Removed SlopCorrectionGatedByApproachVelocity test.
+// Slop correction was removed from velocity-level RHS as it injected energy.
+// Penetration correction now handled exclusively by PositionCorrector.
