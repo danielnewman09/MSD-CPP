@@ -123,7 +123,7 @@ Full test suite results showing D1, D4, H1 passing with no regressions.
 - **Started**: 2026-02-09
 - **Completed**: 2026-02-09
 - **Branch**: 0047-face-contact-manifold-generation
-- **PR**: N/A (not yet created)
+- **PR**: #17 (draft)
 - **Artifacts**:
   - `docs/designs/0047_face_contact_manifold_generation/investigation-findings.md`
 - **Notes**:
