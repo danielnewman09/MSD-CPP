@@ -120,34 +120,18 @@ void WorldModel::update(std::chrono::milliseconds simTime)
     platform.update(simTime);
   }
 
-  // Ticket: 0047_face_contact_manifold_generation
+  // Ticket: 0047a_revert_gravity_preapply
   //
-  // Pre-apply external forces (gravity) to velocities before collision solving.
-  // This is the standard Box2D/Bullet approach: the constraint solver sees
-  // gravity-augmented velocities and can produce non-zero support force even
-  // when bodies are at rest (v≈0 → v_temp = g*dt → solver counteracts it).
+  // Gravity pre-apply REMOVED (was: ticket 0047_face_contact_manifold_generation).
   //
-  // Without this, a resting cube with v=0 produces RHS b = -(1+e)*J*v = 0
-  // → λ = 0 → no support force → micro-bounce oscillation every 2 frames.
+  // Investigation goal: Characterize the resting contact problem without
+  // velocity mutation, then implement a cleaner approach that doesn't couple
+  // restitution with gravity.
   //
-  // Note: This couples gravity with restitution in the solver's RHS:
-  //   b = -(1+e) * J * (v + g*dt)
-  // The extra e*J*g*dt term is bounded (≈ e*9.81*0.016 ≈ 0.08 m/s) and
-  // acceptable for the simulation fidelity required.
-  for (auto& asset : inertialAssets_)
-  {
-    InertialState& state = asset.getInertialState();
-    double const mass = asset.getMass();
+  // With this revert, the constraint solver sees v (not v+g*dt), and gravity
+  // is applied in updatePhysics() along with all other forces.
 
-    for (const auto& potential : potentialEnergies_)
-    {
-      Coordinate const force = potential->computeForce(state, mass);
-      state.velocity += force / mass * dt;
-    }
-  }
-
-  // IMPORTANT: Contact constraint forces BEFORE physics integration
-  // Solver sees gravity-augmented velocities from the pre-apply above
+  // Contact constraint forces BEFORE physics integration
   // Ticket: 0032_contact_constraint_refactor
   updateCollisions(dt);
 
@@ -171,28 +155,28 @@ void WorldModel::updatePhysics(double dt)
 {
   for (auto& asset : inertialAssets_)
   {
-    // Ticket: 0047_face_contact_manifold_generation
+    // Ticket: 0047a_revert_gravity_preapply
     //
-    // Potential energy FORCES (gravity) already applied to velocities in
-    // update() before collision solving. Only accumulated forces (from
-    // collisions, thrusters, etc.) remain to be integrated here.
+    // Gravity application RESTORED to updatePhysics (was: split in ticket 0047).
     //
-    // Potential energy TORQUES are still applied here since they were NOT
-    // pre-applied (gravity torque = 0 for uniform fields, so this is a
-    // no-op currently, but correct for future non-uniform potentials).
+    // All forces (gravity + contact + external) now integrated in a single pass.
+    // No velocity mutation before collision solving — the constraint solver
+    // sees the actual velocity v, not an augmented v+g*dt.
     Coordinate netForce = asset.getAccumulatedForce();
     Coordinate netTorque{0.0, 0.0, 0.0};
 
     InertialState& state = asset.getInertialState();
     const Eigen::Matrix3d& inertiaTensor = asset.getInertiaTensor();
+    double const mass = asset.getMass();
 
+    // Apply ALL potential energy forces and torques
     for (const auto& potential : potentialEnergies_)
     {
+      netForce += potential->computeForce(state, mass);
       netTorque += potential->computeTorque(state, inertiaTensor);
     }
 
     netTorque += asset.getAccumulatedTorque();
-    double const mass = asset.getMass();
 
     // ===== Step 2: Delegate Integration to Integrator =====
     // Integrator handles: velocity update, position update, quaternion
