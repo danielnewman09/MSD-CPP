@@ -7,8 +7,6 @@
 # Ticket: 0035b_box_constrained_asm_solver
 # Ticket: 0039b_linear_collision_test_suite
 
-add_subdirectory(ECOS)
-
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ContactConstraintTest.cpp
@@ -20,4 +18,6 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/SplitImpulseTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ContactCacheTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/WarmStartTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ConeProjectionTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/FrictionConeSolverTest.cpp
 )

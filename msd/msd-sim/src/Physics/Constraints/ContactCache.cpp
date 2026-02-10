@@ -1,4 +1,5 @@
 // Ticket: 0040d_contact_persistence_warm_starting
+// Ticket: 0052d_solver_integration_ecos_removal
 
 #include "msd-sim/src/Physics/Constraints/ContactCache.hpp"
 
@@ -41,7 +42,13 @@ std::vector<double> ContactCache::getWarmStart(
     return {};
   }
 
-  std::vector<double> warmLambdas(numCurrent, 0.0);
+  // Ticket 0052d: Determine if cache stores 3 lambdas per contact (friction)
+  // or 1 lambda per contact (no friction / legacy)
+  const bool hasFrictionLambdas = (cached.lambdas.size() == numCached * 3);
+  const size_t lambdasPerContact = hasFrictionLambdas ? 3 : 1;
+
+  // Return vector: lambdasPerContact values per current contact
+  std::vector<double> warmLambdas(numCurrent * lambdasPerContact, 0.0);
 
   // Track which cached points have been matched (prevent double-matching)
   std::vector<bool> cachedUsed(numCached, false);
@@ -68,7 +75,12 @@ std::vector<double> ContactCache::getWarmStart(
 
     if (bestIdx && bestDist < kPointMatchRadius)
     {
-      warmLambdas[i] = cached.lambdas[*bestIdx];
+      // Copy lambdasPerContact values for the matched contact
+      for (size_t k = 0; k < lambdasPerContact; ++k)
+      {
+        warmLambdas[i * lambdasPerContact + k] =
+          cached.lambdas[*bestIdx * lambdasPerContact + k];
+      }
       cachedUsed[*bestIdx] = true;
     }
     // Unmatched points keep lambda = 0

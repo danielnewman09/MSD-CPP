@@ -17,6 +17,7 @@
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
+#include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/PositionCorrector.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
@@ -67,7 +68,7 @@ public:
    * @brief Construct collision pipeline with handler and solver references
    *
    * @param collisionHandler Collision detection subsystem (GJK/EPA)
-   * @param constraintSolver Contact constraint solver (ASM/ECOS)
+   * @param constraintSolver Contact constraint solver (ASM/FrictionCone)
    */
   explicit CollisionPipeline();
 
@@ -255,14 +256,17 @@ private:
     uint32_t bodyBId;  // Instance ID for cache keying
     CollisionResult result;
     double restitution;
+    double frictionCoefficient;
   };
 
   std::vector<CollisionPair> collisions_;
   std::vector<std::unique_ptr<ContactConstraint>> constraints_;
+  std::vector<std::unique_ptr<FrictionConstraint>> frictionConstraints_;
   std::vector<std::reference_wrapper<const InertialState>> states_;
   std::vector<double> inverseMasses_;
   std::vector<Eigen::Matrix3d> inverseInertias_;
   std::vector<Constraint*> constraintPtrs_;
+  std::vector<Constraint*> normalConstraintPtrs_;
 
   // NEW: Cache and position correction (ticket 0044)
   ContactCache contactCache_;

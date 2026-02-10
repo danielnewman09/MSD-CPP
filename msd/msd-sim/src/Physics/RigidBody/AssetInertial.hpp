@@ -84,6 +84,31 @@ public:
                 const ReferenceFrame& frame,
                 double coefficientOfRestitution);
 
+  /**
+   * @brief Extended constructor with coefficient of restitution and friction.
+   *
+   * @param assetId Asset type identifier
+   * @param instanceId Unique instance identifier
+   * @param hull Reference to collision hull
+   * @param mass Mass in kilograms [kg]
+   * @param frame Initial reference frame (position and orientation)
+   * @param coefficientOfRestitution Elasticity [0, 1] (0=inelastic, 1=elastic)
+   * @param frictionCoefficient Friction coefficient [0, inf) (default: 0.5)
+   *
+   * @throws std::invalid_argument if mass <= 0
+   * @throws std::invalid_argument if coefficientOfRestitution not in [0, 1]
+   * @throws std::invalid_argument if frictionCoefficient < 0
+   *
+   * @ticket 0052d_solver_integration_ecos_removal
+   */
+  AssetInertial(uint32_t assetId,
+                uint32_t instanceId,
+                ConvexHull& hull,
+                double mass,
+                const ReferenceFrame& frame,
+                double coefficientOfRestitution,
+                double frictionCoefficient);
+
   // Rule of Five: Move-only type due to std::unique_ptr<Constraint> ownership
   // Note: Move assignment deleted because base class has reference member
   // Ticket: 0031_generalized_lagrange_constraints
@@ -220,6 +245,31 @@ public:
    */
   void setCoefficientOfRestitution(double e);
 
+  // ========== Friction Coefficient (ticket 0052d) ==========
+
+  /**
+   * @brief Get the friction coefficient.
+   *
+   * Determines tangential friction force magnitude:
+   * - 0.0: Frictionless surface (ice)
+   * - 0.5: Moderate friction (default)
+   * - 1.0+: High friction (rubber)
+   *
+   * @return Friction coefficient [0, inf)
+   * @ticket 0052d_solver_integration_ecos_removal
+   */
+  double getFrictionCoefficient() const;
+
+  /**
+   * @brief Set the friction coefficient.
+   *
+   * @param mu Friction coefficient [0, inf)
+   * @throws std::invalid_argument if mu < 0
+   *
+   * @ticket 0052d_solver_integration_ecos_removal
+   */
+  void setFrictionCoefficient(double mu);
+
   // ========== NEW: Impulse Application API (ticket 0027) ==========
 
   /**
@@ -334,6 +384,9 @@ private:
 
   // NEW: Coefficient of restitution (ticket 0027)
   double coefficientOfRestitution_{0.5};  // Default: moderate elasticity
+
+  // NEW: Friction coefficient (ticket 0052d)
+  double frictionCoefficient_{0.0};  // Default: no friction (backward compatible)
 
   // NEW: Constraint management (ticket 0031)
   std::vector<std::unique_ptr<Constraint>> constraints_;

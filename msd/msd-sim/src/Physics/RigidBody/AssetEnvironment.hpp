@@ -81,6 +81,25 @@ public:
                    const ReferenceFrame& frame,
                    double coefficientOfRestitution);
 
+  /**
+   * @brief Constructor with custom restitution and friction
+   *
+   * @param assetId Asset type ID
+   * @param instanceId Unique instance ID
+   * @param hull Collision hull reference
+   * @param frame Reference frame (position and orientation)
+   * @param coefficientOfRestitution Coefficient of restitution [0, 1]
+   * @param frictionCoefficient Friction coefficient [0, inf)
+   *
+   * @ticket 0052d_solver_integration_ecos_removal
+   */
+  AssetEnvironment(uint32_t assetId,
+                   uint32_t instanceId,
+                   ConvexHull& hull,
+                   const ReferenceFrame& frame,
+                   double coefficientOfRestitution,
+                   double frictionCoefficient);
+
   ~AssetEnvironment() override = default;
 
   // ===== Mass properties for unified solver path (Ticket 0032) =====
@@ -130,6 +149,24 @@ public:
    */
   void setCoefficientOfRestitution(double e);
 
+  /**
+   * @brief Get friction coefficient
+   * @return Friction coefficient [0, inf)
+   * @ticket 0052d_solver_integration_ecos_removal
+   */
+  double getFrictionCoefficient() const
+  {
+    return friction_coefficient_;
+  }
+
+  /**
+   * @brief Set friction coefficient
+   * @param mu Friction coefficient [0, inf)
+   * @throws std::invalid_argument if mu < 0
+   * @ticket 0052d_solver_integration_ecos_removal
+   */
+  void setFrictionCoefficient(double mu);
+
   // Rule of Five
   AssetEnvironment(const AssetEnvironment&) = delete;
   AssetEnvironment& operator=(const AssetEnvironment&) = delete;
@@ -142,6 +179,7 @@ private:
 
   InertialState static_state_;  // Zero velocity, position from frame
   double coefficient_of_restitution_{0.5};
+  double friction_coefficient_{0.0};  // Default: no friction (backward compatible)
 };
 
 }  // namespace msd_sim
