@@ -2,12 +2,12 @@
 
 ## Status
 - [x] Draft
-- [ ] Investigation Complete
+- [x] Investigation Complete
 - [ ] Design Complete — Awaiting Review
 - [ ] Implementation Complete — Awaiting Review
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Investigation Complete
 **Type**: Performance / Investigation
 **Priority**: High
 **Assignee**: N/A
@@ -153,3 +153,23 @@ Profiling the collision and friction pipeline on the `0052d-solver-integration` 
 - **Trace file**: `profile_results/friction_profile.trace`
 - **JSON report**: `profile_results/profile_20260210_135441.json`
 - **Branch profiled**: `0052d-solver-integration` (commit `8d6973a`)
+
+---
+
+## Workflow Log
+
+### Investigation Phase
+- **Started**: 2026-02-10 14:00
+- **Completed**: 2026-02-10 14:15
+- **Branch**: `0053-collision-pipeline-performance`
+- **PR**: N/A (investigation phase)
+- **Artifacts**:
+  - `docs/investigations/0053_collision_pipeline_performance/iteration-log.md`
+  - `docs/investigations/0053_collision_pipeline_performance/investigation-report.md`
+- **Notes**:
+  - Baseline profiling on `main` branch not possible due to Xcode Instruments sampling rate limitations (tests run too fast, only 2 startup samples captured)
+  - Used existing profiling data from `0052d-solver-integration` branch (now merged) as baseline
+  - Validated all 5 optimization opportunities identified in ticket
+  - Prioritized subtasks: 0053b (quick win) → 0053a (allocations) → 0053c (friction solver) → 0053d (SAT) → 0053e (Eigen)
+  - Combined optimizations target ~47% pipeline CPU reduction (6.8% → 3.6% absolute)
+  - AC4 (20% absolute reduction) is very aggressive; recommend adjusting to "47% relative pipeline reduction" or "3.2% absolute CPU reduction"
