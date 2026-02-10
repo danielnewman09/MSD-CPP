@@ -30,6 +30,7 @@ Read thoroughly:
 - Design review criteria and notes
 - Prototype results and implementation ticket
 - Any human annotations or feedback
+- **Iteration log** (if one exists from a previous session — see Phase 2.5)
 
 Note technical decisions already made, known risks and mitigations, and specific implementation guidance.
 
@@ -39,7 +40,17 @@ Check implementation ticket prerequisites:
 - Build system ready for new files
 - Development environment set up
 
-**1.3 Set Up Feature Branch**
+**1.3 Create or Resume Iteration Log**
+
+Check if an iteration log already exists:
+- Feature tickets: `docs/designs/{feature-name}/iteration-log.md`
+- Investigation tickets: `docs/investigations/{feature-name}/iteration-log.md`
+
+If it does NOT exist, copy from `.claude/templates/iteration-log.md.template` and fill in the header fields (ticket name, branch name, baseline test count).
+
+If it DOES exist, read it fully before proceeding. This log records all previous build-test iterations — you must understand what has already been tried.
+
+**1.4 Set Up Feature Branch**
 
 The feature branch should already exist from the design phase. Set it up:
 
@@ -59,7 +70,7 @@ The feature branch should already exist from the design phase. Set it up:
    ```
 5. If git operations fail, report the error but proceed with implementation — git integration is non-blocking.
 
-**1.3 Create Implementation Plan**
+**1.5 Create Implementation Plan**
 Map out file creation/modification order before writing code.
 
 ### Phase 2: Implementation
@@ -121,6 +132,53 @@ TEST_CASE("ClassName: behavior description [ticket-name]") { }
 **Applying Prototype Learnings**:
 - Reference prototype results for validated decisions, performance details, gotchas
 - Adapt useful prototype code to production quality with proper error handling, documentation, and testability
+
+### Phase 2.5: Iteration Tracking Protocol
+
+After each build+test cycle within Phase 2 or Phase 3, follow this protocol:
+
+**1. Record Iteration Entry**
+
+Append a new entry to the iteration log (`docs/designs/{feature-name}/iteration-log.md` or `docs/investigations/{feature-name}/iteration-log.md`):
+
+```markdown
+### Iteration N — {YYYY-MM-DD HH:MM}
+**Commit**: {short SHA}
+**Hypothesis**: {Why this change was made — what problem it's solving}
+**Changes**:
+- `path/to/file.cpp`: {description of change}
+**Build Result**: PASS / FAIL ({details if fail})
+**Test Result**: {pass}/{total} — {list of new failures or fixes vs previous iteration}
+**Impact vs Previous**: {+N passes, -N regressions, net change}
+**Assessment**: {Does this move us forward? Any unexpected side effects?}
+```
+
+**2. Auto-Commit**
+
+After each successful build+test cycle, commit all changes:
+
+```bash
+git add {changed files} {iteration-log.md}
+git commit -m "{prefix}: iteration {N} — {one-line summary of change}
+
+{ticket-name}
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+```
+
+Commit prefix follows project convention (`impl:`, `investigate:`, `fix:`, etc.).
+
+**3. Circle Detection — Before Making Next Change**
+
+Before making the next change, read the iteration log and check for:
+
+- **Repetition**: Same file modified 3+ times with similar changes → flag as potential circle
+- **Oscillation**: Test results alternating (iteration N fixes A/breaks B, iteration N+1 fixes B/breaks A) → flag as incompatible fixes
+- **Recycled hypothesis**: Same hypothesis attempted with same approach → must try a different approach or escalate
+
+If a circle is detected:
+1. STOP making changes
+2. Document the pattern in the iteration log under "Circle Detection Flags"
+3. Escalate to the human with a summary of what has been tried and why approaches are cycling
 
 ### Phase 3: Testing
 
@@ -190,17 +248,18 @@ After completing implementation:
 1. Inform human operator that implementation is complete
 2. Provide summary of files created/modified, test coverage status, any deviations
 3. Note areas warranting extra attention in review
-4. Human reviews implementation before Implementation Review proceeds
-5. **Commit implementation artifacts**:
+4. Include the iteration log (`docs/designs/{feature-name}/iteration-log.md`) as a deliverable artifact — it provides full traceability of what was tried during implementation
+5. Human reviews implementation before Implementation Review proceeds
+6. **Commit implementation artifacts**:
    ```bash
    git add {all new and modified source files, test files, CMakeLists.txt changes}
    git commit -m "impl: implement {feature-name}"
    ```
-6. **Push to remote**:
+7. **Push to remote**:
    ```bash
    git push
    ```
-7. **Create or update PR** (idempotent):
+8. **Create or update PR** (idempotent):
    ```bash
    # Check if PR already exists (should exist from design phase)
    existing_pr=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')

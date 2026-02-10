@@ -42,6 +42,17 @@ cp DEBUG_TICKET.md .debug-sessions/debug_${SESSION_ID}.md
 
 Append investigation sections to the log. See `references/debug-log-template.md` for the full format.
 
+### 1.1 Create or Resume Iteration Log
+
+In addition to the debug session log, create or resume an **iteration log** for tracking build-test cycles:
+
+- Location: `docs/investigations/{feature-name}/iteration-log.md`
+- Template: `.claude/templates/iteration-log.md.template`
+
+If the log already exists (from a previous session), read it fully before making any changes. This is critical for avoiding repeated approaches.
+
+> **Relationship to debug log**: The debug log tracks hypotheses and reasoning. The iteration log tracks build-test cycle results and is used for circle detection. Both are maintained in parallel.
+
 ## Step 2: Investigate Suspect Code
 
 For each file/class/function identified in the ticket:
@@ -210,6 +221,51 @@ Update debug log with:
 - Execution results (including sanitizer output)
 - What was learned
 - Updated hypothesis status
+
+## Step 5.7: Iteration Tracking and Auto-Commit
+
+After each build+test cycle (whether diagnostic tests pass or fail), follow this protocol:
+
+**1. Record Iteration Entry**
+
+Append a new entry to `docs/investigations/{feature-name}/iteration-log.md`:
+
+```markdown
+### Iteration N — {YYYY-MM-DD HH:MM}
+**Commit**: {short SHA}
+**Hypothesis**: {Why this change was made — what problem it's solving}
+**Changes**:
+- `path/to/file.cpp`: {description of change}
+**Build Result**: PASS / FAIL ({details if fail})
+**Test Result**: {pass}/{total} — {list of new failures or fixes vs previous iteration}
+**Impact vs Previous**: {+N passes, -N regressions, net change}
+**Assessment**: {Does this move us forward? Any unexpected side effects?}
+```
+
+**2. Auto-Commit**
+
+After each successful build+test cycle, commit all changes:
+
+```bash
+git add {changed files} {iteration-log.md}
+git commit -m "investigate: iteration {N} — {one-line summary}
+
+{ticket-name}
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+```
+
+**3. Circle Detection — Before Next Change**
+
+Before making the next change, read the iteration log and check for:
+
+- **Repetition**: Same file modified 3+ times with similar changes
+- **Oscillation**: Test results alternating between iterations (fixes A/breaks B, then fixes B/breaks A)
+- **Recycled hypothesis**: Same hypothesis attempted with same approach
+
+If a circle is detected:
+1. STOP making changes
+2. Document the pattern in the iteration log under "Circle Detection Flags"
+3. Escalate to the human at the next checkpoint (Step 6) with a summary of what has been tried
 
 ## Step 6: Human Checkpoint
 

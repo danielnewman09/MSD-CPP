@@ -174,6 +174,7 @@ Read the appropriate agent file and invoke it with:
 - Human feedback to incorporate
 - Project context from CLAUDE.md
 - GitHub context: branch name, issue number, PR number (from Step 2.5)
+- **Iteration log path** (if one exists): `docs/designs/{feature-name}/iteration-log.md` or `docs/investigations/{feature-name}/iteration-log.md`. Pass the path so the agent can read previous iterations before making changes. Both implementation and investigation/debug agents maintain iteration logs.
 
 ### Step 4: Handle Agent Results
 
@@ -184,6 +185,7 @@ Read the appropriate agent file and invoke it with:
   - Artifacts created/updated
   - Notes from the phase
 - Mark addressed feedback
+- **Verify iteration log** was maintained (for implementation and investigation phases): check that `docs/designs/{feature-name}/iteration-log.md` or `docs/investigations/{feature-name}/iteration-log.md` exists and contains at least one iteration entry. If missing, note in Workflow Log that the agent did not maintain the log.
 
 **On NEEDS REVISION / CHANGES REQUESTED:**
 - Do NOT advance status
