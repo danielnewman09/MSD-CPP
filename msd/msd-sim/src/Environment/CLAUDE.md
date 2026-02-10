@@ -727,18 +727,17 @@ world.update(std::chrono::milliseconds{16});  // ~60 FPS
 
 #### Update Order
 
-**Ticket 0047**: WorldModel performs the following sequence during each `update()` call:
+**Ticket 0047a**: WorldModel performs the following sequence during each `update()` call:
 
 1. **Platform updates** — Agent logic and visual synchronization
-2. **Pre-apply gravity** — Apply potential energy forces (gravity) to velocities BEFORE collision solving
-3. **Collision solving** — Constraint-based collision response (sees gravity-augmented velocities)
-4. **Physics integration** — Integrate velocities/positions (skips gravity forces, already applied in step 2)
-5. **Update time** — Advance simulation clock
-6. **Record frame** — Optional data recording if enabled
+2. **Collision solving** — Constraint-based collision response
+3. **Physics integration** — Integrate ALL forces (gravity + contact) and velocities/positions
+4. **Update time** — Advance simulation clock
+5. **Record frame** — Optional data recording if enabled
 
-**Rationale for gravity pre-apply**: Standard Box2D/Bullet approach. The constraint solver sees gravity-augmented velocities `v_temp = v + g*dt` and produces non-zero support forces even for resting bodies (v≈0). Without this, resting bodies with v=0 would produce zero RHS in the constraint solver, leading to micro-bounce oscillation.
+**Resting contact stability** provided by SAT fallback (ticket 0047): CollisionHandler validates EPA results against SAT minimum penetration, ensuring correct contact manifolds even at zero penetration depth. This enables the constraint solver to produce non-zero support forces even when v≈0, without mutating velocities.
 
-**Trade-off accepted**: Gravity pre-apply couples restitution with gravity in the solver RHS: `b = -(1+e)*J*(v+g*dt)`, adding an extra `e*J*g*dt` term. This is bounded (≈ e*9.81*0.016 ≈ 0.08 m/s for typical restitution) and acceptable for current simulation fidelity. Future work (ticket 0051) may decouple this via velocity-bias threading.
+**Historical note (ticket 0047)**: Previously applied gravity to velocities BEFORE collision solving (`v_temp = v + g*dt`). This was intended to help resting contacts but introduced restitution-gravity coupling (`e*J*g*dt` term) that caused spurious sphere rotation (test B3). Investigation (ticket 0047a) revealed the SAT fallback alone solves resting contacts — the pre-apply was unnecessary complexity that regressed physics correctness. Removed in favor of standard single-pass force integration.
 
 #### Thread Safety
 **Not thread-safe** — Single-threaded simulation assumed.
