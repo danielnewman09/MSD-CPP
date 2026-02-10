@@ -3,14 +3,14 @@
 ## Status
 - [x] Draft
 - [x] Ready for Investigation
-- [ ] Investigation Complete
+- [x] Investigation Complete
 - [ ] Ready for Implementation
 - [ ] Implementation Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Merged / Complete
 
-**Current Phase**: Ready for Investigation
+**Current Phase**: Investigation Complete
 **Assignee**: TBD
 **Created**: 2026-02-09
 **Generate Tutorial**: No
@@ -148,3 +148,19 @@ Full test suite results showing no regressions and improved executable behavior.
 - **Timestamp**: 2026-02-09
 - **Action**: Created to investigate reverting the gravity pre-apply introduced in ticket 0047
 - **Notes**: The gravity pre-apply was one of two changes in 0047. The SAT fallback is a targeted correct fix; the pre-apply is an invasive ordering change that may be causing spurious rotation and failure to rest. Ticket 0051 attempted to fix the coupling side-effect but was test-neutral, suggesting the real issues lie elsewhere. This ticket investigates whether removing the pre-apply and using a cleaner approach to resting contact support produces better overall physics behavior.
+
+### Investigation Phase (Phase 1)
+- **Started**: 2026-02-09
+- **Completed**: 2026-02-09
+- **Branch**: 0047a-revert-gravity-preapply
+- **Commit**: b1418df
+- **Artifacts**:
+  - `docs/investigations/0047a_revert_gravity_preapply/phase1-results.md`
+  - Modified: `msd/msd-sim/src/Environment/WorldModel.cpp` (revert implemented)
+- **Results**: **CRITICAL FINDING — D1 and H1 still pass WITHOUT gravity pre-apply**
+  - Test suite: 689/693 (same as main)
+  - Regressions: D4 (micro-jitter, test design issue)
+  - Fixes: B3 (sphere rotation, pre-apply introduced spurious torque)
+  - Unchanged: D1, H1, H3, B2, B5
+- **Key Insight**: The SAT fallback is the true fix for resting contacts. Gravity pre-apply was unnecessary complexity that introduced restitution-gravity coupling and B3 regression.
+- **Notes**: Phase 1 objective complete. The original motivation for ticket 0047 (D1/H1 failures without pre-apply) is contradicted by test results — both tests pass without it. The SAT fallback provides correct contact manifolds at zero penetration, enabling non-zero support forces even when v≈0. Gravity pre-apply should be removed permanently, keeping only the SAT fallback.
