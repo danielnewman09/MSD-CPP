@@ -45,7 +45,8 @@ bool CollisionPipeline::hadCollisions() const
 void CollisionPipeline::execute(
   std::span<AssetInertial> inertialAssets,
   std::span<const AssetEnvironment> environmentalAssets,
-  double dt)
+  double dt,
+  const std::optional<std::vector<InertialState>>& velocityBias)
 {
   // Clear frame-persistent data at start (fail-fast for stale data)
   clearFrameData();
@@ -89,7 +90,7 @@ void CollisionPipeline::execute(
   assembleSolverInput(inertialAssets, environmentalAssets, numBodies);
 
   // ===== Phase 4: Solve Contact Constraint System with Warm-Starting =====
-  auto solveResult = solveConstraintsWithWarmStart(dt);
+  auto solveResult = solveConstraintsWithWarmStart(dt, velocityBias);
 
   // ===== Phase 5: Apply Constraint Forces to Inertial Bodies =====
   applyForces(inertialAssets, solveResult);
@@ -241,7 +242,9 @@ void CollisionPipeline::assembleSolverInput(
 }
 
 ConstraintSolver::SolveResult
-CollisionPipeline::solveConstraintsWithWarmStart(double dt)
+CollisionPipeline::solveConstraintsWithWarmStart(
+  double dt,
+  const std::optional<std::vector<InertialState>>& velocityBias)
 {
   // Build non-owning Constraint* vector for solver
   constraintPtrs_.reserve(constraints_.size());
@@ -295,14 +298,15 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     }
   }
 
-  // ===== Phase 4: Solve with warm-starting =====
+  // ===== Phase 4: Solve with warm-starting and velocity bias (ticket 0051) =====
   auto solveResult = constraintSolver_.solve(constraintPtrs_,
                                               states_,
                                               inverseMasses_,
                                               inverseInertias_,
                                               states_.size(),
                                               dt,
-                                              initialLambda);
+                                              initialLambda,
+                                              velocityBias);
 
   // ===== Phase 4.5: Update Contact Cache =====
   for (const auto& range : pairRanges_)

@@ -56,7 +56,8 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
   const std::vector<Eigen::Matrix3d>& inverseInertias,
   size_t numBodies,
   double dt,
-  const std::optional<Eigen::VectorXd>& initialLambda)
+  const std::optional<Eigen::VectorXd>& initialLambda,
+  const std::optional<std::vector<InertialState>>& velocityBias)
 {
   SolveResult result;
   result.bodyForces.resize(
@@ -92,7 +93,7 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
     contactConstraints, jacobians, inverseMasses, inverseInertias, numBodies);
 
   // Step 4: Assemble RHS vector
-  auto b = assembleRHS(contactConstraints, jacobians, states, dt);
+  auto b = assembleRHS(contactConstraints, jacobians, states, dt, velocityBias);
 
   // Step 5: Solve — dispatch based on friction presence (Ticket 0035b4)
   const int numConstraintRows = static_cast<int>(contactConstraints.size());
@@ -245,11 +246,17 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
   const std::vector<Constraint*>& contactConstraints,
   const std::vector<Eigen::MatrixXd>& jacobians,
   const std::vector<std::reference_wrapper<const InertialState>>& states,
-  double dt)
+  double dt,
+  const std::optional<std::vector<InertialState>>& velocityBias)
 {
   const size_t c = contactConstraints.size();
 
-  // b_i = -(1 + e_i) · (J_i · v_minus)
+  // Ticket 0051: Velocity-bias approach to decouple restitution from gravity.
+  //
+  // RHS formula: b = -(1+e) * J * v_current  -  J * v_bias
+  //
+  // Where v_bias represents pre-applied gravity (g*dt). The bias term is NOT
+  // multiplied by (1+e), preventing restitution-gravity coupling.
   //
   // Ticket 0046: No position-correction terms in velocity-level RHS.
   // Penetration resolved by PositionCorrector (pseudo-velocities, no KE injection).
@@ -283,22 +290,39 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
     double const jv =
       (jacobians[i] * v)(0);  // Scalar: relative velocity along constraint
 
+    // Ticket 0051: Compute bias term J_i · v_bias (if bias provided)
+    double jvBias = 0.0;
+    if (velocityBias.has_value())
+    {
+      const InertialState& biasA = (*velocityBias)[bodyA];
+      const InertialState& biasB = (*velocityBias)[bodyB];
+
+      Eigen::VectorXd vBias(12);
+      vBias.segment<3>(0) =
+        Vector3D{biasA.velocity.x(), biasA.velocity.y(), biasA.velocity.z()};
+      AngularRate omegaBiasA = biasA.getAngularVelocity();
+      vBias.segment<3>(3) = Vector3D{omegaBiasA.x(), omegaBiasA.y(), omegaBiasA.z()};
+      vBias.segment<3>(6) =
+        Vector3D{biasB.velocity.x(), biasB.velocity.y(), biasB.velocity.z()};
+      AngularRate omegaBiasB = biasB.getAngularVelocity();
+      vBias.segment<3>(9) = Vector3D{omegaBiasB.x(), omegaBiasB.y(), omegaBiasB.z()};
+
+      jvBias = (jacobians[i] * vBias)(0);
+    }
+
     // Restitution term (Ticket 0046: no velocity-level position correction)
     if (contact != nullptr)
     {
       double const e = contact->getRestitution();
 
-      // Ticket: 0046 — Removed velocity-level slop correction.
-      //
-      // Pure velocity-level RHS: b = -(1+e) * jv
-      // Penetration correction is handled exclusively by PositionCorrector
-      // (ticket 0040b) using pseudo-velocities that don't inject kinetic energy.
-      b(static_cast<Eigen::Index>(i)) = -(1.0 + e) * jv;
+      // Ticket 0051: RHS = -(1+e)*J*v - J*v_bias
+      // The bias term is NOT multiplied by (1+e), preventing restitution coupling
+      b(static_cast<Eigen::Index>(i)) = -(1.0 + e) * jv - jvBias;
     }
     else
     {
       // Generic two-body constraint (no restitution)
-      b(static_cast<Eigen::Index>(i)) = -jv;
+      b(static_cast<Eigen::Index>(i)) = -jv - jvBias;
     }
   }
 

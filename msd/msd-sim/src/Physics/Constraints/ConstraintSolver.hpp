@@ -131,7 +131,8 @@ public:
     const std::vector<Eigen::Matrix3d>& inverseInertias,
     size_t numBodies,
     double dt,
-    const std::optional<Eigen::VectorXd>& initialLambda = std::nullopt);
+    const std::optional<Eigen::VectorXd>& initialLambda = std::nullopt,
+    const std::optional<std::vector<InertialState>>& velocityBias = std::nullopt);
 
   /**
    * @brief Set maximum safety iteration cap for Active Set Method
@@ -317,7 +318,8 @@ private:
     const std::vector<Constraint*>& contactConstraints,
     const std::vector<Eigen::MatrixXd>& jacobians,
     const std::vector<std::reference_wrapper<const InertialState>>& states,
-    double dt);
+    double dt,
+    const std::optional<std::vector<InertialState>>& velocityBias);
 
   /**
    * @brief Solve contact LCP using Active Set Method

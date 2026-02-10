@@ -93,7 +93,8 @@ public:
    */
   void execute(std::span<AssetInertial> inertialAssets,
                std::span<const AssetEnvironment> environmentalAssets,
-               double dt);
+               double dt,
+               const std::optional<std::vector<InertialState>>& velocityBias = std::nullopt);
 
   /**
    * @brief Advance contact cache age by one frame
@@ -193,10 +194,14 @@ protected:
    * ContactCache for faster convergence on persistent contacts.
    *
    * @param dt Timestep [s]
+   * @param velocityBias Optional velocity bias for gravity decoupling (ticket 0051)
    * @return SolveResult with per-body forces
    * @ticket 0045_constraint_solver_unification
+   * @ticket 0051_restitution_gravity_coupling
    */
-  ConstraintSolver::SolveResult solveConstraintsWithWarmStart(double dt);
+  ConstraintSolver::SolveResult solveConstraintsWithWarmStart(
+    double dt,
+    const std::optional<std::vector<InertialState>>& velocityBias);
 
   /**
    * @brief Phase 5: Apply constraint forces to inertial bodies

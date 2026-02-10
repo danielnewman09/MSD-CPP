@@ -314,6 +314,19 @@ private:
   void updateCollisions(double dt);
 
   /**
+   * @brief Compute velocity bias from potential energies for collision pipeline
+   *
+   * Constructs a vector of InertialState instances with velocity fields populated
+   * from potential energy forces (gravity). Used by CollisionPipeline to decouple
+   * restitution from gravity in the constraint solver RHS.
+   *
+   * @param dt Timestep [s]
+   * @return Vector of InertialState with velocity bias (one per inertial asset)
+   * @ticket 0051_restitution_gravity_coupling
+   */
+  [[nodiscard]] std::vector<InertialState> computeVelocityBias(double dt) const;
+
+  /**
    * @brief Record current frame to database if recording is enabled
    *
    * Creates a SimulationFrameRecord with timestamp, then records all inertial
