@@ -12,7 +12,9 @@
 **Priority**: High
 **Assignee**: N/A
 **Created**: 2026-02-10
-**Branch**: `0052d-solver-integration` (profiled)
+**Branch**: `0053-collision-pipeline-performance`
+**GitHub Issue**: #30
+**GitHub PR**: #31 (draft)
 **Related Tickets**: [0052_custom_friction_cone_solver](0052_custom_friction_cone_solver.md), [0047_face_contact_manifold_generation](0047_face_contact_manifold_generation.md)
 
 ### Subtasks
@@ -162,7 +164,8 @@ Profiling the collision and friction pipeline on the `0052d-solver-integration` 
 - **Started**: 2026-02-10 14:00
 - **Completed**: 2026-02-10 14:15
 - **Branch**: `0053-collision-pipeline-performance`
-- **PR**: N/A (investigation phase)
+- **Issue**: #30
+- **PR**: #31 (draft)
 - **Artifacts**:
   - `docs/investigations/0053_collision_pipeline_performance/iteration-log.md`
   - `docs/investigations/0053_collision_pipeline_performance/investigation-report.md`
