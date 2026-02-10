@@ -52,6 +52,9 @@ std::optional<CollisionResult> CollisionHandler::checkCollision(
   // polyhedra, the minimum penetration direction is always along one of the
   // face normals. If EPA's depth is wildly inconsistent with SAT, replace
   // EPA's result with a SAT-derived contact.
+  //
+  // TODO(0053d): Add gating threshold once penetration depth characteristics
+  // are better understood from profiling data.
   SATResult sat = computeSATMinPenetration(assetA, assetB);
 
   // If EPA result is consistent with SAT, use EPA (it has better manifolds)
