@@ -96,8 +96,6 @@ class msd(ConanFile):
         self.requires("sdl_mixer/3.1.0")
         self.requires("sdl_ttf/3.2.2")
         self.requires("qhull/8.0.2")
-        self.requires("ecos/2.0.10")
-
         # Build cpp_sqlite with same build_type as project for debugging
         self.requires("cpp_sqlite/0.1.0")
 

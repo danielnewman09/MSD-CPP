@@ -55,12 +55,6 @@ InertialState createDefaultState()
   return state;
 }
 
-// Create identity inertia tensor
-Eigen::Matrix3d createIdentityInertia()
-{
-  return Eigen::Matrix3d::Identity();
-}
-
 }  // anonymous namespace
 
 // ============================================================================
