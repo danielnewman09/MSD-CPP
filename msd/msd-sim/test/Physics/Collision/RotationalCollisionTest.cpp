@@ -346,6 +346,15 @@ TEST(RotationalCollisionTest, B2_CubeEdgeImpact_PredictableRotationAxis)
 // ============================================================================
 // B3: Sphere with symmetric contact drops vertically (negative test)
 // Validates: Lever arm = 0 for symmetric contact -- no rotation
+//
+// FIX: This test now PASSES after ticket 0047a_revert_gravity_preapply.
+// With gravity pre-apply (0047), restitution-gravity coupling introduced
+// spurious torque via the e*J*g*dt term in the constraint RHS. The extra
+// term caused off-center impulse application at the EPA contact point,
+// producing rotation where there should be none.
+//
+// After revert (0047a): Pure normal impulse at contact point, no coupling
+// term, no spurious torque → sphere does not rotate ✅
 // ============================================================================
 
 TEST(RotationalCollisionTest, B3_SphereDrop_NoRotation)

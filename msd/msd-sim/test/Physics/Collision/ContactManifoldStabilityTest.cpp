@@ -165,6 +165,19 @@ TEST(ContactManifoldStabilityTest, D1_RestingCube_StableFor1000Frames)
 // ============================================================================
 // D4: Micro-jitter damping -- small perturbation should damp out
 // Validates: Perturbations should not amplify
+//
+// KNOWN FAILURE (Ticket: 0047a_revert_gravity_preapply)
+// This test assumes gravity pre-apply provides damping. Without pre-apply:
+// - At rest (v≈0), RHS ≈ 0 → constraint solver produces λ ≈ 0
+// - Micro-jitter persists (velocity oscillates at magnitude of g*dt ≈ 0.16 m/s)
+// With gravity pre-apply (v_temp = v + g*dt):
+// - RHS includes gravity → solver produces non-zero support force → damping
+//
+// User decision: Accept failure. Rationale: "The micro-jitter failure is due
+// to the velocity being exactly gravity after one timestep, which I'm not sure
+// has a desirable solution." The physics is correct — SAT fallback provides
+// stable resting contact. This test's expectation (aggressive damping) assumes
+// a specific implementation (gravity pre-apply) rather than physics correctness.
 // ============================================================================
 
 TEST(ContactManifoldStabilityTest, D4_MicroJitter_DampsOut)
