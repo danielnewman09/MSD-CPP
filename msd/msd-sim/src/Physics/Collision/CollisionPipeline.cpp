@@ -1,7 +1,10 @@
 // Ticket: 0044_collision_pipeline_integration
+// Ticket: 0052d_solver_integration_ecos_removal
 // Design: docs/designs/0044_collision_pipeline_integration/design.md
+// Design: docs/designs/0052_custom_friction_cone_solver/design.md
 
 #include "msd-sim/src/Physics/Collision/CollisionPipeline.hpp"
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -13,6 +16,7 @@
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
+#include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
@@ -124,12 +128,18 @@ void CollisionPipeline::detectCollisions(
         inertialAssets[i].getCoefficientOfRestitution(),
         inertialAssets[j].getCoefficientOfRestitution());
 
+      // Ticket 0052d: Combined friction coefficient (geometric mean)
+      double const combinedMu = std::sqrt(
+        inertialAssets[i].getFrictionCoefficient() *
+        inertialAssets[j].getFrictionCoefficient());
+
       collisions_.push_back({i,
                              j,
                              inertialAssets[i].getInstanceId(),
                              inertialAssets[j].getInstanceId(),
                              *result,
-                             combinedE});
+                             combinedE,
+                             combinedMu});
     }
   }
 
@@ -149,6 +159,11 @@ void CollisionPipeline::detectCollisions(
         inertialAssets[i].getCoefficientOfRestitution(),
         environmentalAssets[e].getCoefficientOfRestitution());
 
+      // Ticket 0052d: Combined friction coefficient (geometric mean)
+      double const combinedMu = std::sqrt(
+        inertialAssets[i].getFrictionCoefficient() *
+        environmentalAssets[e].getFrictionCoefficient());
+
       // Environment body index offset by numInertial
       collisions_.emplace_back(
         CollisionPair{.bodyAIndex = i,
@@ -157,7 +172,8 @@ void CollisionPipeline::detectCollisions(
                       .bodyBId = environmentalAssets[e].getInstanceId() |
                                  kEnvIdFlag,
                       .result = std::move(*result),
-                      .restitution = combinedE});
+                      .restitution = combinedE,
+                      .frictionCoefficient = combinedMu});
     }
   }
 }
@@ -168,6 +184,19 @@ void CollisionPipeline::createConstraints(
   double /* dt */)
 {
   const size_t numInertial = inertialAssets.size();
+
+  // Ticket 0052d: Determine if ANY collision pair has non-zero friction.
+  // If so, create FrictionConstraints for ALL contacts (1:1 correspondence).
+  // If none have friction, skip FrictionConstraints entirely → ASM path.
+  bool anyFriction = false;
+  for (const auto& pair : collisions_)
+  {
+    if (pair.frictionCoefficient > 0.0)
+    {
+      anyFriction = true;
+      break;
+    }
+  }
 
   for (size_t p = 0; p < collisions_.size(); ++p)
   {
@@ -188,8 +217,8 @@ void CollisionPipeline::createConstraints(
     const Coordinate& comA = stateA.position;
     const Coordinate& comB = stateB.position;
 
-    // Create constraints via factory
-    auto constraints =
+    // Create normal constraints via factory
+    auto contactConstraints =
       contact_constraint_factory::createFromCollision(pair.bodyAIndex,
                                                       pair.bodyBIndex,
                                                       pair.result,
@@ -199,13 +228,32 @@ void CollisionPipeline::createConstraints(
                                                       comB,
                                                       pair.restitution);
 
-    // Move constraints into pipeline storage
-    for (auto& c : constraints)
+    for (size_t ci = 0; ci < contactConstraints.size(); ++ci)
     {
-      constraints_.push_back(std::move(c));
+      const auto& cc = contactConstraints[ci];
+
+      if (anyFriction)
+      {
+        // Create matching FrictionConstraint with same contact geometry.
+        // Uses per-pair friction coefficient (may be 0 for frictionless pairs).
+        auto fc = std::make_unique<FrictionConstraint>(
+          pair.bodyAIndex,
+          pair.bodyBIndex,
+          pair.result.normal,
+          comA + cc->getLeverArmA(),   // contactPointA = comA + leverArmA
+          comB + cc->getLeverArmB(),   // contactPointB = comB + leverArmB
+          comA,
+          comB,
+          pair.frictionCoefficient);
+
+        frictionConstraints_.push_back(std::move(fc));
+      }
+
+      // Move contact constraint into pipeline storage
+      constraints_.push_back(std::move(contactConstraints[ci]));
     }
 
-    // Track constraint range for cache mapping
+    // Track constraint range (number of contact points, not total constraints)
     pairRanges_.push_back(
       {rangeStart, constraints_.size() - rangeStart, p});
   }
@@ -243,20 +291,43 @@ void CollisionPipeline::assembleSolverInput(
 ConstraintSolver::SolveResult
 CollisionPipeline::solveConstraintsWithWarmStart(double dt)
 {
-  // Build non-owning Constraint* vector for solver
-  constraintPtrs_.reserve(constraints_.size());
-  for (auto& c : constraints_)
+  const bool hasFriction = !frictionConstraints_.empty();
+
+  // Build constraint pointer lists
+  normalConstraintPtrs_.reserve(constraints_.size());
+  for (size_t i = 0; i < constraints_.size(); ++i)
   {
-    constraintPtrs_.push_back(c.get());
+    normalConstraintPtrs_.push_back(constraints_[i].get());
   }
 
+  if (hasFriction)
+  {
+    // Ticket 0052d: Build interleaved constraint pointer list
+    // [CC_0, FC_0, CC_1, FC_1, ...]
+    // constraints_ and frictionConstraints_ have 1:1 correspondence
+    constraintPtrs_.reserve(constraints_.size() + frictionConstraints_.size());
+    for (size_t i = 0; i < constraints_.size(); ++i)
+    {
+      constraintPtrs_.push_back(constraints_[i].get());
+      constraintPtrs_.push_back(frictionConstraints_[i].get());
+    }
+  }
+  else
+  {
+    // No friction: solver sees only ContactConstraints → ASM path
+    constraintPtrs_ = normalConstraintPtrs_;
+  }
+
+  // Lambdas per contact: 3 with friction (n, t1, t2), 1 without
+  const size_t lambdasPerContact = hasFriction ? 3 : 1;
+
   // ===== Phase 3.5: Warm-Start from Contact Cache =====
-  const size_t totalConstraints = constraints_.size();
+  const size_t totalRows = constraints_.size() * lambdasPerContact;
   Eigen::VectorXd initialLambda =
-    Eigen::VectorXd::Zero(static_cast<Eigen::Index>(totalConstraints));
+    Eigen::VectorXd::Zero(static_cast<Eigen::Index>(totalRows));
 
   // Helper: extract contact world-space points for a collision pair's
-  // constraint range. Contact point ≈ comA + leverArmA.
+  // constraint range. Contact point = comA + leverArmA.
   auto extractContactPoints =
     [this](const PairConstraintRange& range,
            const CollisionPair& pair) -> std::vector<Coordinate>
@@ -278,19 +349,24 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
 
     auto currentPoints = extractContactPoints(range, pair);
 
-    // Look up cache
     Vector3D const normalVec{pair.result.normal.x(),
                              pair.result.normal.y(),
                              pair.result.normal.z()};
     auto cachedLambdas = contactCache_.getWarmStart(
       pair.bodyAId, pair.bodyBId, normalVec, currentPoints);
 
-    if (!cachedLambdas.empty() && cachedLambdas.size() == range.count)
+    if (!cachedLambdas.empty() &&
+        cachedLambdas.size() == range.count * lambdasPerContact)
     {
       for (size_t ci = 0; ci < range.count; ++ci)
       {
-        initialLambda(static_cast<Eigen::Index>(range.startIdx + ci)) =
-          cachedLambdas[ci];
+        auto const flatBase = static_cast<Eigen::Index>(
+          (range.startIdx + ci) * lambdasPerContact);
+        for (size_t k = 0; k < lambdasPerContact; ++k)
+        {
+          initialLambda(flatBase + static_cast<Eigen::Index>(k)) =
+            cachedLambdas[ci * lambdasPerContact + k];
+        }
       }
     }
   }
@@ -310,11 +386,16 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     const auto& pair = collisions_[range.pairIdx];
 
     std::vector<double> solvedLambdas;
-    solvedLambdas.reserve(range.count);
+    solvedLambdas.reserve(range.count * lambdasPerContact);
     for (size_t ci = 0; ci < range.count; ++ci)
     {
-      solvedLambdas.push_back(
-        solveResult.lambdas(static_cast<Eigen::Index>(range.startIdx + ci)));
+      auto const flatBase = static_cast<Eigen::Index>(
+        (range.startIdx + ci) * lambdasPerContact);
+      for (size_t k = 0; k < lambdasPerContact; ++k)
+      {
+        solvedLambdas.push_back(
+          solveResult.lambdas(flatBase + static_cast<Eigen::Index>(k)));
+      }
     }
 
     auto contactPoints = extractContactPoints(range, pair);
@@ -375,7 +456,8 @@ void CollisionPipeline::correctPositions(
       const_cast<InertialState*>(&envAsset.getInertialState()));
   }
 
-  positionCorrector_.correctPositions(constraintPtrs_,
+  // Ticket 0052d: Pass only normal constraints to position corrector
+  positionCorrector_.correctPositions(normalConstraintPtrs_,
                                       mutableStates,
                                       inverseMasses_,
                                       inverseInertias_,
@@ -388,10 +470,12 @@ void CollisionPipeline::clearFrameData()
 {
   collisions_.clear();
   constraints_.clear();
+  frictionConstraints_.clear();
   states_.clear();
   inverseMasses_.clear();
   inverseInertias_.clear();
   constraintPtrs_.clear();
+  normalConstraintPtrs_.clear();
   pairRanges_.clear();
 }
 

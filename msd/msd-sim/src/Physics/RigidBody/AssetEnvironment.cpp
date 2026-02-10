@@ -42,6 +42,45 @@ AssetEnvironment::AssetEnvironment(uint32_t assetId,
   // Velocities already default to zero in InertialState
 }
 
+AssetEnvironment::AssetEnvironment(uint32_t assetId,
+                                   uint32_t instanceId,
+                                   ConvexHull& hull,
+                                   const ReferenceFrame& frame,
+                                   double coefficientOfRestitution,
+                                   double frictionCoefficient)
+  : AssetPhysical{assetId, instanceId, hull, frame},
+    coefficient_of_restitution_{coefficientOfRestitution},
+    friction_coefficient_{frictionCoefficient}
+{
+  if (coefficientOfRestitution < 0.0 || coefficientOfRestitution > 1.0)
+  {
+    throw std::invalid_argument(
+      "AssetEnvironment: coefficient of restitution must be in [0, 1] (e = " +
+      std::to_string(coefficientOfRestitution) + ")");
+  }
+
+  if (frictionCoefficient < 0.0)
+  {
+    throw std::invalid_argument(
+      "AssetEnvironment: friction coefficient must be non-negative (mu = " +
+      std::to_string(frictionCoefficient) + ")");
+  }
+
+  static_state_.position = frame.getOrigin();
+  static_state_.orientation = frame.getQuaternion();
+}
+
+void AssetEnvironment::setFrictionCoefficient(double mu)
+{
+  if (mu < 0.0)
+  {
+    throw std::invalid_argument(
+      "AssetEnvironment: friction coefficient must be non-negative (mu = " +
+      std::to_string(mu) + ")");
+  }
+  friction_coefficient_ = mu;
+}
+
 void AssetEnvironment::setCoefficientOfRestitution(double e)
 {
   if (e < 0.0 || e > 1.0)

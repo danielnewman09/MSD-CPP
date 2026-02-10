@@ -90,6 +90,51 @@ AssetInertial::AssetInertial(uint32_t assetId,
   // now handled by integrator via state.orientation.normalize()
 }
 
+AssetInertial::AssetInertial(uint32_t assetId,
+                             uint32_t instanceId,
+                             ConvexHull& hull,
+                             double mass,
+                             const ReferenceFrame& frame,
+                             double coefficientOfRestitution,
+                             double frictionCoefficient)
+  : AssetPhysical{assetId, instanceId, hull, frame},
+    mass_{mass},
+    inertiaTensor_{Eigen::Matrix3d::Zero()},
+    inverseInertiaTensor_{Eigen::Matrix3d::Zero()},
+    centerOfMass_{Coordinate{0, 0, 0}},
+    dynamicState_{},
+    coefficientOfRestitution_{coefficientOfRestitution},
+    frictionCoefficient_{frictionCoefficient}
+{
+  if (mass <= 0.0)
+  {
+    throw std::invalid_argument("Mass must be positive, got: " +
+                                std::to_string(mass));
+  }
+
+  if (coefficientOfRestitution < 0.0 || coefficientOfRestitution > 1.0)
+  {
+    throw std::invalid_argument(
+      "Coefficient of restitution must be in [0, 1], got: " +
+      std::to_string(coefficientOfRestitution));
+  }
+
+  if (frictionCoefficient < 0.0)
+  {
+    throw std::invalid_argument(
+      "Friction coefficient must be non-negative, got: " +
+      std::to_string(frictionCoefficient));
+  }
+
+  inertiaTensor_ = inertial_calculations::computeInertiaTensorAboutCentroid(
+    getCollisionHull(), mass);
+  inverseInertiaTensor_ = inertiaTensor_.inverse();
+
+  dynamicState_.position = frame.getOrigin();
+  dynamicState_.orientation = frame.getQuaternion();
+  dynamicState_.quaternionRate = Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
+}
+
 double AssetInertial::getMass() const
 {
   return mass_;
@@ -192,6 +237,24 @@ void AssetInertial::setCoefficientOfRestitution(double e)
       std::to_string(e));
   }
   coefficientOfRestitution_ = e;
+}
+
+// ========== Friction Coefficient (ticket 0052d) ==========
+
+double AssetInertial::getFrictionCoefficient() const
+{
+  return frictionCoefficient_;
+}
+
+void AssetInertial::setFrictionCoefficient(double mu)
+{
+  if (mu < 0.0)
+  {
+    throw std::invalid_argument(
+      "Friction coefficient must be non-negative, got: " +
+      std::to_string(mu));
+  }
+  frictionCoefficient_ = mu;
 }
 
 // ========== Impulse Application API (ticket 0027) ==========

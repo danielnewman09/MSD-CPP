@@ -13,8 +13,6 @@ set_target_properties(${MSD_SIM_NAME} PROPERTIES
 # Find required packages first
 find_package(Eigen3 REQUIRED NO_MODULE)
 find_package(qhull REQUIRED CONFIG)
-find_package(ecos REQUIRED CONFIG)
-
 # Add subdirectories to collect sources from each module
 add_subdirectory(src)
 if(BUILD_TESTING)
@@ -30,7 +28,7 @@ target_link_libraries(${MSD_SIM_NAME}
           msd_assets
           Eigen3::Eigen
           qhull::qhullstatic_r
-          ecos::ecos)
+)
 
 # Add include directories to support "msd-sim/src/..." includes
 target_include_directories(${MSD_SIM_NAME}
