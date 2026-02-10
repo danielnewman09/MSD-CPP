@@ -11,4 +11,5 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     FrictionConstraint.cpp
     PositionCorrector.cpp
     ContactCache.cpp
+    ConeProjection.cpp
 )
