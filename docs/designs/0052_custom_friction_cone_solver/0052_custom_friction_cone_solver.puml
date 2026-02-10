@@ -1,0 +1,167 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+skinparam classFontSize 11
+skinparam defaultFontSize 11
+
+title Custom Friction Cone Solver — Architecture (Ticket 0052)
+
+' ===== NEW COMPONENTS =====
+
+class ConeProjection <<new>> {
+    ' Header-only utility (no state)
+    + {static} project(lambda_n, lambda_t1, lambda_t2, mu) : ProjectionResult
+    + {static} gradient(lambda_n, lambda_t1, lambda_t2, mu) : Eigen::Matrix3d
+    + {static} projectVector(lambda, mu, numContacts) : Eigen::VectorXd
+    __
+    ProjectionResult { n, t1, t2, case_ }
+}
+note right of ConeProjection
+  **Location**: Constraints/ConeProjection.hpp
+  Header-only, stateless.
+  Three geometric cases:
+    1. Interior (no-op)
+    2. Dual cone (zero)
+    3. Cone surface (Eq. 24-25)
+end note
+
+class FrictionConeSolver <<new>> {
+    + solve(A, b, mu, lambda0) : SolveResult
+    + setTolerance(eps) : void
+    + setMaxIterations(n) : void
+    __
+    - tolerance_ : double = 1e-8
+    - max_iterations_ : int = 50
+    - armijo_c1_ : double = 1e-4
+    - armijo_beta_ : double = 0.5
+    - max_line_search_ : int = 10
+    __
+    SolveResult { lambda, converged,
+      iterations, residual }
+}
+note right of FrictionConeSolver
+  **Location**: Constraints/FrictionConeSolver.hpp/.cpp
+  Projected Newton QP-SOCP solver.
+  Algorithm:
+    1. Cholesky factor A
+    2. Compute unconstrained min
+    3. Project onto cone product
+    4. Iterate with Armijo line search
+end note
+
+struct FrictionSpec <<new>> {
+    + numContacts : int
+    + frictionCoefficients : vector<double>
+}
+note bottom of FrictionSpec
+  Lightweight replacement
+  for FrictionConeSpec.
+  No ECOS dependency.
+end note
+
+' ===== MODIFIED COMPONENTS =====
+
+class ConstraintSolver <<modified>> {
+    + solve(constraints, states, ...) : SolveResult
+    __
+    - solveActiveSet(A, b, ...) : ActiveSetResult
+    - {static} assembleJacobiansFlat(constraints, ...) : vector<MatrixXd>
+    - {static} assembleFlatEffectiveMass(...) : MatrixXd
+    - {static} assembleFlatRHS(...) : VectorXd
+    - {static} extractBodyForcesFlat(...) : vector<BodyForces>
+    __
+    - solveWithFriction(A, b, spec) : ActiveSetResult
+    - {static} buildFrictionSpec(constraints) : FrictionSpec
+    - {static} flattenConstraints(constraints) : FlattenedConstraints
+    __
+    <s>- solveWithECOS()</s>  /' removed '/
+    <s>- buildFrictionConeSpec()</s>  /' removed '/
+    <s>- ecos_abs_tol_, ecos_rel_tol_, ecos_max_iters_</s>
+}
+
+class CollisionPipeline <<modified>> {
+    + execute(inertial, env, dt) : void
+    __
+    - createConstraints(...) : void
+    - solveConstraintsWithWarmStart(dt) : SolveResult
+    - correctPositions(...) : void
+    __
+    - constraints_ : vector<unique_ptr<ContactConstraint>>
+    + frictionConstraints_ : vector<unique_ptr<FrictionConstraint>>
+    - constraintPtrs_ : vector<Constraint*>
+}
+
+class ContactCache <<modified>> {
+    + getWarmStart(A, B, normal, points) : vector<double>
+    + update(A, B, normal, lambdas, points) : void
+    __
+    Now stores 3 lambdas per contact:
+    [lambda_n, lambda_t1, lambda_t2]
+}
+
+class PositionCorrector {
+    + correctPositions(constraints, ...) : void
+    __
+    No changes needed:
+    uses dynamic_cast<ContactConstraint*>
+    to check penetration depth.
+    FrictionConstraints are skipped
+    automatically (no penetration depth).
+}
+
+' ===== UNCHANGED CONTEXT =====
+
+class Constraint {
+    + dimension() : int
+    + jacobian(sA, sB, t) : MatrixXd
+    + lambdaBounds() : LambdaBounds
+    + bodyAIndex() : size_t
+    + bodyBIndex() : size_t
+}
+
+class ContactConstraint {
+    + dimension() : 1
+    + jacobian() : 1x12
+    + getRestitution() : double
+    + getPenetrationDepth() : double
+    + getContactNormal() : Coordinate
+}
+
+class FrictionConstraint {
+    + dimension() : 2
+    + jacobian() : 2x12
+    + getFrictionCoefficient() : double
+    + getTangent1() : Coordinate
+    + getTangent2() : Coordinate
+}
+
+class ContactConstraintFactory {
+    + createFromCollision(...) : vector<unique_ptr<ContactConstraint>>
+}
+
+' ===== RELATIONSHIPS =====
+
+Constraint <|-- ContactConstraint
+Constraint <|-- FrictionConstraint
+
+ConstraintSolver --> FrictionConeSolver : "dispatches to\n(friction path)"
+ConstraintSolver --> FrictionSpec : "builds from\nconstraint list"
+FrictionConeSolver --> ConeProjection : "uses for\ncone projection"
+
+CollisionPipeline --> ConstraintSolver : "invokes"
+CollisionPipeline --> ContactConstraintFactory : "creates\nContactConstraints"
+CollisionPipeline --> FrictionConstraint : "creates alongside\nContactConstraints"
+CollisionPipeline --> ContactCache : "warm-start\n3 lambdas/contact"
+CollisionPipeline --> PositionCorrector : "position correction\n(normal only)"
+
+ConstraintSolver ..> Constraint : "reads Jacobian,\nlambdaBounds"
+
+' ===== LAYOUT =====
+
+ConeProjection -[hidden]right- FrictionSpec
+FrictionConeSolver -[hidden]right- ConeProjection
+
+@enduml
