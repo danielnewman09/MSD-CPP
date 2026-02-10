@@ -1,0 +1,153 @@
+@startuml 0035d1_ecos_socp_reformulation
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+' ============================================================
+' Existing ECOS infrastructure (context, not modified by 0035d1)
+' ============================================================
+
+class ECOSData {
+    +idxint num_variables_      : 6C+1
+    +idxint num_inequality_     : 6C+2
+    +idxint num_cones_          : C+1
+    +idxint num_equality_       : 3C
+    +ECOSSparseMatrix G_
+    +ECOSSparseMatrix A_eq_
+    +std::vector<pfloat> h_
+    +std::vector<pfloat> c_
+    +std::vector<pfloat> b_eq_
+    +std::vector<idxint> cone_sizes_
+    +ECOSWorkspacePtr workspace_
+    +setup(): void
+    +cleanup(): void
+    +isSetup(): bool
+}
+
+class FrictionConeSpec {
+    +getNumContacts(): int
+    +getFrictionCoefficient(int): double
+    +getConeSizes(): std::vector<idxint>
+}
+
+class ECOSSparseMatrix {
+    +std::vector<pfloat> data
+    +std::vector<idxint> row_indices
+    +std::vector<idxint> col_ptrs
+    +idxint nrows, ncols, nnz
+}
+
+' ============================================================
+' Modified component: ECOSProblemBuilder
+' ============================================================
+
+class ECOSProblemBuilder <<modified>> {
+    <<static>>
+    +build(A, b, coneSpec): ECOSData
+    --
+    {method} Private methods (all new for 0035d1)
+    -computeCholeskyFactor(A): MatrixXd
+    -buildEpigraphCone(L, b, C): EpigraphConeData
+    -buildExtendedGMatrix(epi, coneSpec, C): ECOSSparseMatrix
+    -buildExtendedHVector(epi, C): vector<pfloat>
+    -buildExtendedCVector(C): vector<pfloat>
+}
+
+' ============================================================
+' New internal data structure
+' ============================================================
+
+struct EpigraphConeData <<new>> {
+    +MatrixXd L_times_2           : 2*L (3C x 3C)
+    +VectorXd L_inv_T_b_times_2   : 2*d = 2*L^{-1}*b
+    +idxint epigraph_cone_size    : 3C+2
+}
+
+' ============================================================
+' Modified component: ConstraintSolver
+' ============================================================
+
+class ConstraintSolver <<modified>> {
+    +solveWithECOS(A, b, coneSpec, C): ActiveSetResult
+    --
+    {field} ECOS configuration
+    -ecos_abs_tol_: double
+    -ecos_rel_tol_: double
+    -ecos_max_iters_: int
+}
+
+struct ActiveSetResult {
+    +VectorXd lambda
+    +bool converged
+    +int iterations
+    +string solver_type
+    +int ecos_exit_flag
+    +double primal_residual
+    +double dual_residual
+    +double gap
+}
+
+' ============================================================
+' Relationships
+' ============================================================
+
+ECOSProblemBuilder ..> ECOSData : creates
+ECOSProblemBuilder ..> FrictionConeSpec : reads mu values
+ECOSProblemBuilder ..> EpigraphConeData : builds internally
+ECOSData *-- ECOSSparseMatrix : owns G_ and A_eq_
+ConstraintSolver --> ECOSProblemBuilder : calls build()
+ConstraintSolver --> ECOSData : owns temporarily
+ConstraintSolver ..> ActiveSetResult : returns
+
+' ============================================================
+' Notes documenting the auxiliary-variable formulation
+' ============================================================
+
+note right of ECOSProblemBuilder
+  **Auxiliary-Variable SOCP Formulation**
+  Variables: x = [lambda(3C); y(3C); t(1)]
+  Equality: L^T * lambda - y = 0  (3C eqs)
+  Epigraph: ||(2(y-d), t-1)|| <= t+1
+  Friction: ||[lt1,lt2]|| <= mu*ln
+
+  **Key Dimensions** (for C contacts):
+  - num_variables = 6C+1
+  - num_equality = 3C
+  - G rows = 6C+2
+  - cone_sizes = [3C+2, 3, ..., 3]
+end note
+
+note bottom of EpigraphConeData
+  **Numerical Stability**:
+  d = L^{-1}*b via forward substitution
+  (stable for lower triangular L)
+
+  Avoids L^{-T}*b backward substitution
+  (unstable for ill-conditioned L)
+end note
+
+note right of ConstraintSolver
+  **Solution Extraction**:
+  workspace->x has dim 6C+1
+  lambda = first 3C elements
+  y and t are discarded
+end note
+
+' ============================================================
+' Data flow sequence
+' ============================================================
+
+note as N1
+  **build() Flow**:
+  1. Cholesky: A = L*L^T
+  2. Forward sub: d = L^{-1}*b
+  3. Build G (6C+2 x 6C+1) in CSC
+  4. Build h = [1, -2d, -1, 0...]
+  5. Build c = [0..0, 1]
+  6. Build A_eq = [L^T | -I | 0]
+  7. Build b_eq = [0..0]
+  8. Cones = [3C+2, 3, ..., 3]
+end note
+
+@enduml
