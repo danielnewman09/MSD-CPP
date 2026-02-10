@@ -40,7 +40,8 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
                                              const ReferenceFrame& origin)
 {
   auto instanceId = getInertialAssetId();
-  inertialAssets_.emplace_back(assetId, instanceId, hull, 10.0, origin);
+  inertialAssets_.emplace_back(
+    assetId, instanceId, hull, 10.0, origin, 0.5, 0.5);
   return inertialAssets_.back();
 }
 
@@ -60,7 +61,8 @@ const AssetEnvironment& WorldModel::spawnEnvironmentObject(
   const ReferenceFrame& origin)
 {
   auto instanceId = ++environmentAssetIdCounter_;
-  environmentalAssets_.emplace_back(assetId, instanceId, hull, origin);
+  environmentalAssets_.emplace_back(
+    assetId, instanceId, hull, origin, 0.5, 0.5);
   return environmentalAssets_.back();
 }
 
@@ -122,7 +124,8 @@ void WorldModel::update(std::chrono::milliseconds simTime)
 
   // Ticket: 0047a_revert_gravity_preapply
   //
-  // Gravity pre-apply REMOVED (was: ticket 0047_face_contact_manifold_generation).
+  // Gravity pre-apply REMOVED (was: ticket
+  // 0047_face_contact_manifold_generation).
   //
   // Investigation goal: Characterize the resting contact problem without
   // velocity mutation, then implement a cleaner approach that doesn't couple
@@ -157,11 +160,12 @@ void WorldModel::updatePhysics(double dt)
   {
     // Ticket: 0047a_revert_gravity_preapply
     //
-    // Gravity application RESTORED to updatePhysics (was: split in ticket 0047).
+    // Gravity application RESTORED to updatePhysics (was: split in ticket
+    // 0047).
     //
-    // All forces (gravity + contact + external) now integrated in a single pass.
-    // No velocity mutation before collision solving — the constraint solver
-    // sees the actual velocity v, not an augmented v+g*dt.
+    // All forces (gravity + contact + external) now integrated in a single
+    // pass. No velocity mutation before collision solving — the constraint
+    // solver sees the actual velocity v, not an augmented v+g*dt.
     Coordinate netForce = asset.getAccumulatedForce();
     Coordinate netTorque{0.0, 0.0, 0.0};
 

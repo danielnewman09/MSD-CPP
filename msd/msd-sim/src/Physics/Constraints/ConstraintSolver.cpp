@@ -234,7 +234,7 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
   const std::vector<Constraint*>& contactConstraints,
   const std::vector<Eigen::MatrixXd>& jacobians,
   const std::vector<std::reference_wrapper<const InertialState>>& states,
-  double dt)
+  double /* dt */)
 {
   const size_t c = contactConstraints.size();
 
