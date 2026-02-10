@@ -1,0 +1,155 @@
+# Ticket 0053: Collision Pipeline Performance Optimization
+
+## Status
+- [x] Draft
+- [ ] Investigation Complete
+- [ ] Design Complete — Awaiting Review
+- [ ] Implementation Complete — Awaiting Review
+- [ ] Merged / Complete
+
+**Current Phase**: Draft
+**Type**: Performance / Investigation
+**Priority**: High
+**Assignee**: N/A
+**Created**: 2026-02-10
+**Branch**: `0052d-solver-integration` (profiled)
+**Related Tickets**: [0052_custom_friction_cone_solver](0052_custom_friction_cone_solver.md), [0047_face_contact_manifold_generation](0047_face_contact_manifold_generation.md)
+
+### Subtasks
+
+| Subtask | Description | Priority | Est. Impact |
+|---------|-------------|----------|-------------|
+| 0053a | Reduce heap allocations in solver pipeline | High | ~1.8% CPU |
+| 0053b | Disable Qhull diagnostic output | Low | ~0.3% CPU |
+| 0053c | FrictionConeSolver iteration optimization | High | ~1.9% CPU |
+| 0053d | SAT fallback cost reduction | Medium | ~1.1% CPU |
+| 0053e | Eigen fixed-size matrix optimization | Medium | ~1.7% CPU |
+
+---
+
+## Summary
+
+Profiling the collision and friction pipeline on the `0052d-solver-integration` branch reveals that the full constraint solving path dominates CPU time. While no single function is catastrophically slow, the aggregate cost of the pipeline is significant. This ticket tracks investigation and optimization of the identified hotspots.
+
+---
+
+## Profiling Results
+
+**Environment**: macOS, Apple Clang, Release (-O2 -g), Time Profiler
+**Workload**: `msd_sim_test --gtest_filter="*Collision*:*Friction*:*Constraint*:*Contact*:*Cone*" --gtest_repeat=50`
+**Total Samples**: 5,013 (~5s wall time)
+
+### Hotspots by Subsystem
+
+| Subsystem | Key Functions | Samples | % of Total |
+|-----------|--------------|---------|------------|
+| Friction Solver | `FrictionConeSolver::solve`, `ConeProjection::projectVector` | 93 | 1.9% |
+| Memory Allocator | `_xzm_free`, `_xzm_xzone_malloc_tiny`, `_free` | 90 | 1.8% |
+| Eigen Linear Algebra | `gebp_kernel`, `general_matrix_vector_product`, `LLT`, `triangular_solver` | 84 | 1.7% |
+| GJK/Support Function | `supportMinkowski`, `supportMinkowskiWithWitness`, `GJK::intersects` | 73 | 1.5% |
+| EPA | `buildHorizonEdges`, `extractContactManifold`, `computeContactInfo`, `expandPolytope` | 69 | 1.4% |
+| Qhull | `printsummary`, `findbest`, `findbesthorizon`, `memalloc`, `addpoint` | 63 | 1.3% |
+| SAT Fallback | `computeSATMinPenetration`, `getFacetsAlignedWith`, `buildPolygonFromFacets` | 53 | 1.1% |
+| Contact Solver (ASM) | `ConstraintSolver::solve`, `solveActiveSet`, `assembleFlatEffectiveMass` | 45 | 0.9% |
+| Position Corrector | `PositionCorrector::correctPositions` | 40 | 0.8% |
+| Collision Pipeline | `solveConstraintsWithWarmStart`, `execute` | 25 | 0.5% |
+
+### Notable Observations
+
+1. **Memory allocation (1.8%)** rivals the friction solver as a hotspot. This suggests excessive per-frame dynamic allocations — likely Eigen temporaries and `std::vector` resizing in the solver pipeline.
+
+2. **`qh_printsummary` (0.3%)** is pure diagnostic I/O that should be disabled in production builds.
+
+3. **`FrictionConeSolver::solve`** has two entries (rank 1 and 18) — the outer function and its lambda merit function evaluation, suggesting the Newton iteration inner loop is the cost center.
+
+4. **SAT fallback (1.1%)** added in ticket 0047 for resting contact stability runs on every collision check. Could be gated on EPA penetration depth.
+
+5. **Eigen dense operations (1.7%)** use dynamic-size matrices. For bounded contact counts, fixed-size specializations could eliminate allocation overhead.
+
+---
+
+## Optimization Opportunities
+
+### 0053a: Reduce Heap Allocations (High Priority)
+
+**Problem**: `malloc`/`free` account for 1.8% of samples. Dynamic allocations in the per-frame solver loop are expensive.
+
+**Investigation Areas**:
+- `ConstraintSolver::solve()` creates `std::vector` and `Eigen::VectorXd`/`MatrixXd` each call
+- `CollisionPipeline::execute()` builds constraint lists each frame
+- `FrictionConeSolver::solve()` allocates workspace each call
+- `PositionCorrector::correctPositions()` allocates per-iteration vectors
+
+**Potential Solutions**:
+- Pre-allocated workspace structs owned by `CollisionPipeline`
+- `Eigen::Matrix<double, Dynamic, Dynamic, 0, MaxRows, MaxCols>` with compile-time upper bounds
+- `SmallVector`-style inline storage for typical contact counts (1-8 contacts)
+
+### 0053b: Disable Qhull Diagnostic Output (Low Priority, Quick Win)
+
+**Problem**: `qh_printsummary` consumes 0.3% of samples on diagnostic I/O.
+
+**Solution**: Set Qhull's `qh->NOsummary = True` or redirect output to `/dev/null` in `ConvexHull::computeHull()`.
+
+### 0053c: FrictionConeSolver Iteration Optimization (High Priority)
+
+**Problem**: Newton solver is the single biggest hotspot (1.9%).
+
+**Investigation Areas**:
+- Average iteration count per solve (target: 3-5, prototype showed 3-8)
+- Merit function evaluation cost (builds full residual vector each time)
+- Line search step count (Armijo backtracking)
+- Warm-starting from previous frame's friction lambda values
+
+**Potential Solutions**:
+- Warm-start friction lambda from `ContactCache` (extends ticket 0040d)
+- Early termination when residual drops below physics-meaningful threshold
+- Avoid recomputing full Jacobian when only lambda changes during line search
+- Cache cone projection results between merit function evaluations
+
+### 0053d: SAT Fallback Cost Reduction (Medium Priority)
+
+**Problem**: `computeSATMinPenetration` + `getFacetsAlignedWith` + `buildPolygonFromFacets` account for 1.1%.
+
+**Investigation Areas**:
+- SAT runs on every collision pair, even when EPA produces good results
+- `getFacetsAlignedWith` does linear scan of all facets
+
+**Potential Solutions**:
+- Only run SAT when EPA penetration depth < threshold (e.g., < 0.01m)
+- Cache facet normals in world space (avoid per-query transforms)
+- Pre-compute face normal index for common orientations
+
+### 0053e: Eigen Fixed-Size Matrix Optimization (Medium Priority)
+
+**Problem**: Dynamic Eigen matrices cause heap allocation and indirection overhead (1.7%).
+
+**Investigation Areas**:
+- Contact count is typically 1-4 per collision pair
+- Normal constraint: 1x12 Jacobian per contact
+- Friction constraint: 3x12 Jacobian per contact
+- Effective mass matrix: CxC or 3Cx3C (typically 4x4 or 12x12)
+
+**Potential Solutions**:
+- `Eigen::Matrix<double, Dynamic, Dynamic, 0, 12, 12>` for effective mass (max 4 contacts)
+- `Eigen::Matrix<double, 1, 12>` fixed-size for individual Jacobians
+- `Eigen::Matrix<double, Dynamic, 1, 0, 12, 1>` for lambda/RHS vectors
+- Template the solver on max contact count for stack allocation
+
+---
+
+## Acceptance Criteria
+
+- [ ] AC1: Profiling baseline established on `main` for before/after comparison
+- [ ] AC2: Each optimization measured independently with profiling
+- [ ] AC3: No physics test regressions (all currently-passing tests still pass)
+- [ ] AC4: Aggregate collision pipeline CPU reduction >= 20% relative to baseline
+- [ ] AC5: Memory allocation samples reduced by >= 50% relative to baseline
+
+---
+
+## Profiling Artifacts
+
+- **Trace file**: `profile_results/friction_profile.trace`
+- **JSON report**: `profile_results/profile_20260210_135441.json`
+- **Branch profiled**: `0052d-solver-integration` (commit `8d6973a`)
