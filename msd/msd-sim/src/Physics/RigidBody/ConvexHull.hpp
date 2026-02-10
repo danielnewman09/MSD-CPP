@@ -286,6 +286,14 @@ private:
 
     try
     {
+      // Ticket: 0053_collision_pipeline_performance
+      // Suppress Qhull diagnostic output by redirecting to /dev/null (0053b)
+      FILE* devNull = std::fopen("/dev/null", "w");
+      if (devNull == nullptr)
+      {
+        throw std::runtime_error("Failed to open /dev/null for Qhull output suppression");
+      }
+
       // Run Qhull with reentrant API
       // "qhull" = required command prefix
       // "Qt" = triangulated output (ensures all facets are triangles)
@@ -298,8 +306,11 @@ private:
                      qhullPoints.data(),               // points array
                      False,    // ismalloc (we manage memory)
                      options,  // options (non-const for qhull's parsing)
-                     stderr,   // outfile
-                     stderr);  // errfile
+                     devNull,  // outfile (redirected to /dev/null)
+                     devNull); // errfile (redirected to /dev/null)
+
+      // Close /dev/null after Qhull completes
+      std::fclose(devNull);
 
       if (exitcode != 0)
       {
