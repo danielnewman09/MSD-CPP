@@ -555,3 +555,169 @@ Each optimization measured independently via profiling:
 - **Constraint System**: [`msd-sim/src/Physics/Constraints/CLAUDE.md`](../../../msd/msd-sim/src/Physics/Constraints/CLAUDE.md)
 - **Eigen Documentation**: https://eigen.tuxfamily.org/dox/group__TopicFixedSizeVectorizable.html
 - **Profiling Guide**: [`docs/profiling.md`](../../profiling.md)
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-10
+**Status**: APPROVED
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | SolverWorkspace, FlattenedConstraints follow PascalCase; jacobianRows, bodyAIndices follow camelCase; workspace_ follows snake_case_ member convention |
+| Namespace organization | ✓ | All changes internal to existing msd_sim namespace, no new namespaces |
+| File structure | ✓ | No new files, modifications to existing components in msd/msd-sim/src/Physics/{Collision,Constraints}/ |
+| Dependency direction | ✓ | No new dependencies. Qhull (0053b), ContactCache (0053c), Eigen (0053e) already present. All changes internal to msd-sim. |
+
+#### C++ Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | ✓ | SolverWorkspace owns Eigen vectors with automatic cleanup. Qhull diagnostic suppression uses RAII via existing ConvexHull implementation. |
+| Smart pointer appropriateness | ✓ | No new smart pointers introduced. Existing constraint pointer patterns unchanged. |
+| Value/reference semantics | ✓ | SolverWorkspace passed by reference via Eigen::Ref. FlattenedConstraints is value type. |
+| Rule of 0/3/5 | ✓ | SolverWorkspace can use Rule of Zero (all members have default copy/move). Explicit `= default` declarations not shown but acceptable. |
+| Const correctness | ✓ | getWarmStart() on ContactCache is const. Static factory methods (flattenConstraints, buildFrictionSpec) are const-correct. |
+| Exception safety | ✓ | No exception guarantees weakened. Eigen resize provides strong guarantee (old data preserved on exception). |
+| Initialization | ✓ | SolverWorkspace members use default initialization. resize() follows Eigen's brace-free API (acceptable for library call). |
+| Return values | ✓ | FlattenedConstraints returned by value (move semantics). No output parameters introduced. |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | No new headers. Eigen, ConvexHull, ContactCache, FrictionConeSolver already included. |
+| Template complexity | ✓ | Fixed-size matrix types use Eigen::Dynamic with compile-time max bounds (standard Eigen pattern). No custom templates. |
+| Memory strategy | ✓ | Clear allocation strategy: pre-allocate in workspace, resize only when capacity insufficient, stack allocation for ≤4 contacts. |
+| Thread safety | ✓ | Single-threaded simulation model maintained. No new thread safety concerns. |
+| Build integration | ✓ | Modifications to existing .cpp/.hpp files, no CMake changes needed. |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | Unit tests proposed for workspace resize, cache warm-start, SAT gating, fixed-size allocation. |
+| Mockable dependencies | N/A | No new external dependencies requiring mocking. |
+| Observable state | ✓ | Profiling samples observable. Benchmark tests measure iteration count, allocation count, invocation rate. |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | Friction solver warm-start may not reduce iterations by expected 2× | Performance | Medium | Low | Prototype convergence before/after warm-start, measure iteration count | Yes |
+| R2 | SAT gating threshold of 0.01m may be too high/low, breaking resting contact stability (D1, D4, H1 tests) | Performance | Medium | Medium | Profile with thresholds [0.001m, 0.01m, 0.1m], validate physics test pass rate | Yes |
+| R3 | Fixed-size Eigen matrices may degrade precision (unlikely per Eigen docs) | Performance | Low | Low | Run full physics suite with fixed-size matrices, compare solver output to baseline | Yes |
+| R4 | Workspace reallocation may occur frequently if contact count is highly variable | Performance | Low | Low | Log reallocation count, adjust kMaxContactsPerPair if needed | No |
+| R5 | Qhull NOsummary flag may be insufficient if other diagnostic paths exist | Performance | Low | Low | Verify qh_printsummary removed from profiling hotspots after change | No |
+
+### Prototype Guidance
+
+#### Prototype P1: Friction Solver Warm-Start Convergence
+
+**Risk addressed**: R1
+**Question to answer**: Does warm-starting from ContactCache reduce FrictionConeSolver iteration count by ≥40% (from 5-8 to 2-4 iterations)?
+
+**Success criteria**:
+- Average iteration count ≤ 5 for warm-started solves
+- Warm-start hit rate > 80% for persistent contacts
+- No physics test regressions
+
+**Prototype approach**:
+```
+Location: prototypes/0053_collision_pipeline_performance/p1_friction_warm_start/
+Type: Instrumented FrictionConeSolver in existing test harness
+
+Steps:
+1. Modify FrictionConeSolver::solve() to log iteration count
+2. Implement warm-start from ContactCache (store/retrieve friction lambda)
+3. Run friction tests with cold-start (baseline)
+4. Run friction tests with warm-start
+5. Compare iteration count distributions
+```
+
+**Time box**: 1 hour
+
+**If prototype fails**:
+- Proceed with allocation reduction (0053a) and SAT gating (0053d)
+- Defer friction warm-start to future ticket
+- Estimated impact: lose 1.9% CPU savings, fall back to 4.9% total reduction
+
+#### Prototype P2: SAT Fallback Gating Threshold
+
+**Risk addressed**: R2
+**Question to answer**: What threshold value for EPA penetration depth minimizes SAT invocations without breaking resting contact stability?
+
+**Success criteria**:
+- SAT invocation rate < 10% of collision pairs
+- No regressions in D1, D4, H1 tests (resting contact energy tracking)
+- Penetration correction remains bounded (< 1mm residual)
+
+**Prototype approach**:
+```
+Location: prototypes/0053_collision_pipeline_performance/p2_sat_gating/
+Type: Instrumented CollisionHandler with threshold sweep
+
+Steps:
+1. Add SAT invocation counter to CollisionHandler
+2. Run physics tests with thresholds [0.001m, 0.005m, 0.01m, 0.05m, 0.1m]
+3. Record SAT invocation rate for each threshold
+4. Record pass/fail status for D1, D4, H1 tests
+5. Identify threshold with lowest invocation rate and zero test failures
+```
+
+**Time box**: 1 hour
+
+**If prototype fails**:
+- Keep SAT unconditional (defer optimization)
+- Proceed with other optimizations (0053a, 0053b, 0053c, 0053e)
+- Estimated impact: lose 1.1% CPU savings, fall back to 5.7% total reduction
+
+#### Prototype P3: Fixed-Size Matrix Numeric Stability
+
+**Risk addressed**: R3
+**Question to answer**: Do fixed-size Eigen specializations maintain solver precision within acceptable tolerance (< 1e-6 relative error)?
+
+**Success criteria**:
+- All 689/693 passing physics tests still pass
+- Solver lambda output matches baseline within 1e-6 relative error
+- No numeric instability warnings from Eigen
+
+**Prototype approach**:
+```
+Location: prototypes/0053_collision_pipeline_performance/p3_fixed_size_precision/
+Type: Modified ConstraintSolver with fixed-size matrix types
+
+Steps:
+1. Replace Eigen::MatrixXd/VectorXd with fixed-size types (kMaxContactsPerPair=4)
+2. Run full physics test suite
+3. Log any lambda differences > 1e-6 relative error
+4. Check for Eigen warnings (ill-conditioned matrices, etc.)
+5. Compare test pass rate: 689/693 baseline vs fixed-size
+```
+
+**Time box**: 1 hour
+
+**If prototype fails**:
+- Defer fixed-size optimization to future investigation
+- Proceed with other optimizations (0053a, 0053b, 0053c, 0053d)
+- Estimated impact: lose 1.7% CPU savings, fall back to 5.1% total reduction
+
+### Required Revisions
+
+None — design ready for prototype phase.
+
+### Blocking Issues
+
+None.
+
+### Summary
+
+The design is **APPROVED** for prototyping. All five optimizations (0053a-e) are well-specified, architecturally sound, and implementable without modifying component relationships or APIs external to the collision pipeline. The design correctly uses modern C++ patterns (Eigen::Ref, value semantics for FlattenedConstraints, RAII for Qhull), follows project naming conventions, and preserves the single-threaded simulation model. Three medium-risk items (friction warm-start convergence, SAT gating threshold, fixed-size matrix precision) require validation prototypes with clear success criteria and fallback plans. The aggregate 6.8% → 3.6% CPU reduction target is achievable with all prototypes succeeding; partial success scenarios degrade gracefully to 5.1-5.7% reduction.
+
+**Next steps**: Proceed to prototype phase for validation of R1, R2, R3. Expected total prototype time: 3 hours.
