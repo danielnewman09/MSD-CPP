@@ -20,3 +20,5 @@ analysis/clang_tidy_reports/
 *.db-wal
 *.pyc
 **/.venv/**
+prototypes/**/p1_cone_projection
+prototypes/**/p2_newton_solver
