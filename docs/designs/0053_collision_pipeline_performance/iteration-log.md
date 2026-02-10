@@ -26,7 +26,7 @@ _None detected._
 ## Iterations
 
 ### Iteration 1 — 2026-02-10 18:00
-**Commit**: (pending)
+**Commit**: 5929a44
 **Hypothesis**: Redirect Qhull output to /dev/null to suppress diagnostic messages (0053b)
 **Changes**:
 - `msd/msd-sim/src/Physics/RigidBody/ConvexHull.hpp`: Added fopen("/dev/null") before qh_new_qhull() and fclose() after, redirecting both outfile and errfile parameters to /dev/null
@@ -34,4 +34,15 @@ _None detected._
 **Test Result**: 657/661 — Same as baseline
 **Impact vs Previous**: +0 passes, -0 regressions, net change: 0
 **Assessment**: Success. Qhull diagnostic output ("Convex hull of N points in 3-d:") no longer appears in test output. All tests that passed before still pass. Ready to proceed to next subtask (0053a).
+
+### Iteration 2 — 2026-02-10 18:30
+**Commit**: (pending)
+**Hypothesis**: Add SolverWorkspace infrastructure to CollisionPipeline for per-frame reuse (0053a)
+**Changes**:
+- `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp`: Added SolverWorkspace struct with pre-allocated vectors (lambda, rhs, warmStart, frictionLambda, residual, gradient, trialLambda, pseudoVelocities, penetrations) and resize() method
+- `msd/msd-sim/src/Physics/Collision/CollisionPipeline.cpp`: Added workspace resize call in Phase 2.5 based on constraints_.size()
+**Build Result**: PASS
+**Test Result**: 657/661 — Same as baseline
+**Impact vs Previous**: +0 passes, -0 regressions, net change: 0
+**Assessment**: Success. Workspace infrastructure added. Eigen's resize() will only reallocate if capacity insufficient, providing automatic memory reuse across frames. Solvers still use internal allocations for now; future iteration can refactor to use workspace via Eigen::Ref if profiling shows need. Ready to commit.
 

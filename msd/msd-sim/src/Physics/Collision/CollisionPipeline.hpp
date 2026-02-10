@@ -284,6 +284,40 @@ private:
   };
   std::vector<PairConstraintRange> pairRanges_;
 
+  // NEW: Pre-allocated workspace for solvers (ticket 0053a)
+  struct SolverWorkspace
+  {
+    // Pre-allocated vectors for ConstraintSolver
+    Eigen::VectorXd lambda;        // Constraint multipliers
+    Eigen::VectorXd rhs;           // Right-hand side (b vector)
+    Eigen::VectorXd warmStart;     // Initial lambda guess
+
+    // Pre-allocated for FrictionConeSolver
+    Eigen::VectorXd frictionLambda;  // 3D friction force per contact
+    Eigen::VectorXd residual;        // Residual vector
+    Eigen::VectorXd gradient;        // Merit function gradient
+    Eigen::VectorXd trialLambda;     // Line search trial vector
+
+    // Pre-allocated for PositionCorrector
+    Eigen::VectorXd pseudoVelocities;  // Position correction velocities
+    Eigen::VectorXd penetrations;      // Penetration depths
+
+    // Resize workspace for current contact count
+    void resize(size_t numContacts)
+    {
+      lambda.resize(static_cast<Eigen::Index>(numContacts));
+      rhs.resize(static_cast<Eigen::Index>(numContacts));
+      warmStart.resize(static_cast<Eigen::Index>(numContacts));
+      frictionLambda.resize(static_cast<Eigen::Index>(3 * numContacts));
+      residual.resize(static_cast<Eigen::Index>(3 * numContacts));
+      gradient.resize(static_cast<Eigen::Index>(3 * numContacts));
+      trialLambda.resize(static_cast<Eigen::Index>(3 * numContacts));
+      pseudoVelocities.resize(static_cast<Eigen::Index>(numContacts));
+      penetrations.resize(static_cast<Eigen::Index>(numContacts));
+    }
+  };
+  SolverWorkspace workspace_;
+
   // Friend declarations for unit testing
   friend class CollisionPipelineTest;
 };
