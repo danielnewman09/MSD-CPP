@@ -106,5 +106,19 @@ _None detected._
 **Impact vs Previous**: Contact points now at correct scale (~0.5m, cube-sized). Energy injection eliminated (compound KE identical to pure pitch). Yaw coupling reduced from 2.06 to 3.9e-9 rad/s. BUT bodies are STILL over-constrained — 3 additional regressions in rotation tests.
 **Assessment**: Even with correctly-scaled incident face vertices, creating 4 contact points across the ENTIRE bottom face of a tilted cube is wrong. Only ONE corner is actually touching — the other 3 vertices are phantom contacts that prevent the cube from rotating. The vertex-face expansion creates contacts at all face vertices regardless of whether they are actually in contact. This over-constrains rotational motion. Need a fundamentally different approach: either (a) only expand near the ACTUAL contact point, or (b) don't expand at all and fix the friction Jacobian instead, or (c) limit expansion to vertices that are actually within the penetration zone.
 
-### Circle Detection Consideration
-EPA.cpp `extractContactManifold()` modified in iterations 1, 4, and 5 (3 times). Each attempt places contacts at different locations but all result in over-constraining. The approach of "expand single-point to multi-point by projecting face vertices" may be fundamentally flawed for vertex-face contacts where only one vertex is truly in contact. Escalating analysis to human.
+### Circle Detection — CONFIRMED
+EPA.cpp `extractContactManifold()` modified in iterations 1, 4, and 5 (3 times). Each attempt places contacts at different locations but all result in over-constraining. The approach of "expand single-point to multi-point by projecting face vertices" is fundamentally flawed for vertex-face contacts where only one vertex is truly in contact. **Human decision: revert EPA changes, fix in constraint solver instead.**
+
+### Iteration 6 — 2026-02-11 (session 3, revert)
+**Commit**: (pending)
+**Hypothesis**: The EPA manifold expansion approach is fundamentally wrong — it trades yaw coupling for over-constraining. Revert ALL EPA and CollisionHandler changes to main branch state. The fix should go in the friction constraint (address yaw coupling at the Jacobian level, not the manifold level).
+**Changes**:
+- `msd/msd-sim/src/Physics/Collision/EPA.cpp`: Reverted to main (removed post-clipping expansion, removed incidentPolyPreClip)
+- `msd/msd-sim/src/Physics/Collision/EPA.hpp`: Reverted to main (removed VertexFaceDetector/Generator members, removed generateVertexFaceManifold)
+- `msd/msd-sim/src/Physics/Collision/CollisionHandler.cpp`: Reverted to main (removed extractFaceVertices, removed vertex-face detection in SAT fallback)
+- `msd/msd-sim/src/Physics/Collision/CollisionHandler.hpp`: Reverted to main (removed VertexFaceDetector/Generator members, removed extractFaceVertices)
+- VertexFaceDetector and VertexFaceManifoldGenerator source/test files KEPT (inert unless called, 11 unit tests still pass)
+**Build Result**: PASS
+**Test Result**: 689/696 — Back to baseline. 4 pre-existing (D4, H3, B2, B5) + 3 TiltedCubeTrajectory (the original 0055a bug). B1, F4, C3 regressions GONE.
+**Impact vs Previous**: All regressions eliminated. Clean baseline restored.
+**Assessment**: EPA manifold expansion abandoned. Next approach: fix the friction Jacobian directly to eliminate yaw coupling from single-point vertex-face contacts without changing the contact manifold.

@@ -568,24 +568,11 @@ size_t EPA::extractContactManifold(size_t faceIndex,
                            refFrame,
                            refNormalWorld);
 
-  // Handle degenerate cases — attempt vertex-face, then edge contact generation
-  // Ticket: 0055c_friction_direction_fix — vertex-face manifold generation
-  // Ticket: 0040c_edge_contact_manifold — edge contact generation
+  // Handle degenerate cases — attempt edge contact generation first
+  // Ticket: 0040c_edge_contact_manifold
   // Ticket: 0040a — fallback uses EPA offset as per-contact depth
   if (refVerts.size() < 3 || incidentPoly.size() < 3)
   {
-    // Try vertex-face manifold generation first
-    if (vertexFaceDetector_.isVertexFaceContact(refVerts.size(), incidentPoly.size()))
-    {
-      size_t const vertexFaceContactCount =
-        generateVertexFaceManifold(epaFace, refVerts, incidentPoly, refIsA, contacts);
-      if (vertexFaceContactCount >= 3)
-      {
-        return vertexFaceContactCount;
-      }
-    }
-
-    // Fall back to edge contact generation
     size_t const edgeContactCount =
       generateEdgeContacts(epaFace, contacts);
     if (edgeContactCount >= 2)
@@ -593,15 +580,11 @@ size_t EPA::extractContactManifold(size_t faceIndex,
       return edgeContactCount;
     }
 
-    // Final fallback: single EPA centroid point
+    // Fallback to single EPA centroid point
     Coordinate const contactPoint = epaFace.normal * epaFace.offset;
     contacts[0] = ContactPoint{contactPoint, contactPoint, epaFace.offset};
     return 1;
   }
-
-  // Save incident polygon before clipping (needed for vertex-face expansion)
-  // Ticket: 0055c_friction_direction_fix
-  std::vector<Coordinate> const incidentPolyPreClip = incidentPoly;
 
   // Clip incident polygon against each edge plane of the reference face
   // Each side plane is perpendicular to the face, pointing inward
@@ -645,46 +628,6 @@ size_t EPA::extractContactManifold(size_t faceIndex,
     Coordinate const contactPoint = epaFace.normal * epaFace.offset;
     contacts[0] = ContactPoint{contactPoint, contactPoint, epaFace.offset};
     return 1;
-  }
-
-  // Ticket: 0055c_friction_direction_fix — vertex-face manifold expansion
-  //
-  // When clipping reduces the incident polygon to 1-2 points but the incident
-  // face (pre-clipping) has >= 3 vertices, this is a vertex-face contact. A
-  // single contact point creates uncompensated yaw torque through friction
-  // Jacobian angular coupling (rA × t), causing energy injection.
-  //
-  // Expand to multi-point manifold using the INCIDENT face vertices (pre-clip).
-  // These represent the actual touching body's face geometry. We must NOT use
-  // the reference face vertices here — the reference face may be a large floor
-  // with vertices 50m+ apart, which would wildly over-constrain a small body.
-  if (finalPoints.size() <= 2 && incidentPolyPreClip.size() >= 3)
-  {
-    // Use incident polygon vertices (before clipping destroyed them).
-    // Project each onto the reference plane and use uniform EPA depth.
-    size_t const incCount =
-      std::min(incidentPolyPreClip.size(), static_cast<size_t>(4));
-    for (size_t i = 0; i < incCount; ++i)
-    {
-      // Project incident vertex onto the reference plane
-      double const dist =
-        refNormalWorld.dot(incidentPolyPreClip[i]) - refPlaneD;
-      Coordinate const onRefPlane =
-        incidentPolyPreClip[i] - refNormalWorld * dist;
-
-      // The incident point is the original incident vertex (below the plane)
-      Coordinate const incPoint = incidentPolyPreClip[i];
-
-      if (refIsA)
-      {
-        contacts[i] = ContactPoint{onRefPlane, incPoint, epaFace.offset};
-      }
-      else
-      {
-        contacts[i] = ContactPoint{incPoint, onRefPlane, epaFace.offset};
-      }
-    }
-    return incCount;
   }
 
   // Limit to 4 contact points
@@ -816,76 +759,6 @@ size_t EPA::generateEdgeContacts(
     depth};
 
   return 2;
-}
-
-size_t EPA::generateVertexFaceManifold(
-  const Facet& epaFace,
-  const std::vector<Coordinate>& refVerts,
-  const std::vector<Coordinate>& incVerts,
-  bool refIsA,
-  std::array<ContactPoint, 4>& contacts) const
-{
-  // Ticket: 0055c_friction_direction_fix
-  // Design: docs/designs/0055c_friction_direction_fix/design.md
-  //
-  // Generate multi-point contact manifold for vertex-face geometry to eliminate
-  // energy injection from single-point friction contacts.
-  //
-  // Algorithm:
-  // 1. Identify reference face (>= 3 verts) and incident vertex (1 vert)
-  // 2. Use VertexFaceManifoldGenerator to project face verts onto contact plane
-  // 3. Build ContactPoint pairs with uniform EPA depth (Option A from design)
-
-  // Determine which side is the face (>= 3 verts) and which is the vertex (1 vert)
-  const std::vector<Coordinate>* faceVerts = nullptr;
-  Coordinate incidentVertex{};
-  bool faceIsA = false;
-
-  if (refVerts.size() >= 3 && incVerts.size() == 1)
-  {
-    // Reference is face, incident is vertex
-    faceVerts = &refVerts;
-    incidentVertex = incVerts[0];
-    faceIsA = refIsA;
-  }
-  else if (incVerts.size() >= 3 && refVerts.size() == 1)
-  {
-    // Incident is face, reference is vertex
-    faceVerts = &incVerts;
-    incidentVertex = refVerts[0];
-    faceIsA = !refIsA;
-  }
-  else
-  {
-    // Not vertex-face geometry, should not be called
-    return 0;
-  }
-
-  // Contact normal in EPA coordinates (points from A toward B)
-  Vector3D const contactNormal{epaFace.normal.x(), epaFace.normal.y(), epaFace.normal.z()};
-
-  // Generate manifold using uniform EPA depth (Option A)
-  size_t const contactCount = vertexFaceManifoldGenerator_.generate(
-    *faceVerts,
-    incidentVertex,
-    contactNormal,
-    epaFace.offset,
-    contacts);
-
-  // Adjust contact point assignment based on which asset owns the face
-  // EPA convention: contacts[i].pointA is on asset A, contacts[i].pointB is on asset B
-  if (!faceIsA)
-  {
-    // Face is on asset B, vertex is on asset A
-    // Generator puts face points in pointA, vertex in pointB
-    // Need to swap so vertex (on A) is in pointA, face (on B) is in pointB
-    for (size_t i = 0; i < contactCount; ++i)
-    {
-      std::swap(contacts[i].pointA, contacts[i].pointB);
-    }
-  }
-
-  return contactCount;
 }
 
 }  // namespace msd_sim

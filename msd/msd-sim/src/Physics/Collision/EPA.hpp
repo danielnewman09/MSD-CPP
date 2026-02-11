@@ -10,8 +10,6 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Facet.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
-#include "msd-sim/src/Physics/Collision/VertexFaceDetector.hpp"
-#include "msd-sim/src/Physics/Collision/VertexFaceManifoldGenerator.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 
 namespace msd_sim
@@ -143,13 +141,6 @@ public:
   size_t generateEdgeContacts(const Facet& epaFace,
                               std::array<ContactPoint, 4>& contacts) const;
 
-  // Vertex-face contact generation (Ticket: 0055c_friction_direction_fix)
-  size_t generateVertexFaceManifold(const Facet& epaFace,
-                                      const std::vector<Coordinate>& refVerts,
-                                      const std::vector<Coordinate>& incVerts,
-                                      bool refIsA,
-                                      std::array<ContactPoint, 4>& contacts) const;
-
   const AssetPhysical& assetA_;
   const AssetPhysical& assetB_;
   double epsilon_;
@@ -157,10 +148,6 @@ public:
   std::vector<MinkowskiVertex>
     vertices_;                // Minkowski vertices with witness tracking
   std::vector<Facet> faces_;  // Triangular faces
-
-  // Vertex-face detection and generation (Ticket: 0055c_friction_direction_fix)
-  VertexFaceDetector vertexFaceDetector_;
-  VertexFaceManifoldGenerator vertexFaceManifoldGenerator_;
 };
 
 }  // namespace msd_sim
