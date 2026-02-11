@@ -110,7 +110,7 @@ _None detected._
 EPA.cpp `extractContactManifold()` modified in iterations 1, 4, and 5 (3 times). Each attempt places contacts at different locations but all result in over-constraining. The approach of "expand single-point to multi-point by projecting face vertices" is fundamentally flawed for vertex-face contacts where only one vertex is truly in contact. **Human decision: revert EPA changes, fix in constraint solver instead.**
 
 ### Iteration 6 — 2026-02-11 (session 3, revert)
-**Commit**: (pending)
+**Commit**: 5a0d7de
 **Hypothesis**: The EPA manifold expansion approach is fundamentally wrong — it trades yaw coupling for over-constraining. Revert ALL EPA and CollisionHandler changes to main branch state. The fix should go in the friction constraint (address yaw coupling at the Jacobian level, not the manifold level).
 **Changes**:
 - `msd/msd-sim/src/Physics/Collision/EPA.cpp`: Reverted to main (removed post-clipping expansion, removed incidentPolyPreClip)
@@ -122,3 +122,16 @@ EPA.cpp `extractContactManifold()` modified in iterations 1, 4, and 5 (3 times).
 **Test Result**: 689/696 — Back to baseline. 4 pre-existing (D4, H3, B2, B5) + 3 TiltedCubeTrajectory (the original 0055a bug). B1, F4, C3 regressions GONE.
 **Impact vs Previous**: All regressions eliminated. Clean baseline restored.
 **Assessment**: EPA manifold expansion abandoned. Next approach: fix the friction Jacobian directly to eliminate yaw coupling from single-point vertex-face contacts without changing the contact manifold.
+
+### Iteration 7 — 2026-02-11 (session 3, friction Jacobian approach)
+**Commit**: (pending)
+**Hypothesis**: The friction lever arm `rA = contactPoint - CoM` has a component along the contact normal `n`. When computing `rA × t` in the Jacobian, this normal component creates parasitic torque about the normal axis (yaw for horizontal contacts). Projecting the lever arm onto the tangent plane (`rA_tangent = rA - (rA·n)·n`) should eliminate the parasitic yaw coupling while preserving correct tangential angular friction.
+**Changes**:
+- `msd/msd-sim/src/Physics/Constraints/FrictionConstraint.cpp`: In constructor, project lever arms onto tangent plane before storing. `lever_arm_a_ = fullLeverA - normal * (fullLeverA·normal)`, same for B.
+**Build Result**: PASS
+**Test Result**: 10/24 TiltedCubeTrajectory pass (same as baseline). Key diagnostics:
+- Peak KE: pure=100.4, compound=89.7 (initial=125) — no energy injection above initial, but compound≠pure (asymmetry remains)
+- Yaw coupling: compound+friction peak omega_z = **1.93 rad/s** — barely changed from baseline (was 2.06 without fix)
+- The 3 original 0055a failures still present
+**Impact vs Previous**: Negligible change from baseline. Lever arm projection did NOT fix yaw coupling.
+**Assessment**: **FAILED**. The tangent-plane projection of the lever arm had minimal effect on yaw coupling (1.93 vs 2.06 rad/s). The yaw torque does NOT come primarily from the normal component of the lever arm. The cross product `rA × t` creates yaw even with a tangent-plane-only lever arm when the lever arm has components in both tangent directions. Need to re-examine the actual mechanism — the yaw coupling may come from the interplay between the two tangent friction directions at an off-center contact, not from the normal component. Reverting this change.
