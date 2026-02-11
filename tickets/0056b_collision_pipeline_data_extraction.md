@@ -3,14 +3,14 @@
 ## Status
 - [x] Draft
 - [x] Ready for Design
-- [ ] Design Complete — Awaiting Review
+- [x] Design Complete — Awaiting Review
 - [ ] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
 - [ ] Implementation Complete — Awaiting Review
 - [ ] Merged / Complete
 
-**Current Phase**: Ready for Design
+**Current Phase**: Design Complete — Awaiting Review
 **Type**: Infrastructure
 **Priority**: High
 **Assignee**: TBD
@@ -176,3 +176,13 @@ TEST(ReplayRecording, CollisionSimulation_AllRecordTypesPopulated)
 ### Draft → Ready for Design
 - **Completed**: 2026-02-11
 - **Notes**: Ticket created with detailed requirements. No math design required. Ready for architectural design phase.
+
+### Design Phase
+- **Started**: 2026-02-11
+- **Completed**: 2026-02-11
+- **Branch**: `0056b-collision-pipeline-data-extraction`
+- **PR**: #43 (https://github.com/danielnewman09/MSD-CPP/pull/43)
+- **Artifacts**:
+  - `docs/designs/0056b_collision_pipeline_data_extraction/design.md` — Detailed design document
+  - `docs/designs/0056b_collision_pipeline_data_extraction/0056b_collision_pipeline_data_extraction.puml` — Architecture diagram
+- **Notes**: Design covers FrameCollisionData snapshot struct, CollisionPipeline integration, WorldModel recording extensions, and ConstraintSolver force extraction. Three open questions flagged: force extraction granularity, snapshot preservation timing, and BodyMetadataRecord uniqueness handling. Fully backward compatible design—all changes are additive.
