@@ -52,3 +52,22 @@ _None detected._
 - Still passing: A4_EqualMassElastic
 **Impact vs Previous**: +0 net passes (test shuffle: fixed Sliding_, lost Compound_)
 **Assessment**: Test oscillation detected — Sliding_ and Compound_ swap success/failure between 1.5× and 2.0× thresholds. This suggests the threshold approach is too coarse-grained — it's trading one failure for another rather than fixing both. A3, F2, F3 still fail regardless of threshold. Next: try 1.25× as a last threshold sweep, then pivot to Option 2 (energy-based scaling) if this doesn't work.
+
+### Iteration 3 — 2026-02-11 14:35
+**Commit**: 419704b
+**Hypothesis**: Try 1.25× as the last multiplicative threshold sweep before pivoting to energy-based approach.
+**Changes**:
+- `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp`: Changed `kInflationThreshold` from 1.5 to 1.25
+**Build Result**: PASS (1 warning: unused `solveFrictionPGS`)
+**Test Result**: 691/699 — 8 failures (identical to iteration 2):
+- Pre-existing (3): H3_TimestepSensitivity, B2_CubeEdgeImpact, B5_LShapeDrop
+- Regressions (5): A3, F2, F3, D4, Compound_NoSpuriousYaw
+- Still passing: A4, Sliding_PurePitch_vs_CompoundTilt_SpuriousY
+**Impact vs Previous**: +0 passes, -0 regressions (identical to 1.5×)
+**Assessment**: **MULTIPLICATIVE THRESHOLD APPROACH IS INSUFFICIENT**. After three iterations (2.0×, 1.5×, 1.25×), the pattern is clear:
+  - A4 fixed at all thresholds ≤ 2.0×
+  - A3, F2, F3 fail at all thresholds (they need something more sophisticated than a multiplicative cap)
+  - D4 fails at all thresholds (resting contact stability unaffected by normal clamping)
+  - Tilted cube tests (Sliding_, Compound_) oscillate between thresholds — they're on the edge of the 1.5-2.0× range
+
+The multiplicative threshold successfully prevents the 3.75× extreme case and fixes A4, but it's too blunt an instrument for the other energy conservation failures. **Pivoting to Option 2: Energy-based friction scaling.**

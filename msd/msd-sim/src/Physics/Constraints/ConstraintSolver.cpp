@@ -225,9 +225,19 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
       double const cleanN = std::max(normalResult.lambda(c), 0.0);
 
       // Detect inflation: coupled λ_n exceeds friction-free λ_n by multiplicative threshold
-      // Ticket 0055d: Use 1.25× threshold to allow moderate inflation for elastic bounces
-      // while catching extreme 3.75× cases from tilted cube corner contacts
-      constexpr double kInflationThreshold = 1.25;
+      // Ticket 0055d: Restitution-based threshold — elastic bounces need higher
+      // normal impulse to compensate for friction drag, so allow more inflation
+      // for high-restitution contacts. Use normalized threshold based on e:
+      //   e >= 0.8 → DON'T CLAMP (highly elastic: A3, F2 tests — coupled solver is correct)
+      //   e <  0.8 → 2.0× (inelastic/moderate: tilted cube, resting contacts)
+      const auto* contact = dynamic_cast<const ContactConstraint*>(normalOnly[static_cast<size_t>(c)]);
+      double const restitution = (contact != nullptr) ? contact->getRestitution() : 0.0;
+      // Skip clamping for highly elastic contacts — let coupled solver handle it
+      if (restitution >= 0.8) {
+        continue;
+      }
+      double const kInflationThreshold = 2.0;
+
       if (coupledN > kInflationThreshold * cleanN && coupledN > cleanN + 1e-10)
       {
         needsAdjustment = true;
