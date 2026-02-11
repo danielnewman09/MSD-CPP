@@ -165,6 +165,161 @@ TiltResult runTiltedCubeSimulation(double tiltX,
   return result;
 }
 
+/// Result structure for thrown/sliding cube simulations.
+/// Captures per-frame snapshots of velocity and angular velocity to detect
+/// rotation reversal relative to sliding direction.
+struct SlidingResult
+{
+  bool nanDetected{false};
+
+  // Final state
+  Coordinate finalPosition;
+  double finalVx{0.0};
+
+  // Rotation-vs-sliding consistency metric:
+  // Count frames where the cube is sliding (|vx| > threshold) AND the
+  // angular velocity about Y has the WRONG sign relative to sliding.
+  //
+  // Physics: if sliding in +X, friction acts in -X at the contact point.
+  // Torque = r × F where r ≈ (0, 0, -h/2) (contact below CoM):
+  //   (0, 0, -h/2) × (-F, 0, 0) = (0, +Fh/2, 0)
+  // So sliding in +X → positive ωy (rolling forward).
+  // If friction direction is wrong, ωy will be negative (rolling backward).
+  int framesSliding{0};
+  int framesReversedRotation{0};  // sliding in +X but ωy < 0 (or vice versa)
+
+  // Peak reversed rotation rate (worst violation)
+  double peakReversedOmegaY{0.0};
+
+  // Spurious cross-axis translation tracking
+  double peakAbsY{0.0};    // peak |posY| during simulation
+  double peakAbsVy{0.0};   // peak |vy| during simulation
+
+  // Time series for diagnostic output
+  struct FrameSnapshot
+  {
+    int frame;
+    double vx;
+    double vy;
+    double omegaY;
+    double posX;
+    double posY;
+    double posZ;
+  };
+  std::vector<FrameSnapshot> snapshots;
+};
+
+/// Run a sliding cube simulation: cube on the floor with initial velocity.
+/// The cube has a compound tilt (tiltX, tiltY) and is launched with
+/// initialVx along the X axis. We track whether friction-induced rotation
+/// is consistent with the sliding direction.
+SlidingResult runSlidingCubeSimulation(double tiltX,
+                                       double tiltY,
+                                       double initialVx,
+                                       double frictionCoeff = 0.5,
+                                       double restitution = 0.5,
+                                       int frames = 300,
+                                       int frameDtMs = 10)
+{
+  constexpr double kSlidingThreshold = 0.1;  // m/s minimum to count as sliding
+
+  WorldModel world;
+
+  // Floor
+  auto floorPoints = createCubePoints(100.0);
+  ConvexHull floorHull{floorPoints};
+  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
+  const auto& floorAsset =
+    world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  const_cast<AssetEnvironment&>(floorAsset).setFrictionCoefficient(
+    frictionCoeff);
+
+  // Tilted cube
+  auto cubePoints = createCubePoints(1.0);
+  ConvexHull cubeHull{cubePoints};
+
+  Eigen::Quaterniond tiltQuat =
+    Eigen::Quaterniond{Eigen::AngleAxisd{tiltY, Eigen::Vector3d::UnitY()}} *
+    Eigen::Quaterniond{Eigen::AngleAxisd{tiltX, Eigen::Vector3d::UnitX()}};
+
+  // Position cube so lowest point is at z=0.01
+  double minZ = std::numeric_limits<double>::max();
+  for (const auto& point : cubePoints)
+  {
+    Eigen::Vector3d rotated =
+      tiltQuat * Eigen::Vector3d{point.x(), point.y(), point.z()};
+    minZ = std::min(minZ, rotated.z());
+  }
+  double centerHeightZ = 0.01 - minZ;
+
+  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, centerHeightZ}, tiltQuat};
+  world.spawnObject(2, cubeHull, 10.0, cubeFrame);
+
+  uint32_t const cubeInstanceId = 1;
+  world.getObject(cubeInstanceId).setCoefficientOfRestitution(restitution);
+  world.getObject(cubeInstanceId).setFrictionCoefficient(frictionCoeff);
+
+  // Set initial velocity
+  world.getObject(cubeInstanceId).getInertialState().velocity =
+    Vector3D{initialVx, 0.0, 0.0};
+
+  SlidingResult result;
+
+  for (int i = 1; i <= frames; ++i)
+  {
+    world.update(std::chrono::milliseconds{i * frameDtMs});
+
+    auto const& state = world.getObject(cubeInstanceId).getInertialState();
+    auto const& pos = state.position;
+
+    if (std::isnan(pos.x()) || std::isnan(pos.y()) || std::isnan(pos.z()))
+    {
+      result.nanDetected = true;
+      break;
+    }
+
+    double vx = state.velocity.x();
+    double vy = state.velocity.y();
+    auto omega = state.getAngularVelocity();
+    double omegaY = omega.y();
+
+    // Track peak cross-axis (Y) displacement and velocity
+    result.peakAbsY = std::max(result.peakAbsY, std::abs(pos.y()));
+    result.peakAbsVy = std::max(result.peakAbsVy, std::abs(vy));
+
+    // Record snapshot every 10 frames for diagnostics
+    if (i % 10 == 0)
+    {
+      result.snapshots.push_back(
+        {i, vx, vy, omegaY, pos.x(), pos.y(), pos.z()});
+    }
+
+    // Check rotation-vs-sliding consistency when sliding significantly
+    if (std::abs(vx) > kSlidingThreshold)
+    {
+      result.framesSliding++;
+
+      // Physics: sliding in +X → ωy should be positive (rolling forward)
+      //          sliding in -X → ωy should be negative
+      // "Reversed" means the signs disagree: vx * ωy < 0
+      bool reversed = (vx * omegaY < 0.0);
+      if (reversed)
+      {
+        result.framesReversedRotation++;
+        double absOmegaY = std::abs(omegaY);
+        result.peakReversedOmegaY =
+          std::max(result.peakReversedOmegaY, absOmegaY);
+      }
+    }
+  }
+
+  auto const& finalState = world.getObject(cubeInstanceId).getInertialState();
+  result.finalPosition = finalState.position;
+  result.finalVx = finalState.velocity.x();
+
+  return result;
+}
+
 }  // namespace
 
 // ============================================================================
@@ -712,5 +867,318 @@ TEST(TiltedCubeTrajectory, Compound_DisplacementAngleMatchesTilt)
       << "|dX|=" << absX << ", |dY|=" << absY
       << ", ratio=" << componentRatio
       << ". Expected ~1.0 for equal-angle tilt.";
+  }
+}
+
+// ============================================================================
+// Friction Rotation Direction Tests
+//
+// DIAGNOSTIC: These tests capture the "reversed rotation" bug observed in the
+// GUI. When a cube slides along the floor, friction should cause it to roll
+// FORWARD (in the direction of motion). The physics:
+//
+//   Sliding in +X → friction acts in -X at the contact point
+//   Torque = r × F where r ≈ (0, 0, -h/2) (contact below CoM)
+//   τ = (0, 0, -h/2) × (-F, 0, 0) = (0, +Fh/2, 0)
+//   → positive ωy = rolling forward (correct)
+//
+// If friction direction is wrong, ωy will be negative (rolling backward
+// while sliding forward), which is the bug the user observes.
+//
+// The bug manifests specifically when the cube has a compound tilt (rotation
+// about both X and Y). A pure single-axis tilt works correctly.
+// ============================================================================
+
+TEST(TiltedCubeTrajectory, Sliding_CompoundDrop_DirectionReversal)
+{
+  // Ticket: 0055a_tilted_cube_trajectory_test_suite
+  //
+  // CORE BUG: The user observes: "When I drop a cube with rotations
+  // around X and Y set to PI/6 each, the cube appears to initially
+  // tumble in the correct direction... After a few bounces, this
+  // behavior shifts and the cube slides, but rotates in the opposite
+  // direction of the sliding."
+  //
+  // This test captures "direction reversal": the displacement direction
+  // in the early simulation (first 100 frames) should be consistent
+  // with the displacement direction in the late simulation (frames 200-500).
+  // If friction is wrong, the late phase reverses direction.
+  //
+  // We use a longer simulation (500 frames = 8s) to allow multiple
+  // bounces and observe the settling behavior.
+
+  // Drop with compound tilt (PI/6, PI/6), no initial velocity
+  // GUI defaults: friction=0.5, restitution=0.5
+  TiltResult early = runTiltedCubeSimulation(
+    M_PI / 6.0, M_PI / 6.0,  // compound tilt
+    0.5, 0.5,                 // friction, restitution (GUI defaults)
+    100);                     // first 100 frames only
+
+  TiltResult late = runTiltedCubeSimulation(
+    M_PI / 6.0, M_PI / 6.0,  // same compound tilt
+    0.5, 0.5,                 // same parameters
+    500);                     // full 500 frames
+
+  ASSERT_FALSE(early.nanDetected);
+  ASSERT_FALSE(late.nanDetected);
+
+  double earlyMag = lateralMagnitude(early);
+  double lateMag = lateralMagnitude(late);
+
+  // Both should have some displacement
+  ASSERT_GT(earlyMag, kMinDisplacement) << "No early displacement";
+  ASSERT_GT(lateMag, kMinDisplacement) << "No late displacement";
+
+  // The displacement DIRECTION should be consistent between early and
+  // late phases. Compute the dot product of the 2D displacement vectors:
+  // if positive, same direction; if negative, reversed.
+  double dotProduct = early.lateralDisplacementX * late.lateralDisplacementX +
+                      early.lateralDisplacementY * late.lateralDisplacementY;
+
+  EXPECT_GT(dotProduct, 0.0)
+    << "DIAGNOSTIC: Displacement direction REVERSED between early and late. "
+    << "Early (100 frames): (" << early.lateralDisplacementX
+    << ", " << early.lateralDisplacementY << ") mag=" << earlyMag
+    << ". Late (500 frames): (" << late.lateralDisplacementX
+    << ", " << late.lateralDisplacementY << ") mag=" << lateMag
+    << ". The cube initially moved one way, then reversed.";
+}
+
+TEST(TiltedCubeTrajectory, Sliding_ThrownCube_SDLAppConfig)
+{
+  // Ticket: 0055a_tilted_cube_trajectory_test_suite
+  //
+  // EXACT reproduction of the user's SDLApp.cpp configuration:
+  //   AngularCoordinate{M_PI / 3, 0.01, 0.}  (pitch=PI/3, roll=0.01)
+  //   velocity = (5, 0, 0)
+  //   restitution = 0.5, friction = 0.5, timestep = 10ms
+  //
+  // The user reports "very peculiar, reversed rotations and motions"
+  // and spurious Y-direction translations from the tiny 0.01 rad roll.
+  //
+  // Assertions:
+  //   1. Final X position is positive (thrown +X, friction cannot reverse)
+  //   2. |Y displacement| stays small — a 0.01 rad perturbation should not
+  //      cause large cross-axis motion. We bound |Y| < 20% of |X|.
+  //   3. Rotation direction matches sliding direction in settled phase.
+
+  SlidingResult result = runSlidingCubeSimulation(
+    0.01,        // tiltX (roll) = 0.01 — tiny perturbation
+    M_PI / 3.0,  // tiltY (pitch) = PI/3 — large pitch
+    5.0,         // initialVx = 5 m/s
+    0.5, 0.5,   // friction, restitution (GUI defaults)
+    2000,        // 2000 frames = 20 seconds at 10ms
+    10);         // 10ms timestep (matches SDLApp frameDelta)
+
+  ASSERT_FALSE(result.nanDetected);
+
+  // 1. Final X must be positive: cube thrown +X cannot end up at -X.
+  EXPECT_GT(result.finalPosition.x(), 0.0)
+    << "DIAGNOSTIC: Cube thrown in +X ended up at -X! "
+    << "Final pos=(" << result.finalPosition.x()
+    << ", " << result.finalPosition.y()
+    << ", " << result.finalPosition.z() << ")";
+
+  // 2. Spurious Y translation: a 0.01 rad X-axis perturbation on a cube
+  // thrown purely in +X should produce negligible Y motion. The initial
+  // momentum is entirely along X; friction acts primarily along X to
+  // decelerate the slide. The tiny roll shifts the contact point by
+  // ~0.005m in Y, which should produce proportionally tiny Y impulse.
+  //
+  // We assert peak |Y| < 20% of final |X|. If friction/collision coupling
+  // is wrong, the tiny perturbation gets amplified into large spurious Y.
+  double absX = std::abs(result.finalPosition.x());
+  double absY = std::abs(result.finalPosition.y());
+  if (absX > 0.1)
+  {
+    double yToXRatio = absY / absX;
+    EXPECT_LT(yToXRatio, 0.2)
+      << "DIAGNOSTIC: Spurious Y displacement from 0.01 rad perturbation. "
+      << "|Y|=" << absY << ", |X|=" << absX
+      << ", |Y|/|X|=" << yToXRatio
+      << ". Peak |Y|=" << result.peakAbsY
+      << ", Peak |vy|=" << result.peakAbsVy;
+  }
+
+  // Also check peak Y displacement during the entire trajectory
+  EXPECT_LT(result.peakAbsY, 2.0)
+    << "DIAGNOSTIC: Peak Y displacement=" << result.peakAbsY
+    << "m from a 0.01 rad perturbation. This is unreasonably large.";
+
+  // 3. Settled-phase rotation direction check.
+  // After frame 500 (5s), the cube should be past the initial tumbling.
+  int settledReversed = 0;
+  int settledSliding = 0;
+  for (auto const& s : result.snapshots)
+  {
+    if (s.frame < 500)
+      continue;
+    if (std::abs(s.vx) > 0.05)
+    {
+      settledSliding++;
+      if (s.vx * s.omegaY < 0.0)
+        settledReversed++;
+    }
+  }
+  if (settledSliding > 3)
+  {
+    double frac = static_cast<double>(settledReversed) /
+                  static_cast<double>(settledSliding);
+    EXPECT_LT(frac, 0.3)
+      << "DIAGNOSTIC: Settled phase (>5s) shows reversed rotation. "
+      << settledReversed << "/" << settledSliding
+      << " sliding frames have vx*ωy<0 (backward rolling).";
+  }
+
+  // Print trajectory for investigation
+  if (!result.snapshots.empty())
+  {
+    std::string diag = "Trajectory (every 10 frames):\n";
+    for (auto const& s : result.snapshots)
+    {
+      diag += "  frame " + std::to_string(s.frame) +
+              ": vx=" + std::to_string(s.vx) +
+              " vy=" + std::to_string(s.vy) +
+              " wy=" + std::to_string(s.omegaY) +
+              " x=" + std::to_string(s.posX) +
+              " y=" + std::to_string(s.posY) +
+              " z=" + std::to_string(s.posZ) +
+              (s.vx * s.omegaY < 0.0 ? " REV-ROT" : "") + "\n";
+    }
+    SCOPED_TRACE(diag);
+  }
+}
+
+TEST(TiltedCubeTrajectory, Sliding_PurePitch_vs_CompoundTilt_SpuriousY)
+{
+  // Ticket: 0055a_tilted_cube_trajectory_test_suite
+  //
+  // Compare pure pitch (tiltX=0) against compound tilt (tiltX=0.01).
+  // Both cubes are thrown in +X at 5 m/s with the same PI/3 pitch.
+  //
+  // The pure pitch baseline should have ZERO Y displacement (by symmetry).
+  // The compound tilt adds 0.01 rad roll — proportionally tiny, so its
+  // Y displacement should be small (bounded by the perturbation magnitude).
+  //
+  // If the collision/friction coupling amplifies the perturbation, the
+  // compound case will have disproportionately large Y displacement.
+
+  SlidingResult purePitch = runSlidingCubeSimulation(
+    0.0, M_PI / 3.0, 5.0, 0.5, 0.5, 2000, 10);
+  SlidingResult compound = runSlidingCubeSimulation(
+    0.01, M_PI / 3.0, 5.0, 0.5, 0.5, 2000, 10);
+
+  ASSERT_FALSE(purePitch.nanDetected);
+  ASSERT_FALSE(compound.nanDetected);
+
+  // Pure pitch baseline: Y displacement should be near zero by symmetry.
+  EXPECT_LT(std::abs(purePitch.finalPosition.y()), 0.1)
+    << "BASELINE: Pure pitch (no roll) should have ~zero Y displacement. "
+    << "Actual Y=" << purePitch.finalPosition.y();
+
+  // Pure pitch: X should be positive.
+  EXPECT_GT(purePitch.finalPosition.x(), 0.0)
+    << "BASELINE: Pure pitch cube thrown +X ended at x="
+    << purePitch.finalPosition.x();
+
+  // Compound: X should also be positive and in the same ballpark.
+  EXPECT_GT(compound.finalPosition.x(), 0.0)
+    << "DIAGNOSTIC: Compound tilt cube thrown +X ended at x="
+    << compound.finalPosition.x()
+    << " (pure pitch: x=" << purePitch.finalPosition.x() << ")";
+
+  // Compound: Y displacement should be proportional to the perturbation.
+  // 0.01 rad is 1/105 of PI/3. Y displacement should be << X displacement.
+  double compoundAbsY = std::abs(compound.finalPosition.y());
+  double compoundAbsX = std::abs(compound.finalPosition.x());
+  if (compoundAbsX > 0.1)
+  {
+    double yToXRatio = compoundAbsY / compoundAbsX;
+    EXPECT_LT(yToXRatio, 0.2)
+      << "DIAGNOSTIC: Compound Y/X ratio=" << yToXRatio
+      << " — tiny 0.01 rad perturbation caused disproportionate Y motion. "
+      << "Compound pos=(" << compound.finalPosition.x()
+      << ", " << compound.finalPosition.y() << "). "
+      << "Pure pitch pos=(" << purePitch.finalPosition.x()
+      << ", " << purePitch.finalPosition.y() << ").";
+  }
+
+  // Compound X should be similar to pure pitch X (perturbation is tiny).
+  if (purePitch.finalPosition.x() > 0.1 && compound.finalPosition.x() > 0.1)
+  {
+    double xRatio = compound.finalPosition.x() / purePitch.finalPosition.x();
+    EXPECT_GT(xRatio, 0.3)
+      << "DIAGNOSTIC: Compound X diverged from pure pitch. "
+      << "Pure=" << purePitch.finalPosition.x()
+      << ", Compound=" << compound.finalPosition.x()
+      << ", Ratio=" << xRatio;
+    EXPECT_LT(xRatio, 3.0)
+      << "DIAGNOSTIC: Compound X diverged from pure pitch. "
+      << "Pure=" << purePitch.finalPosition.x()
+      << ", Compound=" << compound.finalPosition.x()
+      << ", Ratio=" << xRatio;
+  }
+}
+
+TEST(TiltedCubeTrajectory, Sliding_CompoundDrop_SettledPhaseRotation)
+{
+  // Ticket: 0055a_tilted_cube_trajectory_test_suite
+  //
+  // Drop a cube with compound tilt (PI/6, PI/6), no initial velocity.
+  // After settling:
+  //   1. Rotation direction matches sliding direction
+  //   2. Y displacement is proportional to initial Y-component of tilt
+  //      (comparable to X displacement for symmetric PI/6, PI/6 tilt)
+
+  SlidingResult result = runSlidingCubeSimulation(
+    M_PI / 6.0,  // roll = PI/6
+    M_PI / 6.0,  // pitch = PI/6
+    0.0,         // no initial velocity — pure drop
+    0.5, 0.5,   // friction, restitution (GUI defaults)
+    2000,        // 20 seconds
+    10);         // 10ms timestep
+
+  ASSERT_FALSE(result.nanDetected);
+
+  // Settled-phase rotation direction
+  int settledReversed = 0;
+  int settledSliding = 0;
+  for (auto const& s : result.snapshots)
+  {
+    if (s.frame < 500)
+      continue;
+    if (std::abs(s.vx) > 0.05)
+    {
+      settledSliding++;
+      if (s.vx * s.omegaY < 0.0)
+        settledReversed++;
+    }
+  }
+  if (settledSliding > 3)
+  {
+    double frac = static_cast<double>(settledReversed) /
+                  static_cast<double>(settledSliding);
+    EXPECT_LT(frac, 0.3)
+      << "DIAGNOSTIC: Settled phase shows reversed rotation. "
+      << settledReversed << "/" << settledSliding
+      << " sliding frames have vx*ωy<0 (backward rolling).";
+  }
+
+  // Print trajectory with Y data
+  if (!result.snapshots.empty())
+  {
+    std::string diag = "Drop trajectory (every 10 frames):\n";
+    for (auto const& s : result.snapshots)
+    {
+      diag += "  frame " + std::to_string(s.frame) +
+              ": vx=" + std::to_string(s.vx) +
+              " vy=" + std::to_string(s.vy) +
+              " wy=" + std::to_string(s.omegaY) +
+              " x=" + std::to_string(s.posX) +
+              " y=" + std::to_string(s.posY) +
+              " z=" + std::to_string(s.posZ) +
+              (s.vx * s.omegaY < 0.0 ? " REV-ROT" : "") + "\n";
+    }
+    SCOPED_TRACE(diag);
   }
 }
