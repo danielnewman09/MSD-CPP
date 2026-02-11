@@ -38,3 +38,17 @@ _None detected._
 - **Fixed**: A4_EqualMassElastic (was failing at 690/699)
 **Impact vs Previous**: +1 pass (A4), -0 new regressions (all 5 regressions were present in 690/699 baseline)
 **Assessment**: POSITIVE PROGRESS. The 2.0× threshold fixed A4 (elastic head-on collision energy conservation) without introducing new regressions. A3, F2, F3 still fail — these likely need a lower threshold (they're more sensitive to small inflation). D4 regression persists (resting contact stability), and the tilted cube SpuriousY test still fails. Next: try reducing threshold to 1.5× to catch more moderate inflation cases.
+
+### Iteration 2 — 2026-02-11 14:25
+**Commit**: dfd5816
+**Hypothesis**: Reducing the threshold to 1.5× will catch more moderate inflation cases and fix A3, F2, F3 while maintaining A4's fix.
+**Changes**:
+- `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp`: Changed `kInflationThreshold` from 2.0 to 1.5
+**Build Result**: PASS (1 warning: unused `solveFrictionPGS`)
+**Test Result**: 691/699 — 8 failures:
+- Pre-existing (3): H3_TimestepSensitivity, B2_CubeEdgeImpact, B5_LShapeDrop
+- Regressions vs baseline (5): A3_PerfectlyElastic, F2_ElasticBounce, F3_InelasticBounce, D4_MicroJitter, **Compound_NoSpuriousYaw (NEW)**
+- **Fixed**: Sliding_PurePitch_vs_CompoundTilt_SpuriousY (was failing at 2.0×)
+- Still passing: A4_EqualMassElastic
+**Impact vs Previous**: +0 net passes (test shuffle: fixed Sliding_, lost Compound_)
+**Assessment**: Test oscillation detected — Sliding_ and Compound_ swap success/failure between 1.5× and 2.0× thresholds. This suggests the threshold approach is too coarse-grained — it's trading one failure for another rather than fixing both. A3, F2, F3 still fail regardless of threshold. Next: try 1.25× as a last threshold sweep, then pivot to Option 2 (energy-based scaling) if this doesn't work.
