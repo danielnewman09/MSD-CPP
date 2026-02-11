@@ -115,6 +115,21 @@ public:
   void advanceFrame();
 
   /**
+   * @brief Check if cache has a valid entry for a body pair
+   *
+   * Lightweight check without performing full warm-start computation.
+   * Returns true if the body pair has a cached entry that has not expired.
+   * Does NOT check normal alignment — caller should use this only to
+   * determine if a persistent contact exists.
+   *
+   * @param bodyA Body A identifier
+   * @param bodyB Body B identifier
+   * @return true if a cache entry exists for this body pair
+   * @ticket 0053d_sat_fallback_cost_reduction
+   */
+  [[nodiscard]] bool hasEntry(uint32_t bodyA, uint32_t bodyB) const;
+
+  /**
    * @brief Clear all cached data
    */
   void clear();

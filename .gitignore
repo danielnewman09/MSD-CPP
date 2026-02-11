@@ -22,3 +22,10 @@ analysis/clang_tidy_reports/
 **/.venv/**
 prototypes/**/p1_cone_projection
 prototypes/**/p2_newton_solver
+
+# Profiling artifacts (Instruments traces, raw XML, profile JSON)
+**/*.trace/
+**/*.trace
+**/profile_*.xml
+**/profile_*.json
+**/baseline-profile*.json

@@ -249,7 +249,8 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
     const InertialState& stateA = states[bodyA].get();
     const InertialState& stateB = states[bodyB].get();
 
-    Eigen::VectorXd v(12);
+    // Ticket 0053f: Stack-allocated fixed-size velocity vector (zero heap cost)
+    Eigen::Matrix<double, 12, 1> v;
     v.segment<3>(0) =
       Vector3D{stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
     AngularRate omegaA = stateA.getAngularVelocity();
@@ -281,7 +282,7 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
   const Eigen::MatrixXd& A,
   const Eigen::VectorXd& b,
   int numContacts,
-  const std::optional<Eigen::VectorXd>& initialLambda) const
+  const std::optional<Eigen::VectorXd>& initialLambda)
 {
   const int c = numContacts;
   Eigen::VectorXd lambda = Eigen::VectorXd::Zero(c);
@@ -338,20 +339,21 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
     }
     else
     {
-      Eigen::MatrixXd aW(activeSize, activeSize);
-      Eigen::VectorXd bW(activeSize);
+      // Ticket 0053f: Reuse workspace instead of per-iteration allocation
+      asmAw_.resize(activeSize, activeSize);
+      asmBw_.resize(activeSize);
 
       for (int i = 0; i < activeSize; ++i)
       {
-        bW(i) = b(activeIndices[static_cast<size_t>(i)]);
+        asmBw_(i) = b(activeIndices[static_cast<size_t>(i)]);
         for (int j = 0; j < activeSize; ++j)
         {
-          aW(i, j) = A(activeIndices[static_cast<size_t>(i)],
-                       activeIndices[static_cast<size_t>(j)]);
+          asmAw_(i, j) = A(activeIndices[static_cast<size_t>(i)],
+                           activeIndices[static_cast<size_t>(j)]);
         }
       }
 
-      Eigen::LLT<Eigen::MatrixXd> const llt{aW};
+      Eigen::LLT<Eigen::MatrixXd> const llt{asmAw_};
       if (llt.info() != Eigen::Success)
       {
         return ActiveSetResult{.lambda = lambda,
@@ -360,12 +362,12 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
                                .active_set_size = activeSize};
       }
 
-      Eigen::VectorXd lambdaW = llt.solve(bW);
+      asmBw_ = llt.solve(asmBw_);
 
       lambda.setZero();
       for (int i = 0; i < activeSize; ++i)
       {
-        lambda(activeIndices[static_cast<size_t>(i)]) = lambdaW(i);
+        lambda(activeIndices[static_cast<size_t>(i)]) = asmBw_(i);
       }
     }
 
@@ -388,7 +390,9 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
       continue;
     }
 
-    Eigen::VectorXd w = A * lambda - b;
+    // Ticket 0053f: Reuse workspace for dual residual
+    asmW_.resize(c);
+    asmW_.noalias() = A * lambda - b;
 
     double maxViolation = 0.0;
     int maxViolationIndex = -1;
@@ -401,12 +405,12 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
         continue;
       }
 
-      if (w(i) < -convergence_tolerance_)
+      if (asmW_(i) < -convergence_tolerance_)
       {
-        if (maxViolationIndex == -1 || w(i) < maxViolation ||
-            (w(i) == maxViolation && i < maxViolationIndex))
+        if (maxViolationIndex == -1 || asmW_(i) < maxViolation ||
+            (asmW_(i) == maxViolation && i < maxViolationIndex))
         {
-          maxViolation = w(i);
+          maxViolation = asmW_(i);
           maxViolationIndex = i;
         }
       }
@@ -628,8 +632,8 @@ Eigen::VectorXd ConstraintSolver::assembleFlatRHS(
     const InertialState& stateA = states[bodyA].get();
     const InertialState& stateB = states[bodyB].get();
 
-    // Velocity vector v = [v_A, omega_A, v_B, omega_B] (12x1)
-    Eigen::VectorXd v(12);
+    // Ticket 0053f: Stack-allocated fixed-size velocity vector (zero heap cost)
+    Eigen::Matrix<double, 12, 1> v;
     v.segment<3>(0) =
       Vector3D{stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
     AngularRate omegaA = stateA.getAngularVelocity();
@@ -661,7 +665,7 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithFriction(
   const Eigen::MatrixXd& A,
   const Eigen::VectorXd& b,
   const FrictionSpec& spec,
-  const std::optional<Eigen::VectorXd>& initialLambda) const
+  const std::optional<Eigen::VectorXd>& initialLambda)
 {
   // Determine warm-start vector
   Eigen::VectorXd lambda0;

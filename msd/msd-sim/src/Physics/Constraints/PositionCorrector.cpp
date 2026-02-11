@@ -1,4 +1,5 @@
 // Ticket: 0040b_split_impulse_position_correction
+// Ticket: 0053f_wire_solver_workspace
 // Design: docs/designs/0040b-split-impulse-position-correction/design.md
 
 #include "msd-sim/src/Physics/Constraints/PositionCorrector.hpp"
@@ -56,11 +57,13 @@ void PositionCorrector::correctPositions(
   }
 
   const auto c = contactConstraints.size();
+  const auto cIdx = static_cast<Eigen::Index>(c);
 
   // ===== Step 1: Build position-level RHS =====
   // b_pos_i = (beta / dt) * max(depth_i - slop, 0)
-  // Only process ContactConstraint instances (skip FrictionConstraint etc.)
-  Eigen::VectorXd bPos{Eigen::VectorXd::Zero(static_cast<Eigen::Index>(c))};
+  // Ticket 0053f: Reuse workspace
+  bPos_.resize(cIdx);
+  bPos_.setZero();
   bool anyCorrection = false;
 
   for (size_t i = 0; i < c; ++i)
@@ -77,7 +80,7 @@ void PositionCorrector::correctPositions(
 
     if (correctedDepth > 0.0)
     {
-      bPos(static_cast<Eigen::Index>(i)) = (config.beta / dt) * correctedDepth;
+      bPos_(static_cast<Eigen::Index>(i)) = (config.beta / dt) * correctedDepth;
       anyCorrection = true;
     }
   }
@@ -89,18 +92,17 @@ void PositionCorrector::correctPositions(
   }
 
   // ===== Step 2: Assemble Jacobians =====
-  // Same algorithm as ConstraintSolver::assembleContactJacobians()
-  std::vector<Eigen::MatrixXd> jacobians(c);
+  // Ticket 0053f: Reuse workspace vector
+  jacobians_.resize(c);
   for (size_t i = 0; i < c; ++i)
   {
     const auto* constraint = contactConstraints[i];
     size_t const bodyA = constraint->bodyAIndex();
     size_t const bodyB = constraint->bodyBIndex();
-    jacobians[i] = constraint->jacobian(*states[bodyA], *states[bodyB], 0.0);
+    jacobians_[i] = constraint->jacobian(*states[bodyA], *states[bodyB], 0.0);
   }
 
   // ===== Step 3: Build effective mass matrix A = J * M^-1 * J^T =====
-  // Same algorithm as ConstraintSolver::assembleContactEffectiveMass()
   std::vector<Eigen::Matrix<double, 6, 6>> bodyMInv(numBodies);
   for (size_t k = 0; k < numBodies; ++k)
   {
@@ -110,24 +112,25 @@ void PositionCorrector::correctPositions(
     bodyMInv[k].block<3, 3>(3, 3) = inverseInertias[k];
   }
 
-  Eigen::MatrixXd a{Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(c),
-                                          static_cast<Eigen::Index>(c))};
+  // Ticket 0053f: Reuse workspace
+  effectiveMass_.resize(cIdx, cIdx);
+  effectiveMass_.setZero();
 
   for (size_t i = 0; i < c; ++i)
   {
     size_t const bodyAI = contactConstraints[i]->bodyAIndex();
     size_t const bodyBI = contactConstraints[i]->bodyBIndex();
 
-    Eigen::Matrix<double, 1, 6> const jIA = jacobians[i].block<1, 6>(0, 0);
-    Eigen::Matrix<double, 1, 6> const jIB = jacobians[i].block<1, 6>(0, 6);
+    Eigen::Matrix<double, 1, 6> const jIA = jacobians_[i].block<1, 6>(0, 0);
+    Eigen::Matrix<double, 1, 6> const jIB = jacobians_[i].block<1, 6>(0, 6);
 
     for (size_t j = i; j < c; ++j)
     {
       size_t const bodyAJ = contactConstraints[j]->bodyAIndex();
       size_t const bodyBJ = contactConstraints[j]->bodyBIndex();
 
-      Eigen::Matrix<double, 1, 6> const jJA = jacobians[j].block<1, 6>(0, 0);
-      Eigen::Matrix<double, 1, 6> const jJB = jacobians[j].block<1, 6>(0, 6);
+      Eigen::Matrix<double, 1, 6> const jJA = jacobians_[j].block<1, 6>(0, 0);
+      Eigen::Matrix<double, 1, 6> const jJB = jacobians_[j].block<1, 6>(0, 6);
 
       double aIj = 0.0;
 
@@ -148,22 +151,22 @@ void PositionCorrector::correctPositions(
         aIj += (jIB * bodyMInv[bodyBI] * jJB.transpose())(0);
       }
 
-      a(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) = aIj;
-      a(static_cast<Eigen::Index>(j), static_cast<Eigen::Index>(i)) = aIj;
+      effectiveMass_(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) = aIj;
+      effectiveMass_(static_cast<Eigen::Index>(j), static_cast<Eigen::Index>(i)) = aIj;
     }
   }
 
   // Regularization
   for (size_t i = 0; i < c; ++i)
   {
-    a(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(i)) +=
+    effectiveMass_(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(i)) +=
       kRegularizationEpsilon;
   }
 
   // ===== Step 4: Solve with ASM (lambda_pos >= 0) =====
-  // Lightweight Active Set Method — same algorithm as ConstraintSolver
   const int numConstraints = static_cast<int>(c);
-  Eigen::VectorXd lambdaPos{Eigen::VectorXd::Zero(numConstraints)};
+  lambdaPos_.resize(numConstraints);
+  lambdaPos_.setZero();
 
   // Initialize active set: all constraints
   std::vector<int> activeIndices;
@@ -181,36 +184,36 @@ void PositionCorrector::correctPositions(
 
     if (activeSize == 0)
     {
-      lambdaPos.setZero();
+      lambdaPos_.setZero();
     }
     else
     {
-      // Extract active submatrix and solve
-      Eigen::MatrixXd aW{activeSize, activeSize};
-      Eigen::VectorXd bW{activeSize};
+      // Ticket 0053f: Reuse ASM workspace
+      asmAw_.resize(activeSize, activeSize);
+      asmBw_.resize(activeSize);
 
       for (int i = 0; i < activeSize; ++i)
       {
-        bW(i) = bPos(activeIndices[static_cast<size_t>(i)]);
+        asmBw_(i) = bPos_(activeIndices[static_cast<size_t>(i)]);
         for (int j = 0; j < activeSize; ++j)
         {
-          aW(i, j) = a(activeIndices[static_cast<size_t>(i)],
-                       activeIndices[static_cast<size_t>(j)]);
+          asmAw_(i, j) = effectiveMass_(activeIndices[static_cast<size_t>(i)],
+                                        activeIndices[static_cast<size_t>(j)]);
         }
       }
 
-      Eigen::LLT<Eigen::MatrixXd> const llt{aW};
+      Eigen::LLT<Eigen::MatrixXd> const llt{asmAw_};
       if (llt.info() != Eigen::Success)
       {
         return;  // Singular — skip correction
       }
 
-      Eigen::VectorXd lambdaW = llt.solve(bW);
+      asmBw_ = llt.solve(asmBw_);
 
-      lambdaPos.setZero();
+      lambdaPos_.setZero();
       for (int i = 0; i < activeSize; ++i)
       {
-        lambdaPos(activeIndices[static_cast<size_t>(i)]) = lambdaW(i);
+        lambdaPos_(activeIndices[static_cast<size_t>(i)]) = asmBw_(i);
       }
     }
 
@@ -220,7 +223,7 @@ void PositionCorrector::correctPositions(
     for (int i = 0; i < activeSize; ++i)
     {
       int const idx = activeIndices[static_cast<size_t>(i)];
-      double const val = lambdaPos(idx);
+      double const val = lambdaPos_(idx);
       if (val < minLambda || (val == minLambda && idx < minIndex))
       {
         minLambda = val;
@@ -235,7 +238,9 @@ void PositionCorrector::correctPositions(
     }
 
     // Check dual feasibility (w >= 0 for inactive set)
-    Eigen::VectorXd w = a * lambdaPos - bPos;
+    // Ticket 0053f: Reuse workspace
+    asmW_.resize(numConstraints);
+    asmW_.noalias() = effectiveMass_ * lambdaPos_ - bPos_;
 
     double maxViolation = 0.0;
     int maxViolationIndex = -1;
@@ -250,12 +255,12 @@ void PositionCorrector::correctPositions(
         continue;
       }
 
-      if (w(i) < -kTolerance)
+      if (asmW_(i) < -kTolerance)
       {
-        if (maxViolationIndex == -1 || w(i) < maxViolation ||
-            (w(i) == maxViolation && i < maxViolationIndex))
+        if (maxViolationIndex == -1 || asmW_(i) < maxViolation ||
+            (asmW_(i) == maxViolation && i < maxViolationIndex))
         {
-          maxViolation = w(i);
+          maxViolation = asmW_(i);
           maxViolationIndex = i;
         }
       }
@@ -275,7 +280,7 @@ void PositionCorrector::correctPositions(
   // dx_k = dv_pseudo_k * dt
   for (size_t i = 0; i < c; ++i)
   {
-    if (lambdaPos(static_cast<Eigen::Index>(i)) <= 0.0)
+    if (lambdaPos_(static_cast<Eigen::Index>(i)) <= 0.0)
     {
       continue;
     }
@@ -283,10 +288,10 @@ void PositionCorrector::correctPositions(
     size_t const bodyA = contactConstraints[i]->bodyAIndex();
     size_t const bodyB = contactConstraints[i]->bodyBIndex();
 
-    Eigen::Matrix<double, 1, 6> const jIA = jacobians[i].block<1, 6>(0, 0);
-    Eigen::Matrix<double, 1, 6> const jIB = jacobians[i].block<1, 6>(0, 6);
+    Eigen::Matrix<double, 1, 6> const jIA = jacobians_[i].block<1, 6>(0, 0);
+    Eigen::Matrix<double, 1, 6> const jIB = jacobians_[i].block<1, 6>(0, 6);
 
-    double const lambda = lambdaPos(static_cast<Eigen::Index>(i));
+    double const lambda = lambdaPos_(static_cast<Eigen::Index>(i));
 
     // Body A pseudo-velocity contribution
     if (bodyA < numInertial && inverseMasses[bodyA] > 0.0)

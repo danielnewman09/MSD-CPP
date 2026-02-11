@@ -46,7 +46,7 @@ public:
         const Eigen::MatrixXd& A,
         const Eigen::VectorXd& b,
         const std::vector<double>& mu,
-        const Eigen::VectorXd& lambda0 = Eigen::VectorXd{}) const;
+        const Eigen::VectorXd& lambda0 = Eigen::VectorXd{});
 
     void setTolerance(double eps) { tolerance_ = eps; }
     void setMaxIterations(int n) { max_iterations_ = n; }
@@ -55,6 +55,39 @@ public:
     [[nodiscard]] int getMaxIterations() const { return max_iterations_; }
 
 private:
+    /// Pre-allocated workspace for solve() to avoid per-call heap allocations.
+    /// Eigen's resize() reuses capacity when new size <= previous max.
+    struct Workspace
+    {
+        Eigen::MatrixXd A_reg;
+        Eigen::VectorXd lambda_unc;
+        Eigen::VectorXd lambda;
+        Eigen::VectorXd g;
+        Eigen::VectorXd proj;
+        Eigen::MatrixXd J_proj;
+        Eigen::MatrixXd H_r;
+        Eigen::VectorXd g_r;
+        Eigen::VectorXd delta;
+        Eigen::VectorXd trial;
+        Eigen::LLT<Eigen::MatrixXd> llt;
+        Eigen::LLT<Eigen::MatrixXd> llt_r;
+
+        void resize(int n)
+        {
+            A_reg.resize(n, n);
+            lambda_unc.resize(n);
+            lambda.resize(n);
+            g.resize(n);
+            proj.resize(n);
+            J_proj.resize(n, n);
+            H_r.resize(n, n);
+            g_r.resize(n);
+            delta.resize(n);
+            trial.resize(n);
+        }
+    };
+    Workspace ws_;
+
     double tolerance_{1e-8};
     int max_iterations_{50};
     double armijo_c1_{1e-4};

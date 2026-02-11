@@ -1,0 +1,164 @@
+@startuml
+skinparam class {
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<new>> LightGreen
+}
+
+title Collision Pipeline Performance Optimization\n(5 targeted improvements, no architectural changes)
+
+package "CollisionPipeline (0053a: Workspace Allocation)" <<modified>> {
+  class CollisionPipeline <<modified>> {
+    - workspace_: SolverWorkspace
+    - constraintSolver_: ConstraintSolver
+    - frictionSolver_: FrictionConeSolver
+    - positionCorrector_: PositionCorrector
+    - contactCache_: ContactCache
+    - collisionHandler_: CollisionHandler
+    + execute(inertial, environmental, dt)
+  }
+
+  class SolverWorkspace <<new>> {
+    + lambda: Eigen::VectorXd
+    + rhs: Eigen::VectorXd
+    + warmStart: Eigen::VectorXd
+    + frictionLambda: Eigen::VectorXd
+    + residual: Eigen::VectorXd
+    + gradient: Eigen::VectorXd
+    + trialLambda: Eigen::VectorXd
+    + pseudoVelocities: Eigen::VectorXd
+    + penetrations: Eigen::VectorXd
+    + contactConstraints: vector<ContactConstraint*>
+    + frictionConstraints: vector<FrictionConstraint*>
+    + resize(numContacts)
+  }
+
+  CollisionPipeline *-- SolverWorkspace : owns
+}
+
+package "Constraint Solving (0053a, 0053c, 0053e)" {
+  class ConstraintSolver <<modified>> {
+    + solve(constraints, bodies,\n        lambda, rhs, warmStart)
+    - assembleEffectiveMass(): EffectiveMassMatrix
+    - computeLambda(): LambdaVector
+  }
+
+  class FrictionConeSolver <<modified>> {
+    + solve(constraints,\n        frictionLambda,\n        residual, gradient)
+    - evaluateMerit(): double
+    - lineSearch(): double
+  }
+
+  class PositionCorrector <<modified>> {
+    + correctPositions(constraints,\n                   pseudoVelocities,\n                   penetrations)
+  }
+
+  note right of ConstraintSolver
+    **0053e: Fixed-Size Matrices**
+    - EffectiveMassMatrix: stack for ≤4 contacts
+    - LambdaVector: stack for ≤4 contacts
+    - Zero heap allocation for typical cases
+  end note
+
+  note right of FrictionConeSolver
+    **0053c: Iteration Optimization**
+    1. Warm-start from ContactCache
+    2. Early termination (1e-4 tolerance)
+    3. Cached cone projection
+    → 5-8 iterations → 2-4 iterations
+  end note
+}
+
+package "Collision Detection (0053d)" {
+  class CollisionHandler <<modified>> {
+    + checkCollision(assetA, assetB): optional<CollisionResult>
+    - computeContactInfo(gjkResult, ...): CollisionResult
+    - computeSATMinPenetration(...): double
+    - buildSATContact(...): CollisionResult
+  }
+
+  class GJK {
+    + intersects(hullA, hullB): GJKResult
+  }
+
+  class EPA {
+    + computeContactInfo(gjkResult, ...): CollisionResult
+  }
+
+  note right of CollisionHandler
+    **0053d: SAT Fallback Gating**
+    Only run SAT when:
+      EPA depth < 0.01m (near-zero penetration)
+    Eliminates SAT for ~90% of collisions
+  end note
+
+  CollisionHandler --> GJK : uses
+  CollisionHandler --> EPA : uses
+}
+
+package "Geometry (0053b)" {
+  class ConvexHull <<modified>> {
+    - vertices_: vector<Coordinate>
+    - facets_: vector<Facet>
+    + computeHull(points)
+    + getVolume(): double
+    + getSurfaceArea(): double
+  }
+
+  note bottom of ConvexHull
+    **0053b: Disable Qhull Output**
+    Set qh->NOsummary = True
+    → Eliminates qh_printsummary overhead
+  end note
+}
+
+package "Warm-Start Cache (0053c)" {
+  class ContactCache <<modified>> {
+    - cache_: map<pair<id, id>, CacheEntry>
+    + getFrictionLambda(bodyA, bodyB): Vector3d
+    + storeFrictionLambda(bodyA, bodyB, lambda)
+    + advanceFrame()
+    + expireOldEntries()
+  }
+
+  class ContactCacheEntry <<modified>> {
+    + bodyAId: uint32_t
+    + bodyBId: uint32_t
+    + normalLambda: Vector3d
+    + frictionLambda: Vector3d  ← NEW
+    + lastSeen: time_point
+  }
+
+  note right of ContactCache
+    **0053c Extension**
+    Store friction lambda for warm-starting
+    Expected 2-4× iteration reduction
+  end note
+
+  ContactCache *-- ContactCacheEntry : contains
+}
+
+' Relationships
+CollisionPipeline --> ConstraintSolver : uses workspace
+CollisionPipeline --> FrictionConeSolver : uses workspace
+CollisionPipeline --> PositionCorrector : uses workspace
+CollisionPipeline --> ContactCache : queries warm-start
+CollisionPipeline --> CollisionHandler : detects collisions
+
+ConstraintSolver ..> SolverWorkspace : reads/writes
+FrictionConeSolver ..> SolverWorkspace : reads/writes
+PositionCorrector ..> SolverWorkspace : reads/writes
+
+CollisionHandler --> ConvexHull : uses
+
+legend right
+  **Performance Optimization Summary**
+  | Subtask | Component | CPU Impact |
+  | 0053a | Workspace allocation | 1.8% |
+  | 0053b | Qhull diagnostics | 0.3% |
+  | 0053c | Friction solver | 1.9% |
+  | 0053d | SAT gating | 1.1% |
+  | 0053e | Fixed-size matrices | 1.7% |
+  | **Total** | **Pipeline** | **6.8% → 3.6%** |
+endlegend
+
+@enduml

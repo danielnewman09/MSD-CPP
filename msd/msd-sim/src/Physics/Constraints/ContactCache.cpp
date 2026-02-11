@@ -128,6 +128,12 @@ void ContactCache::advanceFrame()
   }
 }
 
+bool ContactCache::hasEntry(uint32_t bodyA, uint32_t bodyB) const
+{
+  auto key = makeKey(bodyA, bodyB);
+  return cache_.find(key) != cache_.end();
+}
+
 void ContactCache::clear()
 {
   cache_.clear();

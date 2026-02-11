@@ -281,13 +281,16 @@ class CodebaseServer:
                 pass
 
         # Find derived classes (classes that have this class as a base)
+        # Use qualified_name for matching since base_classes stores qualified names
+        # e.g., base_classes = "['msd_sim::Constraint']" requires matching 'msd_sim::Constraint'
+        qualified_name = result["qualified_name"]
         sql = """
             SELECT c.name, c.qualified_name, c.kind, f.path as file_path, c.line_number
             FROM compounds c
             LEFT JOIN files f ON f.id = c.file_id
             WHERE c.base_classes LIKE ? AND c.kind IN ('class', 'struct')
         """
-        cursor = self.conn.execute(sql, (f"%'{class_name}'%" if "'" not in class_name else f"%{class_name}%",))
+        cursor = self.conn.execute(sql, (f"%'{qualified_name}'%",))
         result["derived_classes"] = self._rows_to_dicts(cursor.fetchall())
 
         return result
