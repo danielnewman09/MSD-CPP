@@ -643,6 +643,43 @@ size_t EPA::extractContactManifold(size_t faceIndex,
     return 1;
   }
 
+  // Ticket: 0055c_friction_direction_fix — vertex-face manifold expansion
+  //
+  // When clipping reduces the incident polygon to 1-2 points but the reference
+  // face has >= 3 vertices, this is a vertex-face contact. A single contact
+  // point creates uncompensated yaw torque through friction Jacobian angular
+  // coupling (rA × t), causing energy injection. Expand to multi-point manifold
+  // using the reference face vertices projected onto the contact plane.
+  if (finalPoints.size() <= 2 && refVerts.size() >= 3)
+  {
+    // Use reference face vertices as the manifold — they define the face
+    // the vertex is touching. Project each onto the reference plane and use
+    // uniform EPA depth for all contact points.
+    size_t const refCount =
+      std::min(refVerts.size(), static_cast<size_t>(4));
+    for (size_t i = 0; i < refCount; ++i)
+    {
+      // Project reference vertex onto the reference plane
+      double const dist = refNormalWorld.dot(refVerts[i]) - refPlaneD;
+      Coordinate const onRefPlane = refVerts[i] - refNormalWorld * dist;
+
+      // The incident point is the reference plane point offset by depth
+      // along the contact normal (into the reference body)
+      Coordinate const incPoint =
+        onRefPlane - refNormalWorld * epaFace.offset;
+
+      if (refIsA)
+      {
+        contacts[i] = ContactPoint{onRefPlane, incPoint, epaFace.offset};
+      }
+      else
+      {
+        contacts[i] = ContactPoint{incPoint, onRefPlane, epaFace.offset};
+      }
+    }
+    return refCount;
+  }
+
   // Limit to 4 contact points
   size_t const count = std::min(finalPoints.size(), static_cast<size_t>(4));
 
