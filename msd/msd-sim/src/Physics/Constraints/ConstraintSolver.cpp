@@ -225,9 +225,9 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
       double const cleanN = std::max(normalResult.lambda(c), 0.0);
 
       // Detect inflation: coupled λ_n exceeds friction-free λ_n by multiplicative threshold
-      // Ticket 0055d: Use 2.0× threshold to allow moderate inflation for elastic bounces
+      // Ticket 0055d: Use 1.5× threshold to allow moderate inflation for elastic bounces
       // while catching extreme 3.75× cases from tilted cube corner contacts
-      constexpr double kInflationThreshold = 2.0;
+      constexpr double kInflationThreshold = 1.5;
       if (coupledN > kInflationThreshold * cleanN && coupledN > cleanN + 1e-10)
       {
         needsAdjustment = true;
