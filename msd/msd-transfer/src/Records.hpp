@@ -11,6 +11,10 @@
 
 #include "msd-transfer/src/AngularCoordinateRecord.hpp"
 #include "msd-transfer/src/AngularRateRecord.hpp"
+#include "msd-transfer/src/AppliedForceRecord.hpp"
+#include "msd-transfer/src/BodyMetadataRecord.hpp"
+#include "msd-transfer/src/ConstraintForceRecord.hpp"
+#include "msd-transfer/src/ContactRecord.hpp"
 #include "msd-transfer/src/CoordinateRecord.hpp"
 #include "msd-transfer/src/EnergyRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
@@ -18,6 +22,7 @@
 #include "msd-transfer/src/MeshRecord.hpp"
 #include "msd-transfer/src/PhysicsTemplateRecord.hpp"
 #include "msd-transfer/src/SimulationFrameRecord.hpp"
+#include "msd-transfer/src/SolverDiagnosticRecord.hpp"
 #include "msd-transfer/src/SystemEnergyRecord.hpp"
 #include "msd-transfer/src/Vector3DRecord.hpp"
 #include "msd-transfer/src/Vector4DRecord.hpp"
