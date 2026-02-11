@@ -411,3 +411,121 @@ This is the physical basis for why multi-point contacts eliminate yaw-driven ene
 - **Box2D manifold generation**: `b2CollidePolygons()` in `b2_collision.cpp`
 - **Bullet manifold generation**: `btBoxBoxDetector::getClosestPoints()` in `btBoxBoxDetector.cpp`
 - **Ericson (2004)**: "Real-Time Collision Detection" Chapter 5
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-11
+**Status**: APPROVED WITH NOTES
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | Classes use PascalCase (VertexFaceDetector, VertexFaceManifoldGenerator), methods use camelCase (detectContactType, generate), members use snake_case_ (config_) |
+| Namespace organization | ✓ | New components correctly placed in msd_sim namespace (implied by integration with CollisionHandler, EPA) |
+| File structure | ✓ | Follows msd/msd-sim/src/Physics/Collision/ pattern, consistent with existing components |
+| Dependency direction | ✓ | Dependencies flow correctly: new components depend on Coordinate/Vector3D (lower-level), CollisionHandler/EPA depend on new components (composition), no cycles introduced |
+
+#### C++ Design Quality
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | ✓ | No resources to manage, relies on value semantics and standard containers |
+| Smart pointer appropriateness | ✓ | No smart pointers needed - components are stateless or hold simple config by value |
+| Value/reference semantics | ✓ | Config held by value, assets passed by const reference, vectors passed by const reference - appropriate for each use case |
+| Rule of 0/3/5 | ✓ | Both new classes explicitly default all special members (Rule of Zero), matches project pattern |
+| Const correctness | ✓ | generate() and detectContactType() methods are const (stateless), input parameters are const references where appropriate |
+| Exception safety | ✓ | No exceptions in collision path, error handling via return values (0 contacts for degenerate cases) |
+| Initialization | ✓ | Brace initialization specified throughout, NaN for uninitialized floats mentioned |
+| Return values | ✓ | generate() returns count + fills output array (matches existing extractContactManifold pattern), detectContactType() returns enum by value |
+
+#### Feasibility
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | Dependencies on Coordinate, Vector3D, ContactPoint are all existing types, no circular dependencies |
+| Template complexity | ✓ | No templates used, straightforward concrete classes |
+| Memory strategy | ✓ | No dynamic allocation in hot path, uses stack-allocated std::array for output contacts |
+| Thread safety | ✓ | Both components are stateless (config is const), safe for concurrent use as documented |
+| Build integration | ✓ | New .hpp/.cpp files added to msd-sim, straightforward CMake integration |
+
+#### Testability
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | Both components can be instantiated standalone with minimal dependencies (Coordinate, Vector3D) |
+| Mockable dependencies | ✓ | Components have no external dependencies requiring mocking - pure computational logic |
+| Observable state | ✓ | generate() returns contacts array that can be inspected, detectContactType() returns observable enum |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | Contact depth consistency: uniform EPA depth vs per-point depth may affect constraint solver stability | Technical | Medium | Medium | Start with Option A (uniform EPA depth), measure stability in full test suite. If instability detected, implement Option B (per-point depth computation). Design already supports both approaches. | No |
+| R2 | Degenerate vertex-face geometry (reference face nearly parallel to contact normal) may produce < 3 contacts | Technical | Low | Low | Design already recommends Option B (alignment check + fallback). Implementation should include `abs(refFaceNormal · contactNormal) < threshold` check before projection. | No |
+| R3 | Performance overhead on vertex-face contacts (~250 FLOPs) may be higher than estimated in practice | Performance | Low | Low | Benchmark before/after on tilted cube scenarios. Target < 10% overhead for vertex-face-heavy cases, 0% for others. Abort if > 15% overhead. | Yes |
+| R4 | EPA method signature shows public members (assetA_, assetB_, epsilon_, vertices_, faces_) - appears to violate encapsulation | Maintenance | High | Low | This is existing code pattern - EPA already exposes these as public members. New methods follow existing patterns. No change needed for this ticket. | No |
+| R5 | Single-point fallback for vertex-vertex contacts may still exhibit issues if vertex-vertex contacts occur frequently in practice | Technical | Low | Medium | Monitor test results. Design correctly retains single-point fallback only for vertex-vertex and unknown cases. Vertex-vertex is rare and lacks lever arm asymmetry per design rationale. | No |
+
+### Prototype Guidance
+
+#### Prototype P1: Performance Impact Validation
+
+**Risk addressed**: R3
+**Question to answer**: What is the actual wall-clock overhead of vertex-face manifold generation compared to single-point fallback in realistic collision scenarios?
+
+**Success criteria**:
+- Vertex-face contact overhead < 10% compared to baseline (single-point fallback)
+- Face-face contact overhead = 0% (no change to existing path)
+- Overall frame time increase < 2% in tilted-cube-heavy scenario
+
+**Prototype approach**:
+```
+Location: prototypes/0055c_friction_direction_fix/p1_performance_benchmark/
+Type: Benchmark harness using Google Benchmark
+
+Steps:
+1. Create benchmark fixture with:
+   - Cube on floor (vertex-face contact)
+   - Two cubes face-to-face (face-face contact, control)
+2. Measure collision detection time for 1000 iterations each
+3. Compare before/after for both geometries
+4. Measure frame time in full simulation (100 frames, tilted cube)
+5. Report overhead percentages
+
+Baseline: Run with feature flag disabled (single-point fallback)
+Treatment: Run with feature flag enabled (vertex-face manifold)
+```
+
+**Time box**: 1 hour
+
+**If prototype fails** (overhead > 15%):
+- Profile vertex-face manifold generation to identify bottleneck
+- Consider optimization: cache projected vertices, reduce validation
+- If still > 15%, escalate to human for design revision discussion
+
+### Required Revisions
+
+None. Design is approved for prototype phase.
+
+### Summary
+
+This design demonstrates strong architectural fit with the existing collision pipeline and adheres to project C++ coding standards. The two new components (VertexFaceDetector, VertexFaceManifoldGenerator) are well-scoped, stateless, and integrate cleanly into both EPA and SAT fallback paths.
+
+The design correctly identifies the root cause (single-point vertex-face contacts creating uncompensated yaw torque) and proposes a targeted fix (multi-point manifold generation) without disrupting existing face-face or edge-edge contact handling.
+
+**Key strengths**:
+- Minimal, targeted change (no unnecessary refactoring)
+- Clear integration points at both EPA and SAT paths
+- Comprehensive test plan with regression coverage
+- Performance analysis included with acceptable overhead estimate
+- Open questions properly documented for human review
+
+**Minor notes**:
+- R4 (EPA public members) is an existing code pattern, not introduced by this design
+- Open Question 1 (depth assignment) should be resolved during implementation via prototype validation
+- Open Question 3 (edge case handling) is addressed by mitigation in R2
+
+**Next steps**: Proceed to prototype phase with P1 performance validation. Implementation can begin in parallel since the design is sound and performance risk is low-impact (mitigation exists).
