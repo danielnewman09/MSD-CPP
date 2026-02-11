@@ -1,7 +1,8 @@
 // Ticket: 0056a_collision_force_transfer_records
 // Per-body applied forces (gravity, external, potential fields)
 
-#pragma once
+#ifndef MSD_TRANSFER_APPLIED_FORCE_RECORD_HPP
+#define MSD_TRANSFER_APPLIED_FORCE_RECORD_HPP
 
 #include <boost/describe.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
@@ -48,18 +49,20 @@ struct AppliedForceRecord : public cpp_sqlite::BaseTransferObject
 
 // Register with Boost.Describe for cpp_sqlite ORM
 BOOST_DESCRIBE_STRUCT(AppliedForceRecord,
-                       (cpp_sqlite::BaseTransferObject),
-                       (body_id,
-                        force_type,
-                        force_x,
-                        force_y,
-                        force_z,
-                        torque_x,
-                        torque_y,
-                        torque_z,
-                        point_x,
-                        point_y,
-                        point_z,
-                        frame))
+                      (cpp_sqlite::BaseTransferObject),
+                      (body_id,
+                       force_type,
+                       force_x,
+                       force_y,
+                       force_z,
+                       torque_x,
+                       torque_y,
+                       torque_z,
+                       point_x,
+                       point_y,
+                       point_z,
+                       frame));
 
-} // namespace msd_transfer
+}  // namespace msd_transfer
+
+#endif  // MSD_TRANSFER_APPLIED_FORCE_RECORD_HPP

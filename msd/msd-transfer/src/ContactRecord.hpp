@@ -1,7 +1,8 @@
 // Ticket: 0056a_collision_force_transfer_records
 // Per-contact collision data for visualization and replay
 
-#pragma once
+#ifndef MSD_TRANSFER_CONTACT_RECORD_HPP
+#define MSD_TRANSFER_CONTACT_RECORD_HPP
 
 #include <boost/describe.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
@@ -48,22 +49,24 @@ struct ContactRecord : public cpp_sqlite::BaseTransferObject
 
 // Register with Boost.Describe for cpp_sqlite ORM
 BOOST_DESCRIBE_STRUCT(ContactRecord,
-                       (cpp_sqlite::BaseTransferObject),
-                       (body_a_id,
-                        body_b_id,
-                        contact_index,
-                        point_a_x,
-                        point_a_y,
-                        point_a_z,
-                        point_b_x,
-                        point_b_y,
-                        point_b_z,
-                        normal_x,
-                        normal_y,
-                        normal_z,
-                        depth,
-                        restitution,
-                        friction,
-                        frame))
+                      (cpp_sqlite::BaseTransferObject),
+                      (body_a_id,
+                       body_b_id,
+                       contact_index,
+                       point_a_x,
+                       point_a_y,
+                       point_a_z,
+                       point_b_x,
+                       point_b_y,
+                       point_b_z,
+                       normal_x,
+                       normal_y,
+                       normal_z,
+                       depth,
+                       restitution,
+                       friction,
+                       frame));
 
-} // namespace msd_transfer
+}  // namespace msd_transfer
+
+#endif  // MSD_TRANSFER_CONTACT_RECORD_HPP

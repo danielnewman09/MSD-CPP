@@ -1,7 +1,8 @@
 // Ticket: 0056a_collision_force_transfer_records
 // Per-frame solver diagnostics for convergence debugging
 
-#pragma once
+#ifndef MSD_TRANSFER_SOLVER_DIAGNOSTIC_RECORD_HPP
+#define MSD_TRANSFER_SOLVER_DIAGNOSTIC_RECORD_HPP
 
 #include <boost/describe.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
@@ -34,12 +35,14 @@ struct SolverDiagnosticRecord : public cpp_sqlite::BaseTransferObject
 
 // Register with Boost.Describe for cpp_sqlite ORM
 BOOST_DESCRIBE_STRUCT(SolverDiagnosticRecord,
-                       (cpp_sqlite::BaseTransferObject),
-                       (iterations,
-                        residual,
-                        converged,
-                        num_constraints,
-                        num_contacts,
-                        frame))
+                      (cpp_sqlite::BaseTransferObject),
+                      (iterations,
+                       residual,
+                       converged,
+                       num_constraints,
+                       num_contacts,
+                       frame));
 
-} // namespace msd_transfer
+}  // namespace msd_transfer
+
+#endif  // MSD_TRANSFER_SOLVER_DIAGNOSTIC_RECORD_HPP

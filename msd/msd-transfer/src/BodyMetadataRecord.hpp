@@ -1,7 +1,8 @@
 // Ticket: 0056a_collision_force_transfer_records
 // Per-body static metadata (recorded once at spawn)
 
-#pragma once
+#ifndef MSD_TRANSFER_BODY_METADATA_RECORD_HPP
+#define MSD_TRANSFER_BODY_METADATA_RECORD_HPP
 
 #include <boost/describe.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
@@ -32,12 +33,14 @@ struct BodyMetadataRecord : public cpp_sqlite::BaseTransferObject
 
 // Register with Boost.Describe for cpp_sqlite ORM
 BOOST_DESCRIBE_STRUCT(BodyMetadataRecord,
-                       (cpp_sqlite::BaseTransferObject),
-                       (body_id,
-                        asset_id,
-                        mass,
-                        restitution,
-                        friction,
-                        is_environment))
+                      (cpp_sqlite::BaseTransferObject),
+                      (body_id,
+                       asset_id,
+                       mass,
+                       restitution,
+                       friction,
+                       is_environment));
 
-} // namespace msd_transfer
+}  // namespace msd_transfer
+
+#endif  // MSD_TRANSFER_BODY_METADATA_RECORD_HPP
