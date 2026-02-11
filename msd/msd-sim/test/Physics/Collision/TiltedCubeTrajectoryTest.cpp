@@ -2201,3 +2201,158 @@ TEST(TiltedCubeTrajectory, Diag_MechanicalEnergy_FrictionInjection)
               << " cumulativeInjection=" << cumulativeInjection << "\n";
   }
 }
+
+// ============================================================================
+// Diagnostic: Friction work per frame — does F_friction · v_contact > 0?
+// ============================================================================
+//
+// Ticket: 0055c_friction_direction_fix
+//
+// For each frame, captures:
+//   - Contact normal from EPA/SAT (probe collision independently)
+//   - Pre-update and post-update velocity state
+//   - The velocity impulse Δv = v_post - v_pre - g*dt (isolates collision+friction)
+//   - Computes friction work proxy: Δv_tangent · v_tangent (if positive, friction
+//     accelerated the body along the contact surface)
+//
+// This identifies exactly which frames have friction acting in the wrong direction.
+
+TEST(TiltedCubeTrajectory, Diag_FrictionWorkDirection)
+{
+  constexpr int kFrameDtMs = 10;
+  constexpr double kDt = kFrameDtMs / 1000.0;
+  constexpr int kFrames = 200;
+  constexpr double kMass = 10.0;
+  constexpr double kTiltX = 0.01;
+  constexpr double kTiltY = M_PI / 3.0;
+  constexpr double kInitialVx = 5.0;
+
+  WorldModel world;
+
+  auto floorPoints = createCubePoints(100.0);
+  ConvexHull floorHull{floorPoints};
+  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
+  const auto& floorAsset =
+    world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  const_cast<AssetEnvironment&>(floorAsset).setFrictionCoefficient(0.5);
+
+  auto cubePoints = createCubePoints(1.0);
+  ConvexHull cubeHull{cubePoints};
+
+  Eigen::Quaterniond tiltQuat =
+    Eigen::Quaterniond{Eigen::AngleAxisd{kTiltY, Eigen::Vector3d::UnitY()}} *
+    Eigen::Quaterniond{Eigen::AngleAxisd{kTiltX, Eigen::Vector3d::UnitX()}};
+
+  double minZ = std::numeric_limits<double>::max();
+  for (const auto& pt : cubePoints)
+  {
+    Eigen::Vector3d rotated =
+      tiltQuat * Eigen::Vector3d{pt.x(), pt.y(), pt.z()};
+    minZ = std::min(minZ, rotated.z());
+  }
+  double centerZ = 0.01 - minZ;
+
+  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, centerZ}, tiltQuat};
+  world.spawnObject(2, cubeHull, kMass, cubeFrame);
+  uint32_t const cubeId = 1;
+  world.getObject(cubeId).setCoefficientOfRestitution(0.5);
+  world.getObject(cubeId).setFrictionCoefficient(0.5);
+  world.getObject(cubeId).getInertialState().velocity =
+    Vector3D{kInitialVx, 0.0, 0.0};
+
+  CollisionHandler collisionHandler{1e-6};
+
+  const Eigen::Matrix3d& inertiaTensor =
+    world.getObject(cubeId).getInertiaTensor();
+
+  std::cerr << "\n=== Friction Work Direction Diagnostic ===\n";
+  std::cerr << "  (PI/3 pitch, 0.01 roll, 5 m/s initial Vx, friction=0.5)\n\n";
+
+  double prevE = std::numeric_limits<double>::quiet_NaN();
+  int positiveWorkFrames = 0;
+
+  for (int i = 1; i <= kFrames; ++i)
+  {
+    // Save pre-update state
+    auto const& preState = world.getObject(cubeId).getInertialState();
+    Coordinate preVel = preState.velocity;
+    auto preOmega = preState.getAngularVelocity();
+
+    // Probe collision BEFORE update to see what contact geometry will be used
+    const auto& cube = world.getObject(cubeId);
+    const auto& envObjects = world.getEnvironmentalObjects();
+    auto collisionResult = collisionHandler.checkCollision(cube, envObjects[0]);
+
+    world.update(std::chrono::milliseconds{i * kFrameDtMs});
+
+    auto const& postState = world.getObject(cubeId).getInertialState();
+    Coordinate postVel = postState.velocity;
+    auto postOmega = postState.getAngularVelocity();
+
+    // Compute energy
+    Eigen::Vector3d omegaVec{postOmega.x(), postOmega.y(), postOmega.z()};
+    double keT = 0.5 * kMass * (postVel.x() * postVel.x() +
+      postVel.y() * postVel.y() + postVel.z() * postVel.z());
+    double keR = 0.5 * omegaVec.transpose() * inertiaTensor * omegaVec;
+    double pe = kMass * 9.81 * postState.position.z();
+    double E = keT + keR + pe;
+    double deltaE = std::isnan(prevE) ? 0.0 : E - prevE;
+    bool injection = deltaE > 1e-6;
+
+    if (collisionResult && (injection || i <= 30 || i % 20 == 0))
+    {
+      auto const& n = collisionResult->normal;
+
+      // Velocity impulse from collision+friction (subtract gravity contribution)
+      double dvx = postVel.x() - preVel.x();
+      double dvy = postVel.y() - preVel.y();
+      double dvz = postVel.z() - preVel.z() + 9.81 * kDt;  // remove gravity
+
+      // Project impulse and velocity onto tangent plane
+      // normal = n, tangent impulse = dv - (dv·n)*n
+      double dvDotN = dvx * n.x() + dvy * n.y() + dvz * n.z();
+      double dvTx = dvx - dvDotN * n.x();
+      double dvTy = dvy - dvDotN * n.y();
+      double dvTz = dvz - dvDotN * n.z();
+
+      // Pre-update tangent velocity
+      double vDotN = preVel.x() * n.x() + preVel.y() * n.y() +
+                     preVel.z() * n.z();
+      double vTx = preVel.x() - vDotN * n.x();
+      double vTy = preVel.y() - vDotN * n.y();
+      double vTz = preVel.z() - vDotN * n.z();
+
+      // Friction work proxy: Δv_tangent · v_tangent
+      // Positive means friction accelerated the body
+      double frictionWork = dvTx * vTx + dvTy * vTy + dvTz * vTz;
+      if (frictionWork > 0)
+        positiveWorkFrames++;
+
+      // Contact point velocity (v + ω × r)
+      Coordinate cp = collisionResult->contacts[0].pointA;
+      Coordinate com = postState.position;
+      Coordinate r = cp - com;
+      double vcpx = preVel.x() + preOmega.y() * r.z() - preOmega.z() * r.y();
+      double vcpy = preVel.y() + preOmega.z() * r.x() - preOmega.x() * r.z();
+
+      // Tangent basis from normal
+      TangentFrame tf = tangent_basis::computeTangentBasis(n);
+
+      std::cerr << "  f" << i
+                << (injection ? " INJECT" : "       ")
+                << " dE=" << deltaE
+                << " n=(" << n.x() << "," << n.y() << "," << n.z() << ")"
+                << " dvT=(" << dvTx << "," << dvTy << ")"
+                << " vT=(" << vTx << "," << vTy << ")"
+                << " Fw=" << frictionWork
+                << " vcp=(" << vcpx << "," << vcpy << ")"
+                << " t1=(" << tf.t1.x() << "," << tf.t1.y() << "," << tf.t1.z() << ")"
+                << "\n";
+    }
+
+    prevE = E;
+  }
+
+  std::cerr << "\n  positiveWorkFrames=" << positiveWorkFrames
+            << "/" << kFrames << "\n";
+}

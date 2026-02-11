@@ -161,3 +161,19 @@ EPA.cpp `extractContactManifold()` modified in iterations 1, 4, and 5 (3 times).
 - Key observation: at every injection frame, the cube has significant vy (spurious lateral velocity). Friction appears to be pushing the cube laterally rather than opposing its sliding direction.
 **Impact vs Previous**: Confirmed the user's hypothesis — friction is injecting energy by acting in the wrong direction. The bug only manifests with initial horizontal velocity (sliding + tilting).
 **Assessment**: Energy injection confirmed. The friction force vector does not oppose the contact-point sliding velocity. Next step: instrument the constraint solver to print the actual friction force direction vs contact point velocity direction at injection frames, to identify WHY friction acts in the wrong direction (tangent basis misalignment? stale contact normal? wrong lever arm?).
+
+### Iteration 10 — 2026-02-11 (session 5, friction work direction diagnostic)
+**Commit**: (pending)
+**Hypothesis**: If friction injects energy, then the friction work proxy Fw = Δv_tangent · v_tangent should be positive at injection frames. Decompose the velocity impulse (post minus pre minus gravity) into normal and tangential components and check friction work sign.
+**Changes**:
+- `msd/msd-sim/test/Physics/Collision/TiltedCubeTrajectoryTest.cpp`: Added `Diag_FrictionWorkDirection` diagnostic test measuring per-frame tangential impulse, contact-point velocity, and friction work proxy.
+**Build Result**: PASS
+**Test Result**: **SURPRISING FINDING**
+- Contact normal perfectly stable at (0,0,-1) every frame — no wobbling
+- Tangent basis consistently t1=(0,1,0), t2=(1,0,0) — stable
+- At MANY injection frames, dvT≈(0,0) — no tangential velocity impulse
+- Friction work proxy (Fw = dvT·vT) is mostly small or zero at injection frames
+- Only ~41/200 frames have positive friction work, but 238/500 frames have energy injection
+- dE can be 0.5-0.96 J even when Fw=0
+**Impact vs Previous**: Friction is NOT directly doing positive work at most injection frames. This rules out "friction pushes in wrong direction" as the primary mechanism.
+**Assessment**: The energy injection mechanism is more subtle than direct friction positive work. Key insight: `getInertiaTensor()` returns body-frame tensor, but for a cube it equals the world-frame tensor (I_body ∝ Identity), so the energy computation is correct. The injection likely comes from friction gradually altering the trajectory over many frames (building vy, wz through small per-frame impulses), which changes the normal-direction approach velocity at subsequent bounces, causing restitution to amplify KE. **Two hypotheses to test**: (A) Friction changes the normal impulse via A-matrix coupling even when λ_t≈0, or (B) Friction acts on early frames (changing trajectory), and injection manifests at later bounce frames. Evidence for (B): injection starts at frame 77 (after 0.77s of trajectory modification). Next: create diagnostic comparing normal impulse (Δv_n) between friction=0 and friction=0.5 at corresponding frames.
