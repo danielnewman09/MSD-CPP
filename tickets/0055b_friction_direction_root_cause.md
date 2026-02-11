@@ -13,6 +13,7 @@
 **Created**: 2026-02-10
 **Branch**: 0055b-friction-direction-root-cause
 **GitHub Issue**: #39
+**GitHub PR**: #40 (draft)
 **Parent Ticket**: [0055_tilted_cube_friction_direction](0055_tilted_cube_friction_direction.md)
 **Dependencies**: [0055a](0055a_tilted_cube_trajectory_test_suite.md)
 **Generate Tutorial**: No
@@ -139,6 +140,7 @@ The friction Jacobian rows are `[t^T, (r×t)^T, -t^T, -(r×t)^T]` where A is the
 - **Started**: 2026-02-10
 - **Branch**: 0055b-friction-direction-root-cause
 - **GitHub Issue**: #39
+- **GitHub PR**: #40 (draft)
 - **Artifacts**:
   - `docs/investigations/0055b_friction_direction_root_cause/investigation-log.md`
   - `docs/investigations/0055b_friction_direction_root_cause/diagnostic-normal-extraction.cpp` (reference implementation)
