@@ -502,7 +502,6 @@ void CollisionPipeline::snapshotFrameData(
   lastFrameData_.contacts.clear();
   lastFrameData_.contacts.reserve(collisions_.size() * 4);  // Up to 4 contacts per collision
 
-  uint32_t contactIdx = 0;
   for (const auto& collision : collisions_)
   {
     const auto& result = collision.result;
@@ -517,7 +516,7 @@ void CollisionPipeline::snapshotFrameData(
       contact.depth = result.penetrationDepth;
       contact.restitution = collision.restitution;
       contact.friction = collision.frictionCoefficient;
-      contact.contactIndex = contactIdx++;
+      contact.contactIndex = static_cast<uint32_t>(i);
       lastFrameData_.contacts.push_back(contact);
     }
   }
