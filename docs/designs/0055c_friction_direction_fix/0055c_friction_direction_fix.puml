@@ -1,0 +1,144 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+title Vertex-Face Contact Manifold Generation Architecture
+
+package "CollisionHandler" {
+    class CollisionHandler <<modified>> {
+        +checkCollision(): std::optional<CollisionResult>
+        -buildSATContact(): CollisionResult
+        -computeSATMinPenetration(): SATResult
+        +generateVertexFaceManifold(): CollisionResult {NEW}
+    }
+
+    note right of CollisionHandler::generateVertexFaceManifold
+        **NEW METHOD**
+        Creates multi-point manifold when:
+        - SAT fallback triggered (EPA failed)
+        - Contact geometry is vertex-face
+        Generates 3-4 contacts by projecting
+        reference face onto incident vertex region
+    end note
+}
+
+package "EPA" {
+    class EPA <<modified>> {
+        +computeContactInfo(): CollisionResult
+        -extractContactManifold(): size_t
+        -generateEdgeContacts(): size_t
+        -buildPolygonFromFacets(): vector<Coordinate>
+        -generateVertexFaceManifold(): size_t {NEW}
+    }
+
+    note right of EPA::generateVertexFaceManifold
+        **NEW METHOD**
+        Fallback for EPA path when:
+        refVerts.size() < 3 || incPoly.size() < 3
+        Identifies vertex-face geometry and
+        generates 3-4 contact points
+    end note
+}
+
+package "Data Structures" {
+    struct SATResult {
+        double depth
+        Vector3D normal
+    }
+
+    struct CollisionResult {
+        Coordinate normal
+        double penetrationDepth
+        array<ContactPoint, 4> contacts
+        size_t contactCount
+    }
+
+    struct ContactPoint {
+        Coordinate pointA
+        Coordinate pointB
+        double depth
+    }
+}
+
+package "Vertex-Face Detection" <<new>> {
+    class VertexFaceDetector <<new>> {
+        +detectContactType(): ContactType
+        +isVertexFaceContact(): bool
+        -analyzePolygonSizes(): ContactType
+    }
+
+    enum ContactType <<new>> {
+        FaceFace
+        EdgeEdge
+        VertexFace
+        VertexVertex
+        Unknown
+    }
+
+    note right of VertexFaceDetector
+        **NEW COMPONENT**
+        Analyzes polygon vertex counts and
+        face alignment to classify contact
+        geometry. Used by both EPA and
+        SAT fallback paths.
+    end note
+}
+
+package "Manifold Generation" <<new>> {
+    class VertexFaceManifoldGenerator <<new>> {
+        +generate(): array<ContactPoint, 4>
+        +generateCount(): size_t
+        -projectFaceAroundVertex(): vector<Coordinate>
+        -computeContactDepths(): void
+    }
+
+    note right of VertexFaceManifoldGenerator
+        **NEW COMPONENT**
+        Core manifold generation logic:
+        1. Identify reference face (larger poly)
+        2. Project face vertices onto contact plane
+        3. Compute per-point penetration depths
+        4. Return 3-4 contact points
+    end note
+}
+
+' Relationships
+CollisionHandler --> SATResult : computes
+CollisionHandler --> CollisionResult : returns
+CollisionHandler ..> VertexFaceDetector : uses
+CollisionHandler ..> VertexFaceManifoldGenerator : uses
+
+EPA --> CollisionResult : returns
+EPA ..> VertexFaceDetector : uses
+EPA ..> VertexFaceManifoldGenerator : uses
+
+CollisionResult *-- ContactPoint : contains 1-4
+
+VertexFaceDetector --> ContactType : returns
+VertexFaceManifoldGenerator --> ContactPoint : creates
+
+' Flow annotations
+note top of CollisionHandler
+    **Collision Pipeline Flow**
+    1. GJK detects intersection
+    2. EPA computes contact info
+    3. SAT validates EPA result
+    4. **IF vertex-face geometry**:
+       - VertexFaceDetector classifies
+       - VertexFaceManifoldGenerator creates manifold
+    5. Return CollisionResult with 3-4 contacts
+end note
+
+note bottom of EPA
+    **EPA Manifold Extraction Flow**
+    1. Build reference and incident polygons
+    2. **IF degenerate (< 3 verts)**:
+       - VertexFaceDetector checks geometry
+       - **IF vertex-face**: VertexFaceManifoldGenerator
+       - ELSE: Edge contact or single-point fallback
+    3. ELSE: Sutherland-Hodgman clipping (existing)
+end note
+
+@enduml
