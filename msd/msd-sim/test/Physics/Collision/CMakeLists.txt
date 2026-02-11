@@ -1,4 +1,5 @@
 # Physics module tests
+# Ticket: 0055c_friction_direction_fix (VertexFaceDetectorTest, VertexFaceManifoldGeneratorTest)
 
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ManifoldDiagnosticTest.cpp
@@ -13,6 +14,8 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/RotationalEnergyTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/RotationDampingTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TangentBasisTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/VertexFaceDetectorTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/VertexFaceManifoldGeneratorTest.cpp
 )
 
 

@@ -1,5 +1,6 @@
 // Ticket: 0027a_expanding_polytope_algorithm
 // Ticket: 0047_face_contact_manifold_generation
+// Ticket: 0055c_friction_direction_fix
 // Design: docs/designs/0027a_expanding_polytope_algorithm/design.md
 
 #include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
@@ -7,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_set>
 #include <vector>
 
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
@@ -165,6 +167,7 @@ CollisionResult CollisionHandler::buildSATContact(
   // points are computed via the support function along that normal.
   //
   // Ticket: 0047_face_contact_manifold_generation
+  // Ticket: 0055c_friction_direction_fix
 
   // The contact normal in EPA convention points from A toward B.
   // The SAT normal points in the direction of minimum overlap.
@@ -176,16 +179,124 @@ CollisionResult CollisionHandler::buildSATContact(
   Vector3D const contactDir{
     -sat.normal.x(), -sat.normal.y(), -sat.normal.z()};
 
+  double const depth = std::max(sat.depth, 0.0);
+  Coordinate const normal{contactDir.x(), contactDir.y(), contactDir.z()};
+
+  // Detect vertex-face geometry and generate multi-point manifold if applicable
+  // Ticket: 0055c_friction_direction_fix
+  //
+  // Extract face vertices from both assets to determine contact geometry.
+  // SAT normal points in minimum penetration direction, so:
+  // - Reference face vertices from asset B (face perpendicular to -sat.normal)
+  // - Incident vertices from asset A (along +sat.normal)
+  std::vector<Coordinate> refFaceVerts = extractFaceVertices(assetB, -sat.normal);
+  std::vector<Coordinate> incVerts = extractFaceVertices(assetA, sat.normal);
+
+  if (vertexFaceDetector_.isVertexFaceContact(refFaceVerts.size(),
+                                               incVerts.size()))
+  {
+    // Vertex-face contact: generate multi-point manifold
+    std::array<ContactPoint, 4> contacts{};
+
+    // Determine which side is the vertex and which is the face
+    if (incVerts.size() == 1)
+    {
+      // A is incident vertex, B is reference face
+      size_t count = vertexFaceManifoldGenerator_.generate(
+        refFaceVerts, incVerts[0], Vector3D{normal.x(), normal.y(), normal.z()},
+        depth, contacts);
+
+      if (count >= 3)
+      {
+        return CollisionResult{normal, depth, contacts, count};
+      }
+    }
+    else if (refFaceVerts.size() == 1)
+    {
+      // B is incident vertex, A is reference face (swap roles)
+      // Extract reference face from A (along +sat.normal)
+      std::vector<Coordinate> refFaceVertsA = extractFaceVertices(assetA, sat.normal);
+
+      size_t count = vertexFaceManifoldGenerator_.generate(
+        refFaceVertsA, refFaceVerts[0],
+        Vector3D{normal.x(), normal.y(), normal.z()}, depth, contacts);
+
+      if (count >= 3)
+      {
+        return CollisionResult{normal, depth, contacts, count};
+      }
+    }
+  }
+
+  // Fall back to single-point contact (existing behavior)
   SupportResult const witness =
     support_function::supportMinkowskiWithWitness(assetA, assetB, sat.normal);
 
-  double const depth = std::max(sat.depth, 0.0);
-
-  Coordinate const normal{contactDir.x(), contactDir.y(), contactDir.z()};
   std::array<ContactPoint, 4> contacts{};
   contacts[0] = ContactPoint{witness.witnessA, witness.witnessB, depth};
 
   return CollisionResult{normal, depth, contacts, 1};
+}
+
+std::vector<Coordinate> CollisionHandler::extractFaceVertices(
+  const AssetPhysical& asset,
+  const Vector3D& normal) const
+{
+  // Find the face most aligned with the given normal and return its vertices.
+  //
+  // Ticket: 0055c_friction_direction_fix
+  //
+  // Strategy:
+  // 1. Transform normal to asset's local space
+  // 2. Find facet with maximum alignment (normal · facetNormal)
+  // 3. Collect unique vertices from that facet
+  // 4. Transform vertices to world space
+
+  const auto& hull = asset.getCollisionHull();
+  const auto& frame = asset.getReferenceFrame();
+
+  // Transform normal from world space to local space (rotation only)
+  Vector3D localNormal = frame.globalToLocalRelative(normal);
+
+  // Find best-matching facet
+  double bestAlignment = -std::numeric_limits<double>::infinity();
+  const Facet* bestFacet = nullptr;
+
+  for (const auto& facet : hull.getFacets())
+  {
+    Vector3D facetNormal{facet.normal.x(), facet.normal.y(), facet.normal.z()};
+    double alignment = localNormal.dot(facetNormal);
+
+    if (alignment > bestAlignment)
+    {
+      bestAlignment = alignment;
+      bestFacet = &facet;
+    }
+  }
+
+  // If no face found (shouldn't happen), return empty
+  if (!bestFacet)
+  {
+    return {};
+  }
+
+  // Collect unique vertices from the facet
+  // ConvexHull stores vertices as a flat vector; facet.vertexIndices are indices
+  const auto& hullVertices = hull.getVertices();
+  std::unordered_set<size_t> uniqueIndices{bestFacet->vertexIndices.begin(),
+                                             bestFacet->vertexIndices.end()};
+
+  std::vector<Coordinate> faceVertices;
+  faceVertices.reserve(uniqueIndices.size());
+
+  for (size_t idx : uniqueIndices)
+  {
+    // Transform from local space to world space
+    Coordinate worldVert = frame.localToGlobalAbsolute(hullVertices[idx]);
+    faceVertices.push_back(worldVert);
+  }
+
+  return faceVertices;
 }
 
 }  // namespace msd_sim
