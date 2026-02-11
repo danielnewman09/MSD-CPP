@@ -2356,3 +2356,191 @@ TEST(TiltedCubeTrajectory, Diag_FrictionWorkDirection)
   std::cerr << "\n  positiveWorkFrames=" << positiveWorkFrames
             << "/" << kFrames << "\n";
 }
+
+// ============================================================================
+// Diagnostic: Compare friction=0 vs friction=0.5 trajectories side by side
+// ============================================================================
+//
+// Ticket: 0055c_friction_direction_fix
+//
+// Runs two identical simulations (same initial conditions, same dt) with
+// friction=0 and friction=0.5. At each frame, compares:
+//   - Normal velocity impulse (dv_z + g*dt) — tests A-matrix coupling
+//   - Total energy (KE_trans + KE_rot + PE) — tests energy conservation
+//   - Lateral velocity vy — tests spurious lateral acceleration
+//   - Angular velocity wz — tests yaw coupling
+//
+// This identifies whether energy injection comes from:
+//   (A) friction coupling changing the normal impulse, or
+//   (B) friction modifying trajectories that lead to larger restitution bounces
+
+namespace
+{
+struct SimState
+{
+  double keT{0}, keR{0}, pe{0}, E{0};
+  double vx{0}, vy{0}, vz{0};
+  double wx{0}, wy{0}, wz{0};
+  double z{0};
+  double dvN{0};  // normal velocity impulse (collision + friction, minus gravity)
+  bool collision{false};
+};
+
+SimState runOneFrame(WorldModel& world, uint32_t cubeId, double mass,
+                     const Eigen::Matrix3d& I, int frameIndex, int dtMs,
+                     CollisionHandler& handler)
+{
+  SimState s;
+  double dt = dtMs / 1000.0;
+
+  // Pre-update state
+  auto const& pre = world.getObject(cubeId).getInertialState();
+  double preVz = pre.velocity.z();
+
+  // Probe collision
+  const auto& cube = world.getObject(cubeId);
+  const auto& envObjects = world.getEnvironmentalObjects();
+  auto collResult = handler.checkCollision(cube, envObjects[0]);
+  s.collision = collResult.has_value();
+
+  world.update(std::chrono::milliseconds{frameIndex * dtMs});
+
+  auto const& post = world.getObject(cubeId).getInertialState();
+  s.vx = post.velocity.x();
+  s.vy = post.velocity.y();
+  s.vz = post.velocity.z();
+  s.z = post.position.z();
+
+  auto omega = post.getAngularVelocity();
+  s.wx = omega.x();
+  s.wy = omega.y();
+  s.wz = omega.z();
+
+  Eigen::Vector3d omegaVec{s.wx, s.wy, s.wz};
+  s.keT = 0.5 * mass * (s.vx * s.vx + s.vy * s.vy + s.vz * s.vz);
+  s.keR = 0.5 * omegaVec.transpose() * I * omegaVec;
+  s.pe = mass * 9.81 * s.z;
+  s.E = s.keT + s.keR + s.pe;
+
+  // Normal velocity impulse (subtract gravity contribution)
+  s.dvN = s.vz - preVz + 9.81 * dt;
+
+  return s;
+}
+
+void setupTiltedCubeWorld(WorldModel& world, double friction,
+                          ConvexHull& floorHull, ConvexHull& cubeHull,
+                          double mass, double tiltX, double tiltY,
+                          double initialVx, double restitution)
+{
+  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
+  const auto& floorAsset =
+    world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  const_cast<AssetEnvironment&>(floorAsset).setFrictionCoefficient(friction);
+
+  Eigen::Quaterniond tiltQuat =
+    Eigen::Quaterniond{Eigen::AngleAxisd{tiltY, Eigen::Vector3d::UnitY()}} *
+    Eigen::Quaterniond{Eigen::AngleAxisd{tiltX, Eigen::Vector3d::UnitX()}};
+
+  auto cubePoints = cubeHull.getVertices();
+  double minZ = std::numeric_limits<double>::max();
+  for (const auto& pt : cubePoints)
+  {
+    Eigen::Vector3d rotated =
+      tiltQuat * Eigen::Vector3d{pt.x(), pt.y(), pt.z()};
+    minZ = std::min(minZ, rotated.z());
+  }
+  double centerZ = 0.01 - minZ;
+
+  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, centerZ}, tiltQuat};
+  world.spawnObject(2, cubeHull, mass, cubeFrame);
+  uint32_t const cubeId = 1;
+  world.getObject(cubeId).setCoefficientOfRestitution(restitution);
+  world.getObject(cubeId).setFrictionCoefficient(friction);
+  world.getObject(cubeId).getInertialState().velocity =
+    Vector3D{initialVx, 0.0, 0.0};
+}
+}  // namespace
+
+TEST(TiltedCubeTrajectory, Diag_FrictionVsNoFriction_NormalImpulseComparison)
+{
+  constexpr int kFrameDtMs = 10;
+  constexpr int kFrames = 300;
+  constexpr double kMass = 10.0;
+  constexpr double kTiltX = 0.01;
+  constexpr double kTiltY = M_PI / 3.0;
+  constexpr double kInitialVx = 5.0;
+  constexpr double kRestitution = 0.5;
+
+  auto floorPoints = createCubePoints(100.0);
+  ConvexHull floorHull{floorPoints};
+  auto cubePoints = createCubePoints(1.0);
+  ConvexHull cubeHull{cubePoints};
+
+  // Create two identical worlds, one with friction=0, one with friction=0.5
+  WorldModel worldNoFric;
+  setupTiltedCubeWorld(worldNoFric, 0.0, floorHull, cubeHull, kMass,
+                       kTiltX, kTiltY, kInitialVx, kRestitution);
+  WorldModel worldFric;
+  setupTiltedCubeWorld(worldFric, 0.5, floorHull, cubeHull, kMass,
+                       kTiltX, kTiltY, kInitialVx, kRestitution);
+
+  const Eigen::Matrix3d& I =
+    worldNoFric.getObject(1).getInertiaTensor();
+
+  CollisionHandler handlerNF{1e-6};
+  CollisionHandler handlerF{1e-6};
+
+  std::cerr << "\n=== Friction vs No-Friction Trajectory Comparison ===\n";
+  std::cerr << "  (PI/3 pitch, 0.01 roll, 5 m/s Vx, e=0.5)\n";
+  std::cerr << "  Columns: frame, collision(NF/F), dvN(NF/F), E(NF/F), "
+               "vy(NF/F), wz(NF/F)\n\n";
+
+  double prevE_NF = std::numeric_limits<double>::quiet_NaN();
+  double prevE_F = std::numeric_limits<double>::quiet_NaN();
+  int divergenceFrame = -1;
+
+  for (int i = 1; i <= kFrames; ++i)
+  {
+    SimState nf = runOneFrame(worldNoFric, 1, kMass, I, i, kFrameDtMs,
+                              handlerNF);
+    SimState f = runOneFrame(worldFric, 1, kMass, I, i, kFrameDtMs,
+                             handlerF);
+
+    double dE_NF = std::isnan(prevE_NF) ? 0.0 : nf.E - prevE_NF;
+    double dE_F = std::isnan(prevE_F) ? 0.0 : f.E - prevE_F;
+    bool inject_NF = dE_NF > 1e-6;
+    bool inject_F = dE_F > 1e-6;
+
+    // Detect first significant trajectory divergence
+    if (divergenceFrame < 0 && std::abs(nf.vy - f.vy) > 0.01)
+      divergenceFrame = i;
+
+    // Print frames where either has collision, injection, or every 20th frame
+    bool printThis = (nf.collision || f.collision || inject_NF || inject_F ||
+                      i <= 20 || i % 20 == 0);
+
+    if (printThis)
+    {
+      std::cerr << "  f" << i
+                << (inject_F ? " INJECT" : "       ")
+                << " col=" << (nf.collision ? "C" : ".") << "/"
+                << (f.collision ? "C" : ".")
+                << " dvN=" << nf.dvN << "/" << f.dvN
+                << " dE=" << dE_NF << "/" << dE_F
+                << " E=" << nf.E << "/" << f.E
+                << " vy=" << nf.vy << "/" << f.vy
+                << " wz=" << nf.wz << "/" << f.wz
+                << "\n";
+    }
+
+    prevE_NF = nf.E;
+    prevE_F = f.E;
+  }
+
+  std::cerr << "\n  divergenceFrame=" << divergenceFrame << "\n";
+  std::cerr << "  finalE_NF=" << prevE_NF << " finalE_F=" << prevE_F << "\n";
+  std::cerr << "  finalVy_NF=" << worldNoFric.getObject(1).getInertialState().velocity.y()
+            << " finalVy_F=" << worldFric.getObject(1).getInertialState().velocity.y()
+            << "\n";
+}

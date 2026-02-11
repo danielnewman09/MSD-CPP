@@ -177,3 +177,20 @@ EPA.cpp `extractContactManifold()` modified in iterations 1, 4, and 5 (3 times).
 - dE can be 0.5-0.96 J even when Fw=0
 **Impact vs Previous**: Friction is NOT directly doing positive work at most injection frames. This rules out "friction pushes in wrong direction" as the primary mechanism.
 **Assessment**: The energy injection mechanism is more subtle than direct friction positive work. Key insight: `getInertiaTensor()` returns body-frame tensor, but for a cube it equals the world-frame tensor (I_body ∝ Identity), so the energy computation is correct. The injection likely comes from friction gradually altering the trajectory over many frames (building vy, wz through small per-frame impulses), which changes the normal-direction approach velocity at subsequent bounces, causing restitution to amplify KE. **Two hypotheses to test**: (A) Friction changes the normal impulse via A-matrix coupling even when λ_t≈0, or (B) Friction acts on early frames (changing trajectory), and injection manifests at later bounce frames. Evidence for (B): injection starts at frame 77 (after 0.77s of trajectory modification). Next: create diagnostic comparing normal impulse (Δv_n) between friction=0 and friction=0.5 at corresponding frames.
+
+### Iteration 11 — 2026-02-11 (session 5, friction vs no-friction side-by-side)
+**Commit**: (pending)
+**Hypothesis**: Run two identical simulations (friction=0 and friction=0.5) in parallel, comparing normal impulse (dvN), energy, lateral velocity (vy), and yaw (wz) at each frame. This identifies whether energy injection comes from (A) A-matrix coupling inflating the normal impulse, or (B) trajectory modification across frames.
+**Changes**:
+- `msd/msd-sim/test/Physics/Collision/TiltedCubeTrajectoryTest.cpp`: Added `Diag_FrictionVsNoFriction_NormalImpulseComparison` test with two parallel WorldModel instances.
+**Build Result**: PASS
+**Test Result**: **ROOT CAUSE IDENTIFIED — A-MATRIX COUPLING CONFIRMED**
+- Frame 6 (first collision): Normal impulse 3.75× larger with friction (dvN=0.686 vs 0.183). The coupled A matrix inflates λ_n when friction constraints are present.
+- Frame 6 immediately creates vy=+0.10 and wz=-1.09 — friction generates spurious lateral velocity and large angular velocity from the VERY FIRST collision.
+- Subsequent bounces (f26, f46, f76, f98) have progressively larger normal impulses in the friction world.
+- No-friction world: vy=0 always, dE≈0 in resting contact. Perfect energy conservation.
+- Friction world: E drops from 193→82 (overall dissipative, friction IS removing energy), but certain frames have dE>0 (e.g., f77: +0.10, f99-105: +0.02 to +0.28).
+- Energy injection pattern: occurs right AFTER big bounces (e.g., f77 right after f76's bounce), when the body has large angular velocity but the normal impulse is near zero. The rotational energy created by friction-inflated normal impulses at bounce frames appears as energy injection at subsequent free-flight/light-contact frames.
+- Final state: E_NF=173.1, E_F=82.0. Friction world has LESS total energy (friction IS dissipating), but the path includes energy injection frames that cause trajectory instability.
+**Impact vs Previous**: Confirms hypothesis (A): A-matrix coupling inflates normal impulse when friction is present. The coupling is 3.75× at first contact. This is the root cause of both the energy injection and the spurious lateral velocity.
+**Assessment**: The root cause is the COUPLED friction cone QP (ECOS SOCP solver). The normal+friction system is solved simultaneously, allowing friction needs to inflate the normal impulse via off-diagonal A-matrix coupling. Fix approach: **decouple normal and friction solving** — solve normal constraints first (Active Set Method), then solve friction with the post-normal velocity. This is the standard "sequential impulse" approach used in Box2D and Bullet. Alternative: post-solve energy capping (scale friction lambda if ΔE > 0).
