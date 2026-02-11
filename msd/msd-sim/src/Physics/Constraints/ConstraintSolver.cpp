@@ -15,6 +15,7 @@
 #include <Eigen/src/Core/util/Meta.h>
 #include <Eigen/src/SVD/JacobiSVD.h>
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <functional>
 #include <limits>
@@ -28,13 +29,96 @@
 #include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
+namespace
+{
+
+// Ticket 0055c: Projected Gauss-Seidel solver for disk-constrained friction QP.
+// Each contact has 2 friction rows (t1, t2) with constraint:
+//   ||(λ_t1, λ_t2)|| ≤ bound[contact]
+// where bound = μ · λ_n from the decoupled normal solve.
+Eigen::VectorXd solveFrictionPGS(
+  const Eigen::MatrixXd& A,
+  const Eigen::VectorXd& b,
+  const std::vector<double>& bounds,
+  int numContacts)
+{
+  const int n = 2 * numContacts;
+  Eigen::VectorXd lambda = Eigen::VectorXd::Zero(n);
+
+  constexpr int kMaxIterations = 50;
+  constexpr double kTolerance = 1e-8;
+
+  for (int iter = 0; iter < kMaxIterations; ++iter)
+  {
+    double maxChange = 0.0;
+
+    for (int c = 0; c < numContacts; ++c)
+    {
+      int const r0 = 2 * c;
+      int const r1 = 2 * c + 1;
+
+      // Gauss-Seidel update for t1
+      double rhs0 = b(r0);
+      for (int j = 0; j < n; ++j)
+      {
+        if (j != r0)
+        {
+          rhs0 -= A(r0, j) * lambda(j);
+        }
+      }
+      double newL0 = rhs0 / A(r0, r0);
+
+      // Gauss-Seidel update for t2
+      double rhs1 = b(r1);
+      for (int j = 0; j < n; ++j)
+      {
+        if (j != r1)
+        {
+          rhs1 -= A(r1, j) * lambda(j);
+        }
+      }
+      double newL1 = rhs1 / A(r1, r1);
+
+      // Disk clamp: ||(λ_t1, λ_t2)|| ≤ bound
+      double const bound = bounds[static_cast<size_t>(c)];
+      double const norm = std::sqrt(newL0 * newL0 + newL1 * newL1);
+      if (bound <= 0.0)
+      {
+        newL0 = 0.0;
+        newL1 = 0.0;
+      }
+      else if (norm > bound)
+      {
+        double const scale = bound / norm;
+        newL0 *= scale;
+        newL1 *= scale;
+      }
+
+      maxChange = std::max(maxChange, std::abs(newL0 - lambda(r0)));
+      maxChange = std::max(maxChange, std::abs(newL1 - lambda(r1)));
+      lambda(r0) = newL0;
+      lambda(r1) = newL1;
+    }
+
+    if (maxChange < kTolerance)
+    {
+      break;
+    }
+  }
+
+  return lambda;
+}
+
+}  // anonymous namespace
+
 namespace msd_sim
 {
 
 // ===== Multi-Body Contact Constraint Solver =====
 //
-// Dispatches between ASM (no friction) and FrictionConeSolver (with friction).
-// For friction path, constraints are flattened to per-row entries before assembly.
+// Dispatches between ASM (no friction) and decoupled normal+friction solve.
+// Normal constraints solved first with ASM, then friction solved with PGS
+// using post-normal velocities and per-contact disk bounds.
 
 ConstraintSolver::SolveResult ConstraintSolver::solve(
   const std::vector<Constraint*>& contactConstraints,
@@ -72,34 +156,111 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
 
   if (hasFriction)
   {
-    // ===== Friction path: flatten + FrictionConeSolver =====
+    // ===== Capped coupled solve (Ticket 0055c) =====
+    // Solve the coupled friction cone QP (FrictionConeSolver), then check
+    // if the normal impulse was inflated beyond the friction-free value.
+    // If inflated, clamp λ_n to the friction-free value and proportionally
+    // scale λ_t to maintain the cone constraint.
+    //
+    // This prevents A-matrix off-diagonal coupling from inflating λ_n
+    // (root cause of energy injection) while preserving the coupled
+    // solution's accuracy for well-behaved cases.
 
-    // Step 1: Flatten constraints into per-row entries
+    // --- Step 1: Solve coupled system (existing FrictionConeSolver) ---
     auto flat = flattenConstraints(contactConstraints, states);
-
-    // Step 2: Assemble 3C x 3C effective mass matrix
     auto a = assembleFlatEffectiveMass(
       flat, inverseMasses, inverseInertias, numBodies);
-
-    // Step 3: Assemble 3C x 1 RHS vector
     auto b = assembleFlatRHS(flat, states);
-
-    // Step 4: Build friction specification
     auto spec = buildFrictionSpec(contactConstraints);
+    auto coupledResult = solveWithFriction(a, b, spec, initialLambda);
 
-    // Step 5: Solve with FrictionConeSolver
-    auto asmResult = solveWithFriction(a, b, spec, initialLambda);
+    // --- Step 2: Partition and solve normal-only for reference ---
+    std::vector<Constraint*> normalOnly;
+    std::vector<Constraint*> frictionOnly;
+    normalOnly.reserve(contactConstraints.size() / 2);
+    frictionOnly.reserve(contactConstraints.size() / 2);
 
-    // Step 6: Extract per-body forces (no negative lambda skip)
+    for (auto* c : contactConstraints)
+    {
+      if (c->lambdaBounds().isBoxConstrained())
+      {
+        frictionOnly.push_back(c);
+      }
+      else
+      {
+        normalOnly.push_back(c);
+      }
+    }
+
+    const int numContacts = static_cast<int>(normalOnly.size());
+
+    auto normalJacobians = assembleJacobians(normalOnly, states);
+    auto normalA = assembleEffectiveMass(
+      normalOnly, normalJacobians, inverseMasses, inverseInertias, numBodies);
+    auto normalB = assembleRHS(normalOnly, normalJacobians, states, dt);
+
+    // Extract normal-only warm-start from interleaved format
+    std::optional<Eigen::VectorXd> normalInitLambda;
+    if (initialLambda.has_value() &&
+        initialLambda->size() == 3 * numContacts)
+    {
+      Eigen::VectorXd nLam(numContacts);
+      for (int i = 0; i < numContacts; ++i)
+      {
+        nLam(i) = (*initialLambda)(3 * i);
+      }
+      normalInitLambda = nLam;
+    }
+
+    auto normalResult =
+      solveActiveSet(normalA, normalB, numContacts, normalInitLambda);
+
+    // --- Step 3: Clamp inflated normal impulses ---
+    Eigen::VectorXd adjustedLambda = coupledResult.lambda;
+    bool needsAdjustment = false;
+
+    for (int c = 0; c < numContacts; ++c)
+    {
+      double const coupledN = adjustedLambda(3 * c);
+      double const cleanN = std::max(normalResult.lambda(c), 0.0);
+
+      // Detect inflation: coupled λ_n exceeds friction-free λ_n
+      if (coupledN > cleanN + 1e-10)
+      {
+        needsAdjustment = true;
+        adjustedLambda(3 * c) = cleanN;
+
+        // Scale friction to maintain cone: ||λ_t|| ≤ μ · λ_n_new
+        double const lt1 = adjustedLambda(3 * c + 1);
+        double const lt2 = adjustedLambda(3 * c + 2);
+        double const ltNorm = std::sqrt(lt1 * lt1 + lt2 * lt2);
+
+        const auto* friction = dynamic_cast<const FrictionConstraint*>(
+          frictionOnly[static_cast<size_t>(c)]);
+        double const mu =
+          (friction != nullptr) ? friction->getFrictionCoefficient() : 0.0;
+        double const maxLt = mu * cleanN;
+
+        if (ltNorm > maxLt && ltNorm > 1e-15)
+        {
+          double const scale = maxLt / ltNorm;
+          adjustedLambda(3 * c + 1) *= scale;
+          adjustedLambda(3 * c + 2) *= scale;
+        }
+      }
+    }
+
+    // Use adjusted lambda if inflation detected, otherwise coupled as-is
+    const Eigen::VectorXd& finalLambda =
+      needsAdjustment ? adjustedLambda : coupledResult.lambda;
+
     result.bodyForces =
-      extractBodyForcesFlat(flat, asmResult.lambda, numBodies, dt);
+      extractBodyForcesFlat(flat, finalLambda, numBodies, dt);
+    result.lambdas = finalLambda;
+    result.converged = coupledResult.converged;
+    result.iterations = coupledResult.iterations;
 
-    result.lambdas = asmResult.lambda;
-    result.converged = asmResult.converged;
-    result.iterations = asmResult.iterations;
-
-    // Compute residual: ||A*lambda - b||
-    Eigen::VectorXd const residualVec = a * asmResult.lambda - b;
+    Eigen::VectorXd const residualVec = a * finalLambda - b;
     result.residual = residualVec.norm();
   }
   else

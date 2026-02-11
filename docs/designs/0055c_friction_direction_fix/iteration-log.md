@@ -194,3 +194,31 @@ EPA.cpp `extractContactManifold()` modified in iterations 1, 4, and 5 (3 times).
 - Final state: E_NF=173.1, E_F=82.0. Friction world has LESS total energy (friction IS dissipating), but the path includes energy injection frames that cause trajectory instability.
 **Impact vs Previous**: Confirms hypothesis (A): A-matrix coupling inflates normal impulse when friction is present. The coupling is 3.75× at first contact. This is the root cause of both the energy injection and the spurious lateral velocity.
 **Assessment**: The root cause is the COUPLED friction cone QP (ECOS SOCP solver). The normal+friction system is solved simultaneously, allowing friction needs to inflate the normal impulse via off-diagonal A-matrix coupling. Fix approach: **decouple normal and friction solving** — solve normal constraints first (Active Set Method), then solve friction with the post-normal velocity. This is the standard "sequential impulse" approach used in Box2D and Bullet. Alternative: post-solve energy capping (scale friction lambda if ΔE > 0).
+
+### Iteration 12 — 2026-02-11 (session 6, capped coupled solve)
+**Commit**: (pending)
+**Hypothesis**: Two approaches attempted in sequence:
+
+**12a — Decoupled solve (abandoned mid-session)**: Solve normal-only with ASM, then friction with PGS disk clamping using post-normal velocities. Result: 694/699 (A4 regressed: 24% energy loss from over-dissipation; D4 regressed: resting stability degraded). The single-pass normal-then-friction approach over-damps elastic collisions.
+
+**12b — Capped coupled solve (current)**: Keep the coupled FrictionConeSolver for accuracy, then post-hoc clamp any inflated normal impulse. Algorithm: (1) Solve coupled QP with FrictionConeSolver, (2) Solve normal-only with ASM for reference, (3) If coupled λ_n > clean λ_n, clamp and proportionally scale friction to maintain cone constraint.
+
+**Changes**:
+- `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp`:
+  - Added `solveFrictionPGS()` free function in anonymous namespace (PGS with disk clamping, from 12a attempt — currently unused)
+  - Replaced `hasFriction` branch with capped coupled solve: coupled QP → normal-only reference → clamp inflated normals
+  - Added `#include <cmath>` for `std::sqrt`
+**Build Result**: PASS (1 warning: unused `solveFrictionPGS`)
+**Test Result**: 690/699 — 9 failures:
+- Pre-existing (3): H3_TimestepSensitivity, B2_CubeEdgeImpact, B5_LShapeDrop
+- Regressions (6): A3_PerfectlyElastic (max height 0.5 vs 1.0), A4_EqualMassElastic (24% energy loss), F2_ElasticBounce (ratio 0.26 vs 0.35), F3_InelasticBounce (ratio 0.031 vs 0.125), D4_MicroJitter (vel 0.158 vs 0.087), Compound_NoSpuriousYaw (yaw 0.315 vs 0.05)
+**Impact vs Previous**: -4 regressions vs baseline (689/696). The clamping is too aggressive — it removes LEGITIMATE normal inflation needed for elastic bounces. The coupled solver correctly inflates λ_n to compensate for friction drag in elastic collisions; clamping destroys this.
+**Assessment**: **VISUALLY MUCH IMPROVED** — user reports the simulation behavior looks significantly more realistic despite test regressions. The capped coupled solve is on the right path but needs refinement. Key insight: clamping ANY inflation > 1e-10 is wrong because some inflation is legitimate (elastic bounces with friction need higher normal impulse). The Compound_NoSpuriousYaw failure persists because the issue is friction DIRECTION, not normal magnitude — the yaw comes from friction torque at off-center contact points, which clamping normal force doesn't address.
+
+**Next directions to explore**:
+1. Threshold-based clamping: only clamp when inflation exceeds a multiplicative threshold (e.g., 2× or 3×) to allow legitimate inflation while catching extreme 3.75× cases
+2. Energy-based clamping: instead of clamping λ_n, check if the total impulse would inject energy (ΔKE > 0) and scale friction if so
+3. Fix the friction direction itself rather than the normal magnitude
+4. Hybrid: use coupled solve for well-conditioned contacts, fall back to decoupled for degenerate (near-zero penetration) contacts
+
+**BOOKMARKED STATE**: User confirms this is a significant visual improvement and wants this point preserved for reference.
