@@ -16,6 +16,8 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
+#include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
+#include "msd-sim/src/Physics/Collision/TangentBasis.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
@@ -1180,5 +1182,881 @@ TEST(TiltedCubeTrajectory, Sliding_CompoundDrop_SettledPhaseRotation)
               (s.vx * s.omegaY < 0.0 ? " REV-ROT" : "") + "\n";
     }
     SCOPED_TRACE(diag);
+  }
+}
+
+// ============================================================================
+// Phase 2a Diagnostic: EPA Contact Normal Instrumentation
+//
+// Ticket: 0055b_friction_direction_root_cause
+//
+// This test instruments the collision pipeline to capture EPA contact normals
+// and tangent basis vectors frame-by-frame during the failing scenario
+// (compound tilt with initial velocity). By comparing the pure pitch baseline
+// (which works correctly) against the compound tilt (which fails), we can
+// isolate whether the EPA normal deviates from (0,0,1) and whether the
+// tangent basis rotates out of the floor plane.
+// ============================================================================
+
+namespace
+{
+
+/// Per-frame collision diagnostic data
+struct CollisionDiagnostic
+{
+  int frame;
+  bool hasCollision;
+
+  // EPA contact normal (world space)
+  double normalX{0.0};
+  double normalY{0.0};
+  double normalZ{0.0};
+
+  // Lateral magnitude of normal (should be ~0 for floor contact)
+  double normalLateral{0.0};
+
+  // Tangent basis vectors
+  double t1x{0.0};
+  double t1y{0.0};
+  double t1z{0.0};
+  double t2x{0.0};
+  double t2y{0.0};
+  double t2z{0.0};
+
+  // Tangent Z-components (should be ~0 for floor-aligned tangents)
+  double t1zAbs{0.0};
+  double t2zAbs{0.0};
+
+  // Contact point info
+  double penetrationDepth{0.0};
+  size_t contactCount{0};
+
+  // First contact point (world space)
+  double cpAx{0.0};
+  double cpAy{0.0};
+  double cpAz{0.0};
+};
+
+/// Run an instrumented sliding simulation that captures EPA normals each frame.
+/// Returns a vector of per-frame collision diagnostics.
+std::vector<CollisionDiagnostic> runInstrumentedSimulation(
+  double tiltX,
+  double tiltY,
+  double initialVx,
+  double frictionCoeff = 0.5,
+  double restitution = 0.5,
+  int frames = 200,
+  int frameDtMs = 10)
+{
+  WorldModel world;
+
+  // Floor
+  auto floorPoints = createCubePoints(100.0);
+  ConvexHull floorHull{floorPoints};
+  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
+  const auto& floorAsset =
+    world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  const_cast<AssetEnvironment&>(floorAsset).setFrictionCoefficient(
+    frictionCoeff);
+
+  // Tilted cube
+  auto cubePoints = createCubePoints(1.0);
+  ConvexHull cubeHull{cubePoints};
+
+  Eigen::Quaterniond tiltQuat =
+    Eigen::Quaterniond{Eigen::AngleAxisd{tiltY, Eigen::Vector3d::UnitY()}} *
+    Eigen::Quaterniond{Eigen::AngleAxisd{tiltX, Eigen::Vector3d::UnitX()}};
+
+  double minZ = std::numeric_limits<double>::max();
+  for (const auto& point : cubePoints)
+  {
+    Eigen::Vector3d rotated =
+      tiltQuat * Eigen::Vector3d{point.x(), point.y(), point.z()};
+    minZ = std::min(minZ, rotated.z());
+  }
+  double centerHeightZ = 0.01 - minZ;
+
+  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, centerHeightZ}, tiltQuat};
+  world.spawnObject(2, cubeHull, 10.0, cubeFrame);
+
+  uint32_t const cubeInstanceId = 1;
+  world.getObject(cubeInstanceId).setCoefficientOfRestitution(restitution);
+  world.getObject(cubeInstanceId).setFrictionCoefficient(frictionCoeff);
+
+  // Set initial velocity
+  world.getObject(cubeInstanceId).getInertialState().velocity =
+    Vector3D{initialVx, 0.0, 0.0};
+
+  // Collision handler for manual probing
+  CollisionHandler collisionHandler{1e-6};
+
+  std::vector<CollisionDiagnostic> diagnostics;
+
+  for (int i = 1; i <= frames; ++i)
+  {
+    world.update(std::chrono::milliseconds{i * frameDtMs});
+
+    // Probe collision between cube and floor AFTER physics update
+    // to see what the collision system would compute for this frame's state
+    const auto& cube = world.getObject(cubeInstanceId);
+    const auto& envObjects = world.getEnvironmentalObjects();
+    if (envObjects.empty())
+      continue;
+    const auto& floor = envObjects[0];
+
+    auto result = collisionHandler.checkCollision(cube, floor);
+
+    CollisionDiagnostic diag;
+    diag.frame = i;
+    diag.hasCollision = result.has_value();
+
+    if (result)
+    {
+      const auto& n = result->normal;
+      diag.normalX = n.x();
+      diag.normalY = n.y();
+      diag.normalZ = n.z();
+      diag.normalLateral = std::sqrt(n.x() * n.x() + n.y() * n.y());
+      diag.penetrationDepth = result->penetrationDepth;
+      diag.contactCount = result->contactCount;
+
+      if (result->contactCount > 0)
+      {
+        diag.cpAx = result->contacts[0].pointA.x();
+        diag.cpAy = result->contacts[0].pointA.y();
+        diag.cpAz = result->contacts[0].pointA.z();
+      }
+
+      // Compute tangent basis from this normal
+      try
+      {
+        auto tangentFrame = tangent_basis::computeTangentBasis(n);
+        diag.t1x = tangentFrame.t1.x();
+        diag.t1y = tangentFrame.t1.y();
+        diag.t1z = tangentFrame.t1.z();
+        diag.t2x = tangentFrame.t2.x();
+        diag.t2y = tangentFrame.t2.y();
+        diag.t2z = tangentFrame.t2.z();
+        diag.t1zAbs = std::abs(tangentFrame.t1.z());
+        diag.t2zAbs = std::abs(tangentFrame.t2.z());
+      }
+      catch (...)
+      {
+        // Normal not unit length — diagnostic will show zero tangents
+      }
+    }
+
+    diagnostics.push_back(diag);
+  }
+
+  return diagnostics;
+}
+
+}  // namespace
+
+TEST(TiltedCubeTrajectory, Diag_EPANormal_PurePitch_vs_Compound)
+{
+  // Ticket: 0055b_friction_direction_root_cause
+  //
+  // Phase 2a: EPA Contact Normal Accuracy
+  //
+  // Run instrumented simulations for:
+  //   A) Pure pitch (0, PI/3) — known GOOD baseline
+  //   B) Compound tilt (0.01, PI/3) — known FAILING case
+  //
+  // For each, capture EPA contact normals at every frame and check:
+  //   1. Normal is close to (0, 0, 1) — floor contact normal
+  //   2. Lateral normal component is small
+  //   3. Tangent vectors lie in the XY plane (small Z component)
+  //
+  // If the normal differs significantly between A and B, the root cause
+  // is in the EPA/SAT collision detection. If normals are identical but
+  // behavior differs, the root cause is downstream (constraint solver,
+  // force application, etc.)
+
+  auto diagPure = runInstrumentedSimulation(
+    0.0, M_PI / 3.0, 5.0, 0.5, 0.5, 200, 10);
+  auto diagCompound = runInstrumentedSimulation(
+    0.01, M_PI / 3.0, 5.0, 0.5, 0.5, 200, 10);
+
+  // Collect contact frames for analysis
+  int pureContactFrames = 0;
+  int compoundContactFrames = 0;
+  double pureMaxLateral = 0.0;
+  double compoundMaxLateral = 0.0;
+  double pureMaxT1z = 0.0;
+  double compoundMaxT1z = 0.0;
+  double pureMaxT2z = 0.0;
+  double compoundMaxT2z = 0.0;
+
+  // Track worst normals
+  CollisionDiagnostic pureWorstNormal{};
+  CollisionDiagnostic compoundWorstNormal{};
+
+  for (const auto& d : diagPure)
+  {
+    if (!d.hasCollision)
+      continue;
+    pureContactFrames++;
+    if (d.normalLateral > pureMaxLateral)
+    {
+      pureMaxLateral = d.normalLateral;
+      pureWorstNormal = d;
+    }
+    pureMaxT1z = std::max(pureMaxT1z, d.t1zAbs);
+    pureMaxT2z = std::max(pureMaxT2z, d.t2zAbs);
+  }
+
+  for (const auto& d : diagCompound)
+  {
+    if (!d.hasCollision)
+      continue;
+    compoundContactFrames++;
+    if (d.normalLateral > compoundMaxLateral)
+    {
+      compoundMaxLateral = d.normalLateral;
+      compoundWorstNormal = d;
+    }
+    compoundMaxT1z = std::max(compoundMaxT1z, d.t1zAbs);
+    compoundMaxT2z = std::max(compoundMaxT2z, d.t2zAbs);
+  }
+
+  // Print diagnostic summary (always printed, not just on failure)
+  std::cerr << "\n=== EPA Normal Diagnostic Summary ===\n";
+  std::cerr << "Pure pitch (0, PI/3): "
+            << pureContactFrames << " contact frames\n";
+  std::cerr << "  Max lateral normal: " << pureMaxLateral << "\n";
+  std::cerr << "  Max |t1.z|: " << pureMaxT1z << "\n";
+  std::cerr << "  Max |t2.z|: " << pureMaxT2z << "\n";
+  std::cerr << "  Worst normal: ("
+            << pureWorstNormal.normalX << ", "
+            << pureWorstNormal.normalY << ", "
+            << pureWorstNormal.normalZ << ") at frame "
+            << pureWorstNormal.frame << "\n";
+  std::cerr << "Compound (0.01, PI/3): "
+            << compoundContactFrames << " contact frames\n";
+  std::cerr << "  Max lateral normal: " << compoundMaxLateral << "\n";
+  std::cerr << "  Max |t1.z|: " << compoundMaxT1z << "\n";
+  std::cerr << "  Max |t2.z|: " << compoundMaxT2z << "\n";
+  std::cerr << "  Worst normal: ("
+            << compoundWorstNormal.normalX << ", "
+            << compoundWorstNormal.normalY << ", "
+            << compoundWorstNormal.normalZ << ") at frame "
+            << compoundWorstNormal.frame << "\n";
+
+  // Print first 20 contact frames from each for detailed comparison
+  std::cerr << "Pure pitch contact frames (first 20):\n";
+  int count = 0;
+  for (const auto& d : diagPure)
+  {
+    if (!d.hasCollision)
+      continue;
+    if (count++ >= 20)
+      break;
+    std::cerr << "  f" << d.frame
+              << " n=(" << d.normalX << "," << d.normalY << "," << d.normalZ
+              << ") lat=" << d.normalLateral
+              << " depth=" << d.penetrationDepth
+              << " pts=" << d.contactCount
+              << " cpA=(" << d.cpAx << "," << d.cpAy << "," << d.cpAz
+              << ")\n";
+  }
+
+  std::cerr << "Compound contact frames (first 20):\n";
+  count = 0;
+  for (const auto& d : diagCompound)
+  {
+    if (!d.hasCollision)
+      continue;
+    if (count++ >= 20)
+      break;
+    std::cerr << "  f" << d.frame
+              << " n=(" << d.normalX << "," << d.normalY << "," << d.normalZ
+              << ") lat=" << d.normalLateral
+              << " depth=" << d.penetrationDepth
+              << " pts=" << d.contactCount
+              << " t1=(" << d.t1x << "," << d.t1y << "," << d.t1z
+              << ") t2=(" << d.t2x << "," << d.t2y << "," << d.t2z
+              << ") cpA=(" << d.cpAx << "," << d.cpAy << "," << d.cpAz
+              << ")\n";
+  }
+
+  // ---- Assertions ----
+
+  // Both scenarios must have contacts
+  ASSERT_GT(pureContactFrames, 0)
+    << "Pure pitch had no collisions in 200 frames";
+  ASSERT_GT(compoundContactFrames, 0)
+    << "Compound had no collisions in 200 frames";
+
+  // For a cube on a flat floor, the contact normal should be approximately
+  // (0, 0, 1). Any lateral component means the EPA picked a wrong face.
+  // Tolerance: 0.1 allows normals up to ~5.7° from vertical.
+  EXPECT_LT(pureMaxLateral, 0.1)
+    << "DIAGNOSTIC: Pure pitch EPA normal has large lateral component. "
+    << "Max lateral=" << pureMaxLateral
+    << " at frame " << pureWorstNormal.frame
+    << " normal=(" << pureWorstNormal.normalX
+    << ", " << pureWorstNormal.normalY
+    << ", " << pureWorstNormal.normalZ << ")";
+
+  EXPECT_LT(compoundMaxLateral, 0.1)
+    << "DIAGNOSTIC: Compound EPA normal has large lateral component. "
+    << "Max lateral=" << compoundMaxLateral
+    << " at frame " << compoundWorstNormal.frame
+    << " normal=(" << compoundWorstNormal.normalX
+    << ", " << compoundWorstNormal.normalY
+    << ", " << compoundWorstNormal.normalZ << ")";
+
+  // Tangent basis Z components should be small for floor-aligned tangents.
+  // If the normal is (0,0,1), tangents should have z=0.
+  EXPECT_LT(pureMaxT1z, 0.1)
+    << "DIAGNOSTIC: Pure pitch t1 has large Z component="
+    << pureMaxT1z;
+  EXPECT_LT(compoundMaxT1z, 0.1)
+    << "DIAGNOSTIC: Compound t1 has large Z component="
+    << compoundMaxT1z;
+  EXPECT_LT(pureMaxT2z, 0.1)
+    << "DIAGNOSTIC: Pure pitch t2 has large Z component="
+    << pureMaxT2z;
+  EXPECT_LT(compoundMaxT2z, 0.1)
+    << "DIAGNOSTIC: Compound t2 has large Z component="
+    << compoundMaxT2z;
+
+  // Key comparison: if compound lateral is much larger than pure pitch,
+  // the EPA is producing different normals for the tilted case.
+  if (pureMaxLateral > 1e-6)
+  {
+    double lateralRatio = compoundMaxLateral / pureMaxLateral;
+    EXPECT_LT(lateralRatio, 3.0)
+      << "DIAGNOSTIC: Compound normal lateral is " << lateralRatio
+      << "x worse than pure pitch. EPA behaves differently for compound tilt.";
+  }
+}
+
+TEST(TiltedCubeTrajectory, Diag_ContactCount_And_LeverArm)
+{
+  // Ticket: 0055b_friction_direction_root_cause
+  //
+  // Phase 2b: Contact Count and Lever Arm Analysis
+  //
+  // H1 (EPA normal perturbation) is RULED OUT — normals are perfect.
+  // New hypothesis (H2): Single-contact-point corner contact creates
+  // asymmetric yaw torque via off-center lever arm, which amplifies
+  // the tiny 0.01 rad perturbation into large spurious motion.
+  //
+  // This test compares:
+  //   A) Pure pitch (0, PI/3) — 2 contact points (edge)
+  //   B) Compound (0.01, PI/3) — 1 contact point (corner)
+  //
+  // For each, track contact count, contact Y-offset from CoM, yaw rate,
+  // and lateral velocity to see if single-point contact creates yaw coupling.
+
+  // Run longer (500 frames = 5 seconds) to see full development
+  auto diagPure = runInstrumentedSimulation(
+    0.0, M_PI / 3.0, 5.0, 0.5, 0.5, 500, 10);
+  auto diagCompound = runInstrumentedSimulation(
+    0.01, M_PI / 3.0, 5.0, 0.5, 0.5, 500, 10);
+
+  // Count contact point distribution
+  int pure1pt = 0;
+  int pure2pt = 0;
+  int pure3pt = 0;
+  int pure4pt = 0;
+  int compound1pt = 0;
+  int compound2pt = 0;
+  int compound3pt = 0;
+  int compound4pt = 0;
+
+  for (const auto& d : diagPure)
+  {
+    if (!d.hasCollision)
+      continue;
+    if (d.contactCount == 1)
+      pure1pt++;
+    else if (d.contactCount == 2)
+      pure2pt++;
+    else if (d.contactCount == 3)
+      pure3pt++;
+    else if (d.contactCount == 4)
+      pure4pt++;
+  }
+
+  for (const auto& d : diagCompound)
+  {
+    if (!d.hasCollision)
+      continue;
+    if (d.contactCount == 1)
+      compound1pt++;
+    else if (d.contactCount == 2)
+      compound2pt++;
+    else if (d.contactCount == 3)
+      compound3pt++;
+    else if (d.contactCount == 4)
+      compound4pt++;
+  }
+
+  std::cerr << "\n=== Contact Count Distribution ===\n";
+  std::cerr << "Pure pitch:  1pt=" << pure1pt << " 2pt=" << pure2pt
+            << " 3pt=" << pure3pt << " 4pt=" << pure4pt << "\n";
+  std::cerr << "Compound:    1pt=" << compound1pt << " 2pt=" << compound2pt
+            << " 3pt=" << compound3pt << " 4pt=" << compound4pt << "\n";
+
+  // Print contact point Y-coordinates for compound (shows lever arm)
+  std::cerr << "\nCompound contact point Y-coordinates (first 30 contacts):\n";
+  int count = 0;
+  for (const auto& d : diagCompound)
+  {
+    if (!d.hasCollision)
+      continue;
+    if (count++ >= 30)
+      break;
+    std::cerr << "  f" << d.frame
+              << " pts=" << d.contactCount
+              << " cpA_Y=" << d.cpAy
+              << " depth=" << d.penetrationDepth << "\n";
+  }
+
+  // KEY ASSERTION: If compound has significantly more 1-point contacts
+  // than pure pitch, this supports the lever arm hypothesis.
+  int pureTotal = pure1pt + pure2pt + pure3pt + pure4pt;
+  int compoundTotal = compound1pt + compound2pt + compound3pt + compound4pt;
+
+  double pure1ptFrac = pureTotal > 0
+                         ? static_cast<double>(pure1pt) / pureTotal
+                         : 0.0;
+  double compound1ptFrac = compoundTotal > 0
+                             ? static_cast<double>(compound1pt) / compoundTotal
+                             : 0.0;
+
+  std::cerr << "\n1-point contact fraction:\n"
+            << "  Pure pitch: " << (pure1ptFrac * 100.0) << "%\n"
+            << "  Compound:   " << (compound1ptFrac * 100.0) << "%\n";
+
+  // If compound has more than 2x the 1-point contact fraction, flag it.
+  // This would mean the compound tilt produces systematically worse
+  // contact manifolds.
+  if (pure1ptFrac > 0.01)
+  {
+    EXPECT_LT(compound1ptFrac / pure1ptFrac, 5.0)
+      << "DIAGNOSTIC: Compound has " << (compound1ptFrac / pure1ptFrac)
+      << "x more 1-point contacts than pure pitch. "
+      << "This asymmetric contact manifold may cause yaw coupling.";
+  }
+}
+
+TEST(TiltedCubeTrajectory, Diag_EnergyBalance_CompoundVsPurePitch)
+{
+  // Ticket: 0055b_friction_direction_root_cause
+  //
+  // Phase 2c: Energy Balance Analysis
+  //
+  // Track total kinetic energy (translational + rotational) each frame for
+  // both pure pitch and compound tilt. If the compound case shows growing
+  // KE after settling, something is injecting energy.
+  //
+  // Also run with friction=0 to isolate friction's contribution.
+
+  constexpr int kFrames = 1000;
+  constexpr int kFrameDtMs = 10;
+
+  auto runEnergyTrack = [](double tiltX, double tiltY, double initialVx,
+                           double friction, double restitution)
+  {
+    WorldModel world;
+
+    auto floorPoints = createCubePoints(100.0);
+    ConvexHull floorHull{floorPoints};
+    ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
+    const auto& floorAsset =
+      world.spawnEnvironmentObject(1, floorHull, floorFrame);
+    const_cast<AssetEnvironment&>(floorAsset).setFrictionCoefficient(friction);
+
+    auto cubePoints = createCubePoints(1.0);
+    ConvexHull cubeHull{cubePoints};
+
+    Eigen::Quaterniond tiltQuat =
+      Eigen::Quaterniond{Eigen::AngleAxisd{tiltY, Eigen::Vector3d::UnitY()}} *
+      Eigen::Quaterniond{
+        Eigen::AngleAxisd{tiltX, Eigen::Vector3d::UnitX()}};
+
+    double minZ = std::numeric_limits<double>::max();
+    for (const auto& point : cubePoints)
+    {
+      Eigen::Vector3d rotated =
+        tiltQuat * Eigen::Vector3d{point.x(), point.y(), point.z()};
+      minZ = std::min(minZ, rotated.z());
+    }
+    double centerHeightZ = 0.01 - minZ;
+
+    ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, centerHeightZ}, tiltQuat};
+    world.spawnObject(2, cubeHull, 10.0, cubeFrame);
+
+    uint32_t const cubeId = 1;
+    world.getObject(cubeId).setCoefficientOfRestitution(restitution);
+    world.getObject(cubeId).setFrictionCoefficient(friction);
+    world.getObject(cubeId).getInertialState().velocity =
+      Vector3D{initialVx, 0.0, 0.0};
+
+    struct FrameEnergy
+    {
+      int frame;
+      double keTranslational;
+      double keRotational;
+      double keTotal;
+      double posX;
+      double posY;
+      double posZ;
+      double vx;
+      double vy;
+    };
+    std::vector<FrameEnergy> energyLog;
+
+    for (int i = 1; i <= kFrames; ++i)
+    {
+      world.update(std::chrono::milliseconds{i * kFrameDtMs});
+
+      auto const& state = world.getObject(cubeId).getInertialState();
+      double mass = world.getObject(cubeId).getMass();
+      auto I = world.getObject(cubeId).getInertiaTensor();
+      auto omega = state.getAngularVelocity();
+      Eigen::Vector3d w{omega.x(), omega.y(), omega.z()};
+
+      double keT = 0.5 * mass * state.velocity.squaredNorm();
+      double keR = 0.5 * w.dot(I * w);
+      double keTotal = keT + keR;
+
+      if (i % 10 == 0)
+      {
+        energyLog.push_back(
+          {i, keT, keR, keTotal, state.position.x(), state.position.y(),
+           state.position.z(), state.velocity.x(), state.velocity.y()});
+      }
+    }
+
+    return energyLog;
+  };
+
+  auto pureFriction = runEnergyTrack(0.0, M_PI / 3.0, 5.0, 0.5, 0.5);
+  auto compoundFriction = runEnergyTrack(0.01, M_PI / 3.0, 5.0, 0.5, 0.5);
+  auto compoundNoFriction =
+    runEnergyTrack(0.01, M_PI / 3.0, 5.0, 0.0, 0.5);
+
+  // Print energy evolution for each case
+  std::cerr << "\n=== Energy Balance (every 10 frames) ===\n";
+  std::cerr << "Pure pitch (friction=0.5):\n";
+  for (const auto& e : pureFriction)
+  {
+    if (e.frame % 50 == 0)
+    {
+      std::cerr << "  f" << e.frame
+                << " KE_T=" << e.keTranslational
+                << " KE_R=" << e.keRotational
+                << " KE=" << e.keTotal
+                << " x=" << e.posX << " y=" << e.posY
+                << " vx=" << e.vx << " vy=" << e.vy << "\n";
+    }
+  }
+
+  std::cerr << "\nCompound (friction=0.5):\n";
+  for (const auto& e : compoundFriction)
+  {
+    if (e.frame % 50 == 0)
+    {
+      std::cerr << "  f" << e.frame
+                << " KE_T=" << e.keTranslational
+                << " KE_R=" << e.keRotational
+                << " KE=" << e.keTotal
+                << " x=" << e.posX << " y=" << e.posY
+                << " vx=" << e.vx << " vy=" << e.vy << "\n";
+    }
+  }
+
+  std::cerr << "\nCompound (friction=0.0):\n";
+  for (const auto& e : compoundNoFriction)
+  {
+    if (e.frame % 50 == 0)
+    {
+      std::cerr << "  f" << e.frame
+                << " KE_T=" << e.keTranslational
+                << " KE_R=" << e.keRotational
+                << " KE=" << e.keTotal
+                << " x=" << e.posX << " y=" << e.posY
+                << " vx=" << e.vx << " vy=" << e.vy << "\n";
+    }
+  }
+
+  // Initial KE = 0.5 * 10 * 5^2 = 125 J
+  // With friction, KE should DECREASE over time (dissipation)
+  // If KE exceeds initial value, energy is being injected
+
+  double initialKE = 0.5 * 10.0 * 5.0 * 5.0;  // 125 J
+
+  // Check if compound case's KE ever exceeds initial + 10%
+  double compoundPeakKE = 0.0;
+  int compoundPeakFrame = 0;
+  for (const auto& e : compoundFriction)
+  {
+    if (e.keTotal > compoundPeakKE)
+    {
+      compoundPeakKE = e.keTotal;
+      compoundPeakFrame = e.frame;
+    }
+  }
+
+  double purePeakKE = 0.0;
+  for (const auto& e : pureFriction)
+  {
+    purePeakKE = std::max(purePeakKE, e.keTotal);
+  }
+
+  std::cerr << "\nPeak KE: pure=" << purePeakKE
+            << " compound=" << compoundPeakKE
+            << " (at frame " << compoundPeakFrame << ")"
+            << " initial=" << initialKE << "\n";
+
+  EXPECT_LT(compoundPeakKE, initialKE * 2.0)
+    << "DIAGNOSTIC: Compound case peak KE=" << compoundPeakKE
+    << " exceeds 2x initial KE=" << initialKE
+    << ". Energy is being injected at frame " << compoundPeakFrame;
+
+  // Check if compound no-friction case has the same issue
+  double noFrictionPeakKE = 0.0;
+  for (const auto& e : compoundNoFriction)
+  {
+    noFrictionPeakKE = std::max(noFrictionPeakKE, e.keTotal);
+  }
+
+  std::cerr << "No-friction peak KE: " << noFrictionPeakKE << "\n";
+
+  // If the no-friction case also shows energy growth, the issue is NOT
+  // friction-specific — it's in the normal constraint or position corrector.
+  // If only the friction case diverges, friction is the root cause.
+  if (noFrictionPeakKE < initialKE * 1.5 && compoundPeakKE > initialKE * 2.0)
+  {
+    std::cerr << "DIAGNOSIS: Energy injection requires friction. "
+              << "Root cause is in friction constraint, not normal/position.\n";
+  }
+  else if (noFrictionPeakKE > initialKE * 2.0)
+  {
+    std::cerr << "DIAGNOSIS: Energy injection occurs WITHOUT friction. "
+              << "Root cause is in normal constraint or position corrector.\n";
+  }
+}
+
+TEST(TiltedCubeTrajectory, Diag_EPANormal_NormalTimeSeries)
+{
+  // Ticket: 0055b_friction_direction_root_cause
+  //
+  // Capture the EPA normal time series for the compound tilt scenario to
+  // see if the normal is stable or oscillating. An oscillating normal would
+  // indicate EPA is selecting different Minkowski faces frame-to-frame,
+  // which would cause the tangent basis to flip and friction to push in
+  // inconsistent directions.
+
+  auto diag = runInstrumentedSimulation(
+    0.01, M_PI / 3.0, 5.0, 0.5, 0.5, 500, 10);
+
+  // Check for normal direction flips (sign changes in nx or ny)
+  int normalFlips = 0;
+  double prevNx = 0.0;
+  double prevNy = 0.0;
+  bool prevHadCollision = false;
+
+  std::string timeSeries = "Normal time series (compound, contact frames):\n";
+  int contactCount = 0;
+
+  for (const auto& d : diag)
+  {
+    if (!d.hasCollision)
+    {
+      prevHadCollision = false;
+      continue;
+    }
+
+    contactCount++;
+
+    // Log every 5th contact frame to keep output manageable
+    if (contactCount % 5 == 1 || contactCount <= 10)
+    {
+      timeSeries += "  f" + std::to_string(d.frame) +
+                    " n=(" + std::to_string(d.normalX) +
+                    "," + std::to_string(d.normalY) +
+                    "," + std::to_string(d.normalZ) +
+                    ") lat=" + std::to_string(d.normalLateral) +
+                    " depth=" + std::to_string(d.penetrationDepth) + "\n";
+    }
+
+    // Detect lateral normal flips (sign changes)
+    if (prevHadCollision)
+    {
+      // Check if nx changed sign significantly
+      if (std::abs(d.normalX) > 0.01 && std::abs(prevNx) > 0.01 &&
+          d.normalX * prevNx < 0.0)
+      {
+        normalFlips++;
+      }
+      // Check if ny changed sign significantly
+      if (std::abs(d.normalY) > 0.01 && std::abs(prevNy) > 0.01 &&
+          d.normalY * prevNy < 0.0)
+      {
+        normalFlips++;
+      }
+    }
+
+    prevNx = d.normalX;
+    prevNy = d.normalY;
+    prevHadCollision = true;
+  }
+
+  std::cerr << timeSeries;
+
+  // If there are many normal flips, EPA is unstable for this configuration
+  EXPECT_LT(normalFlips, 5)
+    << "DIAGNOSTIC: EPA normal flipped " << normalFlips
+    << " times across " << contactCount
+    << " contact frames. This instability would cause friction to push "
+    << "in inconsistent directions.";
+}
+
+TEST(TiltedCubeTrajectory, Diag_YawCoupling_SinglePointFriction)
+{
+  // Ticket: 0055b_friction_direction_root_cause
+  //
+  // HYPOTHESIS: Single-point contact with friction creates uncompensated
+  // yaw torque (rotation about Z-axis). With multi-point contacts, yaw
+  // torques from friction at opposite corners cancel. With one point, the
+  // yaw torque is unopposed and drives the instability.
+  //
+  // This test tracks omega_z (yaw rate) over time for:
+  //   1. Pure pitch (multi-point contacts) - should have ~0 yaw
+  //   2. Compound tilt with friction - expect yaw growth
+  //   3. Compound tilt without friction - should have ~0 yaw
+
+  auto runYawTrack = [](double tiltX, double tiltY, double initialVx,
+                        double friction, double restitution) {
+    WorldModel world;
+
+    auto floorPoints = createCubePoints(100.0);
+    ConvexHull floorHull{floorPoints};
+    ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
+    const auto& floorAsset =
+      world.spawnEnvironmentObject(1, floorHull, floorFrame);
+    const_cast<AssetEnvironment&>(floorAsset).setFrictionCoefficient(friction);
+
+    auto cubePoints = createCubePoints(1.0);
+    ConvexHull cubeHull{cubePoints};
+
+    Eigen::Quaterniond tiltQuat =
+      Eigen::Quaterniond{Eigen::AngleAxisd{tiltY, Eigen::Vector3d::UnitY()}} *
+      Eigen::Quaterniond{Eigen::AngleAxisd{tiltX, Eigen::Vector3d::UnitX()}};
+
+    double minZ = std::numeric_limits<double>::max();
+    for (const auto& point : cubePoints)
+    {
+      Eigen::Vector3d rotated =
+        tiltQuat * Eigen::Vector3d{point.x(), point.y(), point.z()};
+      minZ = std::min(minZ, rotated.z());
+    }
+    double centerHeightZ = 0.01 - minZ;
+
+    ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, centerHeightZ}, tiltQuat};
+    world.spawnObject(2, cubeHull, 10.0, cubeFrame);
+
+    uint32_t const cubeId = 1;
+    world.getObject(cubeId).setCoefficientOfRestitution(restitution);
+    world.getObject(cubeId).setFrictionCoefficient(friction);
+    world.getObject(cubeId).getInertialState().velocity =
+      Vector3D{initialVx, 0.0, 0.0};
+
+    constexpr int kFrames = 500;
+    constexpr int kFrameDtMs = 10;
+
+    struct YawData
+    {
+      int frame;
+      double omegaX;
+      double omegaY;
+      double omegaZ;
+      double yawAngle;  // cumulative from omega_z integration
+    };
+    std::vector<YawData> yawLog;
+
+    double cumulativeYaw = 0.0;
+    for (int i = 1; i <= kFrames; ++i)
+    {
+      world.update(std::chrono::milliseconds{i * kFrameDtMs});
+
+      auto const& state = world.getObject(cubeId).getInertialState();
+      auto omega = state.getAngularVelocity();
+      cumulativeYaw += omega.z() * (kFrameDtMs / 1000.0);
+
+      if (i % 10 == 0)
+      {
+        yawLog.push_back(
+          {i, omega.x(), omega.y(), omega.z(), cumulativeYaw});
+      }
+    }
+    return yawLog;
+  };
+
+  auto purePitch = runYawTrack(0.0, M_PI / 3.0, 5.0, 0.5, 0.5);
+  auto compoundFriction = runYawTrack(0.01, M_PI / 3.0, 5.0, 0.5, 0.5);
+  auto compoundNoFriction = runYawTrack(0.01, M_PI / 3.0, 5.0, 0.0, 0.5);
+
+  std::cerr << "\n=== Yaw Coupling Analysis ===\n";
+
+  auto printYaw = [](const char* label, const auto& log) {
+    std::cerr << label << ":\n";
+    double peakOmegaZ = 0.0;
+    for (const auto& y : log)
+    {
+      peakOmegaZ = std::max(peakOmegaZ, std::abs(y.omegaZ));
+      if (y.frame <= 200 || y.frame % 100 == 0)
+      {
+        std::cerr << "  f" << y.frame
+                  << " wz=" << y.omegaZ
+                  << " yaw=" << y.yawAngle
+                  << " wx=" << y.omegaX
+                  << " wy=" << y.omegaY << "\n";
+      }
+    }
+    std::cerr << "  Peak |omega_z|: " << peakOmegaZ << " rad/s\n\n";
+  };
+
+  printYaw("Pure pitch (friction=0.5)", purePitch);
+  printYaw("Compound (friction=0.5)", compoundFriction);
+  printYaw("Compound (friction=0.0)", compoundNoFriction);
+
+  // Pure pitch should have negligible yaw
+  double purePeakYaw = 0.0;
+  for (const auto& y : purePitch)
+  {
+    purePeakYaw = std::max(purePeakYaw, std::abs(y.omegaZ));
+  }
+
+  // Compound with friction should show significant yaw
+  double compoundPeakYaw = 0.0;
+  for (const auto& y : compoundFriction)
+  {
+    compoundPeakYaw = std::max(compoundPeakYaw, std::abs(y.omegaZ));
+  }
+
+  // Compound without friction should have negligible yaw
+  double noFrictionPeakYaw = 0.0;
+  for (const auto& y : compoundNoFriction)
+  {
+    noFrictionPeakYaw = std::max(noFrictionPeakYaw, std::abs(y.omegaZ));
+  }
+
+  std::cerr << "Summary: pure yaw=" << purePeakYaw
+            << "  compound+friction yaw=" << compoundPeakYaw
+            << "  compound-friction yaw=" << noFrictionPeakYaw << "\n";
+
+  if (compoundPeakYaw > 10.0 * purePeakYaw &&
+      compoundPeakYaw > 10.0 * noFrictionPeakYaw)
+  {
+    std::cerr << "CONFIRMED: Single-point friction creates uncompensated yaw "
+              << "torque. This is the energy injection mechanism.\n";
   }
 }
