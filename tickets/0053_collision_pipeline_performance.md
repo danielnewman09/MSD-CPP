@@ -311,3 +311,15 @@ Profiling the collision and friction pipeline on the `0052d-solver-integration` 
   | Qhull printsummary | 15 samples | 0 samples | **-100%** |
   | Memory free | 63 samples | 40 samples | **-37%** |
 - **Test Results**: 657/661 pass (0 regressions, same 4 pre-existing failures)
+- **Benchmark Comparison** (`main` vs `0053` branch, Google Benchmark, Release -O2, 5 reps):
+  | Benchmark | main (ns) | 0053 (ns) | Change |
+  |-----------|-----------|-----------|--------|
+  | CollisionPipeline_WithFriction/1 | 6,067 | 4,959 | **-18.3%** |
+  | CollisionPipeline_WithFriction/2 | 11,478 | 9,531 | **-17.0%** |
+  | CollisionPipeline_WithFriction/4 | 25,613 | 22,786 | **-11.0%** |
+  | CollisionPipeline_WithFriction/8 | 73,596 | 65,670 | **-10.8%** |
+  | CollisionPipeline_NoFriction/1 | 4,236 | 3,438 | **-18.8%** |
+  | CollisionPipeline_NoFriction/2 | 7,502 | 6,081 | **-18.9%** |
+  | CollisionPipeline_NoFriction/4 | 14,565 | 12,254 | **-15.9%** |
+  | CollisionPipeline_NoFriction/8 | 33,892 | 29,307 | **-13.5%** |
+  | CollisionPipeline_BodyBody | 6,433 | 5,404 | **-16.0%** |
