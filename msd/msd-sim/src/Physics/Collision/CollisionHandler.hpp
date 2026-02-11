@@ -47,11 +47,16 @@ public:
    *
    * @param assetA First physical asset
    * @param assetB Second physical asset
+   * @param skipSATValidation If true, skip SAT validation of EPA result.
+   *        Use when ContactCache confirms persistent contact with stable
+   *        normal, making EPA failure unlikely.
+   *        Ticket: 0053d_sat_fallback_cost_reduction
    * @return std::nullopt if no collision, CollisionResult if collision
    */
   [[nodiscard]] std::optional<CollisionResult> checkCollision(
     const AssetPhysical& assetA,
-    const AssetPhysical& assetB) const;
+    const AssetPhysical& assetB,
+    bool skipSATValidation = false) const;
 
   CollisionHandler(const CollisionHandler&) = default;
   CollisionHandler(CollisionHandler&&) noexcept = default;

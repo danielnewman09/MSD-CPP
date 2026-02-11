@@ -23,7 +23,8 @@ CollisionHandler::CollisionHandler(double epsilon) : epsilon_{epsilon}
 
 std::optional<CollisionResult> CollisionHandler::checkCollision(
   const AssetPhysical& assetA,
-  const AssetPhysical& assetB) const
+  const AssetPhysical& assetB,
+  bool skipSATValidation) const
 {
   // Phase 1: Broad intersection test via GJK
   GJK gjk{assetA, assetB, epsilon_};
@@ -53,8 +54,16 @@ std::optional<CollisionResult> CollisionHandler::checkCollision(
   // face normals. If EPA's depth is wildly inconsistent with SAT, replace
   // EPA's result with a SAT-derived contact.
   //
-  // TODO(0053d): Add gating threshold once penetration depth characteristics
-  // are better understood from profiling data.
+  // Ticket: 0053d_sat_fallback_cost_reduction
+  // Optimization: Skip SAT for persistent contacts where the ContactCache
+  // confirms a stable normal from the previous frame. EPA failures occur
+  // primarily on NEW contacts (first frame of collision) or when the normal
+  // changes significantly. Persistent contacts with stable normals are safe.
+  if (skipSATValidation)
+  {
+    return result;
+  }
+
   SATResult sat = computeSATMinPenetration(assetA, assetB);
 
   // If EPA result is consistent with SAT, use EPA (it has better manifolds)

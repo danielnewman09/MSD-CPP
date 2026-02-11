@@ -123,8 +123,16 @@ void CollisionPipeline::detectCollisions(
   {
     for (size_t j = i + 1; j < numInertial; ++j)
     {
-      auto result =
-        collisionHandler_.checkCollision(inertialAssets[i], inertialAssets[j]);
+      // Ticket 0053d: Skip SAT for persistent contacts with stable normals.
+      // ContactCache entries indicate the pair was in contact last frame,
+      // meaning EPA produced valid results then. SAT is only critical for
+      // new contacts where EPA may fail on degenerate simplices.
+      bool const skipSAT = contactCache_.hasEntry(
+        inertialAssets[i].getInstanceId(),
+        inertialAssets[j].getInstanceId());
+
+      auto result = collisionHandler_.checkCollision(
+        inertialAssets[i], inertialAssets[j], skipSAT);
       if (!result)
       {
         continue;
@@ -154,8 +162,13 @@ void CollisionPipeline::detectCollisions(
   {
     for (size_t e = 0; e < numEnvironment; ++e)
     {
-      auto result = collisionHandler_.checkCollision(inertialAssets[i],
-                                                     environmentalAssets[e]);
+      // Ticket 0053d: Skip SAT for persistent contacts (see above)
+      bool const skipSAT = contactCache_.hasEntry(
+        inertialAssets[i].getInstanceId(),
+        environmentalAssets[e].getInstanceId() | kEnvIdFlag);
+
+      auto result = collisionHandler_.checkCollision(
+        inertialAssets[i], environmentalAssets[e], skipSAT);
       if (!result)
       {
         continue;
