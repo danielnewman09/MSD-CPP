@@ -71,3 +71,21 @@ _None detected._
   - Tilted cube tests (Sliding_, Compound_) oscillate between thresholds — they're on the edge of the 1.5-2.0× range
 
 The multiplicative threshold successfully prevents the 3.75× extreme case and fixes A4, but it's too blunt an instrument for the other energy conservation failures. **Pivoting to Option 2: Energy-based friction scaling.**
+
+### Iteration 4 — 2026-02-11 14:50
+**Commit**: 3af26fa
+**Hypothesis**: The threshold approach is clamping legitimate inflation for elastic bounces. Try a restitution-based approach: skip clamping entirely for e >= 0.8 (let coupled solver handle elastic collisions), use 2.0× threshold for e < 0.8.
+**Changes**:
+- `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp`: Added restitution check — if `restitution >= 0.8`, skip clamping via `continue`. Otherwise use `kInflationThreshold = 2.0`.
+**Build Result**: PASS (1 warning: unused `solveFrictionPGS`)
+**Test Result**: 691/699 — 8 failures (identical count, different specific failure):
+- Pre-existing (3): H3, B2, B5
+- Regressions (5): A3, F2, F3, D4, Sliding_PurePitch_vs_CompoundTilt_SpuriousY (RETURNED)
+- Fixed: Compound_NoSpuriousYaw (was failing in iteration 3)
+**Impact vs Previous**: +0 net passes (Compound_↑, Sliding_↓)
+**Assessment**: **THRESHOLD APPROACH EXHAUSTED**. Four iterations of threshold tuning show:
+  - Test oscillation (Sliding_ ↔ Compound_) persists across all threshold values
+  - A3, F2, F3 fail EVEN WITH NO CLAMPING for elastic contacts
+  - A4 passes consistently (the 2.0× threshold works for it)
+
+This means the problem is NOT just clamping — there's something fundamentally wrong with the coupled solver's behavior for A3, F2, F3 even when we don't clamp. The multiplicative threshold can't fix this.

@@ -113,3 +113,20 @@ Use the `Diag_MechanicalEnergy_FrictionInjection` test from iteration 9 to verif
 - **Branch**: 0055c-friction-direction-fix
 - **PR**: #41 (draft)
 - **Notes**: Ticket created to refine the capped coupled solve from 0055c iteration 12. Current state bookmarked at git tag `bookmark/0055c-iter12-visual-improvement`. Will maintain separate iteration log at `docs/designs/0055d_friction_solver_energy_conservation/iteration-log.md`.
+
+### Implementation Phase (In Progress)
+- **Completed**: 2026-02-11 15:00
+- **Iterations**: 4
+- **Artifacts**:
+  - `docs/designs/0055d_friction_solver_energy_conservation/iteration-log.md`
+- **Status**: **BLOCKED** — Option 1 (multiplicative threshold) exhausted after 4 iterations
+- **Findings**:
+  1. **A4 fixed at all thresholds ≤ 2.0×** — Equal-mass elastic collision energy conservation works
+  2. **A3, F2, F3 fail even with NO clamping for elastic contacts (e >= 0.8)** — This means the coupled solver itself produces incorrect results for these tests, not the clamping
+  3. **Test oscillation**: Sliding_PurePitch and Compound_NoSpuriousYaw swap success/failure across threshold values (1.5-2.0× range)
+  4. **D4, H3, B2, B5 unaffected** — Resting stability and rotational tests unchanged by threshold tuning
+- **Recommendation**: **Human decision needed**. The multiplicative threshold approach cannot fix A3, F2, F3 because the problem lies in the FrictionConeSolver itself, not the post-solve clamping. Next steps:
+  1. Investigate WHY the coupled solver fails A3, F2, F3 (possibly ECOS solver issues?)
+  2. Try Option 2 (energy-based scaling) — more complex but addresses root cause
+  3. Try Option 3 (multi-iteration sequential impulse) — architectural change
+  4. Accept current state (A4 fixed, 691/699) and address A3/F2/F3 in a separate ticket
