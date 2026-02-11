@@ -89,12 +89,6 @@ void CollisionPipeline::execute(
     return;
   }
 
-  // ===== Phase 2.5: Resize Solver Workspace (ticket 0053a) =====
-  // Resize workspace vectors based on contact count. Eigen's resize() only
-  // reallocates if current capacity is insufficient, so after first frame with
-  // N contacts, subsequent frames with ≤N contacts reuse existing allocation.
-  workspace_.resize(constraints_.size());
-
   // ===== Phase 3: Assemble Solver Input Arrays =====
   assembleSolverInput(inertialAssets, environmentalAssets, numBodies);
 

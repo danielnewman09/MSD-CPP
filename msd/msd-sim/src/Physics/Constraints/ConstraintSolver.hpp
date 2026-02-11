@@ -176,7 +176,7 @@ private:
     const Eigen::MatrixXd& A,
     const Eigen::VectorXd& b,
     int numContacts,
-    const std::optional<Eigen::VectorXd>& initialLambda = std::nullopt) const;
+    const std::optional<Eigen::VectorXd>& initialLambda = std::nullopt);
 
   [[nodiscard]] static std::vector<BodyForces> extractBodyForces(
     const std::vector<Constraint*>& contactConstraints,
@@ -210,7 +210,7 @@ private:
     const Eigen::MatrixXd& A,
     const Eigen::VectorXd& b,
     const FrictionSpec& spec,
-    const std::optional<Eigen::VectorXd>& initialLambda) const;
+    const std::optional<Eigen::VectorXd>& initialLambda);
 
   /**
    * @brief Extract per-body forces from flat lambda (no negative-lambda skip)
@@ -231,6 +231,12 @@ private:
   int max_safety_iterations_{100};
   double convergence_tolerance_{1e-6};
   static constexpr double kRegularizationEpsilon = 1e-8;
+
+  // ASM workspace — reused across calls to avoid per-call heap allocations
+  // Ticket: 0053f_wire_solver_workspace
+  Eigen::MatrixXd asmAw_;
+  Eigen::VectorXd asmBw_;
+  Eigen::VectorXd asmW_;
 
   // Friction cone solver instance
   FrictionConeSolver frictionConeSolver_;

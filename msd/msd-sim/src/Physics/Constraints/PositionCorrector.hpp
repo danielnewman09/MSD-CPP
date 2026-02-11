@@ -86,6 +86,18 @@ public:
 
 private:
   static constexpr double kRegularizationEpsilon = 1e-8;
+
+  // Per-call workspace — reused across calls to avoid heap allocations
+  // Ticket: 0053f_wire_solver_workspace
+  Eigen::VectorXd bPos_;
+  Eigen::MatrixXd effectiveMass_;
+  Eigen::VectorXd lambdaPos_;
+  std::vector<Eigen::MatrixXd> jacobians_;
+
+  // ASM workspace
+  Eigen::MatrixXd asmAw_;
+  Eigen::VectorXd asmBw_;
+  Eigen::VectorXd asmW_;
 };
 
 }  // namespace msd_sim
