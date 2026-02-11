@@ -40,7 +40,7 @@ _None detected._
 **Assessment**: Components created according to design. Next: Add to CMake, integrate into EPA degenerate case (line 574 in EPA.cpp), write unit tests.
 
 ### Iteration 1 — 2026-02-11 10:30
-**Commit**: (pending)
+**Commit**: cb740a4
 **Hypothesis**: Integrate vertex-face manifold generation into EPA degenerate case handling, add to build system.
 **Changes**:
 - `msd/msd-sim/src/Physics/Collision/CMakeLists.txt`: Added VertexFaceDetector and VertexFaceManifoldGenerator to build
@@ -51,3 +51,42 @@ _None detected._
 **Test Result**: 657/661 — 4 failures (D4_MicroJitter, H3_TimestepSensitivity, B2_CubeEdgeImpact, B5_LShapeDrop) appear pre-existing
 **Impact vs Previous**: +0 passes, -0 regressions (baseline maintained)
 **Assessment**: EPA integration successful, no regressions introduced. Next: Integrate into CollisionHandler SAT fallback path, write unit tests for new components, test tilted cube scenarios.
+
+### Iteration 2 — 2026-02-11 (session 2 completion)
+**Commit**: dfd189b
+**Hypothesis**: Complete CollisionHandler SAT fallback integration and add comprehensive unit tests for new components.
+**Changes**:
+- `msd/msd-sim/src/Physics/Collision/CollisionHandler.hpp`: Added includes for VertexFaceDetector/Generator, added extractFaceVertices() helper method, added member instances
+- `msd/msd-sim/src/Physics/Collision/CollisionHandler.cpp`: Implemented extractFaceVertices() to find face vertices from hull given normal, modified buildSATContact() to detect vertex-face geometry and delegate to manifold generator, added fallback to single-point contact if manifold generation fails
+- `msd/msd-sim/test/Physics/Collision/VertexFaceDetectorTest.cpp`: Created 5 unit tests for contact type classification (FaceFace, EdgeEdge, VertexFace, VertexVertex, Unknown)
+- `msd/msd-sim/test/Physics/Collision/VertexFaceManifoldGeneratorTest.cpp`: Created 6 unit tests for manifold generation (CubeOnFloor, TriangleVertex, DepthConsistency, DegenerateFace, MaxContactLimit, ProjectionPlaneCorrectness)
+- `msd/msd-sim/test/Physics/Collision/CMakeLists.txt`: Added new test files to build
+**Build Result**: PASS
+**Test Result**: 668/672 — Added 11 new tests (all pass), 4 pre-existing failures unchanged
+**Impact vs Previous**: +11 passes (new tests), -0 regressions (baseline maintained)
+**Assessment**: CollisionHandler SAT fallback integration complete. All unit tests pass. Implementation now covers both EPA and SAT paths. Remaining: Integration testing with tilted cube trajectory scenarios from 0055a (tests not yet available in main branch).
+
+### Iteration 3 — 2026-02-11 (session 3)
+**Commit**: 59e1654
+**Hypothesis**: Merge 0055b branch (which contains TiltedCubeTrajectory integration tests and diagnostics) into 0055c to enable end-to-end validation of the vertex-face manifold fix.
+**Changes**:
+- `git merge 0055b-friction-direction-root-cause`: Brought in TiltedCubeTrajectoryTest.cpp with diagnostic tests and integration tests
+- `msd/msd-sim/test/Physics/Collision/CMakeLists.txt`: Resolved merge conflict — kept all three new test files (TiltedCubeTrajectoryTest, VertexFaceDetectorTest, VertexFaceManifoldGeneratorTest)
+**Build Result**: PASS
+**Test Result**: 672/686 — 14 TiltedCubeTrajectory tests fail (same 3 from 0055a + 11 others), contact count diagnostic shows **89% single-point contacts unchanged**
+**Impact vs Previous**: +14 new tests added from merge, 14 failing. Fix is NOT activating for the actual bug scenario.
+**Assessment**: **CRITICAL FINDING** — The vertex-face detection at EPA line 574 (degenerate polygon check: `refVerts.size() < 3 || incidentPoly.size() < 3`) NEVER triggers for the tilted cube scenario. For a cube on a floor, EPA builds coplanar facet polygons with >= 3 vertices on both sides. The Sutherland-Hodgman clipping THEN reduces the incident polygon to 1 point, but this happens AFTER the degenerate check. The fix is in the wrong location — it needs to go AFTER clipping, not before.
+
+### Iteration 4 — 2026-02-11 (session 3, continued)
+**Commit**: (uncommitted)
+**Hypothesis**: Move vertex-face manifold expansion to AFTER Sutherland-Hodgman clipping, where `finalPoints.size() <= 2 && refVerts.size() >= 3` detects the actual vertex-face geometry.
+**Changes**:
+- `msd/msd-sim/src/Physics/Collision/EPA.cpp`: Added post-clipping vertex-face expansion at line 646 (after final point filtering). When clipping reduces to 1-2 points but reference face has >= 3 vertices, projects reference face vertices onto contact plane with uniform EPA depth.
+**Build Result**: PASS
+**Test Result**: 672/686 — 14 TiltedCubeTrajectory tests still fail, BUT behavior changed fundamentally:
+- Contact count: **0% single-point, 100% 4-point** (fix IS activating)
+- Yaw coupling: compound+friction peak omega_z dropped from 2.06 to 0.019 rad/s
+- Lateral displacement: now essentially **zero** (1e-10 to 1e-13 m) — cube does not slide at all
+- The cube is **over-constrained**: 4-point friction manifold prevents all lateral motion
+**Impact vs Previous**: Fix activates correctly (0% single-point → 100% 4-point). But over-constraining creates new failure mode — no sliding where sliding is expected.
+**Assessment**: The manifold expansion correctly eliminates single-point contacts, but the 4 friction constraints (one per contact point) over-constrain the body and prevent any lateral sliding. Root cause options: (1) friction force too high with 4 contact points — may need to distribute friction budget across contact points, (2) contact point placement creates zero-net-torque configuration that locks the body, (3) need to re-examine whether ALL reference face vertices should be used vs a subset.

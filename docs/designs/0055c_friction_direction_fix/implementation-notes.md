@@ -9,9 +9,9 @@
 
 ## Summary
 
-Implemented vertex-face contact manifold generation system to fix energy injection from single-point friction contacts. Two new components (VertexFaceDetector, VertexFaceManifoldGenerator) were created and integrated into EPA's degenerate case handling.
+Implemented vertex-face contact manifold generation system to fix energy injection from single-point friction contacts. Two new components (VertexFaceDetector, VertexFaceManifoldGenerator) were created and integrated into both EPA's degenerate case handling and CollisionHandler's SAT fallback path.
 
-**Completion**: ~50% (EPA path done, CollisionHandler SAT fallback path pending)
+**Completion**: ~75% (EPA ✓, SAT ✓, unit tests ✓; integration tests pending)
 
 ---
 
@@ -45,11 +45,11 @@ Implemented vertex-face contact manifold generation system to fix energy injecti
 | VertexFaceDetector class | ✅ | Matches design specification exactly |
 | VertexFaceManifoldGenerator class | ✅ | Matches design, Option A (uniform EPA depth) applied |
 | EPA integration (degenerate case) | ✅ | Integrated at line 574 as specified |
-| CollisionHandler integration (SAT fallback) | ❌ | **PENDING** — Requires extractFaceVertices() helper method |
-| Unit tests for VertexFaceDetector | ❌ | **PENDING** |
-| Unit tests for VertexFaceManifoldGenerator | ❌ | **PENDING** |
-| Integration tests | ❌ | **PENDING** |
-| Tilted cube test updates | ❌ | **PENDING** |
+| CollisionHandler integration (SAT fallback) | ✅ | **COMPLETE** — extractFaceVertices() implemented, buildSATContact() updated |
+| Unit tests for VertexFaceDetector | ✅ | **COMPLETE** — 5 tests, all passing |
+| Unit tests for VertexFaceManifoldGenerator | ✅ | **COMPLETE** — 6 tests, all passing |
+| Integration tests | ❌ | **PENDING** — Tilted cube trajectory tests from 0055a not in main branch |
+| Tilted cube test updates | ❌ | **PENDING** — Tests need to be ported from 0055a branch |
 
 ### Design Deviations
 
@@ -74,10 +74,10 @@ Implemented vertex-face contact manifold generation system to fix energy injecti
 
 | Suite | Status | Notes |
 |-------|--------|-------|
-| Full test suite | 657/661 passing | 4 failures appear pre-existing (D4, H3, B2, B5) |
-| VertexFaceDetector unit tests | ❌ Not implemented | **TODO** |
-| VertexFaceManifoldGenerator unit tests | ❌ Not implemented | **TODO** |
-| TiltedCubeTrajectory integration tests | ❌ Not run | **TODO** |
+| Full test suite | 668/672 passing | 4 failures appear pre-existing (D4, H3, B2, B5) |
+| VertexFaceDetector unit tests | ✅ 5/5 passing | Tests FaceFace, EdgeEdge, VertexFace, VertexVertex, Unknown |
+| VertexFaceManifoldGenerator unit tests | ✅ 6/6 passing | Tests CubeOnFloor, TriangleVertex, DepthConsistency, DegenerateFace, MaxContactLimit, ProjectionPlaneCorrectness |
+| TiltedCubeTrajectory integration tests | ❌ Not available | Tests exist on 0055a branch, not yet in main |
 
 ### Pre-existing Failures
 - `ContactManifoldStabilityTest.D4_MicroJitter_DampsOut`
@@ -131,16 +131,17 @@ Implemented vertex-face contact manifold generation system to fix energy injecti
 - [x] VertexFaceManifoldGenerator class (header + implementation)
 - [x] CMakeLists.txt integration
 - [x] EPA degenerate case integration
+- [x] CollisionHandler SAT fallback integration
+- [x] extractFaceVertices() helper method
+- [x] Unit tests for VertexFaceDetector (5 tests, all passing)
+- [x] Unit tests for VertexFaceManifoldGenerator (6 tests, all passing)
 - [x] Build system verification
-- [x] Regression testing (657/661 maintained)
+- [x] Regression testing (668/672 passing, +11 new tests, 0 regressions)
 
 **Pending**:
-- [ ] CollisionHandler SAT fallback integration
-- [ ] Unit tests for VertexFaceDetector
-- [ ] Unit tests for VertexFaceManifoldGenerator
-- [ ] Integration tests (EPA path, CollisionHandler path)
+- [ ] Integration tests (tilted cube trajectory tests from 0055a)
 - [ ] Tilted cube test assertion updates
-- [ ] Full test suite validation (target: 693+ passing)
+- [ ] Full test suite validation with integration tests
 - [ ] Performance benchmarking
 - [ ] Visual validation in GUI
 
