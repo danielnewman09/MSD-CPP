@@ -89,4 +89,22 @@ _None detected._
 - Lateral displacement: now essentially **zero** (1e-10 to 1e-13 m) — cube does not slide at all
 - The cube is **over-constrained**: 4-point friction manifold prevents all lateral motion
 **Impact vs Previous**: Fix activates correctly (0% single-point → 100% 4-point). But over-constraining creates new failure mode — no sliding where sliding is expected.
-**Assessment**: The manifold expansion correctly eliminates single-point contacts, but the 4 friction constraints (one per contact point) over-constrain the body and prevent any lateral sliding. Root cause options: (1) friction force too high with 4 contact points — may need to distribute friction budget across contact points, (2) contact point placement creates zero-net-torque configuration that locks the body, (3) need to re-examine whether ALL reference face vertices should be used vs a subset.
+**Assessment**: The manifold expansion correctly eliminates single-point contacts, but the 4 friction constraints (one per contact point) over-constrain the body and prevent any lateral sliding. Root cause options: (1) friction force too high with 4 contact points — may need to distribute friction budget across contact points, (2) contact point placement creates zero-net-torque configuration that locks the body, (3) need to re-examine whether ALL reference face vertices should be used vs a subset. **NOTE**: This iteration used REFERENCE face vertices (from the floor, 50m apart) — see iteration 5 for the fix.
+
+### Iteration 5 — 2026-02-11 (session 3, continued)
+**Commit**: 5f5c51a (iteration 4 EPA fix) + uncommitted (iteration 5 incident-face switch)
+**Hypothesis**: Iteration 4 used reference face vertices (floor = 100m cube, vertices at ±50m). Contact points were 50m apart for a 1m cube — clearly wrong. Switch to INCIDENT face vertices (pre-clipping), which represent the actual touching body's face geometry (~0.5m apart for a 1m cube).
+**Changes**:
+- `msd/msd-sim/src/Physics/Collision/EPA.cpp`:
+  - Save `incidentPolyPreClip` before the Sutherland-Hodgman clipping loop
+  - Post-clipping expansion now uses `incidentPolyPreClip` (incident face) instead of `refVerts` (reference face)
+**Build Result**: PASS
+**Test Result**: 675/696 — 21 failures total:
+- 4 pre-existing: D4, H3, B2, B5
+- 14 TiltedCubeTrajectory (expect lateral displacement, get zero)
+- **3 NEW REGRESSIONS**: B1_CubeCornerImpact (no rotation: omega=1.1e-7), F4_RotationEnergyTransfer (no rotational KE), C3_TiltedCubeSettles (stuck at 30°, doesn't settle to flat face)
+**Impact vs Previous**: Contact points now at correct scale (~0.5m, cube-sized). Energy injection eliminated (compound KE identical to pure pitch). Yaw coupling reduced from 2.06 to 3.9e-9 rad/s. BUT bodies are STILL over-constrained — 3 additional regressions in rotation tests.
+**Assessment**: Even with correctly-scaled incident face vertices, creating 4 contact points across the ENTIRE bottom face of a tilted cube is wrong. Only ONE corner is actually touching — the other 3 vertices are phantom contacts that prevent the cube from rotating. The vertex-face expansion creates contacts at all face vertices regardless of whether they are actually in contact. This over-constrains rotational motion. Need a fundamentally different approach: either (a) only expand near the ACTUAL contact point, or (b) don't expand at all and fix the friction Jacobian instead, or (c) limit expansion to vertices that are actually within the penetration zone.
+
+### Circle Detection Consideration
+EPA.cpp `extractContactManifold()` modified in iterations 1, 4, and 5 (3 times). Each attempt places contacts at different locations but all result in over-constraining. The approach of "expand single-point to multi-point by projecting face vertices" may be fundamentally flawed for vertex-face contacts where only one vertex is truly in contact. Escalating analysis to human.

@@ -599,6 +599,10 @@ size_t EPA::extractContactManifold(size_t faceIndex,
     return 1;
   }
 
+  // Save incident polygon before clipping (needed for vertex-face expansion)
+  // Ticket: 0055c_friction_direction_fix
+  std::vector<Coordinate> const incidentPolyPreClip = incidentPoly;
+
   // Clip incident polygon against each edge plane of the reference face
   // Each side plane is perpendicular to the face, pointing inward
   for (size_t i = 0; i < refVerts.size(); ++i)
@@ -645,28 +649,31 @@ size_t EPA::extractContactManifold(size_t faceIndex,
 
   // Ticket: 0055c_friction_direction_fix — vertex-face manifold expansion
   //
-  // When clipping reduces the incident polygon to 1-2 points but the reference
-  // face has >= 3 vertices, this is a vertex-face contact. A single contact
-  // point creates uncompensated yaw torque through friction Jacobian angular
-  // coupling (rA × t), causing energy injection. Expand to multi-point manifold
-  // using the reference face vertices projected onto the contact plane.
-  if (finalPoints.size() <= 2 && refVerts.size() >= 3)
+  // When clipping reduces the incident polygon to 1-2 points but the incident
+  // face (pre-clipping) has >= 3 vertices, this is a vertex-face contact. A
+  // single contact point creates uncompensated yaw torque through friction
+  // Jacobian angular coupling (rA × t), causing energy injection.
+  //
+  // Expand to multi-point manifold using the INCIDENT face vertices (pre-clip).
+  // These represent the actual touching body's face geometry. We must NOT use
+  // the reference face vertices here — the reference face may be a large floor
+  // with vertices 50m+ apart, which would wildly over-constrain a small body.
+  if (finalPoints.size() <= 2 && incidentPolyPreClip.size() >= 3)
   {
-    // Use reference face vertices as the manifold — they define the face
-    // the vertex is touching. Project each onto the reference plane and use
-    // uniform EPA depth for all contact points.
-    size_t const refCount =
-      std::min(refVerts.size(), static_cast<size_t>(4));
-    for (size_t i = 0; i < refCount; ++i)
+    // Use incident polygon vertices (before clipping destroyed them).
+    // Project each onto the reference plane and use uniform EPA depth.
+    size_t const incCount =
+      std::min(incidentPolyPreClip.size(), static_cast<size_t>(4));
+    for (size_t i = 0; i < incCount; ++i)
     {
-      // Project reference vertex onto the reference plane
-      double const dist = refNormalWorld.dot(refVerts[i]) - refPlaneD;
-      Coordinate const onRefPlane = refVerts[i] - refNormalWorld * dist;
+      // Project incident vertex onto the reference plane
+      double const dist =
+        refNormalWorld.dot(incidentPolyPreClip[i]) - refPlaneD;
+      Coordinate const onRefPlane =
+        incidentPolyPreClip[i] - refNormalWorld * dist;
 
-      // The incident point is the reference plane point offset by depth
-      // along the contact normal (into the reference body)
-      Coordinate const incPoint =
-        onRefPlane - refNormalWorld * epaFace.offset;
+      // The incident point is the original incident vertex (below the plane)
+      Coordinate const incPoint = incidentPolyPreClip[i];
 
       if (refIsA)
       {
@@ -677,7 +684,7 @@ size_t EPA::extractContactManifold(size_t faceIndex,
         contacts[i] = ContactPoint{incPoint, onRefPlane, epaFace.offset};
       }
     }
-    return refCount;
+    return incCount;
   }
 
   // Limit to 4 contact points
