@@ -3,10 +3,10 @@
 ## Status
 - [x] Draft
 - [x] Investigation In Progress
-- [ ] Investigation Complete — Root Cause Identified
+- [x] Investigation Complete — Root Cause Identified
 - [ ] Merged / Complete
 
-**Current Phase**: Investigation In Progress
+**Current Phase**: Investigation Complete — Root Cause Identified
 **Type**: Investigation
 **Priority**: High
 **Assignee**: workflow-orchestrator
@@ -26,111 +26,85 @@ Using the failing tests from 0055a as diagnostic evidence, systematically identi
 
 ---
 
-## Investigation Strategy
+## Root Cause Summary
 
-### Phase 1: Characterize the Failure Pattern
+**Classification**: Single-point friction energy injection via uncompensated yaw torque
 
-Run the 0055a test suite and categorize results:
+### Root Cause Chain
 
-| Question | How to Answer |
-|----------|---------------|
-| Which tilt orientations fail? | Run all T1-T8, record pass/fail |
-| Is the failure in direction or magnitude? | Compare actual vs expected displacement vectors |
-| Do symmetry tests fail? | If T1 passes but T2 fails, the sign handling is suspect |
-| Does the failure depend on friction? | Re-run with friction = 0 — if trajectory is correct without friction, friction is the culprit |
-| Does the failure depend on tilt magnitude? | Try θ = 0.01, 0.05, 0.1, 0.2, 0.5 |
+1. **Compound tilt** (tiltX=0.01, tiltY=π/3) → cube rests on a **vertex**, not an edge
+2. **Vertex-face contact** → EPA/SAT correctly returns **1 contact point** (89% of frames vs 0% for pure pitch)
+3. **Single contact at offset lever arm** → friction Jacobian angular coupling `rA × t` creates **yaw torque**
+4. **With multi-point contacts**, opposing yaw torques cancel; with 1 point, **yaw is uncompensated**
+5. **Yaw rotation** changes which vertex is lowest → contact point **jumps** to a new corner
+6. **Oscillating friction direction** does net positive work → **energy injection** (KE exceeds initial by 7.7%)
+7. Self-reinforcing: growing velocity → growing penetration → accelerating instability
 
-### Phase 2: Isolate the Source
+### Key Evidence
 
-Based on Phase 1 results, investigate these subsystems in order:
+| Diagnostic | Finding |
+|-----------|---------|
+| EPA Normal | Perfect (0,0,-1), zero lateral — H1 ELIMINATED |
+| Contact Count | Pure pitch: 0% single-point, 88% four-point. Compound: **89% single-point**, 0% four-point |
+| Energy Balance | Frictionless compound: perfectly conserves 125J. With friction: **peaks at 134.7J** (exceeds initial) |
+| Yaw Coupling | Compound+friction: peak omega_z = **2.06 rad/s** (4.8 million× more than pure pitch) |
 
-#### 2a: EPA Contact Normal Accuracy
+### Code Locations
 
-For each failing configuration, extract the EPA contact normal at the first frame of contact and verify:
-- Is the normal approximately `(0, 0, 1)` (vertical, as expected for cube-on-flat-floor)?
-- Does the normal have unexpected lateral components that would skew the tangent basis?
-- Does the SAT fallback activate, and if so, is its normal correct?
+- Contact manifold generation: `CollisionHandler::checkCollision()`, `buildSATContact()`
+- Friction lever arm coupling: `FrictionConstraint::jacobian()` — angular term `rA × t`
+- The bug is NOT in any individual component — each works correctly in isolation
 
-**Diagnostic**: Add logging to `CollisionPipeline` or `CollisionHandler` to print contact normals for the tilted cube contact.
+### Proposed Fix for 0055c
 
-#### 2b: Tangent Basis Alignment
-
-For the EPA normal from 2a, compute the Duff tangent basis and verify:
-- Are `t1` and `t2` in the floor plane (perpendicular to `z`)?
-- If the normal has a small lateral component, do the tangent vectors rotate significantly?
-- Is there a discontinuity in the tangent basis for normals near `(0, 0, 1)` that depends on the sign of the lateral perturbation?
-
-**Diagnostic**: Print tangent basis vectors for each contact at first frame.
-
-#### 2c: Contact Point Location
-
-Verify the EPA contact point is correct:
-- Is it on the correct face/edge/corner of the tilted cube?
-- Is the lever arm `r = contactPoint - CoM` consistent with the tilt direction?
-- For multi-contact manifolds, are the contact points distributed correctly?
-
-**Diagnostic**: Print contact points and lever arms at first frame.
-
-#### 2d: Friction Jacobian and Impulse Direction
-
-Verify the friction constraint produces the correct impulse:
-- Compute the relative velocity at the contact point in the tangent basis frame
-- Verify the friction impulse opposes the sliding direction
-- Check if the impulse, when transformed back to world coordinates, pushes in the expected direction
-
-**Diagnostic**: Print `J * v` (relative tangential velocity), `λ_t` (friction impulse), and the resulting world-space force.
-
-#### 2e: Constraint Solver Flattening
-
-Verify the constraint flattening in `ConstraintSolver::flattenConstraints()` preserves the correct association between normal and friction rows:
-- Does the 3-row grouping `[n, t1, t2]` maintain the correct pairing?
-- Is the friction cone constraint `||λ_t|| ≤ μ·λ_n` applied to the correct contact?
-
-### Phase 3: Root Cause Documentation
-
-Document the root cause with:
-1. The specific code location(s) where the error occurs
-2. Why it only manifests for certain tilt orientations
-3. The mathematical explanation of the incorrect behavior
-4. A proposed fix strategy
+**Recommended**: Multi-point manifold generation for vertex-face contacts (standard Box2D/Bullet approach). Clip the contact face against the opposing geometry to generate 3-4 contact points, ensuring yaw torques from friction cancel.
 
 ---
 
-## Key Hypotheses (Ranked by Likelihood)
+## Investigation Strategy
 
-### H1: EPA Normal Lateral Perturbation Skews Tangent Basis
+### Phase 1: Characterize the Failure Pattern — COMPLETE
 
-For a tilted cube on a flat floor, the true contact normal should be purely vertical `(0,0,1)`. But EPA extracts the normal from the Minkowski difference, and for a tilted cube the support mapping may produce a normal with small lateral components. These lateral components could rotate the tangent basis away from the floor plane, causing friction to act partially in the normal direction.
+| Question | Answer | Evidence |
+|----------|--------|----------|
+| Which tilt orientations fail? | Compound tilts with velocity | All T1-T8 pass; sliding tests fail |
+| Is failure in direction or magnitude? | Both | Spurious Y=20.7m, 21x energy injection |
+| Do symmetry tests fail? | No | All 4 symmetry tests pass |
+| Does failure depend on friction? | **YES** | Frictionless compound: KE=125J constant |
+| Does failure depend on tilt magnitude? | Yes | 0.01 rad perturbation sufficient |
 
-**Test**: Compare EPA normal to `(0,0,1)` for each tilt configuration.
+### Phase 2: Isolate the Source — COMPLETE
 
-### H2: Contact Point Asymmetry from EPA vs SAT
+- **2a: EPA Normal** — ELIMINATED. Perfect (0,0,-1) for all cases.
+- **2b: Tangent Basis** — ELIMINATED. t1=(0,1,0), t2=(1,0,0) — perfectly aligned.
+- **2c: Contact Manifold Quality** — ROOT CAUSE. 89% single-point vs 0% for pure pitch.
+- **2d: Yaw Coupling** — CONFIRMED. 4.8M× more yaw with single-point friction.
+- 2e: Not needed (root cause found at 2c/2d).
 
-When SAT fallback activates (for near-zero penetration), the contact manifold construction may produce different contact points than EPA. If the contact points are on the wrong face of the tilted cube, the lever arm will produce incorrect torque.
+### Phase 3: Root Cause Documentation — COMPLETE
 
-**Test**: Check which code path (EPA vs SAT) produces the contact for each tilt configuration.
+Full investigation log: `docs/investigations/0055b_friction_direction_root_cause/investigation-log.md`
 
-### H3: ReferenceFrame Overload Bug (Coordinate vs Vector3D)
+---
 
-The known overload bug where `globalToLocal(Coordinate)` and `globalToLocal(Vector3D)` produce different results could affect friction direction if a contact normal or tangent vector is inadvertently passed as a Coordinate instead of a Vector3D.
+## Key Hypotheses (Final Status)
 
-**Test**: Search friction and collision code for `globalToLocal`/`localToGlobal` calls and verify argument types.
-
-### H4: Sign Convention Inconsistency in Friction Jacobian
-
-The friction Jacobian rows are `[t^T, (r×t)^T, -t^T, -(r×t)^T]` where A is the inertial body and B is the environment. If the body ordering is inconsistent (sometimes A is environment), the sign flips and friction pushes the wrong way.
-
-**Test**: Verify body ordering in `FrictionConstraint` construction for inertial-vs-environment pairs.
+| Hypothesis | Status | Evidence |
+|-----------|--------|----------|
+| H1: EPA Normal Lateral Perturbation | **ELIMINATED** | Normal is exactly (0,0,-1) with zero lateral |
+| H2: Contact Point Asymmetry | **CONFIRMED** (reframed as contact manifold quality) | 89% single-point vs 0% for pure pitch |
+| H3: ReferenceFrame Overload Bug | Not investigated (root cause found) | |
+| H4: Sign Convention Inconsistency | **ELIMINATED** | Symmetry tests pass |
 
 ---
 
 ## Acceptance Criteria
 
-1. Root cause identified with specific file and line number references
-2. Failure pattern fully characterized (which orientations fail and why)
-3. At least one hypothesis confirmed or ruled out with evidence
-4. Proposed fix strategy documented
-5. Investigation findings recorded in ticket for 0055c to implement
+1. [x] Root cause identified with specific file and line number references
+2. [x] Failure pattern fully characterized (which orientations fail and why)
+3. [x] At least one hypothesis confirmed or ruled out with evidence
+4. [x] Proposed fix strategy documented
+5. [x] Investigation findings recorded in ticket for 0055c to implement
 
 ---
 
@@ -143,20 +117,21 @@ The friction Jacobian rows are `[t^T, (r×t)^T, -t^T, -(r×t)^T]` where A is the
 - **GitHub PR**: #40 (draft)
 - **Artifacts**:
   - `docs/investigations/0055b_friction_direction_root_cause/investigation-log.md`
-  - `docs/investigations/0055b_friction_direction_root_cause/diagnostic-normal-extraction.cpp` (reference implementation)
 - **Progress**:
   - Phase 1 COMPLETE: Characterized failure pattern (16/19 tests pass, 3 fail with 21x energy injection)
-  - Phase 2a IN PROGRESS: Investigating EPA contact normal accuracy
-  - Created diagnostic framework for EPA normal extraction
-  - Reviewed tangent basis construction (Duff et al. 2017 algorithm)
-  - Identified H1 (EPA Normal Lateral Perturbation) as most likely root cause
-- **Key Findings**:
-  - Tiny 0.01 rad perturbation causes 20.7m spurious Y displacement (21x amplification)
-  - Bug manifests only when velocity + asymmetric tilt break symmetry
-  - Symmetry tests pass (deterministic bug, not numerical instability)
-  - All tilt orientation tests (T1-T8) pass without NaN
-- **Next Steps**:
-  - Add logging to capture EPA normals at first contact
-  - Compare EPA normal to expected (0, 0, 1) for floor contact
-  - If lateral components confirmed, trace to EPA vs SAT fallback source
-  - Document root cause with specific code locations
+  - Phase 2a COMPLETE: EPA normals are perfect — H1 eliminated
+  - Phase 2b COMPLETE: Tangent basis is perfect
+  - Phase 2c COMPLETE: Contact manifold quality is the root cause (89% single-point)
+  - Phase 2d COMPLETE: Yaw coupling confirmed (4.8M× more with friction)
+  - Phase 3 COMPLETE: Root cause documented with fix strategy
+
+### Investigation Complete Phase
+- **Completed**: 2026-02-10
+- **Diagnostic tests added**: 5 tests in TiltedCubeTrajectoryTest.cpp
+  1. `Diag_EPANormal_PurePitch_vs_Compound`
+  2. `Diag_ContactCount_And_LeverArm`
+  3. `Diag_EnergyBalance_CompoundVsPurePitch`
+  4. `Diag_EPANormal_NormalTimeSeries`
+  5. `Diag_YawCoupling_SinglePointFriction`
+- **Root cause**: Single-point vertex-face contacts + friction Jacobian angular coupling = uncompensated yaw torque → energy injection
+- **Recommended fix**: Multi-point manifold generation for vertex-face contacts
