@@ -25,3 +25,14 @@ _None detected._
 
 ## Iterations
 
+### Iteration 1 — 2026-02-11 14:30
+**Commit**: 4fa59c7
+**Hypothesis**: Add FrameCollisionData struct and snapshot logic to CollisionPipeline to capture ephemeral collision data before clearFrameData()
+**Changes**:
+- `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp`: Add FrameCollisionData nested struct with ContactData, BodyForceData, SolverData; add getLastFrameData() accessor; add snapshotFrameData() private method signature
+- `msd/msd-sim/src/Physics/Collision/CollisionPipeline.cpp`: Implement getLastFrameData() accessor; implement snapshotFrameData() to extract contacts, forces, solver diagnostics; call snapshotFrameData() after Phase 6; clear lastFrameData_ at start of execute()
+**Build Result**: PASS
+**Test Result**: 657/661 — Same as baseline (no regressions)
+**Impact vs Previous**: 0 change (baseline maintained)
+**Assessment**: CollisionPipeline changes complete. Snapshot captures all required data. No ConstraintSolver changes needed (bodyForces already exists). Next: Extend WorldModel::recordCurrentFrame() to persist the snapshot data.
+
