@@ -2060,3 +2060,144 @@ TEST(TiltedCubeTrajectory, Diag_YawCoupling_SinglePointFriction)
               << "torque. This is the energy injection mechanism.\n";
   }
 }
+
+// ============================================================================
+// Diagnostic: Total Mechanical Energy (KE + PE) frame-by-frame
+// ============================================================================
+//
+// Ticket: 0055c_friction_direction_fix
+//
+// Measures total mechanical energy E = KE_trans + KE_rot + mgh every frame
+// for both friction and frictionless cases. Any frame where total E increases
+// means a non-conservative force injected energy.
+//
+// Uses the EXACT scenario from the failing Sliding_ThrownCube_SDLAppConfig
+// test: PI/3 pitch, 0.01 roll, 5 m/s initial Vx, friction=0.5, e=0.5,
+// dt=10ms. This is the scenario where the user observed "very peculiar,
+// reversed rotations and motions" and spurious Y translations.
+
+TEST(TiltedCubeTrajectory, Diag_MechanicalEnergy_FrictionInjection)
+{
+  constexpr int kFrameDtMs = 10;
+  constexpr int kFrames = 500;
+  constexpr double kMass = 10.0;
+  constexpr double kGravZ = -9.81;
+  constexpr double kTiltX = 0.01;       // roll — tiny perturbation
+  constexpr double kTiltY = M_PI / 3.0; // pitch — large tilt
+  constexpr double kInitialVx = 5.0;    // thrown in +X direction
+
+  // Run two simulations: with and without friction
+  for (double friction : {0.5, 0.0})
+  {
+    WorldModel world;
+
+    auto floorPoints = createCubePoints(100.0);
+    ConvexHull floorHull{floorPoints};
+    ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
+    const auto& floorAsset =
+      world.spawnEnvironmentObject(1, floorHull, floorFrame);
+    const_cast<AssetEnvironment&>(floorAsset).setFrictionCoefficient(friction);
+
+    auto cubePoints = createCubePoints(1.0);
+    ConvexHull cubeHull{cubePoints};
+
+    Eigen::Quaterniond tiltQuat =
+      Eigen::Quaterniond{Eigen::AngleAxisd{kTiltY, Eigen::Vector3d::UnitY()}} *
+      Eigen::Quaterniond{Eigen::AngleAxisd{kTiltX, Eigen::Vector3d::UnitX()}};
+
+    double minZ = std::numeric_limits<double>::max();
+    for (const auto& pt : cubePoints)
+    {
+      Eigen::Vector3d rotated =
+        tiltQuat * Eigen::Vector3d{pt.x(), pt.y(), pt.z()};
+      minZ = std::min(minZ, rotated.z());
+    }
+    double centerZ = 0.01 - minZ;
+
+    ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, centerZ}, tiltQuat};
+    world.spawnObject(2, cubeHull, kMass, cubeFrame);
+    uint32_t const cubeId = 1;
+    world.getObject(cubeId).setCoefficientOfRestitution(0.5);
+    world.getObject(cubeId).setFrictionCoefficient(friction);
+
+    // Set initial horizontal velocity — this is the key difference
+    world.getObject(cubeId).getInertialState().velocity =
+      Vector3D{kInitialVx, 0.0, 0.0};
+
+    // Get the actual inertia tensor for accurate rotational KE
+    const Eigen::Matrix3d& inertiaTensor =
+      world.getObject(cubeId).getInertiaTensor();
+
+    std::string label = (friction > 0.0) ? "friction=0.5" : "friction=0.0";
+    std::cerr << "\n=== Mechanical Energy (" << label
+              << ", vx0=" << kInitialVx << ") ===\n";
+
+    double prevE = std::numeric_limits<double>::quiet_NaN();
+    double maxEnergyGain = 0.0;
+    int maxGainFrame = -1;
+    int injectionCount = 0;
+    double cumulativeInjection = 0.0;
+
+    for (int i = 1; i <= kFrames; ++i)
+    {
+      world.update(std::chrono::milliseconds{i * kFrameDtMs});
+
+      auto const& state = world.getObject(cubeId).getInertialState();
+      auto const& pos = state.position;
+      auto const& vel = state.velocity;
+      auto omega = state.getAngularVelocity();
+
+      // Translational KE = ½mv²
+      double keT = 0.5 * kMass *
+        (vel.x() * vel.x() + vel.y() * vel.y() + vel.z() * vel.z());
+
+      // Rotational KE = ½ω^T·I·ω (using actual inertia tensor)
+      Eigen::Vector3d omegaVec{omega.x(), omega.y(), omega.z()};
+      double keR = 0.5 * omegaVec.transpose() * inertiaTensor * omegaVec;
+
+      // Gravitational PE = mgh
+      double pe = kMass * (-kGravZ) * pos.z();
+
+      double E = keT + keR + pe;
+
+      double deltaE = 0.0;
+      if (!std::isnan(prevE))
+      {
+        deltaE = E - prevE;
+        if (deltaE > 1e-6)
+        {
+          injectionCount++;
+          cumulativeInjection += deltaE;
+          if (deltaE > maxEnergyGain)
+          {
+            maxEnergyGain = deltaE;
+            maxGainFrame = i;
+          }
+        }
+      }
+
+      // Print every 10th frame, plus any injection frame
+      if (i % 10 == 0 || i <= 20 || deltaE > 1e-4)
+      {
+        std::cerr << "  f" << i
+                  << " E=" << E
+                  << " keT=" << keT
+                  << " keR=" << keR
+                  << " pe=" << pe
+                  << " dE=" << deltaE
+                  << " vy=" << vel.y()
+                  << " wz=" << omega.z()
+                  << (deltaE > 1e-6 ? " <<< INJECTION" : "")
+                  << "\n";
+      }
+
+      prevE = E;
+    }
+
+    std::cerr << "\n  Summary (" << label << "): "
+              << "injectionFrames=" << injectionCount
+              << " maxGain=" << maxEnergyGain
+              << " at frame " << maxGainFrame
+              << " cumulativeInjection=" << cumulativeInjection << "\n";
+  }
+}

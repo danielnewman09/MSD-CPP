@@ -134,4 +134,30 @@ EPA.cpp `extractContactManifold()` modified in iterations 1, 4, and 5 (3 times).
 - Yaw coupling: compound+friction peak omega_z = **1.93 rad/s** — barely changed from baseline (was 2.06 without fix)
 - The 3 original 0055a failures still present
 **Impact vs Previous**: Negligible change from baseline. Lever arm projection did NOT fix yaw coupling.
-**Assessment**: **FAILED**. The tangent-plane projection of the lever arm had minimal effect on yaw coupling (1.93 vs 2.06 rad/s). The yaw torque does NOT come primarily from the normal component of the lever arm. The cross product `rA × t` creates yaw even with a tangent-plane-only lever arm when the lever arm has components in both tangent directions. Need to re-examine the actual mechanism — the yaw coupling may come from the interplay between the two tangent friction directions at an off-center contact, not from the normal component. Reverting this change.
+**Assessment**: **FAILED**. The tangent-plane projection of the lever arm had minimal effect on yaw coupling (1.93 vs 2.06 rad/s). The yaw torque does NOT come primarily from the normal component of the lever arm. The cross product `rA × t` creates yaw even with a tangent-plane-only lever arm when the lever arm has components in both tangent directions. Reverting this change.
+
+**Human insight (post-iteration 7)**: Yaw coupling may be physically correct — a corner impact SHOULD create yaw. The real bug is **energy injection**: friction should only dissipate energy (F_friction · v_contact ≤ 0), but under certain circumstances friction acts in the wrong direction, causing KE to increase. The fix should target the energy injection mechanism, not the yaw coupling itself. Next step: diagnostic to measure friction power (F·v) per frame and identify when/why friction injects energy.
+
+### Iteration 8 — 2026-02-11 (session 4, energy diagnostic — wrong scenario)
+**Commit**: (pending)
+**Hypothesis**: Measure total mechanical energy (KE_translational + KE_rotational + gravitational PE) frame by frame. Any frame where total E increases means a non-conservative force injected energy. Compare friction vs frictionless cases.
+**Changes**:
+- `msd/msd-sim/test/Physics/Collision/TiltedCubeTrajectoryTest.cpp`: Added `Diag_MechanicalEnergy_FrictionInjection` test measuring E = ½mv² + ½Iω² + mgh every frame for friction=0.5 and friction=0.0.
+**Build Result**: PASS
+**Test Result**: `injectionFrames=0` for BOTH friction=0.5 and friction=0.0 cases. Zero energy injection detected.
+**Impact vs Previous**: N/A (diagnostic only, no code changes)
+**Assessment**: **WRONG SCENARIO**. This diagnostic uses a tilted cube dropped from REST (tiltX=0.1, tiltY=0.1, no horizontal velocity). The actual failing tests (Sliding_ThrownCube_SDLAppConfig, SpuriousY) use PI/3 pitch + 5 m/s initial horizontal velocity. The energy injection may only manifest when friction opposes sliding motion while the body is simultaneously rotating — a scenario not covered by this drop-only test. Next: modify diagnostic to use the actual failing scenario parameters (PI/3 pitch, 0.01 roll, 5 m/s initial Vx).
+
+### Iteration 9 — 2026-02-11 (session 4, energy diagnostic — correct scenario)
+**Commit**: (pending)
+**Hypothesis**: Same as iteration 8, but using the actual failing scenario parameters (PI/3 pitch, 0.01 roll, 5 m/s initial Vx, e=0.5, friction=0.5, dt=10ms) matching Sliding_ThrownCube_SDLAppConfig. Also uses actual inertia tensor for accurate rotational KE.
+**Changes**:
+- `msd/msd-sim/test/Physics/Collision/TiltedCubeTrajectoryTest.cpp`: Updated `Diag_MechanicalEnergy_FrictionInjection` with thrown-cube parameters and real inertia tensor.
+**Build Result**: PASS
+**Test Result**: **ENERGY INJECTION CONFIRMED**
+- friction=0.5: **238 injection frames**, cumulative injection = **106.35 J**, max single-frame injection = **0.96 J** at frame 121
+- friction=0.0: **0 injection frames**, cumulative injection = 0 J
+- Injection pattern: starts at frame 77 (vy=-1.42, wz=+0.10), intensifies through frames 99-200+. The cube accelerates in the -Y direction via friction (vy grows from -1.78 to -2.4+), while keT increases monotonically. After frame ~280, vy reverses sign but injection continues.
+- Key observation: at every injection frame, the cube has significant vy (spurious lateral velocity). Friction appears to be pushing the cube laterally rather than opposing its sliding direction.
+**Impact vs Previous**: Confirmed the user's hypothesis — friction is injecting energy by acting in the wrong direction. The bug only manifests with initial horizontal velocity (sliding + tilting).
+**Assessment**: Energy injection confirmed. The friction force vector does not oppose the contact-point sliding velocity. Next step: instrument the constraint solver to print the actual friction force direction vs contact point velocity direction at injection frames, to identify WHY friction acts in the wrong direction (tangent basis misalignment? stale contact normal? wrong lever arm?).
