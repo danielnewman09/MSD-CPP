@@ -13,6 +13,7 @@
 **Assignee**: N/A
 **Created**: 2026-02-10
 **Branch**: TBD
+**GitHub Issue**: #32
 **Related Tickets**: [0053_collision_pipeline_performance](0053_collision_pipeline_performance.md), [0052_custom_friction_cone_solver](0052_custom_friction_cone_solver.md)
 
 ---

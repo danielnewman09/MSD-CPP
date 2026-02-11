@@ -23,7 +23,7 @@
 
 | Subtask | Description | Priority | Est. Impact | Status |
 |---------|-------------|----------|-------------|--------|
-| 0053a | Reduce heap allocations in solver pipeline | High | ~1.8% CPU | Partial (SolverWorkspace infra only) |
+| 0053a | Reduce heap allocations in solver pipeline | High | ~1.8% CPU | COMPLETE (superseded by 0053f) |
 | 0053b | Disable Qhull diagnostic output | Low | ~0.3% CPU | COMPLETE |
 | 0053c | FrictionConeSolver iteration optimization | High | ~1.9% CPU | COMPLETE (done in 0052d) |
 | 0053d | SAT fallback cost reduction | Medium | ~1.1% CPU | COMPLETE |
@@ -294,10 +294,12 @@ Profiling the collision and friction pipeline on the `0052d-solver-integration` 
   - `69ca8b8` — 0053a: SolverWorkspace infrastructure (partial)
   - `d1cba0a` — Document partial implementation status
   - `77ddad7` — 0053d: Gate SAT fallback using ContactCache
-  - (pending) — 0053f: Wire solver workspace into solvers
+  - `99c78e7` — 0053f: Wire solver workspace into solvers
+  - `894329c` — Benchmark: add CollisionPipelineBench + update baseline
+  - `566bdda` — Chore: gitignore profiling artifacts
 - **Results**:
   - **0053b (Qhull suppression)**: Redirected stdout/stderr to `/dev/null` in `qh_new_qhull()`. `qh_printsummary` dropped from 15 samples to 0.
-  - **0053a (SolverWorkspace)**: Created `SolverWorkspace` struct in `CollisionPipeline`. Full Eigen::Ref API refactoring deferred — would require changing signatures across ConstraintSolver, PositionCorrector, and FrictionConeSolver with high regression risk for marginal gain.
+  - **0053a (SolverWorkspace)**: Created `SolverWorkspace` struct in `CollisionPipeline`. Pipeline-level Eigen::Ref API approach superseded by 0053f per-solver workspace approach. Dead `SolverWorkspace` struct removed in 0053f.
   - **0053c (Friction warm-start)**: Already implemented in ticket 0052d. ContactCache stores 3 lambdas per contact (normal + 2 friction). No additional work needed.
   - **0053d (SAT gating)**: Gate SAT validation using ContactCache persistence check. For persistent contacts (cache has entry), skip SAT entirely — EPA results are reliable for non-first-frame contacts. For new contacts (no cache entry), always run SAT to catch EPA's degenerate-simplex failures. Zero test regressions. `computeSATMinPenetration` completely eliminated from top 20 hotspots.
   - **0053e (Eigen fixed-size)**: Deferred — would require extensive API changes for marginal allocation savings given 0053d already achieved -54% total reduction.
