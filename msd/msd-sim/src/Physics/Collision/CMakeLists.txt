@@ -4,6 +4,8 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     EPA.cpp
     CollisionHandler.cpp
     CollisionPipeline.cpp
+    VertexFaceDetector.cpp
+    VertexFaceManifoldGenerator.cpp
 )
 
 set(
@@ -13,5 +15,7 @@ set(
         ${CMAKE_CURRENT_SOURCE_DIR}/CollisionHandler.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/CollisionResult.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/CollisionPipeline.hpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/VertexFaceDetector.hpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/VertexFaceManifoldGenerator.hpp
     PARENT_SCOPE
 )

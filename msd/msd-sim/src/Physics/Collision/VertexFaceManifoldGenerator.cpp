@@ -10,7 +10,7 @@ namespace msd_sim
 {
 
 VertexFaceManifoldGenerator::VertexFaceManifoldGenerator(Config config)
-  : config_{config}
+  : config_{std::move(config)}
 {
 }
 

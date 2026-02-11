@@ -58,12 +58,16 @@ public:
   };
 
   /**
+   * @brief Construct generator with default configuration.
+   */
+  VertexFaceManifoldGenerator() = default;
+
+  /**
    * @brief Construct generator with specified configuration.
    *
-   * @param config Generator configuration (default: depthTolerance=1e-6,
-   * maxContacts=4)
+   * @param config Generator configuration
    */
-  explicit VertexFaceManifoldGenerator(Config config = Config{});
+  explicit VertexFaceManifoldGenerator(Config config);
 
   /**
    * @brief Generate contact manifold for vertex-face geometry.

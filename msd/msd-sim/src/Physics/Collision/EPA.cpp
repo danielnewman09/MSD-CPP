@@ -568,11 +568,24 @@ size_t EPA::extractContactManifold(size_t faceIndex,
                            refFrame,
                            refNormalWorld);
 
-  // Handle degenerate cases — attempt edge contact generation first
-  // Ticket: 0040c_edge_contact_manifold
+  // Handle degenerate cases — attempt vertex-face, then edge contact generation
+  // Ticket: 0055c_friction_direction_fix — vertex-face manifold generation
+  // Ticket: 0040c_edge_contact_manifold — edge contact generation
   // Ticket: 0040a — fallback uses EPA offset as per-contact depth
   if (refVerts.size() < 3 || incidentPoly.size() < 3)
   {
+    // Try vertex-face manifold generation first
+    if (vertexFaceDetector_.isVertexFaceContact(refVerts.size(), incidentPoly.size()))
+    {
+      size_t const vertexFaceContactCount =
+        generateVertexFaceManifold(epaFace, refVerts, incidentPoly, refIsA, contacts);
+      if (vertexFaceContactCount >= 3)
+      {
+        return vertexFaceContactCount;
+      }
+    }
+
+    // Fall back to edge contact generation
     size_t const edgeContactCount =
       generateEdgeContacts(epaFace, contacts);
     if (edgeContactCount >= 2)
@@ -580,7 +593,7 @@ size_t EPA::extractContactManifold(size_t faceIndex,
       return edgeContactCount;
     }
 
-    // Fallback to single EPA centroid point
+    // Final fallback: single EPA centroid point
     Coordinate const contactPoint = epaFace.normal * epaFace.offset;
     contacts[0] = ContactPoint{contactPoint, contactPoint, epaFace.offset};
     return 1;
@@ -759,6 +772,76 @@ size_t EPA::generateEdgeContacts(
     depth};
 
   return 2;
+}
+
+size_t EPA::generateVertexFaceManifold(
+  const Facet& epaFace,
+  const std::vector<Coordinate>& refVerts,
+  const std::vector<Coordinate>& incVerts,
+  bool refIsA,
+  std::array<ContactPoint, 4>& contacts) const
+{
+  // Ticket: 0055c_friction_direction_fix
+  // Design: docs/designs/0055c_friction_direction_fix/design.md
+  //
+  // Generate multi-point contact manifold for vertex-face geometry to eliminate
+  // energy injection from single-point friction contacts.
+  //
+  // Algorithm:
+  // 1. Identify reference face (>= 3 verts) and incident vertex (1 vert)
+  // 2. Use VertexFaceManifoldGenerator to project face verts onto contact plane
+  // 3. Build ContactPoint pairs with uniform EPA depth (Option A from design)
+
+  // Determine which side is the face (>= 3 verts) and which is the vertex (1 vert)
+  const std::vector<Coordinate>* faceVerts = nullptr;
+  Coordinate incidentVertex{};
+  bool faceIsA = false;
+
+  if (refVerts.size() >= 3 && incVerts.size() == 1)
+  {
+    // Reference is face, incident is vertex
+    faceVerts = &refVerts;
+    incidentVertex = incVerts[0];
+    faceIsA = refIsA;
+  }
+  else if (incVerts.size() >= 3 && refVerts.size() == 1)
+  {
+    // Incident is face, reference is vertex
+    faceVerts = &incVerts;
+    incidentVertex = refVerts[0];
+    faceIsA = !refIsA;
+  }
+  else
+  {
+    // Not vertex-face geometry, should not be called
+    return 0;
+  }
+
+  // Contact normal in EPA coordinates (points from A toward B)
+  Vector3D const contactNormal{epaFace.normal.x(), epaFace.normal.y(), epaFace.normal.z()};
+
+  // Generate manifold using uniform EPA depth (Option A)
+  size_t const contactCount = vertexFaceManifoldGenerator_.generate(
+    *faceVerts,
+    incidentVertex,
+    contactNormal,
+    epaFace.offset,
+    contacts);
+
+  // Adjust contact point assignment based on which asset owns the face
+  // EPA convention: contacts[i].pointA is on asset A, contacts[i].pointB is on asset B
+  if (!faceIsA)
+  {
+    // Face is on asset B, vertex is on asset A
+    // Generator puts face points in pointA, vertex in pointB
+    // Need to swap so vertex (on A) is in pointA, face (on B) is in pointB
+    for (size_t i = 0; i < contactCount; ++i)
+    {
+      std::swap(contacts[i].pointA, contacts[i].pointB);
+    }
+  }
+
+  return contactCount;
 }
 
 }  // namespace msd_sim
