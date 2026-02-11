@@ -4,13 +4,15 @@
 - [x] Draft
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Prototype
-- [ ] Prototype Complete — Awaiting Review
-- [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Review
+- [x] Design Approved — Ready for Prototype (SKIPPED - no prototype needed)
+- [x] Prototype Complete — Awaiting Review (SKIPPED)
+- [x] Ready for Implementation
+- [x] Implementation Complete — Awaiting Quality Gate
+- [ ] Quality Gate Passed — Awaiting Review
+- [ ] Approved — Ready to Merge
 - [ ] Merged / Complete
 
-**Current Phase**: Design Complete — Awaiting Review
+**Current Phase**: Implementation Complete — Awaiting Quality Gate
 **Type**: Infrastructure
 **Priority**: High
 **Assignee**: TBD
@@ -186,3 +188,27 @@ TEST(ReplayRecording, CollisionSimulation_AllRecordTypesPopulated)
   - `docs/designs/0056b_collision_pipeline_data_extraction/design.md` — Detailed design document
   - `docs/designs/0056b_collision_pipeline_data_extraction/0056b_collision_pipeline_data_extraction.puml` — Architecture diagram
 - **Notes**: Design covers FrameCollisionData snapshot struct, CollisionPipeline integration, WorldModel recording extensions, and ConstraintSolver force extraction. Three open questions flagged: force extraction granularity, snapshot preservation timing, and BodyMetadataRecord uniqueness handling. Fully backward compatible design—all changes are additive.
+
+### Design Review
+- **Completed**: 2026-02-11
+- **Reviewer**: Human (via orchestrator feedback)
+- **Key Findings**:
+  1. ConstraintSolver::SolveResult ALREADY has bodyForces with linearForce and angularTorque — skip ConstraintSolver changes entirely
+  2. Force extraction: Per-body net forces (Option A, already available)
+  3. Body ID reuse: Accept duplicates (no uniqueness constraint)
+  4. Snapshot timing: Confirmed — recordCurrentFrame() called in update() after execute()
+- **Decision**: Approved for implementation, skip prototype phase (no unknowns)
+
+### Implementation Phase
+- **Started**: 2026-02-11
+- **Completed**: 2026-02-11
+- **Branch**: `0056b-collision-pipeline-data-extraction`
+- **PR**: #43 (https://github.com/danielnewman09/MSD-CPP/pull/43) — marked ready for review
+- **Artifacts**:
+  - `docs/designs/0056b_collision_pipeline_data_extraction/implementation-notes.md` — Implementation summary, deviations, test plan
+  - `docs/designs/0056b_collision_pipeline_data_extraction/iteration-log.md` — 2 iterations, 0 regressions
+- **Files Modified** (~455 LOC added):
+  - `msd/msd-sim/src/Physics/Collision/CollisionPipeline.{hpp,cpp}` — FrameCollisionData struct, snapshotFrameData(), getLastFrameData()
+  - `msd/msd-sim/src/Environment/WorldModel.{hpp,cpp}` — 5 recording helpers, recordCurrentFrame() extension, spawn metadata
+- **Test Results**: 657/661 passing (baseline maintained, 0 regressions)
+- **Notes**: Implementation complete per design. ConstraintSolver changes skipped (bodyForces already existed). All 5 record types implemented. Metadata recorded at spawn, collision data recorded per frame. Awaiting quality gate (unit/integration tests).
