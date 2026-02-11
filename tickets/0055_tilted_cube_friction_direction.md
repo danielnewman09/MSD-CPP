@@ -24,7 +24,9 @@
 |-----------|-------|------|--------------|--------|
 | [0055a](0055a_tilted_cube_trajectory_test_suite.md) | Tilted Cube Trajectory Test Suite | Test Suite | None | Draft |
 | [0055b](0055b_friction_direction_root_cause.md) | Friction Direction Root Cause Investigation | Investigation | 0055a | Investigation Complete |
-| [0055c](0055c_friction_direction_fix.md) | Friction Direction Fix and Regression Testing | Implementation | 0055b | Draft |
+| [0055c](0055c_friction_direction_fix.md) | Friction Direction Fix and Regression Testing | Implementation | 0055b | In Progress (iter 12) |
+| [0055d](0055d_friction_solver_energy_conservation.md) | Friction Solver Energy Conservation | Implementation | 0055c | Draft |
+| [0055e](0055e_yaw_coupling_correctness.md) | Yaw Coupling Physical Correctness Assessment | Investigation | 0055b | Draft |
 
 ### Dependency Graph
 
@@ -34,8 +36,12 @@
     ▼
 0055b (Root Cause Investigation)
     │
+    ├──────────────────────┐
+    ▼                      ▼
+0055c (Fix + Regression)   0055e (Yaw Assessment)
+    │
     ▼
-0055c (Fix + Regression Testing)
+0055d (Energy Conservation)
 ```
 
 ### Subticket Summary
@@ -43,6 +49,8 @@
 - **0055a**: Extends tilted cube tests to cover multiple tilt orientations and asserts trajectory correctness.
 - **0055b**: Uses failing tests to diagnose why friction pushes in incorrect directions for certain tilt angles.
 - **0055c**: Implements the fix and verifies all trajectory tests pass without regressions.
+- **0055d**: Refines the capped coupled solve threshold to preserve elastic bounce energy while preventing pathological normal inflation.
+- **0055e**: Determines whether yaw from corner-impact friction is physically correct or a bug; updates tests accordingly.
 
 ---
 
