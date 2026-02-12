@@ -11,10 +11,9 @@
 **Priority**: High
 **Assignee**: TBD
 **Created**: 2026-02-11
-**Updated**: 2026-02-12
 **Generate Tutorial**: No
 **Parent Ticket**: [0056_browser_simulation_replay](0056_browser_simulation_replay.md)
-**Depends On**: [0056a_collision_force_transfer_records](0056a_collision_force_transfer_records.md), [0056b_collision_pipeline_data_extraction](0056b_collision_pipeline_data_extraction.md), [0056i_static_asset_recording_and_fk](0056i_static_asset_recording_and_fk.md)
+**Depends On**: [0056a_collision_force_transfer_records](0056a_collision_force_transfer_records.md), [0056b_collision_pipeline_data_extraction](0056b_collision_pipeline_data_extraction.md)
 
 ---
 
@@ -52,51 +51,19 @@ msd/msd-pybind/
 
 ### R3: Record Type Bindings
 
-Bind all transfer record types as Python classes with read-only properties. Records are organized into three tiers:
+Bind all transfer record types as Python classes with read-only properties:
 
-#### Tier 1: Top-Level Records (own DB tables, queried directly)
-
-| Record | Key Fields | Notes |
-|--------|-----------|-------|
-| `SimulationFrameRecord` | id, simulation_time, wall_clock_time | Frame timestamping |
-| `AssetInertialStaticRecord` | id, body_id, mass, restitution, friction | Static body data (recorded once at spawn) |
-| `InertialStateRecord` | position (sub), velocity (sub), orientation (sub), quaternionRate (sub), angularAcceleration (sub), body FK, frame FK | Per-body per-frame kinematic state |
-| `EnergyRecord` | body FK, linear_ke, rotational_ke, potential_e, total_e, frame FK | Per-body per-frame energy |
-| `SystemEnergyRecord` | total_linear_ke, total_rotational_ke, total_potential_e, total_system_e, delta_e, energy_injection, collision_active, frame FK | System-level energy summary |
-| `CollisionResultRecord` | body_a_id, body_b_id, normal (sub), penetrationDepth, contacts (RepeatedField), frame FK | Per-collision-pair per-frame |
-| `SolverDiagnosticRecord` | iterations, residual, converged, num_constraints, num_contacts, frame FK | Per-frame solver stats |
-| `MeshRecord` | id, vertex_data (bytes), vertex_count | Asset geometry |
-| `ObjectRecord` | id, name, category, mesh FK IDs | Asset definitions |
-
-#### Tier 2: Sub-Records (composed into top-level records)
-
-These are embedded sub-records within top-level records. They appear as nested objects in Python:
-
-| Sub-Record | Fields | Used By |
-|-----------|--------|---------|
-| `CoordinateRecord` | x, y, z | InertialStateRecord.position, ContactPointRecord.pointA/B |
-| `VelocityRecord` | x, y, z | InertialStateRecord.velocity |
-| `AccelerationRecord` | x, y, z | InertialStateRecord.acceleration |
-| `QuaternionDRecord` | w, x, y, z | InertialStateRecord.orientation |
-| `Vector4DRecord` | w, x, y, z | InertialStateRecord.quaternionRate |
-| `Vector3DRecord` | x, y, z | CollisionResultRecord.normal |
-| `AngularAccelerationRecord` | x, y, z | InertialStateRecord.angularAcceleration |
-| `ContactPointRecord` | pointA (sub), pointB (sub), depth | CollisionResultRecord.contacts (RepeatedField) |
-
-#### Tier 3: Extended Records (defined but not yet actively recorded)
-
-These records exist in msd-transfer but are not yet written by the DataRecorder. Bind them for forward compatibility:
-
-| Record | Fields | Notes |
-|--------|--------|-------|
-| `AssetDynamicStateRecord` | body_id, kinematicState (sub), externalForces (RepeatedField), frame FK | Full per-frame body state |
-| `ExternalForceRecord` | force (sub), torque (sub), applicationPoint (sub) | Force/torque sub-record |
-| `ForceVectorRecord` | x, y, z | Force component sub-record |
-| `TorqueVectorRecord` | x, y, z | Torque component sub-record |
-| `AssetPhysicalDynamicRecord` | (check fields) | Physical asset dynamic state |
-| `AssetPhysicalStaticRecord` | (check fields) | Physical asset static state |
-| `MaterialRecord` | (existing) | Rendering materials |
-| `PhysicsTemplateRecord` | (existing) | Physics templates |
+- `SimulationFrameRecord` — id, simulation_time, wall_clock_time
+- `InertialStateRecord` — position (tuple), velocity (tuple), orientation (tuple), frame_id
+- `EnergyRecord` — body_id, linear_ke, rotational_ke, potential_e, total_e, frame_id
+- `SystemEnergyRecord` — totals, delta_e, energy_injection, collision_active, frame_id
+- `ContactRecord` — body_a_id, body_b_id, point_a/b (tuples), normal (tuple), depth, frame_id
+- `ConstraintForceRecord` — body_id, force/torque (tuples), frame_id
+- `AppliedForceRecord` — body_id, force_type, force/torque/point (tuples), frame_id
+- `SolverDiagnosticRecord` — iterations, residual, converged, num_constraints, frame_id
+- `BodyMetadataRecord` — body_id, asset_id, mass, restitution, friction, is_environment
+- `MeshRecord` — id, vertex_data (bytes), vertex_count
+- `ObjectRecord` — id, name, category, mesh FK IDs
 
 ### R4: Database Query Bindings
 
@@ -106,29 +73,23 @@ Wrap `cpp_sqlite::Database` with read-only query methods:
 db = msd_reader.Database("recording.db")
 
 # Select all records of a type
-frames = db.select_all(SimulationFrameRecord)
-states = db.select_all(InertialStateRecord)
-collisions = db.select_all(CollisionResultRecord)
-static_assets = db.select_all(AssetInertialStaticRecord)
+frames = db.select_all_frames()
+states = db.select_all_states()
+contacts = db.select_all_contacts()
+metadata = db.select_all_metadata()
 
 # Select by frame FK (custom WHERE query)
-states = db.select_by_frame(InertialStateRecord, frame_id)
-collisions = db.select_by_frame(CollisionResultRecord, frame_id)
-solver = db.select_by_frame(SolverDiagnosticRecord, frame_id)
-energy = db.select_by_frame(EnergyRecord, frame_id)
-system_energy = db.select_by_frame(SystemEnergyRecord, frame_id)
-
-# Select by body FK
-states = db.select_by_body(InertialStateRecord, body_id)
-energy = db.select_by_body(EnergyRecord, body_id)
+states = db.select_states_by_frame(frame_id)
+contacts = db.select_contacts_by_frame(frame_id)
+forces = db.select_constraint_forces_by_frame(frame_id)
+applied = db.select_applied_forces_by_frame(frame_id)
+solver = db.select_solver_diagnostics_by_frame(frame_id)
+energy = db.select_energy_by_frame(frame_id)
 
 # Select by ID
-frame = db.select_by_id(SimulationFrameRecord, 1)
-mesh = db.select_by_id(MeshRecord, 1)
-asset = db.select_by_id(AssetInertialStaticRecord, 1)
+frame = db.select_frame_by_id(1)
+mesh = db.select_mesh_by_id(1)
 ```
-
-**Design note**: Prefer generic `select_all(RecordType)` / `select_by_frame(RecordType, id)` over per-type methods. This keeps the API surface small and automatically supports new record types.
 
 ### R5: Geometry Deserialization
 
@@ -192,39 +153,20 @@ def test_open_database():
 # Verify record querying
 def test_select_all_frames():
     db = msd_reader.Database("test_recording.db")
-    frames = db.select_all(msd_reader.SimulationFrameRecord)
+    frames = db.select_all_frames()
     assert len(frames) > 0
     assert hasattr(frames[0], 'simulation_time')
 
 # Verify FK-based queries
 def test_select_states_by_frame():
     db = msd_reader.Database("test_recording.db")
-    states = db.select_by_frame(msd_reader.InertialStateRecord, 1)
+    states = db.select_states_by_frame(1)
     assert all(hasattr(s, 'position') for s in states)
-
-# Verify body FK queries
-def test_select_states_by_body():
-    db = msd_reader.Database("test_recording.db")
-    assets = db.select_all(msd_reader.AssetInertialStaticRecord)
-    assert len(assets) > 0
-    body_id = assets[0].id
-    states = db.select_by_body(msd_reader.InertialStateRecord, body_id)
-    assert len(states) > 0
-
-# Verify collision result with nested contacts
-def test_collision_result_contacts():
-    db = msd_reader.Database("test_recording.db")
-    collisions = db.select_all(msd_reader.CollisionResultRecord)
-    if len(collisions) > 0:
-        c = collisions[0]
-        assert hasattr(c, 'normal')
-        assert hasattr(c, 'contacts')  # RepeatedField
-        assert hasattr(c.normal, 'x')
 
 # Verify geometry deserialization
 def test_deserialize_collision_vertices():
     db = msd_reader.Database("test_assets.db")
-    meshes = db.select_all(msd_reader.MeshRecord)
+    meshes = db.select_all_meshes()
     vertices = msd_reader.deserialize_collision_vertices(meshes[0].vertex_data)
     assert len(vertices) > 0
     assert len(vertices[0]) == 3  # (x, y, z)
@@ -235,37 +177,15 @@ def test_deserialize_collision_vertices():
 ## Acceptance Criteria
 
 1. [ ] **AC1**: `import msd_reader` succeeds after building with `ENABLE_PYBIND=ON`
-2. [ ] **AC2**: Can open recording database and query all Tier 1 record types
-3. [ ] **AC3**: FK-based queries (select by frame, select by body) return correct records
+2. [ ] **AC2**: Can open recording database and query all record types
+3. [ ] **AC3**: FK-based queries (select by frame) return correct records
 4. [ ] **AC4**: Collision vertex deserialization produces correct (x, y, z) tuples
 5. [ ] **AC5**: Visual vertex deserialization produces correct 9-element tuples
 6. [ ] **AC6**: Build preset `debug-pybind-only` works
 7. [ ] **AC7**: Existing C++ build unaffected when `ENABLE_PYBIND=OFF`
-8. [ ] **AC8**: Sub-records (CoordinateRecord, ContactPointRecord, etc.) accessible as nested Python objects
-9. [ ] **AC9**: RepeatedField collections (CollisionResultRecord.contacts) iterable in Python
 
 ---
 
 ## Human Feedback
 
 {Add feedback here at any point. Agents will read this section.}
-
----
-
-## Dependency Compatibility Notes (2026-02-12)
-
-Ticket updated to reflect changes from 0056a/0056b1/0056i/0056j:
-
-| Original 0056c Reference | Current Status | Action |
-|--------------------------|----------------|--------|
-| `ContactRecord` | **Deleted** — replaced by `ContactPointRecord` (sub-record inside `CollisionResultRecord`) | Updated R3 |
-| `ConstraintForceRecord` | **Deleted** — redundant per 0056a refactoring | Removed from R3 |
-| `AppliedForceRecord` | **Deleted** — redundant per 0056a refactoring | Removed from R3 |
-| `BodyMetadataRecord` | **Never existed** — replaced by `AssetInertialStaticRecord` | Updated R3 |
-| `EnergyRecord.body_id` (uint32_t) | Now `EnergyRecord.body` (FK to `AssetInertialStaticRecord`) | Updated R3 |
-| `InertialStateRecord` | Now has `body` FK to `AssetInertialStaticRecord` | Updated R3 |
-| Per-type query methods | Replaced with generic `select_all(Type)` / `select_by_frame(Type, id)` | Updated R4 |
-| — | New: `AssetInertialStaticRecord` (static body data) | Added to R3 |
-| — | New: `CollisionResultRecord` with `RepeatedField<ContactPointRecord>` | Added to R3 |
-| — | New: `select_by_body()` queries via body FK | Added to R4 |
-| — | New dependency: 0056i (FK linkage) | Added to Depends On |
