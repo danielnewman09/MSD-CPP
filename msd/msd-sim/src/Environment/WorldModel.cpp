@@ -313,20 +313,16 @@ void WorldModel::recordCurrentFrame()
   sysEnergyDAO.addToBuffer(sysRecord);
   previousSystemEnergy_ = systemEnergy.total();
 
-  // Ticket: 0056b_collision_pipeline_data_extraction
-  // Record collision-related data from pipeline snapshot
-  const auto& frameData = collisionPipeline_.getLastFrameData();
-  recordCollisions(frameId, frameData);
-  recordSolverDiagnostics(frameId, frameData);
+  // Ticket: 0056b1 — read collision data directly from pipeline (no snapshot)
+  recordCollisions(frameId);
+  recordSolverDiagnostics(frameId);
 }
 
-void WorldModel::recordCollisions(
-  uint32_t frameId,
-  const CollisionPipeline::FrameCollisionData& frameData)
+void WorldModel::recordCollisions(uint32_t frameId)
 {
   auto& collisionDAO =
     dataRecorder_->getDAO<msd_transfer::CollisionResultRecord>();
-  for (const auto& pair : frameData.collisionPairs)
+  for (const auto& pair : collisionPipeline_.getCollisions())
   {
     auto record = pair.result.toRecord(pair.bodyAId, pair.bodyBId);
     record.id = collisionDAO.incrementIdCounter();
@@ -335,21 +331,20 @@ void WorldModel::recordCollisions(
   }
 }
 
-void WorldModel::recordSolverDiagnostics(
-  uint32_t frameId,
-  const CollisionPipeline::FrameCollisionData& frameData)
+void WorldModel::recordSolverDiagnostics(uint32_t frameId)
 {
+  const auto& solver = collisionPipeline_.getSolverData();
+
   auto& diagDAO =
     dataRecorder_->getDAO<msd_transfer::SolverDiagnosticRecord>();
 
   msd_transfer::SolverDiagnosticRecord record{};
   record.id = diagDAO.incrementIdCounter();
-  record.iterations = static_cast<uint32_t>(frameData.solverData.iterations);
-  record.residual = frameData.solverData.residual;
-  record.converged = frameData.solverData.converged ? 1 : 0;
-  record.num_constraints =
-    static_cast<uint32_t>(frameData.solverData.numConstraints);
-  record.num_contacts = static_cast<uint32_t>(frameData.solverData.numContacts);
+  record.iterations = static_cast<uint32_t>(solver.iterations);
+  record.residual = solver.residual;
+  record.converged = solver.converged ? 1 : 0;
+  record.num_constraints = static_cast<uint32_t>(solver.numConstraints);
+  record.num_contacts = static_cast<uint32_t>(solver.numContacts);
   record.frame.id = frameId;
 
   diagDAO.addToBuffer(record);

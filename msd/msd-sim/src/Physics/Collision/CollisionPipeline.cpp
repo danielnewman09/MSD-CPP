@@ -4,11 +4,9 @@
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
 
 #include "msd-sim/src/Physics/Collision/CollisionPipeline.hpp"
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <span>
 #include <utility>
 #include <vector>
 
@@ -46,10 +44,16 @@ bool CollisionPipeline::hadCollisions() const
   return collisionOccurred_;
 }
 
-const CollisionPipeline::FrameCollisionData&
-CollisionPipeline::getLastFrameData() const
+const std::vector<CollisionPipeline::CollisionPair>&
+CollisionPipeline::getCollisions() const
 {
-  return lastFrameData_;
+  return collisions_;
+}
+
+const CollisionPipeline::SolverData&
+CollisionPipeline::getSolverData() const
+{
+  return solverData_;
 }
 
 void CollisionPipeline::execute(
@@ -57,11 +61,10 @@ void CollisionPipeline::execute(
   std::span<const AssetEnvironment> environmentalAssets,
   double dt)
 {
-  // Clear frame-persistent data at start (fail-fast for stale data)
-  clearFrameData();
-
-  // Clear snapshot from previous frame
-  lastFrameData_ = FrameCollisionData{};
+  // Clear all state from previous frame
+  collisions_.clear();
+  solverData_ = SolverData{};
+  clearEphemeralState();
 
   const size_t numInertial = inertialAssets.size();
   const size_t numEnvironment = environmentalAssets.size();
@@ -83,8 +86,7 @@ void CollisionPipeline::execute(
   // Early return if no collisions
   if (collisions_.empty())
   {
-    // Clear at end to leave pipeline empty when idle (prevents dangling refs)
-    clearFrameData();
+    clearEphemeralState();
     return;
   }
 
@@ -94,7 +96,7 @@ void CollisionPipeline::execute(
   // Early return if no constraints created
   if (constraints_.empty())
   {
-    clearFrameData();
+    clearEphemeralState();
     return;
   }
 
@@ -110,11 +112,16 @@ void CollisionPipeline::execute(
   // ===== Phase 6: Position Correction =====
   correctPositions(inertialAssets, environmentalAssets, numBodies);
 
-  // ===== Phase 6.5: Snapshot Collision Data =====
-  snapshotFrameData(inertialAssets, environmentalAssets, solveResult);
+  // Capture solver diagnostics (lightweight value copy)
+  solverData_.iterations = solveResult.iterations;
+  solverData_.residual = solveResult.residual;
+  solverData_.converged = solveResult.converged;
+  solverData_.numConstraints = constraintPtrs_.size();
+  solverData_.numContacts = collisions_.size();
 
-  // Clear at end to leave pipeline empty when idle (prevents dangling refs)
-  clearFrameData();
+  // Clear ephemeral state (references/pointers) but keep collisions_ and
+  // solverData_ alive for WorldModel to read between frames
+  clearEphemeralState();
 }
 
 void CollisionPipeline::detectCollisions(
@@ -491,35 +498,12 @@ void CollisionPipeline::correctPositions(
                                       /* dt = */ 0.016);  // Placeholder, not used in position correction
 }
 
-void CollisionPipeline::snapshotFrameData(
-  std::span<const AssetInertial> inertialAssets,
-  std::span<const AssetEnvironment> environmentalAssets,
-  const ConstraintSolver::SolveResult& solveResult)
+void CollisionPipeline::clearEphemeralState()
 {
-  // 1. Snapshot per-pair collision results (preserving full manifold)
-  lastFrameData_.collisionPairs.clear();
-  lastFrameData_.collisionPairs.reserve(collisions_.size());
-
-  for (const auto& collision : collisions_)
-  {
-    FrameCollisionData::CollisionPairData pair{};
-    pair.bodyAId = collision.bodyAId;
-    pair.bodyBId = collision.bodyBId;
-    pair.result = collision.result;
-    lastFrameData_.collisionPairs.push_back(std::move(pair));
-  }
-
-  // 2. Snapshot solver diagnostics
-  lastFrameData_.solverData.iterations = solveResult.iterations;
-  lastFrameData_.solverData.residual = solveResult.residual;
-  lastFrameData_.solverData.converged = solveResult.converged;
-  lastFrameData_.solverData.numConstraints = constraintPtrs_.size();
-  lastFrameData_.solverData.numContacts = collisions_.size();
-}
-
-void CollisionPipeline::clearFrameData()
-{
-  collisions_.clear();
+  // Clear vectors holding references/pointers to external objects to prevent
+  // dangling refs when assets are modified between frames.
+  // Does NOT clear collisions_ or solverData_ — those are value types owned
+  // by the pipeline, safe to read between frames via getCollisions()/getSolverData().
   constraints_.clear();
   frictionConstraints_.clear();
   states_.clear();
