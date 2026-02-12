@@ -9,10 +9,7 @@
 #include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
-#include "msd-transfer/src/AppliedForceRecord.hpp"
-#include "msd-transfer/src/BodyMetadataRecord.hpp"
-#include "msd-transfer/src/ConstraintForceRecord.hpp"
-#include "msd-transfer/src/ContactRecord.hpp"
+#include "msd-transfer/src/CollisionResultRecord.hpp"
 #include "msd-transfer/src/EnergyRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
 #include "msd-transfer/src/SolverDiagnosticRecord.hpp"
@@ -48,13 +45,6 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
   inertialAssets_.emplace_back(
     assetId, instanceId, hull, 10.0, origin, 0.5, 0.5);
 
-  // Ticket: 0056b_collision_pipeline_data_extraction
-  // Record body metadata if recording is enabled
-  if (dataRecorder_)
-  {
-    recordBodyMetadata(instanceId, assetId, 10.0, 0.5, 0.5, false);
-  }
-
   return inertialAssets_.back();
 }
 
@@ -65,19 +55,6 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
 {
   auto instanceId = getInertialAssetId();
   inertialAssets_.emplace_back(assetId, instanceId, hull, mass, origin);
-
-  // Ticket: 0056b_collision_pipeline_data_extraction
-  // Record body metadata if recording is enabled
-  if (dataRecorder_)
-  {
-    const auto& asset = inertialAssets_.back();
-    recordBodyMetadata(instanceId,
-                       assetId,
-                       mass,
-                       asset.getCoefficientOfRestitution(),
-                       asset.getFrictionCoefficient(),
-                       false);
-  }
 
   return inertialAssets_.back();
 }
@@ -90,19 +67,6 @@ const AssetEnvironment& WorldModel::spawnEnvironmentObject(
   auto instanceId = ++environmentAssetIdCounter_;
   environmentalAssets_.emplace_back(
     assetId, instanceId, hull, origin, 0.5, 0.5);
-
-  // Ticket: 0056b_collision_pipeline_data_extraction
-  // Record body metadata if recording is enabled
-  if (dataRecorder_)
-  {
-    const auto& asset = environmentalAssets_.back();
-    recordBodyMetadata(instanceId,
-                       assetId,
-                       0.0,  // Environment assets are static (zero mass)
-                       asset.getCoefficientOfRestitution(),
-                       asset.getFrictionCoefficient(),
-                       true);
-  }
 
   return environmentalAssets_.back();
 }
@@ -352,125 +316,22 @@ void WorldModel::recordCurrentFrame()
   // Ticket: 0056b_collision_pipeline_data_extraction
   // Record collision-related data from pipeline snapshot
   const auto& frameData = collisionPipeline_.getLastFrameData();
-  recordContacts(frameId, frameData);
-  recordConstraintForces(frameId, frameData);
-  recordAppliedForces(frameId);
+  recordCollisions(frameId, frameData);
   recordSolverDiagnostics(frameId, frameData);
 }
 
-void WorldModel::recordBodyMetadata(uint32_t bodyId,
-                                     uint32_t assetId,
-                                     double mass,
-                                     double restitution,
-                                     double friction,
-                                     bool isEnvironment)
-{
-  msd_transfer::BodyMetadataRecord record{};
-  record.id = dataRecorder_->getDAO<msd_transfer::BodyMetadataRecord>()
-                .incrementIdCounter();
-  record.body_id = bodyId;
-  record.asset_id = assetId;
-  record.mass = mass;
-  record.restitution = restitution;
-  record.friction = friction;
-  record.is_environment = isEnvironment ? 1 : 0;
-
-  dataRecorder_->getDAO<msd_transfer::BodyMetadataRecord>().addToBuffer(record);
-}
-
-void WorldModel::recordContacts(
+void WorldModel::recordCollisions(
   uint32_t frameId,
   const CollisionPipeline::FrameCollisionData& frameData)
 {
-  auto& contactDAO = dataRecorder_->getDAO<msd_transfer::ContactRecord>();
-  for (const auto& contact : frameData.contacts)
+  auto& collisionDAO =
+    dataRecorder_->getDAO<msd_transfer::CollisionResultRecord>();
+  for (const auto& pair : frameData.collisionPairs)
   {
-    msd_transfer::ContactRecord record{};
-    record.id = contactDAO.incrementIdCounter();
-    record.body_a_id = contact.bodyAId;
-    record.body_b_id = contact.bodyBId;
-    record.contact_index = contact.contactIndex;
-
-    record.point_a_x = contact.pointA.x();
-    record.point_a_y = contact.pointA.y();
-    record.point_a_z = contact.pointA.z();
-
-    record.point_b_x = contact.pointB.x();
-    record.point_b_y = contact.pointB.y();
-    record.point_b_z = contact.pointB.z();
-
-    record.normal_x = contact.normal.x();
-    record.normal_y = contact.normal.y();
-    record.normal_z = contact.normal.z();
-
-    record.depth = contact.depth;
-    record.restitution = contact.restitution;
-    record.friction = contact.friction;
+    auto record = pair.result.toRecord(pair.bodyAId, pair.bodyBId);
+    record.id = collisionDAO.incrementIdCounter();
     record.frame.id = frameId;
-
-    contactDAO.addToBuffer(record);
-  }
-}
-
-void WorldModel::recordConstraintForces(
-  uint32_t frameId,
-  const CollisionPipeline::FrameCollisionData& frameData)
-{
-  auto& forceDAO = dataRecorder_->getDAO<msd_transfer::ConstraintForceRecord>();
-  for (const auto& bodyForce : frameData.constraintForces)
-  {
-    msd_transfer::ConstraintForceRecord record{};
-    record.id = forceDAO.incrementIdCounter();
-    record.body_id = bodyForce.bodyId;
-
-    record.force_x = bodyForce.linearForce.x();
-    record.force_y = bodyForce.linearForce.y();
-    record.force_z = bodyForce.linearForce.z();
-
-    record.torque_x = bodyForce.angularTorque.x();
-    record.torque_y = bodyForce.angularTorque.y();
-    record.torque_z = bodyForce.angularTorque.z();
-
-    record.frame.id = frameId;
-
-    forceDAO.addToBuffer(record);
-  }
-}
-
-void WorldModel::recordAppliedForces(uint32_t frameId)
-{
-  auto& forceDAO = dataRecorder_->getDAO<msd_transfer::AppliedForceRecord>();
-  for (const auto& asset : inertialAssets_)
-  {
-    Vector3D gravityForce{0, 0, 0};
-    Vector3D gravityTorque{0, 0, 0};
-
-    // Sum forces from all potential energy fields
-    for (const auto& potential : potentialEnergies_)
-    {
-      gravityForce += potential->computeForce(asset.getInertialState(),
-                                              asset.getMass());
-      gravityTorque += potential->computeTorque(asset.getInertialState(),
-                                                asset.getInertiaTensor());
-    }
-
-    msd_transfer::AppliedForceRecord record{};
-    record.id = forceDAO.incrementIdCounter();
-    record.body_id = asset.getInstanceId();
-    record.force_type = 0;  // Gravity
-
-    record.force_x = gravityForce.x();
-    record.force_y = gravityForce.y();
-    record.force_z = gravityForce.z();
-
-    record.torque_x = gravityTorque.x();
-    record.torque_y = gravityTorque.y();
-    record.torque_z = gravityTorque.z();
-
-    // point_x/y/z remains NaN (gravity acts at center of mass)
-    record.frame.id = frameId;
-
-    forceDAO.addToBuffer(record);
+    collisionDAO.addToBuffer(record);
   }
 }
 

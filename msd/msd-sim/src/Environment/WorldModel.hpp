@@ -324,60 +324,17 @@ private:
   void recordCurrentFrame();
 
   /**
-   * @brief Record body metadata at spawn time
+   * @brief Record collision results for this frame
    *
-   * Records static properties (mass, restitution, friction, asset ID) for a
-   * body. Called once per body at spawn, not per-frame.
-   *
-   * @param bodyId Instance ID of the body
-   * @param assetId Asset template ID
-   * @param mass Body mass [kg]
-   * @param restitution Coefficient of restitution [0,1]
-   * @param friction Coefficient of friction [0,inf)
-   * @param isEnvironment True if environmental (static) body
-   * @ticket 0056b_collision_pipeline_data_extraction
-   */
-  void recordBodyMetadata(uint32_t bodyId,
-                          uint32_t assetId,
-                          double mass,
-                          double restitution,
-                          double friction,
-                          bool isEnvironment);
-
-  /**
-   * @brief Record contact points for this frame
-   *
-   * Writes ContactRecord for each contact point extracted from CollisionPipeline.
+   * Writes CollisionResultRecord for each collision pair, with nested
+   * ContactPointRecords via RepeatedField.
    *
    * @param frameId Frame ID for FK reference
    * @param frameData Snapshot from CollisionPipeline
    * @ticket 0056b_collision_pipeline_data_extraction
    */
-  void recordContacts(uint32_t frameId,
-                      const CollisionPipeline::FrameCollisionData& frameData);
-
-  /**
-   * @brief Record constraint forces for this frame
-   *
-   * Writes ConstraintForceRecord for each body with non-zero forces from solver.
-   *
-   * @param frameId Frame ID for FK reference
-   * @param frameData Snapshot from CollisionPipeline
-   * @ticket 0056b_collision_pipeline_data_extraction
-   */
-  void recordConstraintForces(
-    uint32_t frameId,
-    const CollisionPipeline::FrameCollisionData& frameData);
-
-  /**
-   * @brief Record applied forces (gravity) for this frame
-   *
-   * Writes AppliedForceRecord for gravity acting on each inertial body.
-   *
-   * @param frameId Frame ID for FK reference
-   * @ticket 0056b_collision_pipeline_data_extraction
-   */
-  void recordAppliedForces(uint32_t frameId);
+  void recordCollisions(uint32_t frameId,
+                        const CollisionPipeline::FrameCollisionData& frameData);
 
   /**
    * @brief Record solver diagnostics for this frame

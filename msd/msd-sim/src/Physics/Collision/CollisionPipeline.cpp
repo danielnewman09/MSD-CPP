@@ -496,59 +496,20 @@ void CollisionPipeline::snapshotFrameData(
   std::span<const AssetEnvironment> environmentalAssets,
   const ConstraintSolver::SolveResult& solveResult)
 {
-  const size_t numInertial = inertialAssets.size();
-
-  // 1. Snapshot contact data from collisions_
-  lastFrameData_.contacts.clear();
-  lastFrameData_.contacts.reserve(collisions_.size() * 4);  // Up to 4 contacts per collision
+  // 1. Snapshot per-pair collision results (preserving full manifold)
+  lastFrameData_.collisionPairs.clear();
+  lastFrameData_.collisionPairs.reserve(collisions_.size());
 
   for (const auto& collision : collisions_)
   {
-    const auto& result = collision.result;
-    for (size_t i = 0; i < result.contactCount; ++i)
-    {
-      FrameCollisionData::ContactData contact{};
-      contact.bodyAId = collision.bodyAId;
-      contact.bodyBId = collision.bodyBId;
-      contact.pointA = result.contacts[i].pointA;
-      contact.pointB = result.contacts[i].pointB;
-      contact.normal = result.normal;
-      contact.depth = result.penetrationDepth;
-      contact.restitution = collision.restitution;
-      contact.friction = collision.frictionCoefficient;
-      contact.contactIndex = static_cast<uint32_t>(i);
-      lastFrameData_.contacts.push_back(contact);
-    }
+    FrameCollisionData::CollisionPairData pair{};
+    pair.bodyAId = collision.bodyAId;
+    pair.bodyBId = collision.bodyBId;
+    pair.result = collision.result;
+    lastFrameData_.collisionPairs.push_back(std::move(pair));
   }
 
-  // 2. Snapshot per-body constraint forces from solveResult
-  lastFrameData_.constraintForces.clear();
-  lastFrameData_.constraintForces.reserve(solveResult.bodyForces.size());
-
-  for (size_t i = 0; i < solveResult.bodyForces.size(); ++i)
-  {
-    const auto& bodyForce = solveResult.bodyForces[i];
-
-    // Get body instance ID (inertial vs environment)
-    uint32_t bodyId;
-    if (i < numInertial)
-    {
-      bodyId = inertialAssets[i].getInstanceId();
-    }
-    else
-    {
-      const size_t envIdx = i - numInertial;
-      bodyId = environmentalAssets[envIdx].getInstanceId();
-    }
-
-    FrameCollisionData::BodyForceData forceData{};
-    forceData.bodyId = bodyId;
-    forceData.linearForce = bodyForce.linearForce;
-    forceData.angularTorque = bodyForce.angularTorque;
-    lastFrameData_.constraintForces.push_back(forceData);
-  }
-
-  // 3. Snapshot solver diagnostics
+  // 2. Snapshot solver diagnostics
   lastFrameData_.solverData.iterations = solveResult.iterations;
   lastFrameData_.solverData.residual = solveResult.residual;
   lastFrameData_.solverData.converged = solveResult.converged;

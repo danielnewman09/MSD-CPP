@@ -76,32 +76,15 @@ public:
   struct FrameCollisionData
   {
     /**
-     * @brief Contact point data for a single contact
+     * @brief Per-pair collision data (normal, depth, full contact manifold)
      */
-    struct ContactData
+    struct CollisionPairData
     {
       uint32_t bodyAId{0};
       uint32_t bodyBId{0};
-      Coordinate pointA{};
-      Coordinate pointB{};
-      Coordinate normal{};
-      double depth{std::numeric_limits<double>::quiet_NaN()};
-      double restitution{std::numeric_limits<double>::quiet_NaN()};
-      double friction{std::numeric_limits<double>::quiet_NaN()};
-      uint32_t contactIndex{0};
+      CollisionResult result;
     };
-    std::vector<ContactData> contacts;
-
-    /**
-     * @brief Per-body constraint forces (from solver)
-     */
-    struct BodyForceData
-    {
-      uint32_t bodyId{0};
-      Vector3D linearForce{};
-      Vector3D angularTorque{};
-    };
-    std::vector<BodyForceData> constraintForces;
+    std::vector<CollisionPairData> collisionPairs;
 
     /**
      * @brief Solver diagnostic data
