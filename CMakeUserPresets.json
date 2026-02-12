@@ -93,6 +93,14 @@
             ]
         },
         {
+            "name": "debug-pybind-only",
+            "displayName": "Build msd-pybind (Debug)",
+            "configurePreset": "conan-debug",
+            "targets": [
+                "msd_reader"
+            ]
+        },
+        {
             "name": "release-utils-only",
             "displayName": "Build msd-utils (Release)",
             "configurePreset": "conan-release",
