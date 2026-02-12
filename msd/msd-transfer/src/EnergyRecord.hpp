@@ -1,4 +1,5 @@
 // Ticket: 0039a_energy_tracking_diagnostic_infrastructure
+// Ticket: 0056i_static_asset_recording_and_fk
 
 #ifndef MSD_TRANSFER_ENERGY_RECORD_HPP
 #define MSD_TRANSFER_ENERGY_RECORD_HPP
@@ -7,6 +8,7 @@
 #include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBForeignKey.hpp>
 
+#include "msd-transfer/src/AssetInertialStaticRecord.hpp"
 #include "msd-transfer/src/SimulationFrameRecord.hpp"
 
 namespace msd_transfer
@@ -16,7 +18,8 @@ namespace msd_transfer
  * @brief Database record for per-body energy values
  *
  * Stores computed energy components for a single rigid body at a given
- * simulation frame. Uses ForeignKey<SimulationFrameRecord> for temporal
+ * simulation frame. Uses ForeignKey<AssetInertialStaticRecord> for body
+ * identification and ForeignKey<SimulationFrameRecord> for temporal
  * association with the recording frame.
  *
  * Energy components:
@@ -27,10 +30,11 @@ namespace msd_transfer
  *
  * @see msd_sim::EnergyTracker
  * @ticket 0039a_energy_tracking_diagnostic_infrastructure
+ * @ticket 0056i_static_asset_recording_and_fk
  */
 struct EnergyRecord : public cpp_sqlite::BaseTransferObject
 {
-  uint32_t body_id{0};       // Stable body identifier (AssetInertial::getInstanceId())
+  cpp_sqlite::ForeignKey<AssetInertialStaticRecord> body;
   double linear_ke{0.0};     // Linear kinetic energy [J]
   double rotational_ke{0.0}; // Rotational kinetic energy [J]
   double potential_e{0.0};   // Gravitational potential energy [J]
@@ -41,7 +45,7 @@ struct EnergyRecord : public cpp_sqlite::BaseTransferObject
 // Register with Boost.Describe for cpp_sqlite ORM
 BOOST_DESCRIBE_STRUCT(EnergyRecord,
                       (cpp_sqlite::BaseTransferObject),
-                      (body_id,
+                      (body,
                        linear_ke,
                        rotational_ke,
                        potential_e,

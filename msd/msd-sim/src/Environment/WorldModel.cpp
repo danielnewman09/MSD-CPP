@@ -9,6 +9,7 @@
 #include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
+#include "msd-transfer/src/AssetInertialStaticRecord.hpp"
 #include "msd-transfer/src/CollisionResultRecord.hpp"
 #include "msd-transfer/src/EnergyRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
@@ -45,7 +46,16 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
   inertialAssets_.emplace_back(
     assetId, instanceId, hull, 10.0, origin, 0.5, 0.5);
 
-  return inertialAssets_.back();
+  const AssetInertial& asset = inertialAssets_.back();
+
+  // Ticket: 0056i_static_asset_recording_and_fk
+  // Record static data if recording is enabled
+  if (dataRecorder_)
+  {
+    recordStaticData(asset);
+  }
+
+  return asset;
 }
 
 const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
@@ -56,7 +66,16 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
   auto instanceId = getInertialAssetId();
   inertialAssets_.emplace_back(assetId, instanceId, hull, mass, origin);
 
-  return inertialAssets_.back();
+  const AssetInertial& asset = inertialAssets_.back();
+
+  // Ticket: 0056i_static_asset_recording_and_fk
+  // Record static data if recording is enabled
+  if (dataRecorder_)
+  {
+    recordStaticData(asset);
+  }
+
+  return asset;
 }
 
 const AssetEnvironment& WorldModel::spawnEnvironmentObject(
@@ -268,6 +287,10 @@ void WorldModel::enableRecording(const std::string& dbPath,
   config.databasePath = dbPath;
   config.flushInterval = flushInterval;
   dataRecorder_ = std::make_unique<DataRecorder>(config);
+
+  // Ticket: 0056i_static_asset_recording_and_fk
+  // Backfill static data for already-spawned assets
+  backfillStaticData();
 }
 
 void WorldModel::disableRecording()
@@ -286,6 +309,7 @@ void WorldModel::recordCurrentFrame()
   for (const auto& asset : inertialAssets_)
   {
     auto record = asset.getInertialState().toRecord();
+    record.body.id = asset.getInstanceId();  // Ticket: 0056i_static_asset_recording_and_fk
     record.frame.id = frameId;  // Explicit FK assignment
     stateDAO.addToBuffer(record);
   }
@@ -348,6 +372,30 @@ void WorldModel::recordSolverDiagnostics(uint32_t frameId)
   record.frame.id = frameId;
 
   diagDAO.addToBuffer(record);
+}
+
+void WorldModel::recordStaticData(const AssetInertial& asset)
+{
+  // Ticket: 0056i_static_asset_recording_and_fk
+  auto& staticDAO =
+    dataRecorder_->getDAO<msd_transfer::AssetInertialStaticRecord>();
+
+  msd_transfer::AssetInertialStaticRecord record{};
+  record.id = staticDAO.incrementIdCounter();
+  record.body_id = asset.getInstanceId();
+  record.mass = asset.getMass();
+  record.restitution = asset.getCoefficientOfRestitution();
+  record.friction = asset.getFrictionCoefficient();
+  staticDAO.addToBuffer(record);
+}
+
+void WorldModel::backfillStaticData()
+{
+  // Ticket: 0056i_static_asset_recording_and_fk
+  for (const auto& asset : inertialAssets_)
+  {
+    recordStaticData(asset);
+  }
 }
 
 }  // namespace msd_sim

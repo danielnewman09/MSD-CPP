@@ -345,6 +345,28 @@ private:
    */
   void recordSolverDiagnostics(uint32_t frameId);
 
+  /**
+   * @brief Record static asset data for a single asset
+   *
+   * Creates AssetInertialStaticRecord from asset's static state and writes
+   * to database via DataRecorder. The record's auto-incremented id becomes
+   * the FK target for per-frame records.
+   *
+   * @param asset The asset to record static data for
+   * @ticket 0056i_static_asset_recording_and_fk
+   */
+  void recordStaticData(const AssetInertial& asset);
+
+  /**
+   * @brief Backfill static records for all existing assets
+   *
+   * Called when recording is enabled after assets have already been spawned.
+   * Iterates all inertial assets and records static data for each.
+   *
+   * @ticket 0056i_static_asset_recording_and_fk
+   */
+  void backfillStaticData();
+
   // ========== Data ==========
 
 

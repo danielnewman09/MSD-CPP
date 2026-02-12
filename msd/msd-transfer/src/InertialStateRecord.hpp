@@ -1,4 +1,5 @@
 // Ticket: vector_datatype_refactor
+// Ticket: 0056i_static_asset_recording_and_fk
 // Transfer record for InertialState
 
 #ifndef MSD_TRANSFER_INERTIAL_STATE_RECORD_HPP
@@ -10,6 +11,7 @@
 
 #include "msd-transfer/src/AccelerationRecord.hpp"
 #include "msd-transfer/src/AngularAccelerationRecord.hpp"
+#include "msd-transfer/src/AssetInertialStaticRecord.hpp"
 #include "msd-transfer/src/CoordinateRecord.hpp"
 #include "msd-transfer/src/QuaternionDRecord.hpp"
 #include "msd-transfer/src/SimulationFrameRecord.hpp"
@@ -34,10 +36,12 @@ namespace msd_transfer
  * - orientation: Unit quaternion (w, x, y, z)
  * - quaternionRate: Quaternion time derivative Q̇
  * - angularAcceleration: Angular acceleration [rad/s²]
+ * - body: Foreign key to AssetInertialStaticRecord for body identification
  * - frame: Foreign key to SimulationFrameRecord for timestamping
  *
  * @see msd_sim::InertialState
  * @ticket 0038_simulation_data_recorder
+ * @ticket 0056i_static_asset_recording_and_fk
  */
 struct InertialStateRecord : public cpp_sqlite::BaseTransferObject
 {
@@ -47,6 +51,7 @@ struct InertialStateRecord : public cpp_sqlite::BaseTransferObject
   QuaternionDRecord orientation;
   Vector4DRecord quaternionRate;
   AngularAccelerationRecord angularAcceleration;
+  cpp_sqlite::ForeignKey<AssetInertialStaticRecord> body;
   cpp_sqlite::ForeignKey<SimulationFrameRecord> frame;
 };
 
@@ -59,6 +64,7 @@ BOOST_DESCRIBE_STRUCT(InertialStateRecord,
                        orientation,
                        quaternionRate,
                        angularAcceleration,
+                       body,
                        frame));
 
 }  // namespace msd_transfer
