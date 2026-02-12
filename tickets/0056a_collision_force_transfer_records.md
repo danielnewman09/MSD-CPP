@@ -6,7 +6,7 @@
 - [x] Implementation Complete — Awaiting Review
 - [ ] Merged / Complete
 
-**Current Phase**: Implementation Complete — Awaiting Review
+**Current Phase**: Implementation Complete — Awaiting Review (expanded scope: 0056h + type-safety refactoring)
 **Type**: Infrastructure
 **Priority**: High
 **Assignee**: TBD
@@ -208,14 +208,14 @@ TEST(DataRecorder, GetDAO_BodyMetadataRecord_ReturnsValidDAO)
 
 ## Acceptance Criteria
 
-1. [ ] **AC1**: All 5 record types compile with BOOST_DESCRIBE_STRUCT
-2. [ ] **AC2**: cpp_sqlite auto-generates correct SQLite schema for each record
-3. [ ] **AC3**: Records can be inserted and queried via DAO pattern
-4. [ ] **AC4**: ForeignKey<SimulationFrameRecord> resolves correctly on 4 per-frame records
-5. [ ] **AC5**: BodyMetadataRecord works without frame FK
-6. [ ] **AC6**: DataRecorder::getDAO<T>() works for all 5 types
-7. [ ] **AC7**: Records.hpp includes all new headers
-8. [ ] **AC8**: All existing tests pass (zero regressions)
+1. [x] **AC1**: All 5 record types compile with BOOST_DESCRIBE_STRUCT
+2. [x] **AC2**: cpp_sqlite auto-generates correct SQLite schema for each record
+3. [x] **AC3**: Records can be inserted and queried via DAO pattern
+4. [x] **AC4**: ForeignKey<SimulationFrameRecord> resolves correctly on 4 per-frame records
+5. [x] **AC5**: BodyMetadataRecord works without frame FK
+6. [x] **AC6**: DataRecorder::getDAO<T>() works for all 5 types
+7. [x] **AC7**: Records.hpp includes all new headers
+8. [x] **AC8**: All existing tests pass (zero regressions)
 
 ---
 
@@ -243,6 +243,16 @@ TEST(DataRecorder, GetDAO_BodyMetadataRecord_ReturnsValidDAO)
   - `msd-transfer/src/Records.hpp` — Updated with 5 new includes
   - `msd-sim/src/DataRecorder/DataRecorder.cpp` — Added 5 template instantiations
 - **Notes**: All records follow established pattern (BaseTransferObject + BOOST_DESCRIBE_STRUCT). BodyMetadataRecord omits frame FK as intended (spawn-time data). Build successful, 0 test regressions (657/661 passing, 4 pre-existing failures). Commit: 7b4bb91.
+
+### Additional Work on Branch
+
+Branch scope expanded beyond original 0056a requirements to include:
+
+1. **0056h (AssetDynamicState struct)**: Extracted AssetDynamicState value struct from AssetInertial, added ExternalForce/ExternalForceRecord domain type and transfer record. Commits: 0378221, 8f9658c.
+
+2. **Kinematic type-safety refactoring**: Introduced Velocity, Acceleration, AngularVelocity, AngularAcceleration types (domain + transfer records) to replace generic Vector3D and AngularRate for compile-time type safety. Removed AngularRate entirely. 46 files changed, 22 test files updated, 13 new tests added. Commits: 0cbabd6, b09066e.
+
+Final branch state: 702/706 tests pass (4 pre-existing failures). 706 total tests (up from 693 on main).
 
 ---
 
