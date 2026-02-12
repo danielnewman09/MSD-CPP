@@ -15,6 +15,7 @@
 #include <Eigen/Geometry>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
@@ -103,7 +104,7 @@ TEST(RotationalEnergyTest, F4_RotationEnergyTransfer_EnergyConserved)
 
   uint32_t cubeId = 1;
   world.getObject(cubeId).setCoefficientOfRestitution(1.0);
-  world.getObject(cubeId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const initialTotalEnergy = computeSystemEnergy(world);
 
@@ -254,8 +255,8 @@ TEST(RotationalEnergyTest,
   world.getObject(idB).setCoefficientOfRestitution(1.0);
 
   // Object A moving toward B
-  world.getObject(idA).getInertialState().velocity = Vector3D{2.0, 0.0, 0.0};
-  world.getObject(idB).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(idA).getInertialState().velocity = Velocity{2.0, 0.0, 0.0};
+  world.getObject(idB).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   // Compute initial KE (no gravity, so no PE)
   std::vector<std::unique_ptr<PotentialEnergy>> noPotentials;

@@ -8,7 +8,6 @@ target_sources(${MSD_SIM_NAME} PRIVATE
 set(
     HEADER_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/AngularCoordinate.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/AngularRate.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Coordinate.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Platform.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ReferenceFrame.hpp

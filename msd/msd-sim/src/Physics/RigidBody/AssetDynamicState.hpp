@@ -1,8 +1,9 @@
 #ifndef MSD_SIM_PHYSICS_ASSET_DYNAMIC_STATE_HPP
 #define MSD_SIM_PHYSICS_ASSET_DYNAMIC_STATE_HPP
 
-#include "msd-sim/src/DataTypes/ForceVector.hpp"
-#include "msd-sim/src/DataTypes/TorqueVector.hpp"
+#include <vector>
+
+#include "msd-sim/src/DataTypes/ExternalForce.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 #include "msd-transfer/src/AssetDynamicStateRecord.hpp"
 
@@ -14,8 +15,10 @@ namespace msd_sim
  *
  * Groups the three quantities that change every simulation frame:
  * - Kinematic state (position, velocity, orientation, etc.)
- * - Accumulated force
- * - Accumulated torque
+ * - Individual external force contributions
+ *
+ * Individual forces are stored per-entry for diagnostics and recording;
+ * use ExternalForce::accumulate() for net force/torque sums.
  *
  * Mirrors the transfer-layer AssetDynamicStateRecord for clean
  * domain ↔ persistence mapping.
@@ -25,22 +28,20 @@ namespace msd_sim
 struct AssetDynamicState
 {
   InertialState inertialState;
-  ForceVector accumulatedForce{0.0, 0.0, 0.0};
-  TorqueVector accumulatedTorque{0.0, 0.0, 0.0};
+  std::vector<ExternalForce> externalForces;
 
   /**
-   * @brief Reset accumulated force and torque to zero.
+   * @brief Clear all individual force entries.
    *
    * Called at the end of each physics step after integration.
    */
-  void clearForces()
-  {
-    accumulatedForce = ForceVector{0.0, 0.0, 0.0};
-    accumulatedTorque = TorqueVector{0.0, 0.0, 0.0};
-  }
+  void clearForces() { externalForces.clear(); }
 
   /**
    * @brief Convert to a transfer record for database persistence.
+   *
+   * Each individual external force is stored as a separate record entry
+   * via a one-to-many relationship.
    *
    * @param bodyId The instance ID of the owning AssetInertial
    * @return Transfer record containing all dynamic state data
@@ -51,13 +52,17 @@ struct AssetDynamicState
     msd_transfer::AssetDynamicStateRecord record;
     record.body_id = bodyId;
     record.kinematicState = inertialState.toRecord();
-    record.accumulatedForce = accumulatedForce.toRecord();
-    record.accumulatedTorque = accumulatedTorque.toRecord();
+    for (const auto& ef : externalForces)
+    {
+      record.externalForces.data.push_back(ef.toRecord());
+    }
     return record;
   }
 
   /**
    * @brief Reconstruct from a transfer record.
+   *
+   * Each stored force record is reconstructed as an individual entry.
    *
    * @param record The transfer record to reconstruct from
    * @return AssetDynamicState with all fields populated
@@ -68,10 +73,10 @@ struct AssetDynamicState
     AssetDynamicState state;
     state.inertialState =
       InertialState::fromRecord(record.kinematicState);
-    state.accumulatedForce =
-      ForceVector::fromRecord(record.accumulatedForce);
-    state.accumulatedTorque =
-      TorqueVector::fromRecord(record.accumulatedTorque);
+    for (const auto& efr : record.externalForces.data)
+    {
+      state.externalForces.push_back(ExternalForce::fromRecord(efr));
+    }
     return state;
   }
 };

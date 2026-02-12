@@ -6,7 +6,10 @@
 #include <random>
 
 #include "msd-sim/src/DataRecorder/DataRecorder.hpp"
+#include "msd-sim/src/DataTypes/Acceleration.hpp"
+#include "msd-sim/src/DataTypes/AngularAcceleration.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
 
@@ -29,8 +32,8 @@ InertialState generateRandomState(std::mt19937& rng)
 
   InertialState state;
   state.position = Coordinate{posDist(rng), posDist(rng), posDist(rng)};
-  state.velocity = Vector3D{velDist(rng), velDist(rng), velDist(rng)};
-  state.acceleration = Vector3D{accDist(rng), accDist(rng), accDist(rng)};
+  state.velocity = Velocity{velDist(rng), velDist(rng), velDist(rng)};
+  state.acceleration = Acceleration{accDist(rng), accDist(rng), accDist(rng)};
 
   // Generate random quaternion and normalize
   double w = quatDist(rng);
@@ -43,7 +46,7 @@ InertialState generateRandomState(std::mt19937& rng)
   state.quaternionRate =
     Vector4D{quatDist(rng), quatDist(rng), quatDist(rng), quatDist(rng)};
   state.angularAcceleration =
-    AngularRate{accDist(rng), accDist(rng), accDist(rng)};
+    AngularAcceleration{accDist(rng), accDist(rng), accDist(rng)};
 
   return state;
 }

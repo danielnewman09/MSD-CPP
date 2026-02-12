@@ -48,7 +48,7 @@ TEST(EnergyTracker, LinearKE_MovingBody_ComputesCorrectly)
   // A 2 kg body moving at 3 m/s along x-axis
   // KE = 0.5 * 2 * 9 = 9 J
   InertialState state{};
-  state.velocity = Vector3D{3.0, 0.0, 0.0};
+  state.velocity = Velocity{3.0, 0.0, 0.0};
 
   double const mass = 2.0;
   Eigen::Matrix3d const inertia = cubeTensor(mass, 1.0);
@@ -62,7 +62,7 @@ TEST(EnergyTracker, LinearKE_MovingBody_ComputesCorrectly)
 TEST(EnergyTracker, LinearKE_StationaryBody_ReturnsZero)
 {
   InertialState state{};
-  state.velocity = Vector3D{0.0, 0.0, 0.0};
+  state.velocity = Velocity{0.0, 0.0, 0.0};
 
   double const mass = 5.0;
   Eigen::Matrix3d const inertia = cubeTensor(mass, 1.0);
@@ -78,7 +78,7 @@ TEST(EnergyTracker, LinearKE_DiagonalVelocity_ComputesCorrectly)
   // Body moving at (1, 2, 3) m/s, mass = 1 kg
   // KE = 0.5 * 1 * (1 + 4 + 9) = 7.0 J
   InertialState state{};
-  state.velocity = Vector3D{1.0, 2.0, 3.0};
+  state.velocity = Velocity{1.0, 2.0, 3.0};
 
   double const mass = 1.0;
   Eigen::Matrix3d const inertia = cubeTensor(mass, 1.0);
@@ -98,7 +98,7 @@ TEST(EnergyTracker, RotationalKE_SpinningCube_AxisAligned)
   // KE_rot = 0.5 * omega^2 * I_zz = 0.5 * 4 * (1/6) = 1/3
   InertialState state{};
   state.orientation = QuaternionD{1.0, 0.0, 0.0, 0.0};  // Identity
-  state.setAngularVelocity(AngularRate{0.0, 0.0, 2.0});
+  state.setAngularVelocity(AngularVelocity{0.0, 0.0, 2.0});
 
   double const mass = 1.0;
   Eigen::Matrix3d const inertia = cubeTensor(mass, 1.0);
@@ -119,7 +119,7 @@ TEST(EnergyTracker, RotationalKE_SpinningCube_Tilted)
   Eigen::Quaterniond const tilt{
     Eigen::AngleAxisd{M_PI / 4.0, Eigen::Vector3d::UnitX()}};
   state.orientation = QuaternionD{tilt};
-  state.setAngularVelocity(AngularRate{0.0, 0.0, 2.0});
+  state.setAngularVelocity(AngularVelocity{0.0, 0.0, 2.0});
 
   double const mass = 1.0;
   Eigen::Matrix3d const inertia = cubeTensor(mass, 1.0);
@@ -151,7 +151,7 @@ TEST(EnergyTracker, RotationalKE_ConsistentAcrossOrientations)
   // Case 1: Identity orientation, spinning about z (I_zz = 3.0)
   InertialState state1{};
   state1.orientation = QuaternionD{1.0, 0.0, 0.0, 0.0};
-  state1.setAngularVelocity(AngularRate{0.0, 0.0, 1.0});
+  state1.setAngularVelocity(AngularVelocity{0.0, 0.0, 1.0});
   auto potentials = makeGravityPotentials();
   auto energy1 = EnergyTracker::computeBodyEnergy(state1, mass, bodyInertia, potentials);
   // KE = 0.5 * 1^2 * 3.0 = 1.5
@@ -164,7 +164,7 @@ TEST(EnergyTracker, RotationalKE_ConsistentAcrossOrientations)
   Eigen::Quaterniond const rot90y{
     Eigen::AngleAxisd{M_PI / 2.0, Eigen::Vector3d::UnitY()}};
   state2.orientation = QuaternionD{rot90y};
-  state2.setAngularVelocity(AngularRate{0.0, 0.0, 1.0});
+  state2.setAngularVelocity(AngularVelocity{0.0, 0.0, 1.0});
   auto energy2 = EnergyTracker::computeBodyEnergy(state2, mass, bodyInertia, potentials);
   // I_world_zz after 90-degree Y rotation = body I_xx = 1.0
   // KE = 0.5 * 1^2 * 1.0 = 0.5
@@ -213,9 +213,9 @@ TEST(EnergyTracker, TotalEnergy_SumsAllComponents)
   // Moving body with rotation at some height
   InertialState state{};
   state.position = Coordinate{0.0, 0.0, 10.0};
-  state.velocity = Vector3D{3.0, 0.0, 0.0};
+  state.velocity = Velocity{3.0, 0.0, 0.0};
   state.orientation = QuaternionD{1.0, 0.0, 0.0, 0.0};
-  state.setAngularVelocity(AngularRate{0.0, 0.0, 2.0});
+  state.setAngularVelocity(AngularVelocity{0.0, 0.0, 2.0});
 
   double const mass = 1.0;
   Eigen::Matrix3d const inertia = cubeTensor(mass, 1.0);

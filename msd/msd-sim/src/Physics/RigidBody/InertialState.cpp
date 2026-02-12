@@ -13,17 +13,17 @@
 namespace msd_sim
 {
 
-AngularRate InertialState::getAngularVelocity() const
+AngularVelocity InertialState::getAngularVelocity() const
 {
   return quaternionRateToOmega(quaternionRate, orientation);
 }
 
-void InertialState::setAngularVelocity(const AngularRate& omega)
+void InertialState::setAngularVelocity(const AngularVelocity& omega)
 {
   quaternionRate = omegaToQuaternionRate(omega, orientation);
 }
 
-Vector4D InertialState::omegaToQuaternionRate(const AngularRate& omega,
+Vector4D InertialState::omegaToQuaternionRate(const AngularVelocity& omega,
                                               const QuaternionD& Q)
 {
   // Q̇ = ½ * Q ⊗ [0, ω]
@@ -64,7 +64,7 @@ Vector4D InertialState::omegaToQuaternionRate(const AngularRate& omega,
   return qdot;
 }
 
-AngularRate InertialState::quaternionRateToOmega(const Vector4D& Qdot,
+AngularVelocity InertialState::quaternionRateToOmega(const Vector4D& Qdot,
                                                  const QuaternionD& Q)
 {
   // ω = 2 * Q̄ ⊗ Q̇
@@ -107,7 +107,7 @@ AngularRate InertialState::quaternionRateToOmega(const Vector4D& Qdot,
   double const wy = 2.0 * (qw * qdotY + qx * qdotZ - qy * qdotW - qz * qdotX);
   double const wz = 2.0 * (qw * qdotZ - qx * qdotY + qy * qdotX - qz * qdotW);
 
-  return AngularRate{wx, wy, wz};
+  return AngularVelocity{wx, wy, wz};
 }
 
 AngularCoordinate InertialState::getEulerAngles() const
@@ -151,11 +151,12 @@ InertialState InertialState::fromRecord(
 {
   InertialState state;
   state.position = Coordinate::fromRecord(record.position);
-  state.velocity = Vector3D::fromRecord(record.velocity);
-  state.acceleration = Vector3D::fromRecord(record.acceleration);
+  state.velocity = Velocity::fromRecord(record.velocity);
+  state.acceleration = Acceleration::fromRecord(record.acceleration);
   state.orientation = QuaternionD::fromRecord(record.orientation);
   state.quaternionRate = Vector4D::fromRecord(record.quaternionRate);
-  state.angularAcceleration = AngularRate::fromRecord(record.angularAcceleration);
+  state.angularAcceleration =
+    AngularAcceleration::fromRecord(record.angularAcceleration);
   return state;
 }
 

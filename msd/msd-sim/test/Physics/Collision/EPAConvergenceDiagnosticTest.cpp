@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
@@ -238,8 +239,8 @@ TEST(EPAConvergenceDiagnostic, H6_SimulationFrameByFrame)
 
   world.getObject(1).setCoefficientOfRestitution(0.0);
   world.getObject(2).setCoefficientOfRestitution(0.0);
-  world.getObject(1).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
-  world.getObject(2).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(1).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  world.getObject(2).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   std::cout << "\n=== H6 SIMULATION FRAME-BY-FRAME ===\n";
   std::cout << "Frame | posA.x     | posB.x     | gap(m)       | velA.x     "

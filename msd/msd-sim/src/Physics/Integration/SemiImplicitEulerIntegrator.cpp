@@ -20,7 +20,7 @@ void SemiImplicitEulerIntegrator::step(
   // ===== Compute Accelerations =====
 
   const Coordinate linearAccel = force / mass;
-  const AngularRate angularAccel{inverseInertiaWorld * torque};
+  const AngularAcceleration angularAccel{inverseInertiaWorld * torque};
 
   state.acceleration = linearAccel;
   state.angularAcceleration = angularAccel;
@@ -34,7 +34,7 @@ void SemiImplicitEulerIntegrator::step(
   state.position += state.velocity * dt;
 
   // Convert angular acceleration to quaternion rate change
-  AngularRate omega = state.getAngularVelocity();
+  AngularVelocity omega = state.getAngularVelocity();
   omega += angularAccel * dt;
   state.setAngularVelocity(omega);
 

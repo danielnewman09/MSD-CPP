@@ -12,7 +12,9 @@
 #include <memory>
 #include <vector>
 
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
@@ -81,7 +83,7 @@ TEST(ContactManifoldStabilityTest, D1_RestingCube_StableFor1000Frames)
 
   uint32_t cubeId = 1;
   world.getObject(cubeId).setCoefficientOfRestitution(0.5);
-  world.getObject(cubeId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   Coordinate const initialPosition =
     world.getObject(cubeId).getInertialState().position;
@@ -118,7 +120,7 @@ TEST(ContactManifoldStabilityTest, D1_RestingCube_StableFor1000Frames)
     maxVelocity = std::max(maxVelocity, vel);
 
     // Track angular velocity
-    AngularRate omega = state.getAngularVelocity();
+    AngularVelocity omega = state.getAngularVelocity();
     maxOmega = std::max(maxOmega, omega.norm());
 
     // Track energy growth
@@ -208,7 +210,7 @@ TEST(ContactManifoldStabilityTest, D4_MicroJitter_DampsOut)
 
   // Apply small perturbation velocity
   world.getObject(cubeId).getInertialState().velocity =
-    Vector3D{0.01, 0.01, 0.01};
+    Velocity{0.01, 0.01, 0.01};
 
   double const perturbationVel =
     world.getObject(cubeId).getInertialState().velocity.norm();

@@ -2,8 +2,8 @@
 // Design: docs/designs/input-state-management/design.md
 
 #include "msd-sim/src/Agent/InputControlAgent.hpp"
-#include "msd-sim/src/DataTypes/AngularRate.hpp"
-#include "msd-sim/src/DataTypes/Vector3D.hpp"
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
 namespace msd_sim
@@ -20,7 +20,7 @@ InertialState InputControlAgent::updateState(
   InertialState newState = currentState;
 
   // Calculate linear velocity based on input commands
-  Vector3D velocity{0, 0, 0};
+  Velocity velocity{0, 0, 0};
 
   if (inputCommands_.moveForward)
   {
@@ -50,8 +50,7 @@ InertialState InputControlAgent::updateState(
   newState.velocity = velocity;
 
   // Calculate angular velocity based on input commands
-  // Note: angularVelocity is now AngularRate (vector form) per ticket 0024
-  AngularRate angularVelocity{0, 0, 0};
+  AngularVelocity angularVelocity{0, 0, 0};
 
   if (inputCommands_.pitchUp)
   {

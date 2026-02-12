@@ -189,7 +189,7 @@ public:
    *
    * @param force Force vector in world coordinates [N]
    */
-  void applyForce(const msd_sim::Vector3D& force);
+  void applyForce(const ForceVector& force);
 
   /**
    * @brief Apply a force at a specific world-space point.
@@ -201,7 +201,7 @@ public:
    * @param force Force vector in world coordinates [N]
    * @param worldPoint Application point in world coordinates [m]
    */
-  void applyForceAtPoint(const msd_sim::Vector3D& force,
+  void applyForceAtPoint(const ForceVector& force,
                          const Coordinate& worldPoint);
 
   /**
@@ -211,7 +211,7 @@ public:
    *
    * @param torque Torque vector in world coordinates [N·m]
    */
-  void applyTorque(const msd_sim::Vector3D& torque);
+  void applyTorque(const TorqueVector& torque);
 
   /**
    * @brief Clear all accumulated forces and torques.
@@ -224,13 +224,13 @@ public:
    * @brief Get the accumulated force for this frame.
    * @return Accumulated force vector [N]
    */
-  const msd_sim::Vector3D& getAccumulatedForce() const;
+  ForceVector getAccumulatedForce() const;
 
   /**
    * @brief Get the accumulated torque for this frame.
    * @return Accumulated torque vector [N·m]
    */
-  const msd_sim::Vector3D& getAccumulatedTorque() const;
+  TorqueVector getAccumulatedTorque() const;
 
   // ========== NEW: Coefficient of Restitution (ticket 0027) ==========
 
@@ -296,7 +296,7 @@ public:
    *
    * @ticket 0027_collision_response_system
    */
-  void applyImpulse(const Coordinate& impulse);
+  void applyImpulse(const Vector3D& impulse);
 
   /**
    * @brief Apply an instantaneous angular impulse.
@@ -311,7 +311,7 @@ public:
    *
    * @ticket 0027_collision_response_system
    */
-  void applyAngularImpulse(const AngularRate& angularImpulse);
+  void applyAngularImpulse(const AngularVelocity& angularImpulse);
 
   // ========== NEW: Constraint Management (ticket 0031) ==========
 
@@ -390,8 +390,8 @@ public:
    *
    * @return Transfer record containing all dynamic state data
    */
-  [[nodiscard]] msd_transfer::AssetDynamicStateRecord
-  toDynamicStateRecord() const;
+  [[nodiscard]] msd_transfer::AssetDynamicStateRecord toDynamicStateRecord()
+    const;
 
 private:
   // Rigid body physics properties

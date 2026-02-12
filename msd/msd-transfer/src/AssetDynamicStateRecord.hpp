@@ -6,11 +6,11 @@
 #include <boost/describe.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBForeignKey.hpp>
+#include <cpp_sqlite/src/cpp_sqlite/DBRepeatedFieldTransferObject.hpp>
 
-#include "msd-transfer/src/ForceVectorRecord.hpp"
+#include "msd-transfer/src/ExternalForceRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
 #include "msd-transfer/src/SimulationFrameRecord.hpp"
-#include "msd-transfer/src/TorqueVectorRecord.hpp"
 
 namespace msd_transfer
 {
@@ -32,9 +32,8 @@ struct AssetDynamicStateRecord : public cpp_sqlite::BaseTransferObject
   // Kinematic state (composition, not flattened)
   InertialStateRecord kinematicState;
 
-  // Force/torque accumulators
-  ForceVectorRecord accumulatedForce;
-  TorqueVectorRecord accumulatedTorque;
+  // Individual external force entries (one-to-many)
+  cpp_sqlite::RepeatedFieldTransferObject<ExternalForceRecord> externalForces;
 
   // Frame FK for temporal association
   cpp_sqlite::ForeignKey<SimulationFrameRecord> frame;
@@ -45,8 +44,7 @@ BOOST_DESCRIBE_STRUCT(AssetDynamicStateRecord,
                       (cpp_sqlite::BaseTransferObject),
                       (body_id,
                        kinematicState,
-                       accumulatedForce,
-                       accumulatedTorque,
+                       externalForces,
                        frame));
 
 }  // namespace msd_transfer

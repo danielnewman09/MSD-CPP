@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include <memory>
+#include "msd-sim/src/DataTypes/AngularAcceleration.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
@@ -30,7 +31,7 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
   state.acceleration = Coordinate{0.0, 0.0, 0.0};
   state.orientation = Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};  // Identity
   state.quaternionRate = Eigen::Vector4d::Zero();
-  state.angularAcceleration = AngularRate{0.0, 0.0, 0.0};
+  state.angularAcceleration = AngularAcceleration{0.0, 0.0, 0.0};
   return state;
 }
 

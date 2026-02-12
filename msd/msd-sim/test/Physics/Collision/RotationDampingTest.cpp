@@ -18,7 +18,9 @@
 
 #include <Eigen/Geometry>
 
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
@@ -98,7 +100,7 @@ TEST(RotationDampingTest, C2_RockingCube_AmplitudeDecreases)
 
   uint32_t cubeId = 1;
   world.getObject(cubeId).setCoefficientOfRestitution(0.5);
-  world.getObject(cubeId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const initialEnergy = computeSystemEnergy(world);
 
@@ -204,7 +206,7 @@ TEST(RotationDampingTest, C3_TiltedCubeSettles_ToFlatFace)
 
   uint32_t cubeId = 1;
   world.getObject(cubeId).setCoefficientOfRestitution(0.3);
-  world.getObject(cubeId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const initialEnergy = computeSystemEnergy(world);
   bool nanDetected = false;
@@ -271,7 +273,7 @@ TEST(RotationDampingTest, C3_TiltedCubeSettles_ToFlatFace)
 
     // Check velocity is low (settled)
     double const finalVel = finalState.velocity.norm();
-    AngularRate omega = finalState.getAngularVelocity();
+    AngularVelocity omega = finalState.getAngularVelocity();
     double const finalOmega = omega.norm();
 
     EXPECT_LT(finalVel, 2.0)

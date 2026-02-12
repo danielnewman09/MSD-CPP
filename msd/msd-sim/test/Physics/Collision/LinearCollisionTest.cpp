@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
@@ -132,7 +133,7 @@ TEST(LinearCollisionTest, A1_SphereDrop_SettlesToRest)
 
   uint32_t sphereId = 1;
   world.getObject(sphereId).setCoefficientOfRestitution(0.7);
-  world.getObject(sphereId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   // Simulate for enough frames for the sphere to settle
   // At 60 FPS, 500 frames = ~8.3 seconds
@@ -172,7 +173,7 @@ TEST(LinearCollisionTest, A2_PerfectlyInelastic_QuickStop)
 
   uint32_t sphereId = 1;
   world.getObject(sphereId).setCoefficientOfRestitution(0.0);
-  world.getObject(sphereId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   // Simulate until collision and settling
   // Free fall from z=2 to z=0.5 takes about sqrt(2*1.5/9.81) ~ 0.55s ~ 34 frames
@@ -212,7 +213,7 @@ TEST(LinearCollisionTest, A3_PerfectlyElastic_EnergyConserved)
 
   uint32_t sphereId = 1;
   world.getObject(sphereId).setCoefficientOfRestitution(1.0);
-  world.getObject(sphereId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   // Track max height over time to verify bouncing persists
   double maxHeight = 0.0;
@@ -265,8 +266,8 @@ TEST(LinearCollisionTest, A4_EqualMassElastic_VelocitySwap)
   world.getObject(idA).setCoefficientOfRestitution(1.0);
   world.getObject(idB).setCoefficientOfRestitution(1.0);
 
-  world.getObject(idA).getInertialState().velocity = Vector3D{2.0, 0.0, 0.0};
-  world.getObject(idB).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(idA).getInertialState().velocity = Velocity{2.0, 0.0, 0.0};
+  world.getObject(idB).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   // Initial momentum
   double const initialMomentumX =
@@ -353,8 +354,8 @@ TEST(LinearCollisionTest, A5_UnequalMassElastic_ClassicalFormulas)
   world.getObject(idA).setCoefficientOfRestitution(1.0);
   world.getObject(idB).setCoefficientOfRestitution(1.0);
 
-  world.getObject(idA).getInertialState().velocity = Vector3D{1.0, 0.0, 0.0};
-  world.getObject(idB).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(idA).getInertialState().velocity = Velocity{1.0, 0.0, 0.0};
+  world.getObject(idB).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const initialMomentumX = massA * 1.0 + massB * 0.0;
   double const initialKE = 0.5 * massA * 1.0;
@@ -424,8 +425,8 @@ TEST(LinearCollisionTest, A6_GlancingCollision_MomentumAndEnergyConserved)
   world.getObject(idA).setCoefficientOfRestitution(1.0);
   world.getObject(idB).setCoefficientOfRestitution(1.0);
 
-  world.getObject(idA).getInertialState().velocity = Vector3D{2.0, 0.0, 0.0};
-  world.getObject(idB).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(idA).getInertialState().velocity = Velocity{2.0, 0.0, 0.0};
+  world.getObject(idB).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   Coordinate const initialMomentum =
     world.getObject(idA).getInertialState().velocity * mass +

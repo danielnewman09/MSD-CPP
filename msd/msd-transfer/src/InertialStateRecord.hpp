@@ -8,12 +8,14 @@
 #include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBForeignKey.hpp>
 
-#include "msd-transfer/src/AngularRateRecord.hpp"
+#include "msd-transfer/src/AccelerationRecord.hpp"
+#include "msd-transfer/src/AngularAccelerationRecord.hpp"
 #include "msd-transfer/src/CoordinateRecord.hpp"
 #include "msd-transfer/src/QuaternionDRecord.hpp"
 #include "msd-transfer/src/SimulationFrameRecord.hpp"
 #include "msd-transfer/src/Vector3DRecord.hpp"
 #include "msd-transfer/src/Vector4DRecord.hpp"
+#include "msd-transfer/src/VelocityRecord.hpp"
 
 namespace msd_transfer
 {
@@ -40,11 +42,11 @@ namespace msd_transfer
 struct InertialStateRecord : public cpp_sqlite::BaseTransferObject
 {
   CoordinateRecord position;
-  Vector3DRecord velocity;
-  Vector3DRecord acceleration;
+  VelocityRecord velocity;
+  AccelerationRecord acceleration;
   QuaternionDRecord orientation;
   Vector4DRecord quaternionRate;
-  AngularRateRecord angularAcceleration;
+  AngularAccelerationRecord angularAcceleration;
   cpp_sqlite::ForeignKey<SimulationFrameRecord> frame;
 };
 

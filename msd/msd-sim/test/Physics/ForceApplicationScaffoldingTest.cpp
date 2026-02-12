@@ -1,13 +1,14 @@
 // Ticket: 0023a_force_application_scaffolding
 // Design: docs/designs/0023a_force_application_scaffolding/design.md
 // Updated: 0024_angular_coordinate - Replaced EulerAngles with
-// AngularCoordinate/AngularRate
+// AngularCoordinate/AngularVelocity/AngularAcceleration
 
 #include <gtest/gtest.h>
 #include <cmath>
 
+#include "msd-sim/src/DataTypes/AngularAcceleration.hpp"
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
-#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
@@ -92,7 +93,7 @@ TEST(ForceApplicationScaffolding, clearForces_resetsAccumulators)
   AssetInertial asset{0, 0, hull, 10.0, frame};
 
   // Apply force and torque
-  asset.applyForce(Coordinate{10.0, 5.0, 3.0});
+  asset.applyForce(ForceVector{10.0, 5.0, 3.0});
   asset.applyTorque(Coordinate{1.0, 2.0, 3.0});
 
   // Verify they're set
@@ -126,7 +127,7 @@ TEST(ForceApplicationScaffolding, getAccumulatedForce_returnsAccumulatedValue)
   EXPECT_DOUBLE_EQ(initial.z(), 0.0);
 
   // After applying force
-  asset.applyForce(Coordinate{7.0, 8.0, 9.0});
+  asset.applyForce(ForceVector{7.0, 8.0, 9.0});
   const Coordinate& after = asset.getAccumulatedForce();
   EXPECT_DOUBLE_EQ(after.x(), 7.0);
   EXPECT_DOUBLE_EQ(after.y(), 8.0);
@@ -209,7 +210,7 @@ TEST(ForceApplicationScaffolding, updatePhysics_callsClearForces)
 
   // Apply forces to the asset
   AssetInertial& mutableAsset = world.getObject(instanceId);
-  mutableAsset.applyForce(Coordinate{10.0, 5.0, 3.0});
+  mutableAsset.applyForce(ForceVector{10.0, 5.0, 3.0});
   mutableAsset.applyTorque(Coordinate{1.0, 2.0, 3.0});
 
   // Verify forces are accumulated
@@ -234,29 +235,29 @@ TEST(ForceApplicationScaffolding, updatePhysics_callsClearForces)
 // InertialState Type Tests
 // ============================================================================
 
-TEST(ForceApplicationScaffolding, angularVelocity_isAngularRateType)
+TEST(ForceApplicationScaffolding, angularVelocity_isAngularVelocityType)
 {
   InertialState state;
 
   // Set angular velocity via setter (converts to quaternion rate internally)
-  state.setAngularVelocity(AngularRate{1.0, 2.0, 3.0});
+  state.setAngularVelocity(AngularVelocity{1.0, 2.0, 3.0});
 
-  // Verify it's accessible via getter and returns AngularRate with
+  // Verify it's accessible via getter and returns AngularVelocity with
   // pitch/roll/yaw accessors
-  AngularRate omega = state.getAngularVelocity();
+  AngularVelocity omega = state.getAngularVelocity();
   EXPECT_NEAR(omega.pitch(), 1.0, 1e-10);
   EXPECT_NEAR(omega.roll(), 2.0, 1e-10);
   EXPECT_NEAR(omega.yaw(), 3.0, 1e-10);
 }
 
-TEST(ForceApplicationScaffolding, angularAcceleration_isAngularRateType)
+TEST(ForceApplicationScaffolding, angularAcceleration_isAngularAccelerationType)
 {
   InertialState state;
 
-  // Set angular acceleration as AngularRate
-  state.angularAcceleration = AngularRate{0.5, 1.5, 2.5};
+  // Set angular acceleration as AngularAcceleration
+  state.angularAcceleration = AngularAcceleration{0.5, 1.5, 2.5};
 
-  // Verify it's accessible as AngularRate with pitch/roll/yaw accessors
+  // Verify it's accessible as AngularAcceleration with pitch/roll/yaw accessors
   EXPECT_DOUBLE_EQ(state.angularAcceleration.pitch(), 0.5);
   EXPECT_DOUBLE_EQ(state.angularAcceleration.roll(), 1.5);
   EXPECT_DOUBLE_EQ(state.angularAcceleration.yaw(), 2.5);
@@ -326,15 +327,15 @@ TEST(ForceApplicationScaffolding, forceAccumulationAcrossMultipleFrames)
   AssetInertial& mutableAsset = world.getObject(instanceId);
 
   // Frame 1: Apply forces and update
-  mutableAsset.applyForce(Coordinate{5.0, 0.0, 0.0});
+  mutableAsset.applyForce(ForceVector{5.0, 0.0, 0.0});
   EXPECT_DOUBLE_EQ(mutableAsset.getAccumulatedForce().x(), 5.0);
 
   world.update(std::chrono::milliseconds{16});
   EXPECT_DOUBLE_EQ(mutableAsset.getAccumulatedForce().x(), 0.0);
 
   // Frame 2: Apply different forces
-  mutableAsset.applyForce(Coordinate{0.0, 10.0, 0.0});
-  mutableAsset.applyForce(Coordinate{0.0, 5.0, 0.0});
+  mutableAsset.applyForce(ForceVector{0.0, 10.0, 0.0});
+  mutableAsset.applyForce(ForceVector{0.0, 5.0, 0.0});
   EXPECT_DOUBLE_EQ(mutableAsset.getAccumulatedForce().y(), 15.0);
 
   world.update(std::chrono::milliseconds{16});
@@ -492,7 +493,7 @@ TEST(PhysicsIntegration, updatePhysics_semiImplicitEuler_velocityFirst)
   double mass = mutableAsset.getMass();
   double dt = 0.016;
 
-  mutableAsset.applyForce(Coordinate{force, 0, 0});
+  mutableAsset.applyForce(ForceVector{force, 0, 0});
   world.update(std::chrono::milliseconds{16});
 
   // Semi-implicit Euler: v_new = v_old + a*dt, then x_new = x_old + v_new*dt
@@ -523,7 +524,7 @@ TEST(PhysicsIntegration, updatePhysics_synchronizesReferenceFrame)
   AssetInertial& mutableAsset = world.getObject(instanceId);
 
   // Apply force and torque
-  mutableAsset.applyForce(Coordinate{50, 0, 0});
+  mutableAsset.applyForce(ForceVector{50, 0, 0});
   mutableAsset.applyTorque(Coordinate{0, 0, 5});
 
   world.update(std::chrono::milliseconds{16});
@@ -556,7 +557,7 @@ TEST(PhysicsIntegration, updatePhysics_clearsForces)
   AssetInertial& mutableAsset = world.getObject(instanceId);
 
   // Apply forces
-  mutableAsset.applyForce(Coordinate{10, 20, 30});
+  mutableAsset.applyForce(ForceVector{10, 20, 30});
   mutableAsset.applyTorque(Coordinate{1, 2, 3});
 
   EXPECT_DOUBLE_EQ(mutableAsset.getAccumulatedForce().x(), 10.0);
