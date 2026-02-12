@@ -120,6 +120,8 @@ Common helper functions for numerical operations.
 
 Orchestrates background recording of simulation data to SQLite database with minimal impact on simulation thread performance. Uses cpp_sqlite's double-buffered DAOs for thread-safe record submission and periodic transactional flushing on a dedicated background thread.
 
+**Domain-Aware Recording** ([Ticket: 0056j](../../tickets/0056j_domain_aware_data_recorder.md)): DataRecorder provides high-level methods that accept domain objects (AssetInertial, CollisionPipeline, etc.) and handle iteration, record conversion, FK assignment, and buffering internally. This simplifies WorldModel to a thin orchestrator that delegates recording responsibility to DataRecorder.
+
 ### Key Classes
 
 | Class | Header | Responsibility |
@@ -155,6 +157,18 @@ public:
 
   // Access database for queries (const only)
   const cpp_sqlite::Database& getDatabase() const;
+
+  // Domain-aware recording methods (Ticket: 0056j_domain_aware_data_recorder)
+  void recordInertialStates(uint32_t frameId, std::span<const AssetInertial> assets);
+  void recordBodyEnergies(uint32_t frameId,
+                          std::span<const AssetInertial> assets,
+                          std::span<const std::unique_ptr<PotentialEnergy>> potentials);
+  void recordSystemEnergy(uint32_t frameId,
+                          const EnergyTracker::SystemEnergy& energy,
+                          double previousTotal, bool collisionActive);
+  void recordCollisions(uint32_t frameId, const CollisionPipeline& pipeline);
+  void recordSolverDiagnostics(uint32_t frameId, const CollisionPipeline& pipeline);
+  void recordStaticAsset(const AssetInertial& asset);
 
 private:
   void recorderThreadMain(std::stop_token stopToken);
@@ -192,9 +206,9 @@ worldModel.disableRecording();
 **Simulation Thread**:
 1. Calls `recordFrame(simTime)` to create timestamped frame
 2. Pre-assigned frame ID returned atomically via `nextFrameId_`
-3. Calls `state.toRecord()` for each object
-4. Sets `record.frame.id = frameId` for temporal association
-5. Calls `getDAO<T>().addToBuffer(record)` (thread-safe, mutex-protected)
+3. Calls domain-aware recording methods (e.g., `recordInertialStates(frameId, assets)`)
+4. DataRecorder internally: iterates objects, calls `toRecord()`, sets FK fields, buffers via `getDAO<T>().addToBuffer()`
+5. WorldModel acts as thin orchestrator delegating to DataRecorder (Ticket: 0056j)
 
 **Recorder Thread**:
 1. Sleeps for `flushInterval_` in 10ms chunks (responsive shutdown)
@@ -274,10 +288,16 @@ class WorldModel {
   void disableRecording();
 
 private:
-  void recordCurrentFrame();
+  void recordCurrentFrame();  // Thin orchestrator delegating to DataRecorder (Ticket: 0056j)
   std::unique_ptr<DataRecorder> dataRecorder_;  // nullptr = recording disabled
 };
 ```
+
+**Recording Flow** (Ticket: 0056j):
+1. `WorldModel::recordCurrentFrame()` is a 24-line thin orchestrator
+2. Delegates to DataRecorder domain-aware methods: `recordInertialStates()`, `recordBodyEnergies()`, `recordSystemEnergy()`, `recordCollisions()`, `recordSolverDiagnostics()`
+3. DataRecorder owns all recording logic (iteration, conversion, FK assignment, buffering)
+4. WorldModel retains only simulation state tracking (e.g., `previousSystemEnergy_`)
 
 Backward compatible: existing code unaffected if recording not enabled.
 
