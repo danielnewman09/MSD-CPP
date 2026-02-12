@@ -288,3 +288,75 @@ uint32_t instanceId = staticRecord->body_id;  // Original asset instance ID
 
 `cpp_sqlite` enforces FK constraints at the SQLite level. If a per-frame record references a non-existent `AssetInertialStaticRecord.id`, the insert will fail with an FK violation error. This is the desired behavior — it catches bugs where static data was not recorded properly.
 
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-12
+**Status**: APPROVED
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | All names follow project standards: `recordStaticData`, `backfillStaticData` are camelCase methods, `AssetInertialStaticRecord` is PascalCase, `body` field is lowercase |
+| Namespace organization | ✓ | Transfer records in `msd_transfer`, domain logic in `msd_sim` — correct layering |
+| File structure | ✓ | Follows `msd/{module}/src/` pattern. All file paths correctly specified |
+| Dependency direction | ✓ | Correct: msd-sim → msd-transfer (no reverse dependency). AssetStaticState.toRecord() is the proper conversion boundary |
+
+#### C++ Design Quality
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | ✓ | DataRecorder uses `std::unique_ptr<Database>`, WorldModel uses `std::unique_ptr<DataRecorder>` — proper ownership |
+| Smart pointer appropriateness | ✓ | Exclusive ownership via `unique_ptr`, references for non-owning access (AssetInertial&) — follows CLAUDE.md standards |
+| Value/reference semantics | ✓ | Records use value semantics, helper methods take `const AssetInertial&` non-owning references |
+| Rule of 0/3/5 | ✓ | Transfer records use Rule of Zero (default special members via `= default`) |
+| Const correctness | ✓ | `recordStaticData(const AssetInertial&)` uses const reference, helper methods are private |
+| Exception safety | ✓ | Database write errors handled by cpp_sqlite, FK violations reported as errors (desired behavior) |
+
+#### Feasibility
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | No circular dependencies. AssetInertialStaticRecord already exists, cpp_sqlite::ForeignKey is header-only |
+| Template complexity | ✓ | No new templates. Uses existing `getDAO<T>()` pattern already validated in DataRecorder |
+| Memory strategy | ✓ | Static records are small (32 bytes), backfill is O(N) where N = asset count (acceptable) |
+| Thread safety | ✓ | All writes go through thread-safe DataRecorder::getDAO().addToBuffer() (mutex-protected) |
+| Build integration | ✓ | Requires adding AssetInertialStaticRecord to DataRecorder DAO initialization — straightforward |
+
+#### Testability
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | Each component testable in isolation: AssetStaticState, WorldModel recording, DataRecorder DAO |
+| Mockable dependencies | ✓ | DataRecorder can be null-checked (`if (dataRecorder_)`) for test scenarios without recording |
+| Observable state | ✓ | FK values can be queried via `selectById()`, flush ensures records are queryable |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | FK mismatch between `body.id` (PK) and `body_id` (instance ID) could cause query confusion | Technical | Low | Medium | Clear documentation in design (already present), query pattern example provided | No |
+| R2 | Backfill performance for 10,000+ assets could block enableRecording() | Performance | Low | Low | Backfill is one-time setup, acceptable delay. Could add progress logging if needed | No |
+| R3 | Breaking schema change requires database migration or regeneration | Maintenance | High | Low | Documented as accepted limitation, users regenerate DBs (standard practice for this project) | No |
+
+### Required Revisions
+None — Design is approved.
+
+### Summary
+
+This design is well-structured and follows established patterns from the existing codebase. Key strengths:
+
+1. **Correct layering**: Proper separation between transfer records (msd-transfer) and domain logic (msd-sim) with clean conversion boundary via `AssetStaticState::toRecord()`
+2. **Consistent FK pattern**: Follows the same FK approach used for `SimulationFrameRecord` — proven design
+3. **Non-blocking integration**: Recording is opt-in via `enableRecording()`, backward compatible
+4. **Appropriate design decision**: Option C for R5 (environment bodies as raw IDs) is the right trade-off — simplicity over perfect FK integrity for static, known-at-compile-time data
+
+Minor observations:
+- R1 risk (PK vs instance ID) is well-mitigated by clear query pattern documentation
+- R3 (breaking schema change) is an accepted limitation consistent with project practices
+- Backfill performance (R2) is negligible for typical workloads (<1000 assets)
+
+**Recommendation**: Proceed to implementation. No prototype required — this is a straightforward schema addition with well-understood FK patterns.
+
