@@ -58,7 +58,7 @@ int main(int argc, char** argv)
   // Cube should fall, bounce, and settle
   std::cout << "Running simulation (300 frames @ 10ms)...\n";
   for (int i = 0; i < 300; ++i) {
-    world.update(std::chrono::milliseconds{10});
+    world.update(std::chrono::milliseconds{(i + 1) * 10});
 
     if ((i + 1) % 50 == 0) {
       std::cout << "  Frame " << (i + 1) << "/300\n";

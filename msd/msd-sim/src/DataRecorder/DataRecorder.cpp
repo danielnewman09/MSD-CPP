@@ -10,16 +10,27 @@
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionPipeline.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
+#include "msd-transfer/src/AccelerationRecord.hpp"
+#include "msd-transfer/src/AngularAccelerationRecord.hpp"
 #include "msd-transfer/src/AssetDynamicStateRecord.hpp"
 #include "msd-transfer/src/AssetInertialStaticRecord.hpp"
 #include "msd-transfer/src/AssetPhysicalDynamicRecord.hpp"
 #include "msd-transfer/src/AssetPhysicalStaticRecord.hpp"
 #include "msd-transfer/src/CollisionResultRecord.hpp"
+#include "msd-transfer/src/ContactPointRecord.hpp"
+#include "msd-transfer/src/CoordinateRecord.hpp"
 #include "msd-transfer/src/EnergyRecord.hpp"
+#include "msd-transfer/src/ExternalForceRecord.hpp"
+#include "msd-transfer/src/ForceVectorRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
+#include "msd-transfer/src/QuaternionDRecord.hpp"
 #include "msd-transfer/src/SimulationFrameRecord.hpp"
 #include "msd-transfer/src/SolverDiagnosticRecord.hpp"
 #include "msd-transfer/src/SystemEnergyRecord.hpp"
+#include "msd-transfer/src/TorqueVectorRecord.hpp"
+#include "msd-transfer/src/Vector3DRecord.hpp"
+#include "msd-transfer/src/Vector4DRecord.hpp"
+#include "msd-transfer/src/VelocityRecord.hpp"
 
 namespace msd_sim
 {
@@ -30,13 +41,42 @@ DataRecorder::DataRecorder(const Config& config)
   // Open database
   database_ = std::make_unique<cpp_sqlite::Database>(config.databasePath, true);
 
-  // Note: We don't initialize SimulationFrameRecord DAO explicitly here due to
-  // a cpp_sqlite emplace bug with recent Clang versions. The DAO will be
-  // created automatically on first recordFrame() call. The DAO creation order
-  // (frame before state) is maintained because recordFrame() is always called
-  // before state recording. Ticket: 0038_simulation_data_recorder
+  // Pre-create ALL DAOs before starting the recorder thread. This is critical
+  // because Database::insert() for types with nested ValidTransferObject members
+  // (e.g., CollisionResultRecord → Vector3DRecord, ContactPointRecord →
+  // CoordinateRecord) lazily calls getDAO<NestedType>() during flush, which
+  // modifies daoCreationOrder_ while flushAllDAOs() iterates it — causing
+  // iterator invalidation and a segfault. Pre-creating ensures the vector is
+  // stable before the thread starts iterating it.
 
-  // Start recorder thread
+  // Frame record (must be first for FK integrity)
+  database_->getDAO<msd_transfer::SimulationFrameRecord>();
+
+  // Leaf sub-record types (nested ValidTransferObjects within top-level records)
+  database_->getDAO<msd_transfer::CoordinateRecord>();
+  database_->getDAO<msd_transfer::VelocityRecord>();
+  database_->getDAO<msd_transfer::AccelerationRecord>();
+  database_->getDAO<msd_transfer::QuaternionDRecord>();
+  database_->getDAO<msd_transfer::Vector4DRecord>();
+  database_->getDAO<msd_transfer::AngularAccelerationRecord>();
+  database_->getDAO<msd_transfer::Vector3DRecord>();
+  database_->getDAO<msd_transfer::ContactPointRecord>();
+  database_->getDAO<msd_transfer::ExternalForceRecord>();
+  database_->getDAO<msd_transfer::ForceVectorRecord>();
+  database_->getDAO<msd_transfer::TorqueVectorRecord>();
+
+  // Top-level record types used by domain-aware recording methods
+  database_->getDAO<msd_transfer::InertialStateRecord>();
+  database_->getDAO<msd_transfer::EnergyRecord>();
+  database_->getDAO<msd_transfer::SystemEnergyRecord>();
+  database_->getDAO<msd_transfer::CollisionResultRecord>();
+  database_->getDAO<msd_transfer::SolverDiagnosticRecord>();
+  database_->getDAO<msd_transfer::AssetInertialStaticRecord>();
+  database_->getDAO<msd_transfer::AssetPhysicalStaticRecord>();
+  database_->getDAO<msd_transfer::AssetPhysicalDynamicRecord>();
+  database_->getDAO<msd_transfer::AssetDynamicStateRecord>();
+
+  // Start recorder thread (daoCreationOrder_ is now fully populated)
   recorderThread_ = std::jthread{[this](std::stop_token st)
                                  { recorderThreadMain(std::move(st)); }};
 }
@@ -168,13 +208,12 @@ DataRecorder::getDAO<msd_transfer::AssetDynamicStateRecord>();
 void DataRecorder::recordInertialStates(uint32_t frameId,
                                         std::span<const AssetInertial> assets)
 {
-  auto& stateDAO = getDAO<msd_transfer::InertialStateRecord>();
+  auto& dynamicDAO = getDAO<msd_transfer::AssetDynamicStateRecord>();
   for (const auto& asset : assets)
   {
-    auto record = asset.getInertialState().toRecord();
-    record.body.id = asset.getInstanceId();
+    auto record = asset.toDynamicStateRecord();
     record.frame.id = frameId;
-    stateDAO.addToBuffer(record);
+    dynamicDAO.addToBuffer(record);
   }
 }
 
@@ -212,7 +251,6 @@ void DataRecorder::recordCollisions(uint32_t frameId,
   for (const auto& pair : pipeline.getCollisions())
   {
     auto record = pair.result.toRecord(pair.bodyAId, pair.bodyBId);
-    record.id = collisionDAO.incrementIdCounter();
     record.frame.id = frameId;
     collisionDAO.addToBuffer(record);
   }
@@ -225,7 +263,6 @@ void DataRecorder::recordSolverDiagnostics(uint32_t frameId,
   auto& diagDAO = getDAO<msd_transfer::SolverDiagnosticRecord>();
 
   msd_transfer::SolverDiagnosticRecord record{};
-  record.id = diagDAO.incrementIdCounter();
   record.iterations = static_cast<uint32_t>(solver.iterations);
   record.residual = solver.residual;
   record.converged = solver.converged ? 1 : 0;
@@ -241,7 +278,6 @@ void DataRecorder::recordStaticAsset(const AssetInertial& asset)
   auto& staticDAO = getDAO<msd_transfer::AssetInertialStaticRecord>();
 
   msd_transfer::AssetInertialStaticRecord record{};
-  record.id = staticDAO.incrementIdCounter();
   record.body_id = asset.getInstanceId();
   record.mass = asset.getMass();
   record.restitution = asset.getCoefficientOfRestitution();
