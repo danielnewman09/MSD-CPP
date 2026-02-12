@@ -4,6 +4,32 @@ FastAPI backend for serving MSD simulation data to the Three.js frontend.
 
 **Ticket**: [0056d_fastapi_backend](../tickets/0056d_fastapi_backend.md)
 
+## Quick Start
+
+```bash
+# 1. Build C++ simulation + recording generator
+cd /path/to/MSD-CPP
+conan install . --build=missing -s build_type=Debug -o "&:enable_pybind=True"
+cmake --preset conan-debug
+cmake --build --preset conan-debug --target generate_test_recording
+
+# 2. Generate test recording
+./build/Debug/debug/generate_test_recording replay/recordings/test_cube_drop.db
+
+# 3. Install Python dependencies
+cd replay
+pip install -e .
+
+# 4. Run Python example (validates pybind bindings)
+export PYTHONPATH=../build/Debug/debug:$PYTHONPATH
+python examples/query_recording.py
+
+# 5. Start FastAPI server
+uvicorn replay.app:app --reload
+# Server runs at http://localhost:8000
+# API docs at http://localhost:8000/docs
+```
+
 ## Prerequisites
 
 - Python 3.10+
