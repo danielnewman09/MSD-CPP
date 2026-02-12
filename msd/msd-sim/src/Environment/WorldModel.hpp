@@ -316,56 +316,13 @@ private:
   /**
    * @brief Record current frame to database if recording is enabled
    *
-   * Creates a SimulationFrameRecord with timestamp, then records all inertial
-   * assets' states with FK reference to the frame.
+   * Thin orchestrator that delegates to DataRecorder domain-aware methods.
+   * Tracks previousSystemEnergy_ for delta calculation (WorldModel state).
    *
    * @ticket 0038_simulation_data_recorder
+   * @ticket 0056j_domain_aware_data_recorder
    */
   void recordCurrentFrame();
-
-  /**
-   * @brief Record collision results for this frame
-   *
-   * Reads collision pairs directly from CollisionPipeline::getCollisions()
-   * and writes CollisionResultRecord for each pair.
-   *
-   * @param frameId Frame ID for FK reference
-   * @ticket 0056b1_eliminate_snapshot_layer
-   */
-  void recordCollisions(uint32_t frameId);
-
-  /**
-   * @brief Record solver diagnostics for this frame
-   *
-   * Reads solver data directly from CollisionPipeline::getSolverData()
-   * and writes SolverDiagnosticRecord.
-   *
-   * @param frameId Frame ID for FK reference
-   * @ticket 0056b1_eliminate_snapshot_layer
-   */
-  void recordSolverDiagnostics(uint32_t frameId);
-
-  /**
-   * @brief Record static asset data for a single asset
-   *
-   * Creates AssetInertialStaticRecord from asset's static state and writes
-   * to database via DataRecorder. The record's auto-incremented id becomes
-   * the FK target for per-frame records.
-   *
-   * @param asset The asset to record static data for
-   * @ticket 0056i_static_asset_recording_and_fk
-   */
-  void recordStaticData(const AssetInertial& asset);
-
-  /**
-   * @brief Backfill static records for all existing assets
-   *
-   * Called when recording is enabled after assets have already been spawned.
-   * Iterates all inertial assets and records static data for each.
-   *
-   * @ticket 0056i_static_asset_recording_and_fk
-   */
-  void backfillStaticData();
 
   // ========== Data ==========
 
