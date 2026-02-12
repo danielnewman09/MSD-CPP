@@ -92,15 +92,15 @@ TEST(AssetDynamicStateTest, ToRecord_CapturesAllFields)
   auto record = state.toRecord(42);
 
   EXPECT_EQ(record.body_id, 42u);
-  EXPECT_DOUBLE_EQ(record.position.x, 1.0);
-  EXPECT_DOUBLE_EQ(record.position.y, 2.0);
-  EXPECT_DOUBLE_EQ(record.position.z, 3.0);
-  EXPECT_DOUBLE_EQ(record.velocity.x, 4.0);
-  EXPECT_DOUBLE_EQ(record.velocity.y, 5.0);
-  EXPECT_DOUBLE_EQ(record.velocity.z, 6.0);
-  EXPECT_DOUBLE_EQ(record.acceleration.x, 7.0);
-  EXPECT_DOUBLE_EQ(record.acceleration.y, 8.0);
-  EXPECT_DOUBLE_EQ(record.acceleration.z, 9.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.position.x, 1.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.position.y, 2.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.position.z, 3.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.velocity.x, 4.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.velocity.y, 5.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.velocity.z, 6.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.acceleration.x, 7.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.acceleration.y, 8.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.acceleration.z, 9.0);
   EXPECT_DOUBLE_EQ(record.accumulatedForce.x, 100.0);
   EXPECT_DOUBLE_EQ(record.accumulatedForce.y, 200.0);
   EXPECT_DOUBLE_EQ(record.accumulatedForce.z, 300.0);

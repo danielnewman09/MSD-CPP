@@ -50,18 +50,9 @@ struct AssetDynamicState
   {
     msd_transfer::AssetDynamicStateRecord record;
     record.body_id = bodyId;
-
-    auto stateRecord = inertialState.toRecord();
-    record.position = stateRecord.position;
-    record.velocity = stateRecord.velocity;
-    record.acceleration = stateRecord.acceleration;
-    record.orientation = stateRecord.orientation;
-    record.quaternionRate = stateRecord.quaternionRate;
-    record.angularAcceleration = stateRecord.angularAcceleration;
-
+    record.kinematicState = inertialState.toRecord();
     record.accumulatedForce = accumulatedForce.toRecord();
     record.accumulatedTorque = accumulatedTorque.toRecord();
-
     return record;
   }
 
@@ -74,18 +65,11 @@ struct AssetDynamicState
   static AssetDynamicState fromRecord(
     const msd_transfer::AssetDynamicStateRecord& record)
   {
-    // Build an InertialStateRecord from the flattened fields
-    msd_transfer::InertialStateRecord stateRecord;
-    stateRecord.position = record.position;
-    stateRecord.velocity = record.velocity;
-    stateRecord.acceleration = record.acceleration;
-    stateRecord.orientation = record.orientation;
-    stateRecord.quaternionRate = record.quaternionRate;
-    stateRecord.angularAcceleration = record.angularAcceleration;
-
     AssetDynamicState state;
-    state.inertialState = InertialState::fromRecord(stateRecord);
-    state.accumulatedForce = ForceVector::fromRecord(record.accumulatedForce);
+    state.inertialState =
+      InertialState::fromRecord(record.kinematicState);
+    state.accumulatedForce =
+      ForceVector::fromRecord(record.accumulatedForce);
     state.accumulatedTorque =
       TorqueVector::fromRecord(record.accumulatedTorque);
     return state;

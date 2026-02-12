@@ -79,21 +79,21 @@ TEST_F(AssetDynamicStateTransferTest, RoundTrip_AllFields)
   EXPECT_EQ(record.body_id, 42u);
 
   // Verify kinematic state
-  EXPECT_DOUBLE_EQ(record.position.x, 1.0);
-  EXPECT_DOUBLE_EQ(record.position.y, 2.0);
-  EXPECT_DOUBLE_EQ(record.position.z, 3.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.position.x, 1.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.position.y, 2.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.position.z, 3.0);
 
-  EXPECT_DOUBLE_EQ(record.velocity.x, 4.0);
-  EXPECT_DOUBLE_EQ(record.velocity.y, 5.0);
-  EXPECT_DOUBLE_EQ(record.velocity.z, 6.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.velocity.x, 4.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.velocity.y, 5.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.velocity.z, 6.0);
 
-  EXPECT_DOUBLE_EQ(record.acceleration.x, 7.0);
-  EXPECT_DOUBLE_EQ(record.acceleration.y, 8.0);
-  EXPECT_DOUBLE_EQ(record.acceleration.z, 9.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.acceleration.x, 7.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.acceleration.y, 8.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.acceleration.z, 9.0);
 
-  EXPECT_DOUBLE_EQ(record.angularAcceleration.pitch, 10.0);
-  EXPECT_DOUBLE_EQ(record.angularAcceleration.roll, 11.0);
-  EXPECT_DOUBLE_EQ(record.angularAcceleration.yaw, 12.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.angularAcceleration.pitch, 10.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.angularAcceleration.roll, 11.0);
+  EXPECT_DOUBLE_EQ(record.kinematicState.angularAcceleration.yaw, 12.0);
 
   // Verify force/torque
   EXPECT_DOUBLE_EQ(record.accumulatedForce.x, 100.0);
@@ -113,9 +113,9 @@ TEST_F(AssetDynamicStateTransferTest, RoundTrip_AllFields)
   ASSERT_TRUE(retrieved.has_value());
 
   EXPECT_EQ(retrieved->body_id, 42u);
-  EXPECT_DOUBLE_EQ(retrieved->position.x, 1.0);
-  EXPECT_DOUBLE_EQ(retrieved->velocity.y, 5.0);
-  EXPECT_DOUBLE_EQ(retrieved->acceleration.z, 9.0);
+  EXPECT_DOUBLE_EQ(retrieved->kinematicState.position.x, 1.0);
+  EXPECT_DOUBLE_EQ(retrieved->kinematicState.velocity.y, 5.0);
+  EXPECT_DOUBLE_EQ(retrieved->kinematicState.acceleration.z, 9.0);
   EXPECT_DOUBLE_EQ(retrieved->accumulatedForce.x, 100.0);
   EXPECT_DOUBLE_EQ(retrieved->accumulatedTorque.z, 60.0);
 }
@@ -148,10 +148,10 @@ TEST_F(AssetDynamicStateTransferTest, RoundTrip_OrientationPreserved)
 
   auto record = asset.toDynamicStateRecord();
 
-  EXPECT_DOUBLE_EQ(record.orientation.w, 0.5);
-  EXPECT_DOUBLE_EQ(record.orientation.x, 0.5);
-  EXPECT_DOUBLE_EQ(record.orientation.y, 0.5);
-  EXPECT_DOUBLE_EQ(record.orientation.z, 0.5);
+  EXPECT_DOUBLE_EQ(record.kinematicState.orientation.w, 0.5);
+  EXPECT_DOUBLE_EQ(record.kinematicState.orientation.x, 0.5);
+  EXPECT_DOUBLE_EQ(record.kinematicState.orientation.y, 0.5);
+  EXPECT_DOUBLE_EQ(record.kinematicState.orientation.z, 0.5);
 }
 
 TEST_F(AssetDynamicStateTransferTest, SelectNonexistent_ReturnsNullopt)
