@@ -7,6 +7,7 @@
 #include <cpp_sqlite/src/cpp_sqlite/DBDatabase.hpp>
 #include "msd-sim/src/DataRecorder/DataRecorder.hpp"
 #include "msd-transfer/src/AppliedForceRecord.hpp"
+#include "msd-transfer/src/AssetDynamicStateRecord.hpp"
 #include "msd-transfer/src/BodyMetadataRecord.hpp"
 #include "msd-transfer/src/ConstraintForceRecord.hpp"
 #include "msd-transfer/src/ContactRecord.hpp"
@@ -153,5 +154,8 @@ DataRecorder::getDAO<msd_transfer::SolverDiagnosticRecord>();
 
 template cpp_sqlite::DataAccessObject<msd_transfer::BodyMetadataRecord>&
 DataRecorder::getDAO<msd_transfer::BodyMetadataRecord>();
+
+template cpp_sqlite::DataAccessObject<msd_transfer::AssetDynamicStateRecord>&
+DataRecorder::getDAO<msd_transfer::AssetDynamicStateRecord>();
 
 }  // namespace msd_sim

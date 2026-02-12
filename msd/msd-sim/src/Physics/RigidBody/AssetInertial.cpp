@@ -35,9 +35,10 @@ AssetInertial::AssetInertial(uint32_t assetId,
   inverseInertiaTensor_ = inertiaTensor_.inverse();
 
   // Initialize InertialState position and orientation from ReferenceFrame
-  dynamicState_.position = frame.getOrigin();
-  dynamicState_.orientation = frame.getQuaternion();
-  dynamicState_.quaternionRate = Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
+  dynamicState_.inertialState.position = frame.getOrigin();
+  dynamicState_.inertialState.orientation = frame.getQuaternion();
+  dynamicState_.inertialState.quaternionRate =
+    Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
   // Ticket: 0030_lagrangian_quaternion_physics
 
   // Ticket: 0045_constraint_solver_unification
@@ -80,9 +81,10 @@ AssetInertial::AssetInertial(uint32_t assetId,
   inverseInertiaTensor_ = inertiaTensor_.inverse();
 
   // Initialize InertialState position and orientation from ReferenceFrame
-  dynamicState_.position = frame.getOrigin();
-  dynamicState_.orientation = frame.getQuaternion();
-  dynamicState_.quaternionRate = Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
+  dynamicState_.inertialState.position = frame.getOrigin();
+  dynamicState_.inertialState.orientation = frame.getQuaternion();
+  dynamicState_.inertialState.quaternionRate =
+    Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
   // Ticket: 0030_lagrangian_quaternion_physics
 
   // Ticket: 0045_constraint_solver_unification
@@ -130,9 +132,10 @@ AssetInertial::AssetInertial(uint32_t assetId,
     getCollisionHull(), mass);
   inverseInertiaTensor_ = inertiaTensor_.inverse();
 
-  dynamicState_.position = frame.getOrigin();
-  dynamicState_.orientation = frame.getQuaternion();
-  dynamicState_.quaternionRate = Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
+  dynamicState_.inertialState.position = frame.getOrigin();
+  dynamicState_.inertialState.orientation = frame.getQuaternion();
+  dynamicState_.inertialState.quaternionRate =
+    Eigen::Vector4d{0.0, 0.0, 0.0, 0.0};
 }
 
 double AssetInertial::getMass() const
@@ -151,14 +154,24 @@ const Eigen::Matrix3d& AssetInertial::getInertiaTensor() const
 }
 
 
-const InertialState& AssetInertial::getInertialState() const
+AssetDynamicState& AssetInertial::getDynamicState()
 {
   return dynamicState_;
 }
 
-InertialState& AssetInertial::getInertialState()
+const AssetDynamicState& AssetInertial::getDynamicState() const
 {
   return dynamicState_;
+}
+
+const InertialState& AssetInertial::getInertialState() const
+{
+  return dynamicState_.inertialState;
+}
+
+InertialState& AssetInertial::getInertialState()
+{
+  return dynamicState_.inertialState;
 }
 
 
@@ -169,7 +182,8 @@ const Eigen::Matrix3d& AssetInertial::getInverseInertiaTensor() const
 
 Eigen::Matrix3d AssetInertial::getInverseInertiaTensorWorld() const
 {
-  Eigen::Matrix3d r = dynamicState_.orientation.toRotationMatrix();
+  Eigen::Matrix3d r =
+    dynamicState_.inertialState.orientation.toRotationMatrix();
   return r * inverseInertiaTensor_ * r.transpose();
 }
 
@@ -177,7 +191,7 @@ Eigen::Matrix3d AssetInertial::getInverseInertiaTensorWorld() const
 
 void AssetInertial::applyForce(const msd_sim::Vector3D& force)
 {
-  accumulatedForce_ += force;
+  dynamicState_.accumulatedForce += force;
   // Ticket: 0023a_force_application_scaffolding
 }
 
@@ -185,7 +199,7 @@ void AssetInertial::applyForceAtPoint(const msd_sim::Vector3D& force,
                                       const Coordinate& worldPoint)
 {
   // Accumulate linear force
-  accumulatedForce_ += force;
+  dynamicState_.accumulatedForce += force;
 
   // Compute torque: τ = r × F
   // r is the vector from center of mass to application point
@@ -193,32 +207,31 @@ void AssetInertial::applyForceAtPoint(const msd_sim::Vector3D& force,
   Coordinate const torque = r.cross(force);
 
   // Accumulate torque
-  accumulatedTorque_ += torque;
+  dynamicState_.accumulatedTorque += torque;
 
   // Ticket: 0023_force_application_system
 }
 
 void AssetInertial::applyTorque(const msd_sim::Vector3D& torque)
 {
-  accumulatedTorque_ += torque;
+  dynamicState_.accumulatedTorque += torque;
   // Ticket: 0023a_force_application_scaffolding
 }
 
 void AssetInertial::clearForces()
 {
-  accumulatedForce_ = Coordinate{0.0, 0.0, 0.0};
-  accumulatedTorque_ = Coordinate{0.0, 0.0, 0.0};
+  dynamicState_.clearForces();
   // Ticket: 0023a_force_application_scaffolding
 }
 
 const msd_sim::Vector3D& AssetInertial::getAccumulatedForce() const
 {
-  return accumulatedForce_;
+  return dynamicState_.accumulatedForce;
 }
 
 const msd_sim::Vector3D& AssetInertial::getAccumulatedTorque() const
 {
-  return accumulatedTorque_;
+  return dynamicState_.accumulatedTorque;
 }
 
 // ========== Coefficient of Restitution (ticket 0027) ==========
@@ -263,7 +276,7 @@ void AssetInertial::applyImpulse(const Coordinate& impulse)
 {
   // Impulse directly modifies velocity: Δv = J / m
   // Unlike forces, this is timestep-independent
-  dynamicState_.velocity += impulse / mass_;
+  dynamicState_.inertialState.velocity += impulse / mass_;
   // Ticket: 0027_collision_response_system
 }
 
@@ -271,9 +284,9 @@ void AssetInertial::applyAngularImpulse(const AngularRate& angularImpulse)
 {
   // Angular impulse directly modifies angular velocity: Δω = I⁻¹ * L
   // Unlike torques, this is timestep-independent
-  AngularRate omega = dynamicState_.getAngularVelocity();
+  AngularRate omega = dynamicState_.inertialState.getAngularVelocity();
   omega += angularImpulse;
-  dynamicState_.setAngularVelocity(omega);
+  dynamicState_.inertialState.setAngularVelocity(omega);
   // Ticket: 0027_collision_response_system (updated for quaternions, ticket
   // 0030)
 }
@@ -326,6 +339,14 @@ void AssetInertial::clearConstraints()
 size_t AssetInertial::getConstraintCount() const
 {
   return constraints_.size();
+}
+
+// ========== Transfer Object Support ==========
+
+msd_transfer::AssetDynamicStateRecord
+AssetInertial::toDynamicStateRecord() const
+{
+  return dynamicState_.toRecord(instanceId_);
 }
 
 }  // namespace msd_sim

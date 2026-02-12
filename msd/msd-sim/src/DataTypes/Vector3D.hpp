@@ -22,7 +22,7 @@ namespace msd_sim
  * Use this type for generic 3D vector data that needs to be
  * recorded/transferred. For semantic types (positions, velocities),
  * prefer the domain-specific types like Coordinate.
- * 
+ *
  * Memory footprint: 24 bytes (same as msd_sim::Vector3D)
  */
 struct Vector3D final : detail::Vec3DBase<Vector3D>
@@ -50,13 +50,6 @@ struct Vector3D final : detail::Vec3DBase<Vector3D>
     record.z = z();
     return record;
   }
-
-  // Rule of Zero
-  Vector3D(const Vector3D&) = default;
-  Vector3D(Vector3D&&) noexcept = default;
-  Vector3D& operator=(const Vector3D&) = default;
-  Vector3D& operator=(Vector3D&&) noexcept = default;
-  ~Vector3D() = default;
 };
 
 }  // namespace msd_sim

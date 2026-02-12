@@ -25,6 +25,7 @@
 | 0056e | Three.js core visualization | Medium | 0056d | PENDING |
 | 0056f | Three.js overlays and debugging tools | Low | 0056e | PENDING |
 | 0056g | Replay-enabled test pattern + asset-gen extensions | Medium | 0056b | PENDING |
+| 0056h | AssetDynamicState domain struct + AssetInertial refactor | Medium | 0056a | PENDING |
 
 ---
 

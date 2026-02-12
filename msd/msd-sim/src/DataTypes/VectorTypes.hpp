@@ -28,5 +28,7 @@
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
 #include "msd-sim/src/DataTypes/AngularRate.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/ForceVector.hpp"
+#include "msd-sim/src/DataTypes/TorqueVector.hpp"
 
 #endif  // VECTOR_TYPES_HPP

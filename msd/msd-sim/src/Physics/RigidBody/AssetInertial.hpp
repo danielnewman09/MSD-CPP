@@ -4,9 +4,8 @@
 #include <memory>
 #include <vector>
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetDynamicState.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
-#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
-
 
 namespace msd_sim
 {
@@ -119,12 +118,24 @@ public:
   AssetInertial& operator=(AssetInertial&&) noexcept = delete;
 
   /**
-   * @brief Get the dynamic state (mutable version).
+   * @brief Get the full dynamic state (mutable version).
+   *
+   * Provides access to the grouped per-frame state: kinematic state,
+   * accumulated force, and accumulated torque.
+   *
+   * @return Mutable reference to the dynamic state
+   * @ticket 0056h_asset_dynamic_state_struct
+   */
+  AssetDynamicState& getDynamicState();
+  const AssetDynamicState& getDynamicState() const;
+
+  /**
+   * @brief Get the kinematic state (mutable version).
    *
    * Use this to modify velocities and accelerations during physics
    * integration.
    *
-   * @return Mutable reference to the dynamic state
+   * @return Mutable reference to the inertial state
    */
   InertialState& getInertialState();
 
@@ -368,6 +379,20 @@ public:
    */
   size_t getConstraintCount() const;
 
+  // ========== Transfer Object Support ==========
+
+  /**
+   * @brief Convert dynamic state to a database record.
+   *
+   * Captures the complete per-frame dynamic state: kinematic state
+   * (position, velocity, acceleration, orientation, quaternion rate,
+   * angular acceleration) plus accumulated force and torque.
+   *
+   * @return Transfer record containing all dynamic state data
+   */
+  [[nodiscard]] msd_transfer::AssetDynamicStateRecord
+  toDynamicStateRecord() const;
+
 private:
   // Rigid body physics properties
   double mass_;                    // Mass in kg
@@ -375,18 +400,16 @@ private:
   Eigen::Matrix3d inverseInertiaTensor_;  // Inverse inertia tensor [1/(kg⋅m²)]
   Coordinate centerOfMass_;               // Center of mass in local coordinates
 
-  // Dynamic state (linear/angular velocity and acceleration)
-  InertialState dynamicState_;
-
-  // NEW: Force accumulation (ticket 0023a)
-  msd_sim::Vector3D accumulatedForce_{0.0, 0.0, 0.0};
-  msd_sim::Vector3D accumulatedTorque_{0.0, 0.0, 0.0};
+  // Per-frame mutable state (kinematic + force/torque accumulators)
+  // Ticket: 0056h_asset_dynamic_state_struct
+  AssetDynamicState dynamicState_;
 
   // NEW: Coefficient of restitution (ticket 0027)
   double coefficientOfRestitution_{0.5};  // Default: moderate elasticity
 
   // NEW: Friction coefficient (ticket 0052d)
-  double frictionCoefficient_{0.0};  // Default: no friction (backward compatible)
+  double frictionCoefficient_{
+    0.0};  // Default: no friction (backward compatible)
 
   // NEW: Constraint management (ticket 0031)
   std::vector<std::unique_ptr<Constraint>> constraints_;
