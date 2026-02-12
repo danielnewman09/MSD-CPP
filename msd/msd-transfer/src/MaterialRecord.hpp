@@ -5,7 +5,7 @@
 #include <string>
 
 #include <boost/describe.hpp>
-#include <cpp_sqlite/sqlite_db/DBBaseTransferObject.hpp>
+#include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
 
 namespace msd_transfer
 {
@@ -35,10 +35,8 @@ struct MaterialRecord : public cpp_sqlite::BaseTransferObject
   float roughness{1.0f};
 };
 
-}  // namespace msd_transfer
-
 // Register with Boost.Describe for cpp_sqlite ORM
-BOOST_DESCRIBE_STRUCT(msd_transfer::MaterialRecord,
+BOOST_DESCRIBE_STRUCT(MaterialRecord,
                       (cpp_sqlite::BaseTransferObject),
                       (name,
                        shader_vertex,
@@ -49,5 +47,7 @@ BOOST_DESCRIBE_STRUCT(msd_transfer::MaterialRecord,
                        shininess,
                        metallic,
                        roughness));
+
+}  // namespace msd_transfer
 
 #endif  // MSD_TRANSFER_MATERIAL_RECORD_HPP

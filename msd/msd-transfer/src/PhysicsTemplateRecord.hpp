@@ -6,8 +6,8 @@
 #include <vector>
 
 #include <boost/describe.hpp>
-#include <cpp_sqlite/sqlite_db/DBBaseTransferObject.hpp>
-#include <cpp_sqlite/sqlite_db/DBForeignKey.hpp>
+#include <cpp_sqlite/src/cpp_sqlite/DBBaseTransferObject.hpp>
+#include <cpp_sqlite/src/cpp_sqlite/DBForeignKey.hpp>
 
 #include "msd-transfer/src/MeshRecord.hpp"
 
@@ -39,10 +39,8 @@ struct PhysicsTemplateRecord : public cpp_sqlite::BaseTransferObject
   std::vector<uint8_t> inertia_tensor;
 };
 
-}  // namespace msd_transfer
-
 // Register with Boost.Describe for cpp_sqlite ORM
-BOOST_DESCRIBE_STRUCT(msd_transfer::PhysicsTemplateRecord,
+BOOST_DESCRIBE_STRUCT(PhysicsTemplateRecord,
                       (cpp_sqlite::BaseTransferObject),
                       (name,
                        mesh,
@@ -52,5 +50,7 @@ BOOST_DESCRIBE_STRUCT(msd_transfer::PhysicsTemplateRecord,
                        linear_damping,
                        angular_damping,
                        inertia_tensor));
+
+}  // namespace msd_transfer
 
 #endif  // MSD_TRANSFER_PHYSICS_TEMPLATE_RECORD_HPP
