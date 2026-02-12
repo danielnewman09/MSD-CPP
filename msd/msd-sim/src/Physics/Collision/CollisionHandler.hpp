@@ -58,12 +58,6 @@ public:
     const AssetPhysical& assetB,
     bool skipSATValidation = false) const;
 
-  CollisionHandler(const CollisionHandler&) = default;
-  CollisionHandler(CollisionHandler&&) noexcept = default;
-  CollisionHandler& operator=(const CollisionHandler&) = default;
-  CollisionHandler& operator=(CollisionHandler&&) noexcept = default;
-  ~CollisionHandler() = default;
-
 private:
   /// @brief SAT result: minimum penetration depth and corresponding normal
   ///
@@ -96,10 +90,9 @@ private:
   /// When EPA picks the wrong face (depth wildly inconsistent with SAT),
   /// construct a valid contact using the SAT normal and depth with witness
   /// points from the support function.
-  [[nodiscard]] CollisionResult buildSATContact(
-    const AssetPhysical& assetA,
-    const AssetPhysical& assetB,
-    const SATResult& sat) const;
+  [[nodiscard]] CollisionResult buildSATContact(const AssetPhysical& assetA,
+                                                const AssetPhysical& assetB,
+                                                const SATResult& sat) const;
 
   double epsilon_;
 };
