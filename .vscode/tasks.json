@@ -196,6 +196,76 @@
             "problemMatcher": []
         },
         {
+            "label": "Setup Python Venv",
+            "type": "shell",
+            "command": "python3 -m venv .venv && source .venv/bin/activate && pip install pytest",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Conan Install (pybind)",
+            "type": "shell",
+            "command": "conan install . --build=missing -s build_type=${input:buildType} -o \"&:enable_pybind=True\"",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build Python Bindings",
+            "type": "shell",
+            "command": "cmake --preset conan-debug && cmake --build --preset debug-pybind-only",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": [
+                "Conan Install (pybind)"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Run Python Tests",
+            "type": "shell",
+            "command": "source .venv/bin/activate && python3 -m pytest msd/msd-pybind/test/ -v",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test",
+            "dependsOn": [
+                "Setup Python Venv",
+                "Build Python Bindings"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "Run clang-tidy",
             "type": "shell",
             "command": "bash",
