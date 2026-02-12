@@ -1,0 +1,110 @@
+# MSD Replay Backend
+
+FastAPI backend for serving MSD simulation data to the Three.js frontend.
+
+**Ticket**: [0056d_fastapi_backend](../tickets/0056d_fastapi_backend.md)
+
+## Prerequisites
+
+- Python 3.10+
+- MSD-CPP project built with Python bindings enabled:
+  ```bash
+  conan install . --build=missing -s build_type=Debug -o "&:enable_pybind=True"
+  cmake --preset conan-debug
+  cmake --build --preset conan-debug
+  ```
+
+## Installation
+
+```bash
+cd replay
+pip install -e .
+
+# For development with tests
+pip install -e ".[dev]"
+```
+
+## Configuration
+
+The backend needs to know where recording databases are stored:
+
+```bash
+# Set recordings directory (defaults to ./recordings/)
+export MSD_RECORDINGS_DIR=/path/to/recordings
+```
+
+## Running the Server
+
+```bash
+# Make sure msd_reader is in PYTHONPATH
+export PYTHONPATH=/path/to/MSD-CPP/build/Debug/debug:$PYTHONPATH
+
+# Start the server
+uvicorn replay.app:app --reload
+
+# Server runs at http://localhost:8000
+```
+
+## API Documentation
+
+Interactive API documentation available at:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+## API Endpoints
+
+**Base URL**: `http://localhost:8000/api/v1`
+
+### Simulations
+
+- `GET /simulations` - List available recording databases
+- `GET /simulations/{id}/metadata` - Body metadata for simulation
+
+### Frames
+
+- `GET /simulations/{id}/frames` - Frame list with timestamps
+- `GET /simulations/{id}/frames/{fid}/state` - Full frame data
+- `GET /simulations/{id}/frames/range?start={n}&count={n}` - Bulk frame data
+
+### Assets
+
+- `GET /simulations/{id}/assets` - Geometry data for all bodies
+
+### Energy
+
+- `GET /simulations/{id}/energy` - System-level energy timeseries
+- `GET /simulations/{id}/energy/{body_id}` - Per-body energy timeseries
+
+## Development
+
+Run tests:
+```bash
+pytest
+```
+
+## Architecture
+
+```
+replay/
+  replay/
+    app.py                    # FastAPI application
+    config.py                 # Configuration
+    models.py                 # Pydantic response models
+    routes/
+      simulations.py          # /simulations endpoints
+      frames.py               # /frames endpoints
+      assets.py               # /assets endpoints
+    services/
+      simulation_service.py   # Database query wrapper
+      geometry_service.py     # Geometry conversion
+  static/
+    index.html                # Placeholder (Three.js frontend in 0056e)
+```
+
+## Dependencies
+
+The backend depends on:
+- **0056c**: `msd_reader` Python module (pybind11 bindings)
+- **FastAPI**: REST API framework
+- **Uvicorn**: ASGI server
+- **Pydantic**: Data validation and serialization
