@@ -1,0 +1,176 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "msd-sim/src/Physics/Collision" {
+  class CollisionPipeline <<modified>> {
+    +execute(...)
+    +getLastFrameData(): const FrameCollisionData&
+    -clearFrameData()
+    -applyForces(...)
+    -lastFrameData_: FrameCollisionData
+  }
+
+  class "FrameCollisionData" <<new>> {
+    +contacts: vector<ContactData>
+    +constraintForces: vector<BodyForceData>
+    +solverData: SolverData
+  }
+
+  class "ContactData" <<new>> {
+    +bodyAId: uint32_t
+    +bodyBId: uint32_t
+    +pointA: Coordinate
+    +pointB: Coordinate
+    +normal: Coordinate
+    +depth: double
+    +restitution: double
+    +friction: double
+    +contactIndex: uint32_t
+  }
+
+  class "BodyForceData" <<new>> {
+    +bodyId: uint32_t
+    +linearForce: Vector3D
+    +angularTorque: Vector3D
+  }
+
+  class "SolverData" <<new>> {
+    +iterations: int
+    +residual: double
+    +converged: bool
+    +numConstraints: size_t
+    +numContacts: size_t
+  }
+
+  CollisionPipeline *-- FrameCollisionData
+  FrameCollisionData *-- "*" ContactData
+  FrameCollisionData *-- "*" BodyForceData
+  FrameCollisionData *-- SolverData
+}
+
+package "msd-sim/src/Physics/Constraints" {
+  class ConstraintSolver <<modified>> {
+    +solve(...): SolveResult
+  }
+
+  class "SolveResult" <<modified>> {
+    +bodyForces: vector<Vector3D>
+    +bodyTorques: vector<Vector3D>
+    +iterations: int
+    +residual: double
+    +converged: bool
+  }
+
+  ConstraintSolver ..> SolveResult : returns
+}
+
+package "msd-sim/src/Environment" {
+  class WorldModel <<modified>> {
+    +spawnObject(...): const AssetInertial&
+    +spawnEnvironmentObject(...): const AssetEnvironment&
+    -recordCurrentFrame()
+    -recordBodyMetadata(bodyId, assetId, mass, restitution, friction, isEnvironment)
+    -recordContacts(frameId, frameData)
+    -recordConstraintForces(frameId, frameData)
+    -recordAppliedForces(frameId)
+    -recordSolverDiagnostics(frameId, frameData)
+  }
+
+  WorldModel *-- CollisionPipeline : owns
+  WorldModel ..> FrameCollisionData : reads via getLastFrameData()
+}
+
+package "msd-sim/src/DataRecorder" {
+  class DataRecorder {
+    +recordFrame(simTime): uint32_t
+    +getDAO<T>(): DataAccessObject<T>&
+    +flush()
+  }
+
+  WorldModel *-- DataRecorder : owns
+}
+
+package "msd-transfer" {
+  class ContactRecord {
+    +body_a_id: uint32_t
+    +body_b_id: uint32_t
+    +contact_index: uint32_t
+    +point_a_x/y/z: double
+    +point_b_x/y/z: double
+    +normal_x/y/z: double
+    +depth: double
+    +restitution: double
+    +friction: double
+    +frame: ForeignKey<SimulationFrameRecord>
+  }
+
+  class ConstraintForceRecord {
+    +body_id: uint32_t
+    +force_x/y/z: double
+    +torque_x/y/z: double
+    +frame: ForeignKey<SimulationFrameRecord>
+  }
+
+  class AppliedForceRecord {
+    +body_id: uint32_t
+    +force_type: uint32_t
+    +force_x/y/z: double
+    +torque_x/y/z: double
+    +point_x/y/z: double
+    +frame: ForeignKey<SimulationFrameRecord>
+  }
+
+  class SolverDiagnosticRecord {
+    +iterations: uint32_t
+    +residual: double
+    +converged: uint32_t
+    +num_constraints: uint32_t
+    +num_contacts: uint32_t
+    +frame: ForeignKey<SimulationFrameRecord>
+  }
+
+  class BodyMetadataRecord {
+    +body_id: uint32_t
+    +asset_id: uint32_t
+    +mass: double
+    +restitution: double
+    +friction: double
+    +is_environment: uint32_t
+  }
+}
+
+WorldModel ..> DataRecorder : uses
+WorldModel ..> ContactRecord : writes
+WorldModel ..> ConstraintForceRecord : writes
+WorldModel ..> AppliedForceRecord : writes
+WorldModel ..> SolverDiagnosticRecord : writes
+WorldModel ..> BodyMetadataRecord : writes
+
+note right of FrameCollisionData
+  Captures ephemeral data BEFORE
+  clearFrameData() in execute().
+  Preserves collision/force data
+  across frame boundaries.
+end note
+
+note right of WorldModel::recordCurrentFrame
+  Extended to write 5 new record types:
+  1. ContactRecord (from frameData.contacts)
+  2. ConstraintForceRecord (from frameData.constraintForces)
+  3. AppliedForceRecord (from potentialEnergies_)
+  4. SolverDiagnosticRecord (from frameData.solverData)
+  5. BodyMetadataRecord (on spawn only)
+end note
+
+note right of CollisionPipeline::execute
+  After Phase 5 (force application),
+  BEFORE clearFrameData():
+  - Snapshot contacts to lastFrameData_
+  - Extract per-body forces from solver
+  - Capture solver diagnostics
+end note
+
+@enduml

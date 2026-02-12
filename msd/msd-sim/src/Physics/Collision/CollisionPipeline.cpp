@@ -46,6 +46,12 @@ bool CollisionPipeline::hadCollisions() const
   return collisionOccurred_;
 }
 
+const CollisionPipeline::FrameCollisionData&
+CollisionPipeline::getLastFrameData() const
+{
+  return lastFrameData_;
+}
+
 void CollisionPipeline::execute(
   std::span<AssetInertial> inertialAssets,
   std::span<const AssetEnvironment> environmentalAssets,
@@ -53,6 +59,9 @@ void CollisionPipeline::execute(
 {
   // Clear frame-persistent data at start (fail-fast for stale data)
   clearFrameData();
+
+  // Clear snapshot from previous frame
+  lastFrameData_ = FrameCollisionData{};
 
   const size_t numInertial = inertialAssets.size();
   const size_t numEnvironment = environmentalAssets.size();
@@ -100,6 +109,9 @@ void CollisionPipeline::execute(
 
   // ===== Phase 6: Position Correction =====
   correctPositions(inertialAssets, environmentalAssets, numBodies);
+
+  // ===== Phase 6.5: Snapshot Collision Data =====
+  snapshotFrameData(inertialAssets, environmentalAssets, solveResult);
 
   // Clear at end to leave pipeline empty when idle (prevents dangling refs)
   clearFrameData();
@@ -477,6 +489,32 @@ void CollisionPipeline::correctPositions(
                                       numBodies,
                                       numInertial,
                                       /* dt = */ 0.016);  // Placeholder, not used in position correction
+}
+
+void CollisionPipeline::snapshotFrameData(
+  std::span<const AssetInertial> inertialAssets,
+  std::span<const AssetEnvironment> environmentalAssets,
+  const ConstraintSolver::SolveResult& solveResult)
+{
+  // 1. Snapshot per-pair collision results (preserving full manifold)
+  lastFrameData_.collisionPairs.clear();
+  lastFrameData_.collisionPairs.reserve(collisions_.size());
+
+  for (const auto& collision : collisions_)
+  {
+    FrameCollisionData::CollisionPairData pair{};
+    pair.bodyAId = collision.bodyAId;
+    pair.bodyBId = collision.bodyBId;
+    pair.result = collision.result;
+    lastFrameData_.collisionPairs.push_back(std::move(pair));
+  }
+
+  // 2. Snapshot solver diagnostics
+  lastFrameData_.solverData.iterations = solveResult.iterations;
+  lastFrameData_.solverData.residual = solveResult.residual;
+  lastFrameData_.solverData.converged = solveResult.converged;
+  lastFrameData_.solverData.numConstraints = constraintPtrs_.size();
+  lastFrameData_.solverData.numContacts = collisions_.size();
 }
 
 void CollisionPipeline::clearFrameData()

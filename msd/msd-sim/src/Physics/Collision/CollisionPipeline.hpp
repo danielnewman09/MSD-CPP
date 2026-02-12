@@ -65,6 +65,42 @@ class CollisionPipeline
 {
 public:
   /**
+   * @brief Snapshot struct capturing ephemeral collision pipeline output
+   *
+   * Captures collision data (contacts, forces, solver diagnostics) before
+   * it is cleared by clearFrameData(). WorldModel reads this struct to
+   * persist data via DataRecorder.
+   *
+   * @ticket 0056b_collision_pipeline_data_extraction
+   */
+  struct FrameCollisionData
+  {
+    /**
+     * @brief Per-pair collision data (normal, depth, full contact manifold)
+     */
+    struct CollisionPairData
+    {
+      uint32_t bodyAId{0};
+      uint32_t bodyBId{0};
+      CollisionResult result;
+    };
+    std::vector<CollisionPairData> collisionPairs;
+
+    /**
+     * @brief Solver diagnostic data
+     */
+    struct SolverData
+    {
+      int iterations{0};
+      double residual{0.0};
+      bool converged{false};
+      size_t numConstraints{0};
+      size_t numContacts{0};
+    };
+    SolverData solverData;
+  };
+
+  /**
    * @brief Construct collision pipeline with handler and solver references
    *
    * @param collisionHandler Collision detection subsystem (GJK/EPA)
@@ -127,6 +163,18 @@ public:
    * @ticket 0044_collision_pipeline_integration
    */
   bool hadCollisions() const;
+
+  /**
+   * @brief Get snapshot of collision data from last execute()
+   *
+   * Returns const reference to frame data captured after Phase 5 (force
+   * application) and before clearFrameData(). Data is valid from end of
+   * execute() until start of next execute().
+   *
+   * @return const reference to FrameCollisionData
+   * @ticket 0056b_collision_pipeline_data_extraction
+   */
+  const FrameCollisionData& getLastFrameData() const;
 
   CollisionPipeline(const CollisionPipeline&) = delete;
   CollisionPipeline& operator=(const CollisionPipeline&) = delete;
@@ -230,6 +278,23 @@ protected:
 
 private:
   /**
+   * @brief Snapshot collision data for external recording
+   *
+   * Captures contacts, forces, and solver diagnostics from current frame
+   * into lastFrameData_. Called after Phase 6 (position correction) and
+   * before clearFrameData().
+   *
+   * @param inertialAssets Dynamic objects (for instance IDs)
+   * @param environmentalAssets Static objects (for instance IDs)
+   * @param solveResult Solver output with constraint forces
+   * @ticket 0056b_collision_pipeline_data_extraction
+   */
+  void snapshotFrameData(
+    std::span<const AssetInertial> inertialAssets,
+    std::span<const AssetEnvironment> environmentalAssets,
+    const ConstraintSolver::SolveResult& solveResult);
+
+  /**
    * @brief Clear frame-persistent data
    *
    * Clears all member vectors to prepare for new frame or leave pipeline
@@ -274,6 +339,9 @@ private:
 
   // NEW: Track collision-active status (ticket 0044)
   bool collisionOccurred_{false};
+
+  // NEW: Snapshot of collision data (ticket 0056b)
+  FrameCollisionData lastFrameData_;
 
   // NEW: Cache interaction data structures (ticket 0044)
   struct PairConstraintRange

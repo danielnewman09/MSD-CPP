@@ -9,8 +9,10 @@
 #include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
+#include "msd-transfer/src/CollisionResultRecord.hpp"
 #include "msd-transfer/src/EnergyRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
+#include "msd-transfer/src/SolverDiagnosticRecord.hpp"
 #include "msd-transfer/src/SystemEnergyRecord.hpp"
 
 namespace msd_sim
@@ -42,6 +44,7 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
   auto instanceId = getInertialAssetId();
   inertialAssets_.emplace_back(
     assetId, instanceId, hull, 10.0, origin, 0.5, 0.5);
+
   return inertialAssets_.back();
 }
 
@@ -52,6 +55,7 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
 {
   auto instanceId = getInertialAssetId();
   inertialAssets_.emplace_back(assetId, instanceId, hull, mass, origin);
+
   return inertialAssets_.back();
 }
 
@@ -63,6 +67,7 @@ const AssetEnvironment& WorldModel::spawnEnvironmentObject(
   auto instanceId = ++environmentAssetIdCounter_;
   environmentalAssets_.emplace_back(
     assetId, instanceId, hull, origin, 0.5, 0.5);
+
   return environmentalAssets_.back();
 }
 
@@ -307,6 +312,47 @@ void WorldModel::recordCurrentFrame()
     frameId, previousSystemEnergy_, collisionActiveThisFrame_);
   sysEnergyDAO.addToBuffer(sysRecord);
   previousSystemEnergy_ = systemEnergy.total();
+
+  // Ticket: 0056b_collision_pipeline_data_extraction
+  // Record collision-related data from pipeline snapshot
+  const auto& frameData = collisionPipeline_.getLastFrameData();
+  recordCollisions(frameId, frameData);
+  recordSolverDiagnostics(frameId, frameData);
+}
+
+void WorldModel::recordCollisions(
+  uint32_t frameId,
+  const CollisionPipeline::FrameCollisionData& frameData)
+{
+  auto& collisionDAO =
+    dataRecorder_->getDAO<msd_transfer::CollisionResultRecord>();
+  for (const auto& pair : frameData.collisionPairs)
+  {
+    auto record = pair.result.toRecord(pair.bodyAId, pair.bodyBId);
+    record.id = collisionDAO.incrementIdCounter();
+    record.frame.id = frameId;
+    collisionDAO.addToBuffer(record);
+  }
+}
+
+void WorldModel::recordSolverDiagnostics(
+  uint32_t frameId,
+  const CollisionPipeline::FrameCollisionData& frameData)
+{
+  auto& diagDAO =
+    dataRecorder_->getDAO<msd_transfer::SolverDiagnosticRecord>();
+
+  msd_transfer::SolverDiagnosticRecord record{};
+  record.id = diagDAO.incrementIdCounter();
+  record.iterations = static_cast<uint32_t>(frameData.solverData.iterations);
+  record.residual = frameData.solverData.residual;
+  record.converged = frameData.solverData.converged ? 1 : 0;
+  record.num_constraints =
+    static_cast<uint32_t>(frameData.solverData.numConstraints);
+  record.num_contacts = static_cast<uint32_t>(frameData.solverData.numContacts);
+  record.frame.id = frameId;
+
+  diagDAO.addToBuffer(record);
 }
 
 }  // namespace msd_sim
