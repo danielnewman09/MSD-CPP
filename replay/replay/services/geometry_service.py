@@ -26,7 +26,7 @@ class GeometryService:
             )
 
         self.db_path = db_path
-        self.db = msd_reader.RecordingDatabase(str(db_path))
+        self.db = msd_reader.Database(str(db_path))
 
     def get_all_geometries(self) -> list[AssetGeometry]:
         """Get all asset geometries in Three.js BufferGeometry format."""
@@ -34,10 +34,15 @@ class GeometryService:
 
         geometries = []
         for mesh in mesh_records:
-            # Deserialize BLOB to flat float array
-            positions = msd_reader.deserialize_visual_vertices(
+            # Deserialize BLOB to 9-tuples (px,py,pz, r,g,b, nx,ny,nz)
+            visual_vertices = msd_reader.deserialize_visual_vertices(
                 mesh.vertex_data
             )
+
+            # Extract positions (first 3 floats) and flatten
+            positions = []
+            for vertex in visual_vertices:
+                positions.extend([vertex[0], vertex[1], vertex[2]])
 
             geometries.append(
                 AssetGeometry(

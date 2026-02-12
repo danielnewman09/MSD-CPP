@@ -40,7 +40,7 @@ class SimulationService:
             )
 
         self.db_path = db_path
-        self.db = msd_reader.RecordingDatabase(str(db_path))
+        self.db = msd_reader.Database(str(db_path))
 
     def get_frames(self) -> list[FrameInfo]:
         """Get list of all frames with timestamps."""
@@ -173,8 +173,8 @@ class SimulationService:
         return [
             EnergyPoint(
                 body_id=body_id,
-                frame_id=energy.frame_fk,
-                simulation_time=frame_time_map.get(energy.frame_fk, 0.0),
+                frame_id=energy.frame_id,
+                simulation_time=frame_time_map.get(energy.frame_id, 0.0),
                 linear_ke=energy.linear_ke,
                 rotational_ke=energy.rotational_ke,
                 potential_e=energy.potential_e,
@@ -191,8 +191,8 @@ class SimulationService:
 
         return [
             SystemEnergyPoint(
-                frame_id=sys_energy.frame_fk,
-                simulation_time=frame_time_map.get(sys_energy.frame_fk, 0.0),
+                frame_id=sys_energy.frame_id,
+                simulation_time=frame_time_map.get(sys_energy.frame_id, 0.0),
                 total_system_e=sys_energy.total_system_e,
                 delta_e=sys_energy.delta_e,
             )

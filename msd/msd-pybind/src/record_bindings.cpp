@@ -130,8 +130,15 @@ void bind_records(py::module_& m)
     .def_readonly("quaternionRate",
                   &msd_transfer::InertialStateRecord::quaternionRate)
     .def_readonly("angularAcceleration",
-                  &msd_transfer::InertialStateRecord::angularAcceleration);
-  // Note: body and frame FKs are not directly exposed; use Database queries
+                  &msd_transfer::InertialStateRecord::angularAcceleration)
+    .def_property_readonly("body_id",
+                           [](const msd_transfer::InertialStateRecord& r) {
+                             return r.body.id;
+                           })
+    .def_property_readonly("frame_id",
+                           [](const msd_transfer::InertialStateRecord& r) {
+                             return r.frame.id;
+                           });
 
   py::class_<msd_transfer::EnergyRecord>(m, "EnergyRecord")
     .def(py::init<>())
@@ -139,8 +146,15 @@ void bind_records(py::module_& m)
     .def_readonly("linear_ke", &msd_transfer::EnergyRecord::linear_ke)
     .def_readonly("rotational_ke", &msd_transfer::EnergyRecord::rotational_ke)
     .def_readonly("potential_e", &msd_transfer::EnergyRecord::potential_e)
-    .def_readonly("total_e", &msd_transfer::EnergyRecord::total_e);
-  // Note: body and frame FKs not exposed; use Database queries
+    .def_readonly("total_e", &msd_transfer::EnergyRecord::total_e)
+    .def_property_readonly("body_id",
+                           [](const msd_transfer::EnergyRecord& r) {
+                             return r.body.id;
+                           })
+    .def_property_readonly("frame_id",
+                           [](const msd_transfer::EnergyRecord& r) {
+                             return r.frame.id;
+                           });
 
   py::class_<msd_transfer::SystemEnergyRecord>(m, "SystemEnergyRecord")
     .def(py::init<>())
@@ -157,8 +171,11 @@ void bind_records(py::module_& m)
     .def_readonly("energy_injection",
                   &msd_transfer::SystemEnergyRecord::energy_injection)
     .def_readonly("collision_active",
-                  &msd_transfer::SystemEnergyRecord::collision_active);
-  // Note: frame FK not exposed; use Database queries
+                  &msd_transfer::SystemEnergyRecord::collision_active)
+    .def_property_readonly("frame_id",
+                           [](const msd_transfer::SystemEnergyRecord& r) {
+                             return r.frame.id;
+                           });
 
   py::class_<msd_transfer::CollisionResultRecord>(m, "CollisionResultRecord")
     .def(py::init<>())
@@ -167,8 +184,16 @@ void bind_records(py::module_& m)
     .def_readonly("body_b_id", &msd_transfer::CollisionResultRecord::body_b_id)
     .def_readonly("normal", &msd_transfer::CollisionResultRecord::normal)
     .def_readonly("penetrationDepth",
-                  &msd_transfer::CollisionResultRecord::penetrationDepth);
-  // Note: contacts (RepeatedField) and frame FK handled by Database queries
+                  &msd_transfer::CollisionResultRecord::penetrationDepth)
+    .def_property_readonly(
+      "contacts",
+      [](const msd_transfer::CollisionResultRecord& r) {
+        return r.contacts.data;
+      })
+    .def_property_readonly("frame_id",
+                           [](const msd_transfer::CollisionResultRecord& r) {
+                             return r.frame.id;
+                           });
 
   py::class_<msd_transfer::SolverDiagnosticRecord>(m, "SolverDiagnosticRecord")
     .def(py::init<>())
@@ -179,8 +204,11 @@ void bind_records(py::module_& m)
     .def_readonly("num_constraints",
                   &msd_transfer::SolverDiagnosticRecord::num_constraints)
     .def_readonly("num_contacts",
-                  &msd_transfer::SolverDiagnosticRecord::num_contacts);
-  // Note: frame FK not exposed; use Database queries
+                  &msd_transfer::SolverDiagnosticRecord::num_contacts)
+    .def_property_readonly("frame_id",
+                           [](const msd_transfer::SolverDiagnosticRecord& r) {
+                             return r.frame.id;
+                           });
 
   py::class_<msd_transfer::MeshRecord>(m, "MeshRecord")
     .def(py::init<>())

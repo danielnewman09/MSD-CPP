@@ -226,6 +226,9 @@ endif()
 
 add_subdirectory(msd)
 
+# Replay tools (test recording generator)
+add_subdirectory(replay/tools)
+
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
