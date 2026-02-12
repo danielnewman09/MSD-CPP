@@ -45,11 +45,11 @@ TEST_F(InertialStateTransferTest, RoundTrip_AllFields)
   // Create domain object with known values
   msd_sim::InertialState original;
   original.position = msd_sim::Coordinate{1.0, 2.0, 3.0};
-  original.velocity = msd_sim::Vector3D{4.0, 5.0, 6.0};
-  original.acceleration = msd_sim::Vector3D{7.0, 8.0, 9.0};
+  original.velocity = msd_sim::Velocity{4.0, 5.0, 6.0};
+  original.acceleration = msd_sim::Acceleration{7.0, 8.0, 9.0};
   original.orientation = msd_sim::QuaternionD{0.5, 0.5, 0.5, 0.5};  // w,x,y,z
   original.quaternionRate = msd_sim::Vector4D{0.1, 0.2, 0.3, 0.4};
-  original.angularAcceleration = msd_sim::AngularRate{10.0, 11.0, 12.0};
+  original.angularAcceleration = msd_sim::AngularAcceleration{10.0, 11.0, 12.0};
 
   // Serialize to record
   auto record = original.toRecord();
@@ -145,11 +145,11 @@ TEST_F(InertialStateTransferTest, RoundTrip_NegativeValues)
 {
   msd_sim::InertialState original;
   original.position = msd_sim::Coordinate{-100.5, -200.75, -300.125};
-  original.velocity = msd_sim::Vector3D{-1.0, -2.0, -3.0};
-  original.acceleration = msd_sim::Vector3D{-4.0, -5.0, -6.0};
+  original.velocity = msd_sim::Velocity{-1.0, -2.0, -3.0};
+  original.acceleration = msd_sim::Acceleration{-4.0, -5.0, -6.0};
   original.orientation = msd_sim::QuaternionD{-0.5, -0.5, -0.5, -0.5};
   original.quaternionRate = msd_sim::Vector4D{-0.1, -0.2, -0.3, -0.4};
-  original.angularAcceleration = msd_sim::AngularRate{-7.0, -8.0, -9.0};
+  original.angularAcceleration = msd_sim::AngularAcceleration{-7.0, -8.0, -9.0};
 
   auto record = original.toRecord();
   auto restored = msd_sim::InertialState::fromRecord(record);
@@ -188,10 +188,10 @@ TEST_F(InertialStateTransferTest, RoundTrip_LargeValues)
 {
   msd_sim::InertialState original;
   original.position = msd_sim::Coordinate{1.0e15, -2.5e12, 9.99e18};
-  original.velocity = msd_sim::Vector3D{1.0e6, 2.0e6, 3.0e6};
-  original.acceleration = msd_sim::Vector3D{1.0e3, 2.0e3, 3.0e3};
+  original.velocity = msd_sim::Velocity{1.0e6, 2.0e6, 3.0e6};
+  original.acceleration = msd_sim::Acceleration{1.0e3, 2.0e3, 3.0e3};
   original.quaternionRate = msd_sim::Vector4D{1.0e-6, 2.0e-6, 3.0e-6, 4.0e-6};
-  original.angularAcceleration = msd_sim::AngularRate{1.0e2, 2.0e2, 3.0e2};
+  original.angularAcceleration = msd_sim::AngularAcceleration{1.0e2, 2.0e2, 3.0e2};
 
   auto record = original.toRecord();
   auto restored = msd_sim::InertialState::fromRecord(record);
@@ -218,7 +218,7 @@ TEST_F(InertialStateTransferTest, ToRecord_MapsNestedRecordsCorrectly)
 {
   msd_sim::InertialState state;
   state.position = msd_sim::Coordinate{1.0, 2.0, 3.0};
-  state.velocity = msd_sim::Vector3D{4.0, 5.0, 6.0};
+  state.velocity = msd_sim::Velocity{4.0, 5.0, 6.0};
 
   auto record = state.toRecord();
 
@@ -268,7 +268,7 @@ TEST_F(InertialStateTransferTest, RoundTrip_AngularVelocityPreserved)
   // Set angular velocity, which internally sets quaternionRate
   msd_sim::InertialState original;
   original.orientation = msd_sim::QuaternionD{1.0, 0.0, 0.0, 0.0};
-  original.setAngularVelocity(msd_sim::AngularRate{1.0, 2.0, 3.0});
+  original.setAngularVelocity(msd_sim::AngularVelocity{1.0, 2.0, 3.0});
 
   auto record = original.toRecord();
   auto restored = msd_sim::InertialState::fromRecord(record);

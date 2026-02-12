@@ -7,12 +7,14 @@
 #include <Eigen/Geometry>
 #include <cstdint>
 
+#include "msd-sim/src/DataTypes/Acceleration.hpp"
+#include "msd-sim/src/DataTypes/AngularAcceleration.hpp"
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
-#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Quaternion.hpp"
-#include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/DataTypes/Vector4D.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 
 #include "msd-transfer/src/InertialStateRecord.hpp"
 
@@ -42,16 +44,16 @@ struct InertialState
 {
   // Linear components
   Coordinate position;
-  Vector3D velocity;
-  Vector3D acceleration;
+  Velocity velocity;
+  Acceleration acceleration;
 
   // Angular components (quaternion representation)
   QuaternionD orientation{1.0,
                           0.0,
                           0.0,
                           0.0};  // Identity quaternion (w, x, y, z)
-  Vector4D quaternionRate{0.0, 0.0, 0.0, 0.0};  // Q̇ (w, x, y, z)
-  AngularRate angularAcceleration;              // α = I⁻¹ * τ [rad/s²]
+  Vector4D quaternionRate{0.0, 0.0, 0.0, 0.0};       // Q̇ (w, x, y, z)
+  AngularAcceleration angularAcceleration;  // α = I⁻¹ * τ [rad/s²]
 
   /**
    * @brief Convert quaternion rate to angular velocity
@@ -60,7 +62,7 @@ struct InertialState
    * Formula: ω = 2 * Q̄ ⊗ Q̇
    * where Q̄ is the conjugate quaternion (w, -x, -y, -z)
    */
-  [[nodiscard]] AngularRate getAngularVelocity() const;
+  [[nodiscard]] AngularVelocity getAngularVelocity() const;
 
   /**
    * @brief Set angular velocity (converts to quaternion rate)
@@ -68,7 +70,7 @@ struct InertialState
    *
    * Formula: Q̇ = ½ * Q ⊗ [0, ω]
    */
-  void setAngularVelocity(const AngularRate& omega);
+  void setAngularVelocity(const AngularVelocity& omega);
 
   /**
    * @brief Convert angular velocity to quaternion rate
@@ -78,7 +80,7 @@ struct InertialState
    *
    * Formula: Q̇ = ½ * Q ⊗ [0, ω]
    */
-  static Vector4D omegaToQuaternionRate(const AngularRate& omega,
+  static Vector4D omegaToQuaternionRate(const AngularVelocity& omega,
                                         const QuaternionD& Q);
 
   /**
@@ -89,8 +91,8 @@ struct InertialState
    *
    * Formula: ω = 2 * Q̄ ⊗ Q̇
    */
-  static AngularRate quaternionRateToOmega(const Vector4D& Qdot,
-                                           const QuaternionD& Q);
+  static AngularVelocity quaternionRateToOmega(const Vector4D& Qdot,
+                                               const QuaternionD& Q);
 
   /**
    * @brief Get Euler angles from quaternion (deprecated, for backward

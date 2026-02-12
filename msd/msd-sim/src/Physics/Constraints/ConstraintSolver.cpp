@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
@@ -253,11 +253,11 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
     Eigen::Matrix<double, 12, 1> v;
     v.segment<3>(0) =
       Vector3D{stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
-    AngularRate omegaA = stateA.getAngularVelocity();
+    AngularVelocity omegaA = stateA.getAngularVelocity();
     v.segment<3>(3) = Vector3D{omegaA.x(), omegaA.y(), omegaA.z()};
     v.segment<3>(6) =
       Vector3D{stateB.velocity.x(), stateB.velocity.y(), stateB.velocity.z()};
-    AngularRate omegaB = stateB.getAngularVelocity();
+    AngularVelocity omegaB = stateB.getAngularVelocity();
     v.segment<3>(9) = Vector3D{omegaB.x(), omegaB.y(), omegaB.z()};
 
     double const jv = (jacobians[i] * v)(0);
@@ -636,11 +636,11 @@ Eigen::VectorXd ConstraintSolver::assembleFlatRHS(
     Eigen::Matrix<double, 12, 1> v;
     v.segment<3>(0) =
       Vector3D{stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
-    AngularRate omegaA = stateA.getAngularVelocity();
+    AngularVelocity omegaA = stateA.getAngularVelocity();
     v.segment<3>(3) = Vector3D{omegaA.x(), omegaA.y(), omegaA.z()};
     v.segment<3>(6) =
       Vector3D{stateB.velocity.x(), stateB.velocity.y(), stateB.velocity.z()};
-    AngularRate omegaB = stateB.getAngularVelocity();
+    AngularVelocity omegaB = stateB.getAngularVelocity();
     v.segment<3>(9) = Vector3D{omegaB.x(), omegaB.y(), omegaB.z()};
 
     double const jv = (flat.jacobianRows[idx] * v)(0);

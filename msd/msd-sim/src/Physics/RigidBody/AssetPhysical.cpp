@@ -41,5 +41,14 @@ uint32_t AssetPhysical::getInstanceId() const
   return instanceId_;
 }
 
+msd_transfer::AssetPhysicalStaticRecord AssetPhysical::toStaticRecord(
+  bool isEnvironment) const
+{
+  msd_transfer::AssetPhysicalStaticRecord record;
+  record.body_id = instanceId_;
+  record.asset_id = referenceAssetId_;
+  record.is_environment = isEnvironment ? 1u : 0u;
+  return record;
+}
 
 }  // namespace msd_sim

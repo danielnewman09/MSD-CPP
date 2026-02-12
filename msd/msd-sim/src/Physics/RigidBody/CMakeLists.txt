@@ -9,6 +9,7 @@ target_sources(${MSD_SIM_NAME} PRIVATE
 
 set(
     PHYSICS_HEADER_FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/AssetDynamicState.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/AssetEnvironment.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/AssetInertial.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/AssetPhysical.hpp

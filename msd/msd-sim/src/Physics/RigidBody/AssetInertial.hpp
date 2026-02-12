@@ -4,9 +4,9 @@
 #include <memory>
 #include <vector>
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetDynamicState.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
-#include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
-
+#include "msd-sim/src/Physics/RigidBody/AssetStaticState.hpp"
 
 namespace msd_sim
 {
@@ -119,12 +119,24 @@ public:
   AssetInertial& operator=(AssetInertial&&) noexcept = delete;
 
   /**
-   * @brief Get the dynamic state (mutable version).
+   * @brief Get the full dynamic state (mutable version).
+   *
+   * Provides access to the grouped per-frame state: kinematic state,
+   * accumulated force, and accumulated torque.
+   *
+   * @return Mutable reference to the dynamic state
+   * @ticket 0056h_asset_dynamic_state_struct
+   */
+  AssetDynamicState& getDynamicState();
+  const AssetDynamicState& getDynamicState() const;
+
+  /**
+   * @brief Get the kinematic state (mutable version).
    *
    * Use this to modify velocities and accelerations during physics
    * integration.
    *
-   * @return Mutable reference to the dynamic state
+   * @return Mutable reference to the inertial state
    */
   InertialState& getInertialState();
 
@@ -178,7 +190,7 @@ public:
    *
    * @param force Force vector in world coordinates [N]
    */
-  void applyForce(const msd_sim::Vector3D& force);
+  void applyForce(const ForceVector& force);
 
   /**
    * @brief Apply a force at a specific world-space point.
@@ -190,7 +202,7 @@ public:
    * @param force Force vector in world coordinates [N]
    * @param worldPoint Application point in world coordinates [m]
    */
-  void applyForceAtPoint(const msd_sim::Vector3D& force,
+  void applyForceAtPoint(const ForceVector& force,
                          const Coordinate& worldPoint);
 
   /**
@@ -200,7 +212,7 @@ public:
    *
    * @param torque Torque vector in world coordinates [N·m]
    */
-  void applyTorque(const msd_sim::Vector3D& torque);
+  void applyTorque(const TorqueVector& torque);
 
   /**
    * @brief Clear all accumulated forces and torques.
@@ -213,13 +225,13 @@ public:
    * @brief Get the accumulated force for this frame.
    * @return Accumulated force vector [N]
    */
-  const msd_sim::Vector3D& getAccumulatedForce() const;
+  ForceVector getAccumulatedForce() const;
 
   /**
    * @brief Get the accumulated torque for this frame.
    * @return Accumulated torque vector [N·m]
    */
-  const msd_sim::Vector3D& getAccumulatedTorque() const;
+  TorqueVector getAccumulatedTorque() const;
 
   // ========== NEW: Coefficient of Restitution (ticket 0027) ==========
 
@@ -285,7 +297,7 @@ public:
    *
    * @ticket 0027_collision_response_system
    */
-  void applyImpulse(const Coordinate& impulse);
+  void applyImpulse(const Vector3D& impulse);
 
   /**
    * @brief Apply an instantaneous angular impulse.
@@ -300,7 +312,7 @@ public:
    *
    * @ticket 0027_collision_response_system
    */
-  void applyAngularImpulse(const AngularRate& angularImpulse);
+  void applyAngularImpulse(const AngularVelocity& angularImpulse);
 
   // ========== NEW: Constraint Management (ticket 0031) ==========
 
@@ -368,27 +380,45 @@ public:
    */
   size_t getConstraintCount() const;
 
+  // ========== Transfer Object Support ==========
+
+  /**
+   * @brief Convert dynamic state to a database record.
+   *
+   * Captures the complete per-frame dynamic state: kinematic state
+   * (position, velocity, acceleration, orientation, quaternion rate,
+   * angular acceleration) plus accumulated force and torque.
+   *
+   * @return Transfer record containing all dynamic state data
+   */
+  [[nodiscard]] msd_transfer::AssetDynamicStateRecord toDynamicStateRecord()
+    const;
+
+  /**
+   * @brief Convert physics properties to a spawn-time static record.
+   *
+   * Captures mass, restitution, and friction for this inertial asset.
+   *
+   * @return Transfer record with body_id, mass, restitution, friction
+   * @ticket 0056a_collision_force_transfer_records
+   */
+  [[nodiscard]] msd_transfer::AssetInertialStaticRecord toStaticRecord() const;
+
 private:
-  // Rigid body physics properties
-  double mass_;                    // Mass in kg
+  // Spawn-time static properties (mass + material)
+  // Ticket: 0056a_collision_force_transfer_records
+  AssetStaticState staticState_;
+
+  // Rigid body inertia properties (computed from hull + mass)
   Eigen::Matrix3d inertiaTensor_;  // Inertia tensor about centroid [kg⋅m²]
   Eigen::Matrix3d inverseInertiaTensor_;  // Inverse inertia tensor [1/(kg⋅m²)]
   Coordinate centerOfMass_;               // Center of mass in local coordinates
 
-  // Dynamic state (linear/angular velocity and acceleration)
-  InertialState dynamicState_;
+  // Per-frame mutable state (kinematic + force/torque accumulators)
+  // Ticket: 0056h_asset_dynamic_state_struct
+  AssetDynamicState dynamicState_;
 
-  // NEW: Force accumulation (ticket 0023a)
-  msd_sim::Vector3D accumulatedForce_{0.0, 0.0, 0.0};
-  msd_sim::Vector3D accumulatedTorque_{0.0, 0.0, 0.0};
-
-  // NEW: Coefficient of restitution (ticket 0027)
-  double coefficientOfRestitution_{0.5};  // Default: moderate elasticity
-
-  // NEW: Friction coefficient (ticket 0052d)
-  double frictionCoefficient_{0.0};  // Default: no friction (backward compatible)
-
-  // NEW: Constraint management (ticket 0031)
+  // Constraint management (ticket 0031)
   std::vector<std::unique_ptr<Constraint>> constraints_;
 };
 

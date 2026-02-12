@@ -27,7 +27,9 @@
 
 #include <Eigen/Geometry>
 
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
@@ -133,7 +135,7 @@ SimulationResult runRestingCubeSimulation(double cubeStartZ,
   uint32_t cubeId = 1;
   world.getObject(cubeId).setCoefficientOfRestitution(restitution);
   // Start at rest
-  world.getObject(cubeId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const initialEnergy = useGravity
                                  ? computeSystemEnergy(world)
@@ -515,7 +517,7 @@ TEST(ParameterIsolation, H5_ContactPointCount_EvolutionDiagnostic)
 
   uint32_t cubeId = 1;
   world.getObject(cubeId).setCoefficientOfRestitution(0.0);
-  world.getObject(cubeId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   // Use a separate CollisionHandler to inspect contacts each frame
   CollisionHandler handler{1e-6};
@@ -608,8 +610,8 @@ TEST(ParameterIsolation, H6_ZeroGravity_RestingContact_Stable)
   world.getObject(idB).setCoefficientOfRestitution(0.0);
 
   // Both at rest
-  world.getObject(idA).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
-  world.getObject(idB).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(idA).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  world.getObject(idB).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   auto initialSysEnergy = computeSystemEnergyNoGravity(world);
   double const initialKE = initialSysEnergy.total();
@@ -754,7 +756,7 @@ TEST(ParameterIsolation, H8_TiltedCube_FeedbackLoop)
 
   uint32_t cubeId = 1;
   world.getObject(cubeId).setCoefficientOfRestitution(0.0);
-  world.getObject(cubeId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const initialEnergy = computeSystemEnergy(world);
 
@@ -776,7 +778,7 @@ TEST(ParameterIsolation, H8_TiltedCube_FeedbackLoop)
       break;
     }
 
-    AngularRate omega = state.getAngularVelocity();
+    AngularVelocity omega = state.getAngularVelocity();
     double angVelMag = Eigen::Vector3d{omega.x(), omega.y(), omega.z()}.norm();
 
     maxAngVel = std::max(maxAngVel, angVelMag);

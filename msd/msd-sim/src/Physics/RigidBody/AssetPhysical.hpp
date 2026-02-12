@@ -6,6 +6,7 @@
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
+#include "msd-transfer/src/AssetPhysicalStaticRecord.hpp"
 
 namespace msd_sim
 {
@@ -88,6 +89,19 @@ public:
   uint32_t getAssetId() const;
 
   uint32_t getInstanceId() const;
+
+  // ========== Transfer Object Support ==========
+
+  /**
+   * @brief Convert identity to a spawn-time static record.
+   *
+   * @param isEnvironment true for AssetEnvironment, false for AssetInertial
+   * @return Transfer record with body_id, asset_id, and is_environment flag
+   *
+   * @ticket 0056a_collision_force_transfer_records
+   */
+  [[nodiscard]] msd_transfer::AssetPhysicalStaticRecord
+  toStaticRecord(bool isEnvironment) const;
 
 protected:
   // The identifier for the asset from which this object was built

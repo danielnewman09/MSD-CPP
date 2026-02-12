@@ -1,28 +1,20 @@
-// Ticket: 0024_angular_coordinate
-// Design: docs/designs/0024_angular_coordinate/design.md
-
-#ifndef ANGULAR_RATE_HPP
-#define ANGULAR_RATE_HPP
+#ifndef ANGULAR_ACCELERATION_HPP
+#define ANGULAR_ACCELERATION_HPP
 
 #include <Eigen/Dense>
 
 #include "msd-sim/src/DataTypes/Vec3FormatterBase.hpp"
 
-#include "msd-transfer/src/AngularRateRecord.hpp"
+#include "msd-transfer/src/AngularAccelerationRecord.hpp"
 
 namespace msd_sim
 {
 
 /**
- * @brief Angular rate vector (velocity or acceleration) without normalization
+ * @brief Angular acceleration vector [rad/s^2] without normalization
  *
  * Inherits from Eigen::Vector3d for full matrix operation support.
  * Provides semantic pitch/roll/yaw accessors without any normalization.
- * Rates can exceed 2π rad/s and should not be normalized.
- *
- * Units:
- * - Angular velocity: rad/s
- * - Angular acceleration: rad/s²
  *
  * Axis convention (ZYX intrinsic rotation):
  * - pitch: Rotation around Y-axis (component 0)
@@ -30,42 +22,39 @@ namespace msd_sim
  * - yaw:   Rotation around Z-axis (component 2)
  *
  * Memory footprint: 24 bytes (same as Eigen::Vector3d)
- *
- * @see docs/designs/0024_angular_coordinate/0024_angular_coordinate.puml
- * @ticket 0024_angular_coordinate
  */
-class AngularRate final : public Eigen::Vector3d
+class AngularAcceleration final : public Eigen::Vector3d
 {
 public:
   // Default constructor - initializes to (0, 0, 0)
-  AngularRate() : Eigen::Vector3d{0.0, 0.0, 0.0}
+  AngularAcceleration() : Eigen::Vector3d{0.0, 0.0, 0.0}
   {
   }
 
   // Constructor with pitch, roll, yaw rates
-  AngularRate(double pitchRate, double rollRate, double yawRate)
+  AngularAcceleration(double pitchRate, double rollRate, double yawRate)
     : Eigen::Vector3d{pitchRate, rollRate, yawRate}
   {
   }
 
   // Constructor from Eigen::Vector3d
   // NOLINTNEXTLINE(google-explicit-constructor)
-  AngularRate(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec}
+  AngularAcceleration(const Eigen::Vector3d& vec) : Eigen::Vector3d{vec}
   {
   }
 
   // Template constructor for Eigen expressions
   template <typename OtherDerived>
   // NOLINTNEXTLINE(google-explicit-constructor)
-  AngularRate(const Eigen::MatrixBase<OtherDerived>&
-                other)  // NOLINT(google-explicit-constructor)
+  AngularAcceleration(const Eigen::MatrixBase<OtherDerived>&
+                        other)  // NOLINT(google-explicit-constructor)
     : Eigen::Vector3d{other}
   {
   }
 
   // Template assignment for Eigen expressions
   template <typename OtherDerived>
-  AngularRate& operator=(const Eigen::MatrixBase<OtherDerived>& other)
+  AngularAcceleration& operator=(const Eigen::MatrixBase<OtherDerived>& other)
   {
     this->Eigen::Vector3d::operator=(other);
     return *this;
@@ -103,14 +92,15 @@ public:
   }
 
   // Transfer methods
-  static AngularRate fromRecord(const msd_transfer::AngularRateRecord& record)
+  static AngularAcceleration fromRecord(
+    const msd_transfer::AngularAccelerationRecord& record)
   {
-    return AngularRate{record.pitch, record.roll, record.yaw};
+    return AngularAcceleration{record.pitch, record.roll, record.yaw};
   }
 
-  [[nodiscard]] msd_transfer::AngularRateRecord toRecord() const
+  [[nodiscard]] msd_transfer::AngularAccelerationRecord toRecord() const
   {
-    msd_transfer::AngularRateRecord record;
+    msd_transfer::AngularAccelerationRecord record;
     record.pitch = pitch();
     record.roll = roll();
     record.yaw = yaw();
@@ -118,21 +108,22 @@ public:
   }
 
   // Rule of Zero
-  AngularRate(const AngularRate&) = default;
-  AngularRate(AngularRate&&) noexcept = default;
-  AngularRate& operator=(const AngularRate&) = default;
-  AngularRate& operator=(AngularRate&&) noexcept = default;
-  ~AngularRate() = default;
+  AngularAcceleration(const AngularAcceleration&) = default;
+  AngularAcceleration(AngularAcceleration&&) noexcept = default;
+  AngularAcceleration& operator=(const AngularAcceleration&) = default;
+  AngularAcceleration& operator=(AngularAcceleration&&) noexcept = default;
+  ~AngularAcceleration() = default;
 };
 
 }  // namespace msd_sim
 
 // Formatter specialization for std::format support
 template <>
-struct std::formatter<msd_sim::AngularRate>
-  : msd_sim::detail::Vec3FormatterBase<msd_sim::AngularRate>
+struct std::formatter<msd_sim::AngularAcceleration>
+  : msd_sim::detail::Vec3FormatterBase<msd_sim::AngularAcceleration>
 {
-  auto format(const msd_sim::AngularRate& rate, std::format_context& ctx) const
+  auto format(const msd_sim::AngularAcceleration& rate,
+              std::format_context& ctx) const
   {
     return formatComponents(
       rate,
@@ -141,4 +132,4 @@ struct std::formatter<msd_sim::AngularRate>
   }
 };
 
-#endif  // ANGULAR_RATE_HPP
+#endif  // ANGULAR_ACCELERATION_HPP

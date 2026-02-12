@@ -12,7 +12,7 @@
 
 #include <Eigen/Cholesky>
 
-#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"

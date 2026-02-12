@@ -6,6 +6,7 @@
 #include "msd-assets/src/Geometry.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
+#include "msd-sim/src/Physics/RigidBody/MaterialProperties.hpp"
 
 namespace msd_sim
 {
@@ -139,7 +140,7 @@ public:
    */
   double getCoefficientOfRestitution() const
   {
-    return coefficient_of_restitution_;
+    return material_.coefficientOfRestitution;
   }
 
   /**
@@ -156,7 +157,7 @@ public:
    */
   double getFrictionCoefficient() const
   {
-    return friction_coefficient_;
+    return material_.frictionCoefficient;
   }
 
   /**
@@ -178,8 +179,7 @@ private:
   static inline const Eigen::Matrix3d kZeroInertia{Eigen::Matrix3d::Zero()};
 
   InertialState static_state_;  // Zero velocity, position from frame
-  double coefficient_of_restitution_{0.5};
-  double friction_coefficient_{0.0};  // Default: no friction (backward compatible)
+  MaterialProperties material_;
 };
 
 }  // namespace msd_sim

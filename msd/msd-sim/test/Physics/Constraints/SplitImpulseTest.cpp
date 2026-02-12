@@ -10,7 +10,8 @@
 #include <memory>
 #include <vector>
 
-#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/AngularAcceleration.hpp"
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
@@ -43,7 +44,7 @@ InertialState createDefaultState(
   state.acceleration = Coordinate{0.0, 0.0, 0.0};
   state.orientation = QuaternionD{1.0, 0.0, 0.0, 0.0};
   state.quaternionRate = Eigen::Vector4d::Zero();
-  state.angularAcceleration = AngularRate{0.0, 0.0, 0.0};
+  state.angularAcceleration = AngularAcceleration{0.0, 0.0, 0.0};
   return state;
 }
 
@@ -228,7 +229,7 @@ TEST(SplitImpulse, PositionCorrection_DoesNotChangeAngularVelocity)
   std::vector<Constraint*> constraints{&constraint};
 
   InertialState stateA = createDefaultState(Coordinate{0.0, 0.0, -0.5});
-  stateA.setAngularVelocity(AngularRate{1.0, 0.0, 0.0});
+  stateA.setAngularVelocity(AngularVelocity{1.0, 0.0, 0.0});
   InertialState stateB = createDefaultState(Coordinate{0.0, 0.0, 0.5});
 
   Eigen::Vector4d qdotA_before = stateA.quaternionRate;

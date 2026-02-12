@@ -12,6 +12,7 @@
 #include <numeric>
 #include <random>
 #include <vector>
+#include "msd-sim/src/DataTypes/AngularAcceleration.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
@@ -37,7 +38,7 @@ InertialState createDefaultState(
   state.acceleration = Coordinate{0.0, 0.0, 0.0};
   state.orientation = Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};
   state.quaternionRate = Eigen::Vector4d::Zero();
-  state.angularAcceleration = AngularRate{0.0, 0.0, 0.0};
+  state.angularAcceleration = AngularAcceleration{0.0, 0.0, 0.0};
   return state;
 }
 

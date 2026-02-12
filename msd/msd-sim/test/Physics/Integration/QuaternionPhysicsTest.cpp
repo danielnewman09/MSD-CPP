@@ -41,11 +41,11 @@ TEST(QuaternionPhysicsAC1, OmegaToQdotRoundTrip_Identity)
 {
   // Test with identity quaternion
   Eigen::Quaterniond Q = Eigen::Quaterniond::Identity();
-  AngularRate omega{1.0, 2.0, 3.0};
+  AngularVelocity omega{1.0, 2.0, 3.0};
 
   // Convert ω → Q̇ → ω
   Eigen::Vector4d Qdot = InertialState::omegaToQuaternionRate(omega, Q);
-  AngularRate omega_recovered = InertialState::quaternionRateToOmega(Qdot, Q);
+  AngularVelocity omega_recovered = InertialState::quaternionRateToOmega(Qdot, Q);
 
   EXPECT_NEAR(omega_recovered.x(), omega.x(), 1e-10);
   EXPECT_NEAR(omega_recovered.y(), omega.y(), 1e-10);
@@ -56,11 +56,11 @@ TEST(QuaternionPhysicsAC1, OmegaToQdotRoundTrip_RotatedQuaternion)
 {
   // Test with 45° rotation about Z-axis
   Eigen::Quaterniond Q{Eigen::AngleAxisd{M_PI / 4, msd_sim::Vector3D::UnitZ()}};
-  AngularRate omega{0.5, -1.5, 2.5};
+  AngularVelocity omega{0.5, -1.5, 2.5};
 
   // Convert ω → Q̇ → ω
   Eigen::Vector4d Qdot = InertialState::omegaToQuaternionRate(omega, Q);
-  AngularRate omega_recovered = InertialState::quaternionRateToOmega(Qdot, Q);
+  AngularVelocity omega_recovered = InertialState::quaternionRateToOmega(Qdot, Q);
 
   EXPECT_NEAR(omega_recovered.x(), omega.x(), 1e-10);
   EXPECT_NEAR(omega_recovered.y(), omega.y(), 1e-10);
@@ -72,11 +72,11 @@ TEST(QuaternionPhysicsAC1, OmegaToQdotRoundTrip_ArbitraryQuaternion)
   // Test with arbitrary rotation
   Eigen::Quaterniond Q{
     Eigen::AngleAxisd{1.2, msd_sim::Vector3D{1, 2, 3}.normalized()}};
-  AngularRate omega{-2.0, 3.0, -1.0};
+  AngularVelocity omega{-2.0, 3.0, -1.0};
 
   // Convert ω → Q̇ → ω
   Eigen::Vector4d Qdot = InertialState::omegaToQuaternionRate(omega, Q);
-  AngularRate omega_recovered = InertialState::quaternionRateToOmega(Qdot, Q);
+  AngularVelocity omega_recovered = InertialState::quaternionRateToOmega(Qdot, Q);
 
   EXPECT_NEAR(omega_recovered.x(), omega.x(), 1e-10);
   EXPECT_NEAR(omega_recovered.y(), omega.y(), 1e-10);
@@ -90,11 +90,11 @@ TEST(QuaternionPhysicsAC1, QdotToOmegaRoundTrip)
 
   // Valid Q̇ must be perpendicular to Q: Q · Q̇ = 0
   // For rotation about Z with Q at 30° about Y
-  AngularRate omega{0.0, 0.0, 5.0};
+  AngularVelocity omega{0.0, 0.0, 5.0};
   Eigen::Vector4d Qdot = InertialState::omegaToQuaternionRate(omega, Q);
 
   // Now recover
-  AngularRate omega_recovered = InertialState::quaternionRateToOmega(Qdot, Q);
+  AngularVelocity omega_recovered = InertialState::quaternionRateToOmega(Qdot, Q);
   Eigen::Vector4d Qdot_recovered =
     InertialState::omegaToQuaternionRate(omega_recovered, Q);
 
@@ -110,10 +110,10 @@ TEST(QuaternionPhysicsAC1, InertialStateGetSetAngularVelocity)
   state.orientation =
     Eigen::Quaterniond{Eigen::AngleAxisd{0.3, msd_sim::Vector3D::UnitX()}};
 
-  AngularRate omega{1.5, -0.5, 2.0};
+  AngularVelocity omega{1.5, -0.5, 2.0};
   state.setAngularVelocity(omega);
 
-  AngularRate recovered = state.getAngularVelocity();
+  AngularVelocity recovered = state.getAngularVelocity();
 
   EXPECT_NEAR(recovered.x(), omega.x(), 1e-10);
   EXPECT_NEAR(recovered.y(), omega.y(), 1e-10);

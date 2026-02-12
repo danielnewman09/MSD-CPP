@@ -6,9 +6,15 @@
 #include <cpp_sqlite/src/cpp_sqlite/DBDataAccessObject.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBDatabase.hpp>
 #include "msd-sim/src/DataRecorder/DataRecorder.hpp"
+#include "msd-transfer/src/AssetDynamicStateRecord.hpp"
+#include "msd-transfer/src/AssetInertialStaticRecord.hpp"
+#include "msd-transfer/src/AssetPhysicalDynamicRecord.hpp"
+#include "msd-transfer/src/AssetPhysicalStaticRecord.hpp"
+#include "msd-transfer/src/CollisionResultRecord.hpp"
 #include "msd-transfer/src/EnergyRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
 #include "msd-transfer/src/SimulationFrameRecord.hpp"
+#include "msd-transfer/src/SolverDiagnosticRecord.hpp"
 #include "msd-transfer/src/SystemEnergyRecord.hpp"
 
 namespace msd_sim
@@ -132,5 +138,24 @@ DataRecorder::getDAO<msd_transfer::EnergyRecord>();
 
 template cpp_sqlite::DataAccessObject<msd_transfer::SystemEnergyRecord>&
 DataRecorder::getDAO<msd_transfer::SystemEnergyRecord>();
+
+// Ticket: 0056a_collision_force_transfer_records
+template cpp_sqlite::DataAccessObject<msd_transfer::CollisionResultRecord>&
+DataRecorder::getDAO<msd_transfer::CollisionResultRecord>();
+
+template cpp_sqlite::DataAccessObject<msd_transfer::SolverDiagnosticRecord>&
+DataRecorder::getDAO<msd_transfer::SolverDiagnosticRecord>();
+
+template cpp_sqlite::DataAccessObject<msd_transfer::AssetPhysicalStaticRecord>&
+DataRecorder::getDAO<msd_transfer::AssetPhysicalStaticRecord>();
+
+template cpp_sqlite::DataAccessObject<msd_transfer::AssetPhysicalDynamicRecord>&
+DataRecorder::getDAO<msd_transfer::AssetPhysicalDynamicRecord>();
+
+template cpp_sqlite::DataAccessObject<msd_transfer::AssetInertialStaticRecord>&
+DataRecorder::getDAO<msd_transfer::AssetInertialStaticRecord>();
+
+template cpp_sqlite::DataAccessObject<msd_transfer::AssetDynamicStateRecord>&
+DataRecorder::getDAO<msd_transfer::AssetDynamicStateRecord>();
 
 }  // namespace msd_sim

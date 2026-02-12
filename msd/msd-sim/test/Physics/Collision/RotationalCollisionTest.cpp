@@ -15,7 +15,9 @@
 
 #include <Eigen/Geometry>
 
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
@@ -194,7 +196,7 @@ TEST(RotationalCollisionTest, B1_CubeCornerImpact_RotationInitiated)
 
   uint32_t cubeId = 1;
   world.getObject(cubeId).setCoefficientOfRestitution(0.7);
-  world.getObject(cubeId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const initialEnergy = computeSystemEnergy(world);
 
@@ -209,7 +211,7 @@ TEST(RotationalCollisionTest, B1_CubeCornerImpact_RotationInitiated)
     world.update(std::chrono::milliseconds{i * 16});
 
     auto const& state = world.getObject(cubeId).getInertialState();
-    AngularRate omega = state.getAngularVelocity();
+    AngularVelocity omega = state.getAngularVelocity();
     double omegaMag = omega.norm();
 
     // Check for NaN
@@ -284,7 +286,7 @@ TEST(RotationalCollisionTest, B2_CubeEdgeImpact_PredictableRotationAxis)
 
   uint32_t cubeId = 1;
   world.getObject(cubeId).setCoefficientOfRestitution(0.7);
-  world.getObject(cubeId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const initialEnergy = computeSystemEnergy(world);
 
@@ -298,7 +300,7 @@ TEST(RotationalCollisionTest, B2_CubeEdgeImpact_PredictableRotationAxis)
     world.update(std::chrono::milliseconds{i * 16});
 
     auto const& state = world.getObject(cubeId).getInertialState();
-    AngularRate omega = state.getAngularVelocity();
+    AngularVelocity omega = state.getAngularVelocity();
 
     if (std::isnan(omega.norm()) || std::isnan(state.position.z()))
     {
@@ -376,7 +378,7 @@ TEST(RotationalCollisionTest, B3_SphereDrop_NoRotation)
 
   uint32_t sphereId = 1;
   world.getObject(sphereId).setCoefficientOfRestitution(0.7);
-  world.getObject(sphereId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double maxOmega = 0.0;
   double maxLateralDrift = 0.0;
@@ -386,7 +388,7 @@ TEST(RotationalCollisionTest, B3_SphereDrop_NoRotation)
     world.update(std::chrono::milliseconds{i * 16});
 
     auto const& state = world.getObject(sphereId).getInertialState();
-    AngularRate omega = state.getAngularVelocity();
+    AngularVelocity omega = state.getAngularVelocity();
     maxOmega = std::max(maxOmega, omega.norm());
 
     // Check for lateral drift (should stay near x=0, y=0)
@@ -434,7 +436,7 @@ TEST(RotationalCollisionTest, B4_RodFallsFlat_NoRotation)
 
   uint32_t rodId = 1;
   world.getObject(rodId).setCoefficientOfRestitution(0.3);
-  world.getObject(rodId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(rodId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double maxOmega = 0.0;
 
@@ -443,7 +445,7 @@ TEST(RotationalCollisionTest, B4_RodFallsFlat_NoRotation)
     world.update(std::chrono::milliseconds{i * 16});
 
     auto const& state = world.getObject(rodId).getInertialState();
-    AngularRate omega = state.getAngularVelocity();
+    AngularVelocity omega = state.getAngularVelocity();
 
     if (std::isnan(omega.norm()))
     {
@@ -491,7 +493,7 @@ TEST(RotationalCollisionTest, B5_LShapeDrop_RotationFromAsymmetricCOM)
 
   uint32_t lId = 1;
   world.getObject(lId).setCoefficientOfRestitution(0.5);
-  world.getObject(lId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(lId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double maxOmega = 0.0;
   bool nanDetected = false;
@@ -501,7 +503,7 @@ TEST(RotationalCollisionTest, B5_LShapeDrop_RotationFromAsymmetricCOM)
     world.update(std::chrono::milliseconds{i * 16});
 
     auto const& state = world.getObject(lId).getInertialState();
-    AngularRate omega = state.getAngularVelocity();
+    AngularVelocity omega = state.getAngularVelocity();
 
     if (std::isnan(omega.norm()) || std::isnan(state.position.z()))
     {

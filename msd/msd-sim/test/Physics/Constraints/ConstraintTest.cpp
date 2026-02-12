@@ -51,7 +51,7 @@ InertialState createDefaultState()
   state.acceleration = Coordinate{0.0, 0.0, 0.0};
   state.orientation = Eigen::Quaterniond{1.0, 0.0, 0.0, 0.0};  // Identity
   state.quaternionRate = Eigen::Vector4d::Zero();
-  state.angularAcceleration = AngularRate{0.0, 0.0, 0.0};
+  state.angularAcceleration = AngularAcceleration{0.0, 0.0, 0.0};
   return state;
 }
 
@@ -587,7 +587,7 @@ TEST(ConstraintIntegrationTest, QuaternionRemainNormalized_1000Steps)
   AssetInertial asset{0, 0, hull, 10.0, frame};
 
   // Add angular velocity to make it interesting
-  asset.getInertialState().setAngularVelocity(AngularRate{0.1, 0.2, 0.3});
+  asset.getInertialState().setAngularVelocity(AngularVelocity{0.1, 0.2, 0.3});
 
   SemiImplicitEulerIntegrator integrator;
 

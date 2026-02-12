@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
@@ -128,7 +129,7 @@ TEST(EnergyAccountingTest, F1_FreeFall_TotalEnergyConstant)
   world.spawnObject(1, sphereHull, sphereFrame);
 
   uint32_t sphereId = 1;
-  world.getObject(sphereId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const initialEnergy = computeSystemEnergy(world);
 
@@ -174,7 +175,7 @@ TEST(EnergyAccountingTest, F2_ElasticBounce_KEConserved)
 
   uint32_t sphereId = 1;
   world.getObject(sphereId).setCoefficientOfRestitution(1.0);
-  world.getObject(sphereId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   // Simulate enough frames for ball to hit floor and bounce
   // Track total KE (linear + rotational) before and after impact zone.
@@ -259,7 +260,7 @@ TEST(EnergyAccountingTest, F3_InelasticBounce_KEReducedByESquared)
   uint32_t sphereId = 1;
   double const e = 0.5;
   world.getObject(sphereId).setCoefficientOfRestitution(e);
-  world.getObject(sphereId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const mass = world.getObject(sphereId).getMass();
 
@@ -332,7 +333,7 @@ TEST(EnergyAccountingTest, F5_MultiBounce_EnergyDecreases)
 
   uint32_t sphereId = 1;
   world.getObject(sphereId).setCoefficientOfRestitution(0.8);
-  world.getObject(sphereId).getInertialState().velocity = Vector3D{0.0, 0.0, 0.0};
+  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   double const initialEnergy = computeSystemEnergy(world);
   double prevEnergy = initialEnergy;

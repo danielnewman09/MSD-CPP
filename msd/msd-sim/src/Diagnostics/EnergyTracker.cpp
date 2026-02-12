@@ -72,7 +72,7 @@ EnergyTracker::BodyEnergy EnergyTracker::computeBodyEnergy(
   // I_world = R * I_body * R^T
   Eigen::Matrix3d const R = state.orientation.toRotationMatrix();
   Eigen::Matrix3d const I_world = R * bodyInertia * R.transpose();
-  AngularRate const omega = state.getAngularVelocity();
+  AngularVelocity const omega = state.getAngularVelocity();
   Eigen::Vector3d const omegaVec{omega.x(), omega.y(), omega.z()};
   result.rotationalKE = 0.5 * omegaVec.transpose() * I_world * omegaVec;
 

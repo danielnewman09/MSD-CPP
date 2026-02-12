@@ -187,10 +187,11 @@ msd_sim::Vector3D ReferenceFrame::globalToLocal(
   return rotation_.transpose() * globalVector;
 }
 
-AngularRate ReferenceFrame::globalToLocal(const AngularRate& globalVector) const
+AngularVelocity ReferenceFrame::globalToLocal(
+  const AngularVelocity& globalVector) const
 {
   // Apply only rotation (transpose for inverse), no translation
-  return AngularRate{rotation_.transpose() * globalVector};
+  return AngularVelocity{rotation_.transpose() * globalVector};
 }
 
 Vector3D ReferenceFrame::localToGlobal(const Vector3D& localVector) const
@@ -199,10 +200,11 @@ Vector3D ReferenceFrame::localToGlobal(const Vector3D& localVector) const
   return rotation_ * localVector;
 }
 
-AngularRate ReferenceFrame::localToGlobal(const AngularRate& localVector) const
+AngularVelocity ReferenceFrame::localToGlobal(
+  const AngularVelocity& localVector) const
 {
   // Apply only rotation, no translation
-  return AngularRate{rotation_ * localVector};
+  return AngularVelocity{rotation_ * localVector};
 }
 
 Coordinate ReferenceFrame::globalToLocal(const Coordinate& globalPoint) const
@@ -217,6 +219,23 @@ Coordinate ReferenceFrame::localToGlobal(const Coordinate& localPoint) const
   // Rotate to global orientation, then translate to global position
   Coordinate const rotated = rotation_ * localPoint;
   return rotated + origin_;
+}
+
+msd_transfer::AssetPhysicalDynamicRecord ReferenceFrame::toRecord() const
+{
+  msd_transfer::AssetPhysicalDynamicRecord record;
+  record.position = origin_.toRecord();
+  QuaternionD const quat{getQuaternion()};
+  record.orientation = quat.toRecord();
+  return record;
+}
+
+ReferenceFrame ReferenceFrame::fromRecord(
+  const msd_transfer::AssetPhysicalDynamicRecord& record)
+{
+  Coordinate const origin = Coordinate::fromRecord(record.position);
+  QuaternionD const quat = QuaternionD::fromRecord(record.orientation);
+  return ReferenceFrame{origin, quat.eigen()};
 }
 
 void ReferenceFrame::setOrigin(const Coordinate& origin)

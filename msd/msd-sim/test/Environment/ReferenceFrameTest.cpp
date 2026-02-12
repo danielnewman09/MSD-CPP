@@ -4,7 +4,7 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
-#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
@@ -1154,18 +1154,18 @@ TEST(ReferenceFrameTest, localToGlobalAbsolute_Coordinate_IncludesTranslation)
   EXPECT_TRUE(msd_sim::almostEqual(result.z(), 0.0, 1e-9));
 }
 
-// R5: globalToLocalRelative works with AngularRate
-TEST(ReferenceFrameTest, globalToLocalRelative_AngularRate)
+// R5: globalToLocalRelative works with AngularVelocity
+TEST(ReferenceFrameTest, globalToLocalRelative_AngularVelocity)
 {
   Coordinate origin{10.0, 20.0, 30.0};
   Eigen::Quaterniond rotation{
     Eigen::AngleAxisd{M_PI / 2, msd_sim::Vector3D::UnitZ()}};
   ReferenceFrame frame{origin, rotation};
 
-  AngularRate globalOmega{1.0, 0.0, 0.0};
+  AngularVelocity globalOmega{1.0, 0.0, 0.0};
 
   // Relative transform: rotation only
-  AngularRate localOmega = frame.globalToLocalRelative(globalOmega);
+  AngularVelocity localOmega = frame.globalToLocalRelative(globalOmega);
 
   // 90deg rotation around Z: global X -> local Y
   EXPECT_TRUE(msd_sim::almostEqual(localOmega.x(), 0.0, 1e-9));
@@ -1173,17 +1173,17 @@ TEST(ReferenceFrameTest, globalToLocalRelative_AngularRate)
   EXPECT_TRUE(msd_sim::almostEqual(localOmega.z(), 0.0, 1e-9));
 }
 
-// R5: localToGlobalRelative for AngularRate matches expected rotation
-TEST(ReferenceFrameTest, localToGlobalRelative_AngularRate_MatchesExisting)
+// R5: localToGlobalRelative for AngularVelocity matches expected rotation
+TEST(ReferenceFrameTest, localToGlobalRelative_AngularVelocity_MatchesExisting)
 {
   Coordinate origin{5.0, 10.0, 15.0};
   Eigen::Quaterniond rotation{
     Eigen::AngleAxisd{M_PI / 3, msd_sim::Vector3D::UnitX()}};
   ReferenceFrame frame{origin, rotation};
 
-  AngularRate localOmega{0.0, 1.0, 0.0};
+  AngularVelocity localOmega{0.0, 1.0, 0.0};
 
-  AngularRate globalOmega = frame.localToGlobalRelative(localOmega);
+  AngularVelocity globalOmega = frame.localToGlobalRelative(localOmega);
 
   // R_x(60deg) * [0, 1, 0]^T = [0, cos60, sin60] = [0, 0.5, sqrt(3)/2]
   EXPECT_TRUE(msd_sim::almostEqual(globalOmega.x(), 0.0, 1e-9));
@@ -1216,10 +1216,10 @@ TEST(ReferenceFrameTest, Absolute_Relative_Roundtrip)
   EXPECT_TRUE(msd_sim::almostEqual(dir.y(), recoveredDir.y(), 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(dir.z(), recoveredDir.z(), 1e-9));
 
-  // Relative roundtrip with AngularRate
-  AngularRate omega{1.5, -2.0, 0.7};
-  AngularRate localOmega = frame.globalToLocalRelative(omega);
-  AngularRate recoveredOmega = frame.localToGlobalRelative(localOmega);
+  // Relative roundtrip with AngularVelocity
+  AngularVelocity omega{1.5, -2.0, 0.7};
+  AngularVelocity localOmega = frame.globalToLocalRelative(omega);
+  AngularVelocity recoveredOmega = frame.localToGlobalRelative(localOmega);
   EXPECT_TRUE(msd_sim::almostEqual(omega.x(), recoveredOmega.x(), 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(omega.y(), recoveredOmega.y(), 1e-9));
   EXPECT_TRUE(msd_sim::almostEqual(omega.z(), recoveredOmega.z(), 1e-9));
@@ -1241,10 +1241,10 @@ TEST(ReferenceFrameTest, TypeDeduction_AllTypes)
   auto coordResult = frame.globalToLocalAbsolute(coord);
   static_assert(std::is_same_v<decltype(coordResult), Coordinate>);
 
-  // AngularRate
-  AngularRate omega{1.0, 0.0, 0.0};
+  // AngularVelocity
+  AngularVelocity omega{1.0, 0.0, 0.0};
   auto omegaResult = frame.localToGlobalRelative(omega);
-  static_assert(std::is_same_v<decltype(omegaResult), AngularRate>);
+  static_assert(std::is_same_v<decltype(omegaResult), AngularVelocity>);
 
   // Verify no compile error and reasonable results
   EXPECT_TRUE(vecResult.norm() > 0.0);

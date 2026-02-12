@@ -6,6 +6,8 @@
 
 #include <gtest/gtest.h>
 
+#include "msd-sim/src/DataTypes/AngularAcceleration.hpp"
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
@@ -32,7 +34,7 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
   state.acceleration = Coordinate{0.0, 0.0, 0.0};
   state.orientation = QuaternionD{1.0, 0.0, 0.0, 0.0};
   state.quaternionRate = Eigen::Vector4d::Zero();
-  state.angularAcceleration = AngularRate{0.0, 0.0, 0.0};
+  state.angularAcceleration = AngularAcceleration{0.0, 0.0, 0.0};
   return state;
 }
 
@@ -47,7 +49,7 @@ InertialState createMovingState(const Coordinate& position,
 
 // Create InertialState with angular velocity
 InertialState createRotatingState(const Coordinate& position,
-                                  const AngularRate& angularVelocity)
+                                  const AngularVelocity& angularVelocity)
 {
   InertialState state = createDefaultState(position);
 
@@ -184,7 +186,7 @@ TEST(ContactConstraintFactoryTest,
   // At lever arm (1, 0, 0), velocity contribution: ω × r = (0, 0, 1) × (1, 0,
   // 0) = (0, 1, 0)
   InertialState stateA =
-    createRotatingState(Coordinate{0, 0, -1}, AngularRate{0, 0, 1});
+    createRotatingState(Coordinate{0, 0, -1}, AngularVelocity{0, 0, 1});
   InertialState stateB = createDefaultState(Coordinate{0, 0, 1});
 
   double relVelNormal =

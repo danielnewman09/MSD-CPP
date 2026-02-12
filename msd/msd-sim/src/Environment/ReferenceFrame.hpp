@@ -12,10 +12,11 @@
 #include <type_traits>
 
 #include "msd-sim/src/DataTypes/AngularCoordinate.hpp"
-#include "msd-sim/src/DataTypes/AngularRate.hpp"
+#include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Quaternion.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
+#include "msd-transfer/src/AssetPhysicalDynamicRecord.hpp"
 
 namespace msd_sim
 {
@@ -25,7 +26,7 @@ namespace detail
 
 /// Concept constraining template parameters to 3D vector types compatible
 /// with ReferenceFrame transforms. Accepts Vector3D, Coordinate,
-/// AngularRate, and AngularCoordinate.
+/// AngularVelocity, AngularAcceleration, and AngularCoordinate.
 /// @ticket 0041_reference_frame_transform_refactor
 template<typename T>
 concept EigenVec3Type =
@@ -149,7 +150,7 @@ public:
   /**
    * @brief Transform a point from global frame to local frame.
    * Applies rotation AND translation (for positions/points).
-   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularRate,
+   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularVelocity,
    * AngularCoordinate)
    * @param globalPoint Point in global frame
    * @return Point in this local frame
@@ -164,7 +165,7 @@ public:
   /**
    * @brief Transform a point from local frame to global frame.
    * Applies rotation AND translation (for positions/points).
-   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularRate,
+   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularVelocity,
    * AngularCoordinate)
    * @param localPoint Point in this local frame
    * @return Point in global frame
@@ -179,7 +180,7 @@ public:
   /**
    * @brief Transform a direction vector from global frame to local frame.
    * Applies rotation ONLY (for directions, normals, velocities).
-   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularRate,
+   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularVelocity,
    * AngularCoordinate)
    * @param globalVector Direction vector in global frame
    * @return Direction vector in this local frame
@@ -194,7 +195,7 @@ public:
   /**
    * @brief Transform a direction vector from local frame to global frame.
    * Applies rotation ONLY (for directions, normals, velocities).
-   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularRate,
+   * @tparam T A 3D vector type (Vector3D, Coordinate, AngularVelocity,
    * AngularCoordinate)
    * @param localVector Direction vector in this local frame
    * @return Direction vector in global frame
@@ -224,13 +225,13 @@ public:
    * @brief Transform a direction vector from global frame to local frame
    * (relative transformation)
    *
-   * @deprecated Use globalToLocalRelative() for angular rates
+   * @deprecated Use globalToLocalRelative() for angular velocities
    *
    * @param globalVector Direction vector in global frame
    * @return Direction vector in local frame
    */
-  [[deprecated("Use globalToLocalRelative() for angular rates")]]
-  AngularRate globalToLocal(const AngularRate& globalVector) const;
+  [[deprecated("Use globalToLocalRelative() for angular velocities")]]
+  AngularVelocity globalToLocal(const AngularVelocity& globalVector) const;
 
   /**
    * @brief Transform a direction vector from local frame to global frame
@@ -248,13 +249,13 @@ public:
    * @brief Transform a direction vector from local frame to global frame
    * (relative transformation)
    *
-   * @deprecated Use localToGlobalRelative() for angular rates
+   * @deprecated Use localToGlobalRelative() for angular velocities
    *
    * @param localVector Direction vector in local frame
    * @return Direction vector in global frame
    */
-  [[deprecated("Use localToGlobalRelative() for angular rates")]]
-  AngularRate localToGlobal(const AngularRate& localVector) const;
+  [[deprecated("Use localToGlobalRelative() for angular velocities")]]
+  AngularVelocity localToGlobal(const AngularVelocity& localVector) const;
 
   /**
    * @brief Transform a point from global frame to local frame (absolute
@@ -279,6 +280,28 @@ public:
    */
   [[deprecated("Use localToGlobalAbsolute() for points or localToGlobalRelative() for directions")]]
   Coordinate localToGlobal(const Coordinate& localPoint) const;
+
+  // ========== Transfer Object Support ==========
+
+  /**
+   * @brief Convert to a per-frame dynamic record.
+   *
+   * Captures position (origin) and orientation (quaternion) for replay.
+   *
+   * @return Transfer record with position and orientation
+   * @ticket 0056a_collision_force_transfer_records
+   */
+  [[nodiscard]] msd_transfer::AssetPhysicalDynamicRecord toRecord() const;
+
+  /**
+   * @brief Reconstruct a ReferenceFrame from a dynamic record.
+   *
+   * @param record Previously serialized dynamic record
+   * @return ReferenceFrame with position and orientation from the record
+   * @ticket 0056a_collision_force_transfer_records
+   */
+  static ReferenceFrame fromRecord(
+    const msd_transfer::AssetPhysicalDynamicRecord& record);
 
   /**
    * @brief Set the origin of this frame in global coordinates

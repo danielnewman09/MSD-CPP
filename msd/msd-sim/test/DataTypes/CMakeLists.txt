@@ -1,8 +1,10 @@
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     AngularCoordinateTest.cpp
     AngularCoordinateTransferTest.cpp
-    AngularRateTest.cpp
-    AngularRateTransferTest.cpp
+    AngularAccelerationTest.cpp
+    AngularAccelerationTransferTest.cpp
+    AngularVelocityTest.cpp
+    AngularVelocityTransferTest.cpp
     CoordinateTransferTest.cpp
     Vector3DTransferTest.cpp
     Vector4DTransferTest.cpp

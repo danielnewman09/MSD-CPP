@@ -2,6 +2,7 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     EnvironmentTest.cpp
     MotionControllerTest.cpp
     ReferenceFrameTest.cpp
+    ReferenceFrameTransferTest.cpp
     WorldModelCollisionTest.cpp
     WorldModelContactIntegrationTest.cpp
 )

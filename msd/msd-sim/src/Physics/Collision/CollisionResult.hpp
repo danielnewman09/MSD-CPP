@@ -14,6 +14,8 @@
 #include <utility>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
+#include "msd-transfer/src/CollisionResultRecord.hpp"
 
 namespace msd_sim
 {
@@ -40,7 +42,7 @@ struct ContactPoint
 
   ContactPoint() = default;
 
-  ContactPoint(Coordinate  pA, Coordinate  pB, double d = 0.0)
+  ContactPoint(Coordinate pA, Coordinate pB, double d = 0.0)
     : pointA{std::move(pA)}, pointB{std::move(pB)}, depth{d}
   {
   }
@@ -50,6 +52,24 @@ struct ContactPoint
   ContactPoint& operator=(const ContactPoint&) = default;
   ContactPoint& operator=(ContactPoint&&) noexcept = default;
   ~ContactPoint() = default;
+
+  // Transfer methods
+  static ContactPoint fromRecord(
+    const msd_transfer::ContactPointRecord& record)
+  {
+    return ContactPoint{Coordinate::fromRecord(record.pointA),
+                        Coordinate::fromRecord(record.pointB),
+                        record.depth};
+  }
+
+  [[nodiscard]] msd_transfer::ContactPointRecord toRecord() const
+  {
+    msd_transfer::ContactPointRecord record;
+    record.pointA = pointA.toRecord();
+    record.pointB = pointB.toRecord();
+    record.depth = depth;
+    return record;
+  }
 };
 
 /**
@@ -97,7 +117,7 @@ struct CollisionResult
   CollisionResult() = default;
 
   // Manifold constructor
-  CollisionResult(Coordinate  n,
+  CollisionResult(Coordinate n,
                   double depth,
                   const std::array<ContactPoint, 4>& contactsArray,
                   size_t count)
@@ -113,7 +133,7 @@ struct CollisionResult
   }
 
   // Single-contact convenience constructor
-  CollisionResult(Coordinate  n,
+  CollisionResult(Coordinate n,
                   double depth,
                   const Coordinate& pointA,
                   const Coordinate& pointB)
@@ -124,11 +144,38 @@ struct CollisionResult
   {
   }
 
-  CollisionResult(const CollisionResult&) = default;
-  CollisionResult(CollisionResult&&) noexcept = default;
-  CollisionResult& operator=(const CollisionResult&) = default;
-  CollisionResult& operator=(CollisionResult&&) noexcept = default;
-  ~CollisionResult() = default;
+  // Transfer methods
+  static CollisionResult fromRecord(
+    const msd_transfer::CollisionResultRecord& record)
+  {
+    CollisionResult result;
+    result.normal =
+      Coordinate{record.normal.x, record.normal.y, record.normal.z};
+    result.penetrationDepth = record.penetrationDepth;
+    result.contactCount = record.contacts.data.size();
+    for (size_t i = 0; i < result.contactCount && i < 4; ++i)
+    {
+      result.contacts[i] =
+        ContactPoint::fromRecord(record.contacts.data[i]);
+    }
+    return result;
+  }
+
+  [[nodiscard]] msd_transfer::CollisionResultRecord toRecord(
+    uint32_t bodyAId,
+    uint32_t bodyBId) const
+  {
+    msd_transfer::CollisionResultRecord record;
+    record.body_a_id = bodyAId;
+    record.body_b_id = bodyBId;
+    record.normal = Vector3D{normal.x(), normal.y(), normal.z()}.toRecord();
+    record.penetrationDepth = penetrationDepth;
+    for (size_t i = 0; i < contactCount; ++i)
+    {
+      record.contacts.data.push_back(contacts[i].toRecord());
+    }
+    return record;
+  }
 };
 
 }  // namespace msd_sim
