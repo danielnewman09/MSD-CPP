@@ -25,16 +25,10 @@ AssetEnvironment::AssetEnvironment(uint32_t assetId,
                                    ConvexHull& hull,
                                    const ReferenceFrame& frame,
                                    double coefficientOfRestitution)
-  : AssetPhysical{assetId, instanceId, hull, frame},
-    coefficient_of_restitution_{coefficientOfRestitution}
+  : AssetPhysical{assetId, instanceId, hull, frame}
 {
-  // Validate restitution
-  if (coefficientOfRestitution < 0.0 || coefficientOfRestitution > 1.0)
-  {
-    throw std::invalid_argument(
-      "AssetEnvironment: coefficient of restitution must be in [0, 1] (e = " +
-      std::to_string(coefficientOfRestitution) + ")");
-  }
+  // Validate and set restitution via MaterialProperties
+  material_.setCoefficientOfRestitution(coefficientOfRestitution);
 
   // Initialize static state with position from frame, zero velocities
   static_state_.position = frame.getOrigin();
@@ -48,23 +42,11 @@ AssetEnvironment::AssetEnvironment(uint32_t assetId,
                                    const ReferenceFrame& frame,
                                    double coefficientOfRestitution,
                                    double frictionCoefficient)
-  : AssetPhysical{assetId, instanceId, hull, frame},
-    coefficient_of_restitution_{coefficientOfRestitution},
-    friction_coefficient_{frictionCoefficient}
+  : AssetPhysical{assetId, instanceId, hull, frame}
 {
-  if (coefficientOfRestitution < 0.0 || coefficientOfRestitution > 1.0)
-  {
-    throw std::invalid_argument(
-      "AssetEnvironment: coefficient of restitution must be in [0, 1] (e = " +
-      std::to_string(coefficientOfRestitution) + ")");
-  }
-
-  if (frictionCoefficient < 0.0)
-  {
-    throw std::invalid_argument(
-      "AssetEnvironment: friction coefficient must be non-negative (mu = " +
-      std::to_string(frictionCoefficient) + ")");
-  }
+  // Validate and set material properties via MaterialProperties
+  material_.setCoefficientOfRestitution(coefficientOfRestitution);
+  material_.setFrictionCoefficient(frictionCoefficient);
 
   static_state_.position = frame.getOrigin();
   static_state_.orientation = frame.getQuaternion();
@@ -72,24 +54,12 @@ AssetEnvironment::AssetEnvironment(uint32_t assetId,
 
 void AssetEnvironment::setFrictionCoefficient(double mu)
 {
-  if (mu < 0.0)
-  {
-    throw std::invalid_argument(
-      "AssetEnvironment: friction coefficient must be non-negative (mu = " +
-      std::to_string(mu) + ")");
-  }
-  friction_coefficient_ = mu;
+  material_.setFrictionCoefficient(mu);
 }
 
 void AssetEnvironment::setCoefficientOfRestitution(double e)
 {
-  if (e < 0.0 || e > 1.0)
-  {
-    throw std::invalid_argument(
-      "AssetEnvironment: coefficient of restitution must be in [0, 1] (e = " +
-      std::to_string(e) + ")");
-  }
-  coefficient_of_restitution_ = e;
+  material_.setCoefficientOfRestitution(e);
 }
 
 }  // namespace msd_sim

@@ -16,6 +16,7 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Quaternion.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
+#include "msd-transfer/src/AssetPhysicalDynamicRecord.hpp"
 
 namespace msd_sim
 {
@@ -279,6 +280,28 @@ public:
    */
   [[deprecated("Use localToGlobalAbsolute() for points or localToGlobalRelative() for directions")]]
   Coordinate localToGlobal(const Coordinate& localPoint) const;
+
+  // ========== Transfer Object Support ==========
+
+  /**
+   * @brief Convert to a per-frame dynamic record.
+   *
+   * Captures position (origin) and orientation (quaternion) for replay.
+   *
+   * @return Transfer record with position and orientation
+   * @ticket 0056a_collision_force_transfer_records
+   */
+  [[nodiscard]] msd_transfer::AssetPhysicalDynamicRecord toRecord() const;
+
+  /**
+   * @brief Reconstruct a ReferenceFrame from a dynamic record.
+   *
+   * @param record Previously serialized dynamic record
+   * @return ReferenceFrame with position and orientation from the record
+   * @ticket 0056a_collision_force_transfer_records
+   */
+  static ReferenceFrame fromRecord(
+    const msd_transfer::AssetPhysicalDynamicRecord& record);
 
   /**
    * @brief Set the origin of this frame in global coordinates

@@ -221,6 +221,23 @@ Coordinate ReferenceFrame::localToGlobal(const Coordinate& localPoint) const
   return rotated + origin_;
 }
 
+msd_transfer::AssetPhysicalDynamicRecord ReferenceFrame::toRecord() const
+{
+  msd_transfer::AssetPhysicalDynamicRecord record;
+  record.position = origin_.toRecord();
+  QuaternionD const quat{getQuaternion()};
+  record.orientation = quat.toRecord();
+  return record;
+}
+
+ReferenceFrame ReferenceFrame::fromRecord(
+  const msd_transfer::AssetPhysicalDynamicRecord& record)
+{
+  Coordinate const origin = Coordinate::fromRecord(record.position);
+  QuaternionD const quat = QuaternionD::fromRecord(record.orientation);
+  return ReferenceFrame{origin, quat.eigen()};
+}
+
 void ReferenceFrame::setOrigin(const Coordinate& origin)
 {
   origin_ = origin;

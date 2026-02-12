@@ -6,6 +6,7 @@
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetDynamicState.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetStaticState.hpp"
 
 namespace msd_sim
 {
@@ -393,9 +394,22 @@ public:
   [[nodiscard]] msd_transfer::AssetDynamicStateRecord toDynamicStateRecord()
     const;
 
+  /**
+   * @brief Convert physics properties to a spawn-time static record.
+   *
+   * Captures mass, restitution, and friction for this inertial asset.
+   *
+   * @return Transfer record with body_id, mass, restitution, friction
+   * @ticket 0056a_collision_force_transfer_records
+   */
+  [[nodiscard]] msd_transfer::AssetInertialStaticRecord toStaticRecord() const;
+
 private:
-  // Rigid body physics properties
-  double mass_;                    // Mass in kg
+  // Spawn-time static properties (mass + material)
+  // Ticket: 0056a_collision_force_transfer_records
+  AssetStaticState staticState_;
+
+  // Rigid body inertia properties (computed from hull + mass)
   Eigen::Matrix3d inertiaTensor_;  // Inertia tensor about centroid [kg⋅m²]
   Eigen::Matrix3d inverseInertiaTensor_;  // Inverse inertia tensor [1/(kg⋅m²)]
   Coordinate centerOfMass_;               // Center of mass in local coordinates
@@ -404,14 +418,7 @@ private:
   // Ticket: 0056h_asset_dynamic_state_struct
   AssetDynamicState dynamicState_;
 
-  // NEW: Coefficient of restitution (ticket 0027)
-  double coefficientOfRestitution_{0.5};  // Default: moderate elasticity
-
-  // NEW: Friction coefficient (ticket 0052d)
-  double frictionCoefficient_{
-    0.0};  // Default: no friction (backward compatible)
-
-  // NEW: Constraint management (ticket 0031)
+  // Constraint management (ticket 0031)
   std::vector<std::unique_ptr<Constraint>> constraints_;
 };
 

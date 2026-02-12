@@ -8,7 +8,9 @@
 #include "msd-sim/src/DataRecorder/DataRecorder.hpp"
 #include "msd-transfer/src/AppliedForceRecord.hpp"
 #include "msd-transfer/src/AssetDynamicStateRecord.hpp"
-#include "msd-transfer/src/BodyMetadataRecord.hpp"
+#include "msd-transfer/src/AssetInertialStaticRecord.hpp"
+#include "msd-transfer/src/AssetPhysicalDynamicRecord.hpp"
+#include "msd-transfer/src/AssetPhysicalStaticRecord.hpp"
 #include "msd-transfer/src/ConstraintForceRecord.hpp"
 #include "msd-transfer/src/ContactRecord.hpp"
 #include "msd-transfer/src/EnergyRecord.hpp"
@@ -152,8 +154,14 @@ DataRecorder::getDAO<msd_transfer::AppliedForceRecord>();
 template cpp_sqlite::DataAccessObject<msd_transfer::SolverDiagnosticRecord>&
 DataRecorder::getDAO<msd_transfer::SolverDiagnosticRecord>();
 
-template cpp_sqlite::DataAccessObject<msd_transfer::BodyMetadataRecord>&
-DataRecorder::getDAO<msd_transfer::BodyMetadataRecord>();
+template cpp_sqlite::DataAccessObject<msd_transfer::AssetPhysicalStaticRecord>&
+DataRecorder::getDAO<msd_transfer::AssetPhysicalStaticRecord>();
+
+template cpp_sqlite::DataAccessObject<msd_transfer::AssetPhysicalDynamicRecord>&
+DataRecorder::getDAO<msd_transfer::AssetPhysicalDynamicRecord>();
+
+template cpp_sqlite::DataAccessObject<msd_transfer::AssetInertialStaticRecord>&
+DataRecorder::getDAO<msd_transfer::AssetInertialStaticRecord>();
 
 template cpp_sqlite::DataAccessObject<msd_transfer::AssetDynamicStateRecord>&
 DataRecorder::getDAO<msd_transfer::AssetDynamicStateRecord>();

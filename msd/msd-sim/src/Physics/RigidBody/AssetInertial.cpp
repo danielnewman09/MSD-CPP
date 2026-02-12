@@ -15,7 +15,7 @@ AssetInertial::AssetInertial(uint32_t assetId,
                              double mass,
                              const ReferenceFrame& frame)
   : AssetPhysical{assetId, instanceId, hull, frame},
-    mass_{mass},
+    staticState_{mass, {}},
     inertiaTensor_{Eigen::Matrix3d::Zero()},
     inverseInertiaTensor_{Eigen::Matrix3d::Zero()},
     centerOfMass_{Coordinate{0, 0, 0}},
@@ -53,12 +53,11 @@ AssetInertial::AssetInertial(uint32_t assetId,
                              const ReferenceFrame& frame,
                              double coefficientOfRestitution)
   : AssetPhysical{assetId, instanceId, hull, frame},
-    mass_{mass},
+    staticState_{mass, {}},
     inertiaTensor_{Eigen::Matrix3d::Zero()},
     inverseInertiaTensor_{Eigen::Matrix3d::Zero()},
     centerOfMass_{Coordinate{0, 0, 0}},
-    dynamicState_{},
-    coefficientOfRestitution_{coefficientOfRestitution}
+    dynamicState_{}
 {
   if (mass <= 0.0)
   {
@@ -66,12 +65,8 @@ AssetInertial::AssetInertial(uint32_t assetId,
                                 std::to_string(mass));
   }
 
-  if (coefficientOfRestitution < 0.0 || coefficientOfRestitution > 1.0)
-  {
-    throw std::invalid_argument(
-      "Coefficient of restitution must be in [0, 1], got: " +
-      std::to_string(coefficientOfRestitution));
-  }
+  // Validate and set restitution via MaterialProperties
+  staticState_.material.setCoefficientOfRestitution(coefficientOfRestitution);
 
   // Compute inertia tensor about the centroid
   inertiaTensor_ = inertial_calculations::computeInertiaTensorAboutCentroid(
@@ -100,13 +95,11 @@ AssetInertial::AssetInertial(uint32_t assetId,
                              double coefficientOfRestitution,
                              double frictionCoefficient)
   : AssetPhysical{assetId, instanceId, hull, frame},
-    mass_{mass},
+    staticState_{mass, {}},
     inertiaTensor_{Eigen::Matrix3d::Zero()},
     inverseInertiaTensor_{Eigen::Matrix3d::Zero()},
     centerOfMass_{Coordinate{0, 0, 0}},
-    dynamicState_{},
-    coefficientOfRestitution_{coefficientOfRestitution},
-    frictionCoefficient_{frictionCoefficient}
+    dynamicState_{}
 {
   if (mass <= 0.0)
   {
@@ -114,19 +107,9 @@ AssetInertial::AssetInertial(uint32_t assetId,
                                 std::to_string(mass));
   }
 
-  if (coefficientOfRestitution < 0.0 || coefficientOfRestitution > 1.0)
-  {
-    throw std::invalid_argument(
-      "Coefficient of restitution must be in [0, 1], got: " +
-      std::to_string(coefficientOfRestitution));
-  }
-
-  if (frictionCoefficient < 0.0)
-  {
-    throw std::invalid_argument(
-      "Friction coefficient must be non-negative, got: " +
-      std::to_string(frictionCoefficient));
-  }
+  // Validate and set material properties via MaterialProperties
+  staticState_.material.setCoefficientOfRestitution(coefficientOfRestitution);
+  staticState_.material.setFrictionCoefficient(frictionCoefficient);
 
   inertiaTensor_ = inertial_calculations::computeInertiaTensorAboutCentroid(
     getCollisionHull(), mass);
@@ -140,12 +123,12 @@ AssetInertial::AssetInertial(uint32_t assetId,
 
 double AssetInertial::getMass() const
 {
-  return mass_;
+  return staticState_.mass;
 }
 
 double AssetInertial::getInverseMass() const
 {
-  return 1.0 / mass_;
+  return 1.0 / staticState_.mass;
 }
 
 const Eigen::Matrix3d& AssetInertial::getInertiaTensor() const
@@ -232,35 +215,24 @@ TorqueVector AssetInertial::getAccumulatedTorque() const
 
 double AssetInertial::getCoefficientOfRestitution() const
 {
-  return coefficientOfRestitution_;
+  return staticState_.material.coefficientOfRestitution;
 }
 
 void AssetInertial::setCoefficientOfRestitution(double e)
 {
-  if (e < 0.0 || e > 1.0)
-  {
-    throw std::invalid_argument(
-      "Coefficient of restitution must be in [0, 1], got: " +
-      std::to_string(e));
-  }
-  coefficientOfRestitution_ = e;
+  staticState_.material.setCoefficientOfRestitution(e);
 }
 
 // ========== Friction Coefficient (ticket 0052d) ==========
 
 double AssetInertial::getFrictionCoefficient() const
 {
-  return frictionCoefficient_;
+  return staticState_.material.frictionCoefficient;
 }
 
 void AssetInertial::setFrictionCoefficient(double mu)
 {
-  if (mu < 0.0)
-  {
-    throw std::invalid_argument(
-      "Friction coefficient must be non-negative, got: " + std::to_string(mu));
-  }
-  frictionCoefficient_ = mu;
+  staticState_.material.setFrictionCoefficient(mu);
 }
 
 // ========== Impulse Application API (ticket 0027) ==========
@@ -269,7 +241,7 @@ void AssetInertial::applyImpulse(const Vector3D& impulse)
 {
   // Impulse directly modifies velocity: Δv = J / m
   // Unlike forces, this is timestep-independent
-  dynamicState_.inertialState.velocity += impulse / mass_;
+  dynamicState_.inertialState.velocity += impulse / staticState_.mass;
   // Ticket: 0027_collision_response_system
 }
 
@@ -340,6 +312,11 @@ msd_transfer::AssetDynamicStateRecord AssetInertial::toDynamicStateRecord()
   const
 {
   return dynamicState_.toRecord(instanceId_);
+}
+
+msd_transfer::AssetInertialStaticRecord AssetInertial::toStaticRecord() const
+{
+  return staticState_.toRecord(instanceId_);
 }
 
 }  // namespace msd_sim
