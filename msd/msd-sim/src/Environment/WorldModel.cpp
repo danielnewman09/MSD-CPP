@@ -9,6 +9,7 @@
 #include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/Integration/SemiImplicitEulerIntegrator.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
+#include "msd-transfer/src/AssetInertialStaticRecord.hpp"
 #include "msd-transfer/src/CollisionResultRecord.hpp"
 #include "msd-transfer/src/EnergyRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
@@ -45,7 +46,16 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
   inertialAssets_.emplace_back(
     assetId, instanceId, hull, 10.0, origin, 0.5, 0.5);
 
-  return inertialAssets_.back();
+  const AssetInertial& asset = inertialAssets_.back();
+
+  // Ticket: 0056j_domain_aware_data_recorder
+  // Record static data if recording is enabled
+  if (dataRecorder_)
+  {
+    dataRecorder_->recordStaticAsset(asset);
+  }
+
+  return asset;
 }
 
 const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
@@ -56,7 +66,16 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
   auto instanceId = getInertialAssetId();
   inertialAssets_.emplace_back(assetId, instanceId, hull, mass, origin);
 
-  return inertialAssets_.back();
+  const AssetInertial& asset = inertialAssets_.back();
+
+  // Ticket: 0056j_domain_aware_data_recorder
+  // Record static data if recording is enabled
+  if (dataRecorder_)
+  {
+    dataRecorder_->recordStaticAsset(asset);
+  }
+
+  return asset;
 }
 
 const AssetEnvironment& WorldModel::spawnEnvironmentObject(
@@ -268,6 +287,13 @@ void WorldModel::enableRecording(const std::string& dbPath,
   config.databasePath = dbPath;
   config.flushInterval = flushInterval;
   dataRecorder_ = std::make_unique<DataRecorder>(config);
+
+  // Ticket: 0056j_domain_aware_data_recorder
+  // Backfill static data for already-spawned assets
+  for (const auto& asset : inertialAssets_)
+  {
+    dataRecorder_->recordStaticAsset(asset);
+  }
 }
 
 void WorldModel::disableRecording()
@@ -277,82 +303,29 @@ void WorldModel::disableRecording()
 
 void WorldModel::recordCurrentFrame()
 {
+  // Ticket: 0056j_domain_aware_data_recorder
+  // Thin orchestrator — delegates to DataRecorder domain-aware methods
+
   // Get pre-assigned frame ID from recorder
   double const simulationTime = std::chrono::duration<double>(time_).count();
   const uint32_t frameId = dataRecorder_->recordFrame(simulationTime);
 
-  // Record all inertial states with FK to this frame
-  auto& stateDAO = dataRecorder_->getDAO<msd_transfer::InertialStateRecord>();
-  for (const auto& asset : inertialAssets_)
-  {
-    auto record = asset.getInertialState().toRecord();
-    record.frame.id = frameId;  // Explicit FK assignment
-    stateDAO.addToBuffer(record);
-  }
+  // Delegate recording to DataRecorder
+  dataRecorder_->recordInertialStates(frameId, inertialAssets_);
+  dataRecorder_->recordBodyEnergies(frameId, inertialAssets_,
+                                    potentialEnergies_);
 
-  // Ticket: 0039a_energy_tracking_diagnostic_infrastructure
-  // Compute and record per-body energy
-  auto& energyDAO = dataRecorder_->getDAO<msd_transfer::EnergyRecord>();
-  for (const auto& asset : inertialAssets_)
-  {
-    auto bodyEnergy = EnergyTracker::computeBodyEnergy(asset.getInertialState(),
-                                                       asset.getMass(),
-                                                       asset.getInertiaTensor(),
-                                                       potentialEnergies_);
-    auto energyRecord = bodyEnergy.toRecord(frameId, asset.getInstanceId());
-    energyDAO.addToBuffer(energyRecord);
-  }
-
-  // Compute and record system energy summary
+  // Compute system energy (WorldModel state tracking)
   auto systemEnergy =
     EnergyTracker::computeSystemEnergy(inertialAssets_, potentialEnergies_);
-  auto& sysEnergyDAO =
-    dataRecorder_->getDAO<msd_transfer::SystemEnergyRecord>();
-  auto sysRecord = systemEnergy.toRecord(
-    frameId, previousSystemEnergy_, collisionActiveThisFrame_);
-  sysEnergyDAO.addToBuffer(sysRecord);
+  dataRecorder_->recordSystemEnergy(frameId, systemEnergy,
+                                    previousSystemEnergy_,
+                                    collisionActiveThisFrame_);
   previousSystemEnergy_ = systemEnergy.total();
 
-  // Ticket: 0056b_collision_pipeline_data_extraction
-  // Record collision-related data from pipeline snapshot
-  const auto& frameData = collisionPipeline_.getLastFrameData();
-  recordCollisions(frameId, frameData);
-  recordSolverDiagnostics(frameId, frameData);
-}
-
-void WorldModel::recordCollisions(
-  uint32_t frameId,
-  const CollisionPipeline::FrameCollisionData& frameData)
-{
-  auto& collisionDAO =
-    dataRecorder_->getDAO<msd_transfer::CollisionResultRecord>();
-  for (const auto& pair : frameData.collisionPairs)
-  {
-    auto record = pair.result.toRecord(pair.bodyAId, pair.bodyBId);
-    record.id = collisionDAO.incrementIdCounter();
-    record.frame.id = frameId;
-    collisionDAO.addToBuffer(record);
-  }
-}
-
-void WorldModel::recordSolverDiagnostics(
-  uint32_t frameId,
-  const CollisionPipeline::FrameCollisionData& frameData)
-{
-  auto& diagDAO =
-    dataRecorder_->getDAO<msd_transfer::SolverDiagnosticRecord>();
-
-  msd_transfer::SolverDiagnosticRecord record{};
-  record.id = diagDAO.incrementIdCounter();
-  record.iterations = static_cast<uint32_t>(frameData.solverData.iterations);
-  record.residual = frameData.solverData.residual;
-  record.converged = frameData.solverData.converged ? 1 : 0;
-  record.num_constraints =
-    static_cast<uint32_t>(frameData.solverData.numConstraints);
-  record.num_contacts = static_cast<uint32_t>(frameData.solverData.numContacts);
-  record.frame.id = frameId;
-
-  diagDAO.addToBuffer(record);
+  // Record collision results and solver diagnostics
+  dataRecorder_->recordCollisions(frameId, collisionPipeline_);
+  dataRecorder_->recordSolverDiagnostics(frameId, collisionPipeline_);
 }
 
 }  // namespace msd_sim

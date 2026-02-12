@@ -18,7 +18,7 @@ msd_transfer::EnergyRecord EnergyTracker::BodyEnergy::toRecord(
   uint32_t bodyId) const
 {
   msd_transfer::EnergyRecord record{};
-  record.body_id = bodyId;
+  record.body.id = bodyId;  // Ticket: 0056i_static_asset_recording_and_fk
   record.linear_ke = linearKE;
   record.rotational_ke = rotationalKE;
   record.potential_e = potentialE;

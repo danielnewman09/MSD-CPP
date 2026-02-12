@@ -1,5 +1,6 @@
 // Ticket: 0038_simulation_data_recorder
 // Design: docs/designs/0038_simulation_data_recorder/design.md
+// Ticket: 0056j_domain_aware_data_recorder
 
 #ifndef MSD_SIM_DATA_RECORDER_HPP
 #define MSD_SIM_DATA_RECORDER_HPP
@@ -8,11 +9,25 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <stop_token>
 #include <thread>
+#include <vector>
 
 #include <cpp_sqlite/src/cpp_sqlite/DBDataAccessObject.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBDatabase.hpp>
+
+// Ticket: 0056j_domain_aware_data_recorder — domain-aware recording
+// Forward declarations (incomplete types for pointer/reference parameters)
+namespace msd_sim
+{
+class AssetInertial;
+class PotentialEnergy;
+class CollisionPipeline;
+}
+
+// Full includes needed for nested structs (SystemEnergy in header signature)
+#include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
 
 namespace msd_transfer
 {
@@ -135,6 +150,109 @@ public:
    * @ticket 0038_simulation_data_recorder
    */
   const cpp_sqlite::Database& getDatabase() const;
+
+  // ========== Domain-Aware Recording Methods ==========
+  // Ticket: 0056j_domain_aware_data_recorder
+
+  /**
+   * @brief Record inertial states for all assets in a frame
+   *
+   * Iterates assets, calls toRecord(), sets FK fields (body_id, frame_id),
+   * and buffers records via DAO.
+   *
+   * Thread-safe: Uses mutex-protected DAO::addToBuffer().
+   *
+   * @param frameId Foreign key to SimulationFrameRecord
+   * @param assets Span of inertial assets to record
+   *
+   * @ticket 0056j_domain_aware_data_recorder
+   */
+  void recordInertialStates(uint32_t frameId,
+                            std::span<const AssetInertial> assets);
+
+  /**
+   * @brief Record per-body energy for all assets in a frame
+   *
+   * Computes body energy from inertial state, mass, inertia tensor, and
+   * potential energy fields. Buffers EnergyRecord for each asset.
+   *
+   * Thread-safe: Uses mutex-protected DAO::addToBuffer().
+   *
+   * @param frameId Foreign key to SimulationFrameRecord
+   * @param assets Span of inertial assets to record
+   * @param potentials Span of potential energy fields for energy calculation
+   *
+   * @ticket 0056j_domain_aware_data_recorder
+   */
+  void recordBodyEnergies(
+    uint32_t frameId,
+    std::span<const AssetInertial> assets,
+    std::span<const std::unique_ptr<PotentialEnergy>> potentials);
+
+  /**
+   * @brief Record system-level energy summary for a frame
+   *
+   * Records total system energy (KE + PE), energy change from previous frame,
+   * and collision active flag.
+   *
+   * Thread-safe: Uses mutex-protected DAO::addToBuffer().
+   *
+   * @param frameId Foreign key to SimulationFrameRecord
+   * @param energy System energy summary (total, KE, PE breakdown)
+   * @param previousTotal Total energy from previous frame for delta calculation
+   * @param collisionActive Whether collision was active this frame
+   *
+   * @ticket 0056j_domain_aware_data_recorder
+   */
+  void recordSystemEnergy(uint32_t frameId,
+                          const EnergyTracker::SystemEnergy& energy,
+                          double previousTotal,
+                          bool collisionActive);
+
+  /**
+   * @brief Record collision results for a frame
+   *
+   * Iterates collision pairs, calls toRecord(), sets FK fields, and buffers
+   * CollisionResultRecord for each collision.
+   *
+   * Thread-safe: Uses mutex-protected DAO::addToBuffer().
+   *
+   * @param frameId Foreign key to SimulationFrameRecord
+   * @param pipeline CollisionPipeline instance (for accessing collision pairs)
+   *
+   * @ticket 0056j_domain_aware_data_recorder
+   */
+  void recordCollisions(uint32_t frameId, const CollisionPipeline& pipeline);
+
+  /**
+   * @brief Record solver diagnostics for a frame
+   *
+   * Records constraint solver convergence metrics (iterations, residual,
+   * constraint count, contact count).
+   *
+   * Thread-safe: Uses mutex-protected DAO::addToBuffer().
+   *
+   * @param frameId Foreign key to SimulationFrameRecord
+   * @param pipeline CollisionPipeline instance (for accessing solver data)
+   *
+   * @ticket 0056j_domain_aware_data_recorder
+   */
+  void recordSolverDiagnostics(uint32_t frameId,
+                               const CollisionPipeline& pipeline);
+
+  /**
+   * @brief Record static asset properties at spawn time
+   *
+   * Records immutable asset properties (mass, restitution, friction) linked
+   * by body_id foreign key. Called when asset is spawned into WorldModel.
+   *
+   * Thread-safe: Uses mutex-protected DAO::addToBuffer().
+   *
+   * @param asset Inertial asset to record static properties for
+   *
+   * @ticket 0056j_domain_aware_data_recorder
+   */
+  void recordStaticAsset(const AssetInertial& asset);
 
 private:
   /**

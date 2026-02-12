@@ -316,39 +316,13 @@ private:
   /**
    * @brief Record current frame to database if recording is enabled
    *
-   * Creates a SimulationFrameRecord with timestamp, then records all inertial
-   * assets' states with FK reference to the frame.
+   * Thin orchestrator that delegates to DataRecorder domain-aware methods.
+   * Tracks previousSystemEnergy_ for delta calculation (WorldModel state).
    *
    * @ticket 0038_simulation_data_recorder
+   * @ticket 0056j_domain_aware_data_recorder
    */
   void recordCurrentFrame();
-
-  /**
-   * @brief Record collision results for this frame
-   *
-   * Writes CollisionResultRecord for each collision pair, with nested
-   * ContactPointRecords via RepeatedField.
-   *
-   * @param frameId Frame ID for FK reference
-   * @param frameData Snapshot from CollisionPipeline
-   * @ticket 0056b_collision_pipeline_data_extraction
-   */
-  void recordCollisions(uint32_t frameId,
-                        const CollisionPipeline::FrameCollisionData& frameData);
-
-  /**
-   * @brief Record solver diagnostics for this frame
-   *
-   * Writes SolverDiagnosticRecord with solver statistics (iterations, residual,
-   * convergence).
-   *
-   * @param frameId Frame ID for FK reference
-   * @param frameData Snapshot from CollisionPipeline
-   * @ticket 0056b_collision_pipeline_data_extraction
-   */
-  void recordSolverDiagnostics(
-    uint32_t frameId,
-    const CollisionPipeline::FrameCollisionData& frameData);
 
   // ========== Data ==========
 

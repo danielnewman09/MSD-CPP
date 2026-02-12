@@ -301,7 +301,7 @@ TEST(EnergyTracker, BodyEnergy_ToRecord_SetsAllFields)
   auto record = energy.toRecord(42, 7);
 
   EXPECT_EQ(record.frame.id, 42U);
-  EXPECT_EQ(record.body_id, 7U);
+  EXPECT_EQ(record.body.id, 7U);  // Ticket: 0056i_static_asset_recording_and_fk
   EXPECT_NEAR(record.linear_ke, 10.0, 1e-10);
   EXPECT_NEAR(record.rotational_ke, 5.0, 1e-10);
   EXPECT_NEAR(record.potential_e, 20.0, 1e-10);

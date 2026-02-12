@@ -1,11 +1,15 @@
 // Ticket: 0038_simulation_data_recorder
 // Design: docs/designs/0038_simulation_data_recorder/design.md
+// Ticket: 0056j_domain_aware_data_recorder
 
 #include <chrono>
 
 #include <cpp_sqlite/src/cpp_sqlite/DBDataAccessObject.hpp>
 #include <cpp_sqlite/src/cpp_sqlite/DBDatabase.hpp>
 #include "msd-sim/src/DataRecorder/DataRecorder.hpp"
+#include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
+#include "msd-sim/src/Physics/Collision/CollisionPipeline.hpp"
+#include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-transfer/src/AssetDynamicStateRecord.hpp"
 #include "msd-transfer/src/AssetInertialStaticRecord.hpp"
 #include "msd-transfer/src/AssetPhysicalDynamicRecord.hpp"
@@ -157,5 +161,92 @@ DataRecorder::getDAO<msd_transfer::AssetInertialStaticRecord>();
 
 template cpp_sqlite::DataAccessObject<msd_transfer::AssetDynamicStateRecord>&
 DataRecorder::getDAO<msd_transfer::AssetDynamicStateRecord>();
+
+// ========== Domain-Aware Recording Methods ==========
+// Ticket: 0056j_domain_aware_data_recorder
+
+void DataRecorder::recordInertialStates(uint32_t frameId,
+                                        std::span<const AssetInertial> assets)
+{
+  auto& stateDAO = getDAO<msd_transfer::InertialStateRecord>();
+  for (const auto& asset : assets)
+  {
+    auto record = asset.getInertialState().toRecord();
+    record.body.id = asset.getInstanceId();
+    record.frame.id = frameId;
+    stateDAO.addToBuffer(record);
+  }
+}
+
+void DataRecorder::recordBodyEnergies(
+  uint32_t frameId,
+  std::span<const AssetInertial> assets,
+  std::span<const std::unique_ptr<PotentialEnergy>> potentials)
+{
+  auto& energyDAO = getDAO<msd_transfer::EnergyRecord>();
+  for (const auto& asset : assets)
+  {
+    auto bodyEnergy = EnergyTracker::computeBodyEnergy(
+      asset.getInertialState(), asset.getMass(), asset.getInertiaTensor(),
+      potentials);
+    auto energyRecord = bodyEnergy.toRecord(frameId, asset.getInstanceId());
+    energyDAO.addToBuffer(energyRecord);
+  }
+}
+
+void DataRecorder::recordSystemEnergy(
+  uint32_t frameId,
+  const EnergyTracker::SystemEnergy& energy,
+  double previousTotal,
+  bool collisionActive)
+{
+  auto& sysEnergyDAO = getDAO<msd_transfer::SystemEnergyRecord>();
+  auto sysRecord = energy.toRecord(frameId, previousTotal, collisionActive);
+  sysEnergyDAO.addToBuffer(sysRecord);
+}
+
+void DataRecorder::recordCollisions(uint32_t frameId,
+                                    const CollisionPipeline& pipeline)
+{
+  auto& collisionDAO = getDAO<msd_transfer::CollisionResultRecord>();
+  for (const auto& pair : pipeline.getCollisions())
+  {
+    auto record = pair.result.toRecord(pair.bodyAId, pair.bodyBId);
+    record.id = collisionDAO.incrementIdCounter();
+    record.frame.id = frameId;
+    collisionDAO.addToBuffer(record);
+  }
+}
+
+void DataRecorder::recordSolverDiagnostics(uint32_t frameId,
+                                           const CollisionPipeline& pipeline)
+{
+  const auto& solver = pipeline.getSolverData();
+  auto& diagDAO = getDAO<msd_transfer::SolverDiagnosticRecord>();
+
+  msd_transfer::SolverDiagnosticRecord record{};
+  record.id = diagDAO.incrementIdCounter();
+  record.iterations = static_cast<uint32_t>(solver.iterations);
+  record.residual = solver.residual;
+  record.converged = solver.converged ? 1 : 0;
+  record.num_constraints = static_cast<uint32_t>(solver.numConstraints);
+  record.num_contacts = static_cast<uint32_t>(solver.numContacts);
+  record.frame.id = frameId;
+
+  diagDAO.addToBuffer(record);
+}
+
+void DataRecorder::recordStaticAsset(const AssetInertial& asset)
+{
+  auto& staticDAO = getDAO<msd_transfer::AssetInertialStaticRecord>();
+
+  msd_transfer::AssetInertialStaticRecord record{};
+  record.id = staticDAO.incrementIdCounter();
+  record.body_id = asset.getInstanceId();
+  record.mass = asset.getMass();
+  record.restitution = asset.getCoefficientOfRestitution();
+  record.friction = asset.getFrictionCoefficient();
+  staticDAO.addToBuffer(record);
+}
 
 }  // namespace msd_sim

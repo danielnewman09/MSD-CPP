@@ -1,0 +1,103 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "msd-transfer (Database Records)" {
+  class AssetInertialStaticRecord {
+    +id: uint32_t (PK from BaseTransferObject)
+    +body_id: uint32_t
+    +mass: double
+    +restitution: double
+    +friction: double
+  }
+
+  class InertialStateRecord <<modified>> {
+    +position: CoordinateRecord
+    +velocity: VelocityRecord
+    +acceleration: AccelerationRecord
+    +orientation: QuaternionDRecord
+    +quaternionRate: Vector4DRecord
+    +angularAcceleration: AngularAccelerationRecord
+    +body: ForeignKey<AssetInertialStaticRecord>
+    +frame: ForeignKey<SimulationFrameRecord>
+  }
+
+  class EnergyRecord <<modified>> {
+    +linear_ke: double
+    +rotational_ke: double
+    +potential_e: double
+    +total_e: double
+    +body: ForeignKey<AssetInertialStaticRecord>
+    +frame: ForeignKey<SimulationFrameRecord>
+  }
+
+  class CollisionResultRecord {
+    +body_a_id: uint32_t
+    +body_b_id: uint32_t
+    +normal: Vector3DRecord
+    +penetrationDepth: double
+    +contacts: RepeatedFieldTransferObject<ContactPointRecord>
+    +frame: ForeignKey<SimulationFrameRecord>
+  }
+
+  note right of CollisionResultRecord
+    body_a_id / body_b_id kept as raw uint32_t
+    (not FK) per Option C — environment bodies
+    remain raw IDs. Simple, sufficient for replay.
+  end note
+
+  InertialStateRecord --> AssetInertialStaticRecord : body FK
+  EnergyRecord --> AssetInertialStaticRecord : body FK
+}
+
+package "msd-sim (Domain Logic)" {
+  class AssetStaticState {
+    +mass: double
+    +material: MaterialProperties
+    +toRecord(bodyId): AssetInertialStaticRecord
+    +{static} fromRecord(record): AssetStaticState
+  }
+
+  class WorldModel <<modified>> {
+    -dataRecorder_: unique_ptr<DataRecorder>
+    +spawnObject(...): const AssetInertial&
+    +enableRecording(dbPath, flushInterval)
+    +disableRecording()
+    -recordCurrentFrame()
+    -recordStaticData(asset): void
+    -backfillStaticData(): void
+  }
+
+  class DataRecorder {
+    +recordFrame(simTime): uint32_t
+    +getDAO<T>(): DataAccessObject<T>&
+    +flush(): void
+  }
+
+  class AssetInertial {
+    +getInstanceId(): uint32_t
+    +getStaticState(): const AssetStaticState&
+  }
+
+  WorldModel --> DataRecorder : owns
+  WorldModel --> AssetInertial : manages
+  AssetInertial --> AssetStaticState : owns
+  AssetStaticState --> AssetInertialStaticRecord : converts to
+}
+
+note bottom of WorldModel
+  **Recording Lifecycle**:
+  1. spawnObject() → if recording enabled, call recordStaticData()
+  2. enableRecording() → backfill existing assets
+  3. recordCurrentFrame() → write InertialStateRecord + EnergyRecord (with body FK)
+end note
+
+note bottom of AssetInertialStaticRecord
+  **Primary Key**: id (from BaseTransferObject)
+  **Stable Identifier**: body_id (AssetInertial::getInstanceId())
+  Per-frame records reference this via ForeignKey<AssetInertialStaticRecord>
+end note
+
+@enduml

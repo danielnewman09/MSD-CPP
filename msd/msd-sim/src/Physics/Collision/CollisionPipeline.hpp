@@ -65,39 +65,17 @@ class CollisionPipeline
 {
 public:
   /**
-   * @brief Snapshot struct capturing ephemeral collision pipeline output
-   *
-   * Captures collision data (contacts, forces, solver diagnostics) before
-   * it is cleared by clearFrameData(). WorldModel reads this struct to
-   * persist data via DataRecorder.
+   * @brief Solver diagnostic data captured after constraint solving
    *
    * @ticket 0056b_collision_pipeline_data_extraction
    */
-  struct FrameCollisionData
+  struct SolverData
   {
-    /**
-     * @brief Per-pair collision data (normal, depth, full contact manifold)
-     */
-    struct CollisionPairData
-    {
-      uint32_t bodyAId{0};
-      uint32_t bodyBId{0};
-      CollisionResult result;
-    };
-    std::vector<CollisionPairData> collisionPairs;
-
-    /**
-     * @brief Solver diagnostic data
-     */
-    struct SolverData
-    {
-      int iterations{0};
-      double residual{0.0};
-      bool converged{false};
-      size_t numConstraints{0};
-      size_t numContacts{0};
-    };
-    SolverData solverData;
+    int iterations{0};
+    double residual{0.0};
+    bool converged{false};
+    size_t numConstraints{0};
+    size_t numContacts{0};
   };
 
   /**
@@ -165,16 +143,47 @@ public:
   bool hadCollisions() const;
 
   /**
-   * @brief Get snapshot of collision data from last execute()
+   * @brief Collision pair data from last execute()
    *
-   * Returns const reference to frame data captured after Phase 5 (force
-   * application) and before clearFrameData(). Data is valid from end of
-   * execute() until start of next execute().
+   * Holds body indices, instance IDs, CollisionResult, and material
+   * coefficients for a single colliding pair.
    *
-   * @return const reference to FrameCollisionData
+   * Data is valid from end of execute() until start of next execute().
+   * collisions_ is owned by the pipeline and cleared at the start of
+   * each frame — no intermediate snapshot copy needed.
+   *
    * @ticket 0056b_collision_pipeline_data_extraction
    */
-  const FrameCollisionData& getLastFrameData() const;
+  struct CollisionPair
+  {
+    size_t bodyAIndex;
+    size_t bodyBIndex;
+    uint32_t bodyAId;  // Instance ID for cache keying
+    uint32_t bodyBId;  // Instance ID for cache keying
+    CollisionResult result;
+    double restitution;
+    double frictionCoefficient;
+  };
+
+  /**
+   * @brief Get collision pairs from last execute()
+   *
+   * Returns const reference to collision pairs detected during the most
+   * recent execute() call. Data is valid from end of execute() until
+   * start of next execute().
+   *
+   * @return const reference to collision pair vector
+   * @ticket 0056b_collision_pipeline_data_extraction
+   */
+  const std::vector<CollisionPair>& getCollisions() const;
+
+  /**
+   * @brief Get solver diagnostics from last execute()
+   *
+   * @return const reference to solver diagnostic data
+   * @ticket 0056b_collision_pipeline_data_extraction
+   */
+  const SolverData& getSolverData() const;
 
   CollisionPipeline(const CollisionPipeline&) = delete;
   CollisionPipeline& operator=(const CollisionPipeline&) = delete;
@@ -278,53 +287,33 @@ protected:
 
 private:
   /**
-   * @brief Snapshot collision data for external recording
+   * @brief Clear ephemeral solver state (references, pointers, constraints)
    *
-   * Captures contacts, forces, and solver diagnostics from current frame
-   * into lastFrameData_. Called after Phase 6 (position correction) and
-   * before clearFrameData().
+   * Clears vectors that hold references or pointers to external objects
+   * (states_, constraintPtrs_, etc.) to prevent dangling references when
+   * assets are modified between frames. Also clears constraints.
    *
-   * @param inertialAssets Dynamic objects (for instance IDs)
-   * @param environmentalAssets Static objects (for instance IDs)
-   * @param solveResult Solver output with constraint forces
-   * @ticket 0056b_collision_pipeline_data_extraction
-   */
-  void snapshotFrameData(
-    std::span<const AssetInertial> inertialAssets,
-    std::span<const AssetEnvironment> environmentalAssets,
-    const ConstraintSolver::SolveResult& solveResult);
-
-  /**
-   * @brief Clear frame-persistent data
+   * Does NOT clear collisions_ — those are value types (owned by pipeline)
+   * and are cleared at the start of the next execute() call. This allows
+   * WorldModel to read collision data between frames without an intermediate
+   * snapshot copy.
    *
-   * Clears all member vectors to prepare for new frame or leave pipeline
-   * empty when idle. Called at both start and end of execute().
    * Preserves capacity to avoid reallocation (NFR-1).
-   *
-   * Prevents dangling references: If WorldModel modifies asset vectors
-   * between frames (e.g., removes a body), cached references in states_
-   * and constraintPtrs_ would become dangling. Clearing at end ensures
-   * the pipeline is "empty" and safe when idle.
    */
-  void clearFrameData();
+  void clearEphemeralState();
 
   CollisionHandler collisionHandler_;
   ConstraintSolver constraintSolver_;
 
-  // Frame-persistent storage (reused across frames for NFR-1: zero additional
-  // allocations)
-  struct CollisionPair
-  {
-    size_t bodyAIndex;
-    size_t bodyBIndex;
-    uint32_t bodyAId;  // Instance ID for cache keying
-    uint32_t bodyBId;  // Instance ID for cache keying
-    CollisionResult result;
-    double restitution;
-    double frictionCoefficient;
-  };
-
+  // Collision results — owned by pipeline, valid from end of execute()
+  // until start of next execute(). WorldModel reads directly via
+  // getCollisions() — no snapshot copy needed.
   std::vector<CollisionPair> collisions_;
+
+  // Solver diagnostics — lightweight, captured after solve
+  SolverData solverData_;
+
+  // Ephemeral solver state (cleared at end of execute to prevent dangling refs)
   std::vector<std::unique_ptr<ContactConstraint>> constraints_;
   std::vector<std::unique_ptr<FrictionConstraint>> frictionConstraints_;
   std::vector<std::reference_wrapper<const InertialState>> states_;
@@ -333,17 +322,14 @@ private:
   std::vector<Constraint*> constraintPtrs_;
   std::vector<Constraint*> normalConstraintPtrs_;
 
-  // NEW: Cache and position correction (ticket 0044)
+  // Cache and position correction (ticket 0044)
   ContactCache contactCache_;
   PositionCorrector positionCorrector_;
 
-  // NEW: Track collision-active status (ticket 0044)
+  // Track collision-active status (ticket 0044)
   bool collisionOccurred_{false};
 
-  // NEW: Snapshot of collision data (ticket 0056b)
-  FrameCollisionData lastFrameData_;
-
-  // NEW: Cache interaction data structures (ticket 0044)
+  // Cache interaction data structures (ticket 0044)
   struct PairConstraintRange
   {
     size_t startIdx;
