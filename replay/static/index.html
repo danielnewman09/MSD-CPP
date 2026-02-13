@@ -4,61 +4,76 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MSD Replay Viewer</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            font-family: system-ui, -apple-system, sans-serif;
-            background: #1a1a1a;
-            color: #e0e0e0;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        h1 {
-            color: #4a9eff;
-        }
-        .info {
-            background: #2a2a2a;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 20px;
-        }
-        code {
-            background: #1a1a1a;
-            padding: 2px 6px;
-            border-radius: 4px;
-            color: #4a9eff;
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>MSD Replay Viewer</h1>
-        <div class="info">
-            <h2>Status</h2>
-            <p>The FastAPI backend is running. The Three.js visualization frontend will be implemented in ticket 0056e.</p>
+    <!-- Ticket: 0056e_threejs_core_visualization -->
+    <!-- Three.js core visualization with playback controls -->
 
-            <h2>API Documentation</h2>
-            <p>Interactive API documentation available at:</p>
-            <ul>
-                <li><a href="/docs" style="color: #4a9eff;">/docs</a> - Swagger UI</li>
-                <li><a href="/redoc" style="color: #4a9eff;">/redoc</a> - ReDoc</li>
-            </ul>
+    <div id="viewport-container">
+        <canvas id="viewport"></canvas>
 
-            <h2>API Endpoints</h2>
-            <p>Base URL: <code>/api/v1</code></p>
-            <ul>
-                <li><code>GET /simulations</code> - List available recordings</li>
-                <li><code>GET /simulations/{id}/metadata</code> - Simulation metadata</li>
-                <li><code>GET /simulations/{id}/frames</code> - Frame list</li>
-                <li><code>GET /simulations/{id}/frames/{fid}/state</code> - Frame data</li>
-                <li><code>GET /simulations/{id}/frames/range?start={n}&count={n}</code> - Bulk frames</li>
-                <li><code>GET /simulations/{id}/assets</code> - Asset geometries</li>
-                <li><code>GET /simulations/{id}/energy</code> - System energy</li>
-            </ul>
+        <!-- Loading indicator -->
+        <div id="loading-indicator" class="loading">
+            <div class="spinner"></div>
+            <div>Loading simulation...</div>
         </div>
     </div>
+
+    <div id="controls-panel">
+        <!-- Simulation Selection -->
+        <div class="control-group">
+            <label for="sim-select">Simulation:</label>
+            <select id="sim-select">
+                <option value="">Loading...</option>
+            </select>
+        </div>
+
+        <!-- Playback Controls -->
+        <div class="control-group playback-controls">
+            <button id="btn-step-back" title="Step Back (←)">⏮</button>
+            <button id="btn-play-pause" title="Play/Pause (Space)">▶</button>
+            <button id="btn-step-forward" title="Step Forward (→)">⏭</button>
+        </div>
+
+        <!-- Timeline Scrubber -->
+        <div class="control-group timeline">
+            <input type="range" id="timeline-slider" min="0" max="100" value="0">
+            <div class="timeline-info">
+                <span id="frame-display">Frame 0 / 0</span>
+                <span id="time-display">Time: 0.000s</span>
+            </div>
+        </div>
+
+        <!-- Speed Control -->
+        <div class="control-group">
+            <label>Speed:</label>
+            <div class="speed-controls">
+                <button class="speed-btn" data-speed="0.25">0.25x</button>
+                <button class="speed-btn" data-speed="0.5">0.5x</button>
+                <button class="speed-btn active" data-speed="1">1x</button>
+                <button class="speed-btn" data-speed="2">2x</button>
+                <button class="speed-btn" data-speed="4">4x</button>
+            </div>
+        </div>
+
+        <!-- Camera Controls -->
+        <div class="control-group">
+            <button id="btn-reset-camera">Reset Camera</button>
+        </div>
+    </div>
+
+    <!-- Three.js from CDN -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <!-- Application modules -->
+    <script type="module" src="/static/js/app.js"></script>
 </body>
 </html>
