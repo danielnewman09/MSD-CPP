@@ -19,6 +19,7 @@ analysis/clang_tidy_reports/
 *.db-shm
 *.db-wal
 *.pyc
+*.egg-info/
 **/.venv/**
 **/venv*/**
 prototypes/**/p1_cone_projection
