@@ -40,12 +40,16 @@ export class DataLoader {
         }
         this.metadata = await metaResponse.json();
 
-        // Extract unique asset_ids from metadata
-        const assetIds = [...new Set(this.metadata.bodies.map(b => b.asset_id))];
+        // Extract unique asset_ids from metadata (filter out null/undefined)
+        const assetIds = [...new Set(
+            this.metadata.bodies.map(b => b.asset_id).filter(id => id != null)
+        )];
 
-        // Load geometries filtered by asset_ids
-        const assetParams = assetIds.map(id => `asset_ids=${id}`).join('&');
-        const geoResponse = await fetch(`${API_BASE}/simulations/${simId}/assets?${assetParams}`);
+        // Load geometries filtered by asset_ids (or all if none specified)
+        const assetParams = assetIds.length > 0
+            ? '?' + assetIds.map(id => `asset_ids=${id}`).join('&')
+            : '';
+        const geoResponse = await fetch(`${API_BASE}/simulations/${simId}/assets${assetParams}`);
         if (!geoResponse.ok) {
             throw new Error(`Failed to load geometries: ${geoResponse.statusText}`);
         }
@@ -94,7 +98,7 @@ export class DataLoader {
         const startFrame = currentFrame;
         const endFrame = Math.min(
             currentFrame + this.bufferSize,
-            this.metadata.frame_count - 1
+            this.metadata.total_frames - 1
         );
 
         // Find missing frames in range

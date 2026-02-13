@@ -14,15 +14,16 @@ export class SceneManager {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x1a1a1a);
 
-        // Camera setup (default position)
+        // Camera setup — Z-up coordinate system (matching MSD-CPP gravity = (0,0,-9.81))
         this.camera = new THREE.PerspectiveCamera(
             75,
             window.innerWidth / window.innerHeight,
             0.1,
             1000
         );
-        this.defaultCameraPosition = new THREE.Vector3(10, 10, 10);
-        this.defaultCameraTarget = new THREE.Vector3(0, 0, 0);
+        this.camera.up.set(0, 0, 1);  // Z-up to match simulation
+        this.defaultCameraPosition = new THREE.Vector3(10, -10, 5);
+        this.defaultCameraTarget = new THREE.Vector3(0, 0, 1);
         this.resetCamera();
 
         // Renderer setup
@@ -38,8 +39,9 @@ export class SceneManager {
         directionalLight.position.set(10, 20, 10);
         this.scene.add(directionalLight);
 
-        // Ground grid
+        // Ground grid — rotated to XY plane (Z-up coordinate system)
         const gridHelper = new THREE.GridHelper(100, 100, 0x4a9eff, 0x3a3a3a);
+        gridHelper.rotation.x = Math.PI / 2;  // Rotate from XZ to XY plane
         this.scene.add(gridHelper);
 
         // Axis helpers
@@ -63,8 +65,11 @@ export class SceneManager {
      */
     resetCamera() {
         this.camera.position.copy(this.defaultCameraPosition);
-        this.controls.target.copy(this.defaultCameraTarget);
-        this.controls.update();
+        this.camera.lookAt(this.defaultCameraTarget);
+        if (this.controls) {
+            this.controls.target.copy(this.defaultCameraTarget);
+            this.controls.update();
+        }
     }
 
     /**
@@ -125,11 +130,12 @@ export class SceneManager {
             if (!mesh) return;
 
             // Update position
-            mesh.position.set(state.x, state.y, state.z);
+            mesh.position.set(state.position.x, state.position.y, state.position.z);
 
             // Update quaternion
-            // API returns {w, x, y, z}, Three.js constructor takes (x, y, z, w)
-            mesh.quaternion.set(state.qx, state.qy, state.qz, state.qw);
+            // API returns {w, x, y, z}, Three.js Quaternion.set() takes (x, y, z, w)
+            const q = state.orientation;
+            mesh.quaternion.set(q.x, q.y, q.z, q.w);
         });
     }
 

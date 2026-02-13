@@ -21,7 +21,7 @@ export class PlaybackController {
      * @param {Object} metadata - Simulation metadata
      */
     initialize(metadata) {
-        this.frameCount = metadata.frame_count;
+        this.frameCount = metadata.total_frames;
         this.currentFrame = 0;
         this.pause();
     }

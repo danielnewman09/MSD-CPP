@@ -106,7 +106,7 @@ export class UIController {
             simulations.forEach(sim => {
                 const option = document.createElement('option');
                 option.value = sim.id;
-                option.textContent = `${sim.id} (${sim.frame_count} frames)`;
+                option.textContent = sim.name;
                 this.elements.simSelect.appendChild(option);
             });
 
@@ -138,7 +138,7 @@ export class UIController {
             this.playbackController.initialize(metadata);
 
             // Update timeline range
-            this.elements.timelineSlider.max = metadata.frame_count - 1;
+            this.elements.timelineSlider.max = metadata.total_frames - 1;
             this.elements.timelineSlider.value = 0;
 
             // Load first frame

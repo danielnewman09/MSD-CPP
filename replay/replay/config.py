@@ -37,8 +37,11 @@ class Config:
             )
 
     def list_databases(self) -> list[Path]:
-        """List all .db files in recordings directory."""
-        return sorted(self.recordings_dir.glob("*.db"))
+        """List recording .db files in recordings directory (excludes asset DB)."""
+        return sorted(
+            db for db in self.recordings_dir.glob("*.db")
+            if db.resolve() != self.assets_db_path
+        )
 
     def get_database_path(self, db_id: str) -> Path:
         """Get path to database by ID (filename without extension)."""
