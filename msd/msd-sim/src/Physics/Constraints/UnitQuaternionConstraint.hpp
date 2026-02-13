@@ -65,6 +65,10 @@ public:
   [[nodiscard]] LambdaBounds lambdaBounds() const override;
   [[nodiscard]] std::string typeName() const override;
 
+  void recordState(msd_transfer::ConstraintRecordVisitor& visitor,
+                   uint32_t bodyAId,
+                   uint32_t bodyBId) const override;
+
   // Rule of Five
   UnitQuaternionConstraint(const UnitQuaternionConstraint&) = default;
   UnitQuaternionConstraint& operator=(const UnitQuaternionConstraint&) = default;

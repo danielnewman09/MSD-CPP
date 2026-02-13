@@ -185,6 +185,32 @@ public:
    */
   const SolverData& getSolverData() const;
 
+  /**
+   * @brief Record constraint states to DataRecorder
+   *
+   * Iterates all constraints (both ContactConstraint and FrictionConstraint),
+   * calls constraint->recordState() with a DataRecorderVisitor, and buffers
+   * the typed records to the appropriate DAOs.
+   *
+   * Uses visitor pattern for type-safe dispatching without dynamic_cast.
+   * Each constraint builds its specific record (ContactConstraintRecord or
+   * FrictionConstraintRecord) and dispatches to visitor.visit(record).
+   *
+   * Must be called AFTER execute() and BEFORE clearEphemeralState() to ensure
+   * constraints are still alive.
+   *
+   * @param recorder DataRecorder instance to buffer records to
+   * @param frameId Frame ID for FK references in constraint records
+   *
+   * Thread safety: Not thread-safe (calls DataRecorder methods)
+   * Error handling: Exceptions from DAO operations propagate to caller
+   *
+   * @see DataRecorderVisitor
+   * @see Constraint::recordState()
+   * @ticket 0057_contact_tangent_recording
+   */
+  void recordConstraints(class DataRecorder& recorder, uint32_t frameId) const;
+
   CollisionPipeline(const CollisionPipeline&) = delete;
   CollisionPipeline& operator=(const CollisionPipeline&) = delete;
   CollisionPipeline(CollisionPipeline&&) = delete;
@@ -335,6 +361,20 @@ private:
    * Ticket: 0058_constraint_ownership_cleanup
    */
   std::vector<Constraint*> buildContactView() const;
+
+  /**
+   * @brief Map constraint index to collision pair index
+   *
+   * Iterates pairRanges_ to find which collision pair owns the given
+   * constraint index. Used by recordConstraints() to extract body IDs.
+   *
+   * @param constraintIdx Index into allConstraints_
+   * @return Index into collisions_ vector
+   * @throws std::logic_error if constraint index not found in pairRanges_
+   *
+   * Ticket: 0057_contact_tangent_recording
+   */
+  size_t findPairIndexForConstraint(size_t constraintIdx) const;
 
   CollisionHandler collisionHandler_;
   ConstraintSolver constraintSolver_;

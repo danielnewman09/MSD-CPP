@@ -95,4 +95,16 @@ std::string UnitQuaternionConstraint::typeName() const
   return "UnitQuaternionConstraint";
 }
 
+void UnitQuaternionConstraint::recordState(
+  msd_transfer::ConstraintRecordVisitor& /* visitor */,
+  uint32_t /* bodyAId */,
+  uint32_t /* bodyBId */) const
+{
+  // Stub implementation: UnitQuaternionConstraint is a single-body normalization
+  // constraint that is vestigial from ticket 0045 (quaternion normalization now
+  // done via direct state.orientation.normalize()).
+  // No recording needed as this constraint is never instantiated by CollisionPipeline.
+  // Ticket: 0057_contact_tangent_recording
+}
+
 }  // namespace msd_sim

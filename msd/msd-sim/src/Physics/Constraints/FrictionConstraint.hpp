@@ -164,6 +164,10 @@ public:
     return "FrictionConstraint";
   }
 
+  void recordState(msd_transfer::ConstraintRecordVisitor& visitor,
+                   uint32_t bodyAId,
+                   uint32_t bodyBId) const override;
+
   // ===== Friction-specific interface =====
 
   /**

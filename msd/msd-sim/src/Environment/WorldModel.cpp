@@ -326,6 +326,10 @@ void WorldModel::recordCurrentFrame()
   // Record collision results and solver diagnostics
   dataRecorder_->recordCollisions(frameId, collisionPipeline_);
   dataRecorder_->recordSolverDiagnostics(frameId, collisionPipeline_);
+
+  // Record constraint states (tangents, forces, geometry)
+  // Ticket: 0057_contact_tangent_recording
+  collisionPipeline_.recordConstraints(*dataRecorder_, frameId);
 }
 
 }  // namespace msd_sim
