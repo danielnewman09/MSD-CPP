@@ -6,12 +6,10 @@
 ## Architecture Overview
 
 ```
-AssetInertial (Owns constraints)
-    └── std::vector<std::unique_ptr<Constraint>>
-        ├── DistanceConstraint
-        └── ... (user-defined constraints)
-
-CollisionPipeline
+CollisionPipeline (Sole constraint owner, ephemeral per-frame)
+    ├── std::vector<std::unique_ptr<Constraint>> allConstraints_
+    │   ├── ContactConstraint (per collision pair)
+    │   └── FrictionConstraint (2× per contact, tangent directions)
     └── ConstraintSolver
         ├── Contacts (no friction) → Active Set Method
         └── Contacts (with friction) → ECOS SOCP solver
@@ -20,6 +18,8 @@ SemiImplicitEulerIntegrator
     └── (No ConstraintSolver dependency)
         └── Quaternion normalization via state.orientation.normalize()
 ```
+
+**Ownership model** (as of [Ticket 0058](../../../../../tickets/0058_constraint_ownership_cleanup.md)): `CollisionPipeline` owns all constraints in a single vector (`allConstraints_`). Constraints are ephemeral — created each frame from collision manifolds, solved, then cleared. `AssetInertial` no longer owns constraints.
 
 **Key benefit**: New constraint types (joints, limits) can be added by implementing the `Constraint` interface without modifying the solver.
 
@@ -85,10 +85,12 @@ The constraint type hierarchy is a flat 2-level design where all concrete constr
 
 ```
 Constraint (abstract base)
-├── UnitQuaternionConstraint (single-body, bilateral)
-├── DistanceConstraint (single-body, bilateral)
-├── ContactConstraint (two-body, unilateral)
-└── FrictionConstraint (two-body, box-constrained)
+├── ContactConstraint (two-body, unilateral) — actively used by CollisionPipeline
+└── FrictionConstraint (two-body, box-constrained) — actively used by CollisionPipeline
+
+Vestigial constraint types (no longer instantiated as of ticket 0058):
+├── UnitQuaternionConstraint (removed, replaced by direct state.orientation.normalize())
+└── DistanceConstraint (example implementation, not actively used)
 ```
 
 ### Key Base Class Features
@@ -201,12 +203,14 @@ worldModel.addConstraint(std::make_unique<MyJointConstraint>(indexA, indexB));
 
 ## Integration with Physics Pipeline
 
-1. **Ownership**: AssetInertial owns constraints via `unique_ptr`
-2. **Default** (as of ticket 0045): AssetInertial constraint list is empty by default. No automatic UnitQuaternionConstraint added.
-3. **Contact solving**: CollisionPipeline creates ContactConstraints from collision manifolds and invokes `ConstraintSolver::solve()`
-4. **Quaternion normalization**: SemiImplicitEulerIntegrator enforces quaternion normalization via direct `state.orientation.normalize()` call (not constraint-based)
+1. **Ownership** (as of [Ticket 0058](../../../../../tickets/0058_constraint_ownership_cleanup.md)): `CollisionPipeline` owns all constraints in a single vector (`allConstraints_`). Constraints are ephemeral — created each frame, solved, then cleared. `AssetInertial` no longer owns constraints.
+2. **Contact solving**: `CollisionPipeline::createConstraints()` builds `ContactConstraint` and `FrictionConstraint` instances from collision manifolds, stores in `allConstraints_`, then invokes `ConstraintSolver::solve()`
+3. **Typed views**: `CollisionPipeline` generates on-demand typed views via `buildSolverView()` (all constraints) and `buildContactView()` (contact-only, for position correction)
+4. **Quaternion normalization**: `SemiImplicitEulerIntegrator` enforces quaternion normalization via direct `state.orientation.normalize()` call (not constraint-based)
 
-**Historical note**: Prior to ticket 0045, every AssetInertial included a default UnitQuaternionConstraint, and the integrator owned a ConstraintSolver instance. This was removed as redundant with direct quaternion normalization.
+**Historical notes**:
+- **Ticket 0045**: Removed integrator's `ConstraintSolver` dependency and `AssetInertial`'s default `UnitQuaternionConstraint`. Quaternion normalization moved to direct `state.orientation.normalize()`.
+- **Ticket 0058**: Removed vestigial constraint ownership from `AssetInertial`. Consolidated all constraint ownership to `CollisionPipeline` in a single owning vector.
 
 ---
 
