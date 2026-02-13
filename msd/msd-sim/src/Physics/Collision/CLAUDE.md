@@ -94,6 +94,7 @@ The `CollisionPipeline` executes a multi-phase collision response workflow:
 **Extended**: [Ticket: 0044_collision_pipeline_integration](../../../../../../tickets/0044_collision_pipeline_integration.md)
 
 **Key components**:
+- Owns all constraints in a single vector (`allConstraints_`) — ephemeral, per-frame (ticket 0058)
 - Owns `ContactCache` for warm-starting (frame-persistent lambda storage)
 - Owns `PositionCorrector` for split-impulse position correction
 - Owns `ConstraintSolver` for Active Set Method solving
@@ -110,7 +111,9 @@ void WorldModel::updateCollisions(double dt) {
 }
 ```
 
-**Key insight**: Contacts are solved as constraints, not as standalone impulses. This unifies collision response with the Lagrangian constraint framework (quaternion normalization, future joints).
+**Key insight**: Contacts are solved as constraints, not as standalone impulses. This unifies collision response with the Lagrangian constraint framework.
+
+**Constraint ownership** (as of [Ticket 0058](../../../../../../tickets/0058_constraint_ownership_cleanup.md)): `CollisionPipeline` is the sole owner of all constraints via `std::vector<std::unique_ptr<Constraint>> allConstraints_`. Constraints are ephemeral — created each frame from collision manifolds in `createConstraints()`, solved, then cleared in `clearEphemeralState()`. The pipeline generates typed views on-demand via `buildSolverView()` (all constraints) and `buildContactView()` (contact-only for position correction).
 
 ---
 
