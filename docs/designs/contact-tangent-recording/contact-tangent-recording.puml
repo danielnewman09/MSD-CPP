@@ -1,0 +1,137 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "msd-transfer" {
+    struct CollisionResultRecord <<modified>> {
+        +body_a_id: uint32_t
+        +body_b_id: uint32_t
+        +normal: Vector3DRecord
+        +penetrationDepth: double
+        +contacts: RepeatedField<ContactPointRecord>
+        +frame: ForeignKey<SimulationFrameRecord>
+        --
+        <<new>> +tangent1: Vector3DRecord
+        <<new>> +tangent2: Vector3DRecord
+    }
+
+    struct Vector3DRecord {
+        +x: double
+        +y: double
+        +z: double
+    }
+}
+
+package "msd-sim::Collision" {
+    class CollisionResult <<modified>> {
+        +normal: Coordinate
+        +penetrationDepth: double
+        +contacts: array<ContactPoint, 4>
+        +contactCount: size_t
+        --
+        <<new>> +tangent1: Coordinate
+        <<new>> +tangent2: Coordinate
+        +toRecord(): CollisionResultRecord
+        +fromRecord(): CollisionResult
+    }
+
+    class CollisionPipeline <<modified>> {
+        -frictionConstraints_: vector<unique_ptr<FrictionConstraint>>
+        -collisions_: vector<CollisionPair>
+        --
+        <<new>> -extractTangentsFromConstraints(): void
+        +execute(): void
+        +getCollisions(): const vector<CollisionPair>&
+    }
+
+    struct CollisionPair <<modified>> {
+        +bodyAIndex: size_t
+        +bodyBIndex: size_t
+        +bodyAId: uint32_t
+        +bodyBId: uint32_t
+        +result: CollisionResult
+        +restitution: double
+        +frictionCoefficient: double
+    }
+
+    class FrictionConstraint {
+        +getTangent1(): const Coordinate&
+        +getTangent2(): const Coordinate&
+    }
+}
+
+package "msd-sim::DataRecorder" {
+    class DataRecorder <<modified>> {
+        --
+        recordCollisions(): void <<modified>>
+    }
+}
+
+package "replay (Python)" {
+    class CollisionModel <<modified>> {
+        +body_a_id: int
+        +body_b_id: int
+        +normal: Vector3D
+        +penetration_depth: float
+        +contacts: List[ContactPoint]
+        --
+        <<new>> +tangent1: Optional[Vector3D]
+        <<new>> +tangent2: Optional[Vector3D]
+    }
+
+    class SimulationService <<modified>> {
+        --
+        get_frame_state(): dict <<modified>>
+    }
+}
+
+package "replay/static (Three.js)" {
+    class ContactOverlay <<modified>> {
+        -normalArrows_: Map<string, ArrowHelper>
+        <<new>> -tangent1Arrows_: Map<string, ArrowHelper>
+        <<new>> -tangent2Arrows_: Map<string, ArrowHelper>
+        --
+        +update(collisions): void <<modified>>
+        <<new>> -createTangentArrow(contact, tangent, color): ArrowHelper
+        <<new>> -updateTangentArrows(): void
+    }
+}
+
+' Relationships
+CollisionResultRecord --> Vector3DRecord : tangent1, tangent2
+CollisionResult --> CollisionResultRecord : toRecord()
+CollisionPipeline --> FrictionConstraint : owns
+CollisionPipeline --> CollisionPair : owns
+CollisionPair --> CollisionResult : contains
+CollisionPipeline ..> FrictionConstraint : extractTangentsFromConstraints()
+DataRecorder ..> CollisionPipeline : reads via getCollisions()
+DataRecorder ..> CollisionResultRecord : writes
+SimulationService ..> CollisionResultRecord : reads
+SimulationService --> CollisionModel : constructs
+ContactOverlay ..> CollisionModel : visualizes
+
+note right of CollisionPipeline::extractTangentsFromConstraints
+  New method called after createConstraints():
+  - Iterates frictionConstraints_
+  - Matches constraints to collisions_ via body indices
+  - Populates CollisionResult::tangent1/tangent2
+end note
+
+note right of CollisionResultRecord::tangent1
+  Backward compatible:
+  - Optional fields in pybind
+  - Default to (0,0,0) if missing
+  - Old recordings load without error
+end note
+
+note right of ContactOverlay
+  Renders 3 arrows per contact:
+  - Red: normal
+  - Green: tangent1
+  - Blue: tangent2
+  All arrows at contact midpoint
+end note
+
+@enduml
