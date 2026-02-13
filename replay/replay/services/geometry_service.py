@@ -1,7 +1,8 @@
 """
-Geometry Service — Three.js geometry conversion
+Geometry Service — Three.js geometry conversion via AssetRegistry
 
 Ticket: 0056d_fastapi_backend
+Ticket: 0056e_threejs_core_visualization (R0d)
 """
 
 from pathlib import Path
@@ -15,41 +16,58 @@ from ..models import AssetGeometry
 
 
 class GeometryService:
-    """Service for converting MeshRecord BLOBs to Three.js format."""
+    """Service for loading asset geometry via AssetRegistry.
 
-    def __init__(self, db_path: Path):
-        """Initialize service with database connection."""
+    Uses msd_reader.AssetRegistry to resolve ObjectRecord.id → geometry,
+    matching the C++ AssetRegistry pipeline.
+
+    Two-database architecture (Ticket: 0056e):
+    - Asset DB (input): ObjectRecord → MeshRecord (geometry definitions)
+    - Recording DB (output): AssetPhysicalStaticRecord.asset_id → ObjectRecord.id
+    """
+
+    def __init__(self, assets_db_path: Path):
         if msd_reader is None:
             raise RuntimeError(
                 "msd_reader module not available. "
                 "Build with -o '&:enable_pybind=True' to enable Python bindings."
             )
 
-        self.db_path = db_path
-        self.db = msd_reader.Database(str(db_path))
+        self.registry = msd_reader.AssetRegistry(str(assets_db_path))
 
-    def get_all_geometries(self) -> list[AssetGeometry]:
-        """Get all asset geometries in Three.js BufferGeometry format."""
-        mesh_records = self.db.select_all_meshes()
+    def get_geometries(self, asset_ids: list[int] | None = None) -> list[AssetGeometry]:
+        """Get asset geometries in Three.js BufferGeometry format.
+
+        Args:
+            asset_ids: Optional list of ObjectRecord IDs to filter.
+                       If None, returns geometry for all assets.
+
+        Returns:
+            List of AssetGeometry with positions for Three.js BufferGeometry
+        """
+        # Determine which assets to load
+        if asset_ids is not None:
+            assets_to_load = [(aid, self.registry.get_asset_name(aid)) for aid in asset_ids]
+        else:
+            assets_to_load = self.registry.list_assets()
 
         geometries = []
-        for mesh in mesh_records:
-            # Deserialize BLOB to 9-tuples (px,py,pz, r,g,b, nx,ny,nz)
-            visual_vertices = msd_reader.deserialize_visual_vertices(
-                mesh.vertex_data
-            )
+        for asset_id, name in assets_to_load:
+            vertices = self.registry.get_collision_vertices(asset_id)
+            if not vertices:
+                continue
 
-            # Extract positions (first 3 floats) and flatten
+            # Flatten to [x,y,z,x,y,z,...] for Three.js BufferGeometry
             positions = []
-            for vertex in visual_vertices:
-                positions.extend([vertex[0], vertex[1], vertex[2]])
+            for v in vertices:
+                positions.extend([v[0], v[1], v[2]])
 
             geometries.append(
                 AssetGeometry(
-                    asset_id=mesh.id,
-                    name=f"mesh_{mesh.id}",
+                    asset_id=asset_id,
+                    name=name,
                     positions=positions,
-                    vertex_count=mesh.vertex_count,
+                    vertex_count=len(vertices),
                 )
             )
 

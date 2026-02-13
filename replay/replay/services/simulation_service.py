@@ -4,6 +4,7 @@ Simulation Service — Database query wrapper
 Ticket: 0056d_fastapi_backend
 """
 
+import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -54,23 +55,76 @@ class SimulationService:
 
     def get_metadata(self) -> SimulationMetadata:
         """Get simulation metadata (body properties and frame count)."""
-        # Body metadata from static asset records
+        # Body metadata from AssetInertialStaticRecord (via msd_reader)
         static_assets = self.db.select_all_static_assets()
-        bodies = [
-            BodyMetadata(
-                body_id=asset.body_id,
-                mass=asset.mass,
-                restitution=asset.restitution,
-                friction=asset.friction,
+
+        # Read AssetPhysicalStaticRecord via sqlite3 (not yet in msd_reader)
+        physical_map: dict[int, tuple[int, bool]] = {}  # body_id -> (asset_id, is_env)
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            cursor = conn.execute(
+                "SELECT body_id, asset_id, is_environment FROM AssetPhysicalStaticRecord"
             )
-            for asset in static_assets
-        ]
+            for row in cursor:
+                physical_map[row[0]] = (row[1], bool(row[2]))
+        except sqlite3.OperationalError:
+            pass  # Table may not exist in older recordings
+        finally:
+            conn.close()
+
+        bodies = []
+        for asset in static_assets:
+            asset_id, is_env = physical_map.get(asset.body_id, (None, False))
+            bodies.append(
+                BodyMetadata(
+                    body_id=asset.body_id,
+                    mass=asset.mass,
+                    restitution=asset.restitution,
+                    friction=asset.friction,
+                    asset_id=asset_id,
+                    is_environment=is_env,
+                )
+            )
 
         # Total frame count
         frames = self.db.select_all_frames()
         total_frames = len(frames)
 
         return SimulationMetadata(bodies=bodies, total_frames=total_frames)
+
+    def _get_states_by_frame(self, frame_id: int) -> list[BodyState]:
+        """Get body states for a frame via SQL join through AssetDynamicStateRecord.
+
+        InertialStateRecord doesn't have frame_id directly — it's nested inside
+        AssetDynamicStateRecord which holds the frame_id FK.
+        """
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            rows = conn.execute("""
+                SELECT
+                    adr.body_id,
+                    pos.x, pos.y, pos.z,
+                    vel.x, vel.y, vel.z,
+                    quat.w, quat.x, quat.y, quat.z
+                FROM AssetDynamicStateRecord adr
+                JOIN InertialStateRecord isr ON adr.kinematicState_id = isr.id
+                JOIN CoordinateRecord pos ON isr.position_id = pos.id
+                JOIN VelocityRecord vel ON isr.velocity_id = vel.id
+                JOIN QuaternionDRecord quat ON isr.orientation_id = quat.id
+                WHERE adr.frame_id = ?
+            """, (frame_id,)).fetchall()
+        finally:
+            conn.close()
+
+        return [
+            BodyState(
+                body_id=row[0],
+                position=Vec3(x=row[1], y=row[2], z=row[3]),
+                velocity=Vec3(x=row[4], y=row[5], z=row[6]),
+                orientation=Quaternion(w=row[7], x=row[8], y=row[9], z=row[10]),
+            )
+            for row in rows
+        ]
 
     def get_frame_data(self, frame_id: int) -> FrameData:
         """Get complete frame data (states, collisions, solver)."""
@@ -80,30 +134,8 @@ class SimulationService:
         if frame is None:
             raise ValueError(f"Frame {frame_id} not found")
 
-        # Body states
-        state_records = self.db.select_inertial_states_by_frame(frame_id)
-        states = [
-            BodyState(
-                body_id=state.body_id,
-                position=Vec3(
-                    x=state.position.x,
-                    y=state.position.y,
-                    z=state.position.z,
-                ),
-                velocity=Vec3(
-                    x=state.velocity.x,
-                    y=state.velocity.y,
-                    z=state.velocity.z,
-                ),
-                orientation=Quaternion(
-                    w=state.orientation.w,
-                    x=state.orientation.x,
-                    y=state.orientation.y,
-                    z=state.orientation.z,
-                ),
-            )
-            for state in state_records
-        ]
+        # Body states via SQL join
+        states = self._get_states_by_frame(frame_id)
 
         # Collisions
         collision_records = self.db.select_collisions_by_frame(frame_id)

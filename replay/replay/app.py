@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .routes import assets_router, frames_router, simulations_router
@@ -37,7 +38,13 @@ app.include_router(assets_router, prefix="/api/v1")
 # Mount static files (Three.js frontend)
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():
-    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    @app.get("/", response_class=HTMLResponse)
+    async def serve_index():
+        """Serve the main HTML page."""
+        index_path = static_dir / "index.html"
+        return index_path.read_text()
 
 
 @app.get("/api/v1/health")

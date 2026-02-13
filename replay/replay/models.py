@@ -102,12 +102,14 @@ class SystemEnergyPoint(BaseModel):
 
 
 class BodyMetadata(BaseModel):
-    """From AssetInertialStaticRecord — static body properties recorded at spawn."""
+    """From AssetInertialStaticRecord + AssetPhysicalStaticRecord — static body properties."""
 
     body_id: int
     mass: float
     restitution: float
     friction: float
+    asset_id: int | None = None
+    is_environment: bool = False
 
 
 class SimulationMetadata(BaseModel):

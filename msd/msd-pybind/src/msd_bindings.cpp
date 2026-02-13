@@ -9,6 +9,7 @@ namespace py = pybind11;
 void bind_records(py::module_& m);
 void bind_database(py::module_& m);
 void bind_geometry(py::module_& m);
+void bind_asset_registry(py::module_& m);
 
 /**
  * @brief Python module: msd_reader
@@ -38,6 +39,9 @@ PYBIND11_MODULE(msd_reader, m)
 
   // Bind geometry deserialization functions
   bind_geometry(m);
+
+  // Bind AssetRegistry for geometry lookup by asset ID
+  bind_asset_registry(m);
 
   // Module metadata
   m.attr("__version__") = "1.0.0";

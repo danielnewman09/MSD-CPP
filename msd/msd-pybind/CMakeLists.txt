@@ -13,12 +13,12 @@ pybind11_add_module(msd_reader
     src/record_bindings.cpp
     src/database_bindings.cpp
     src/geometry_bindings.cpp
+    src/asset_registry_bindings.cpp
 )
 
-# Link to msd_transfer (INTERFACE library) which transitively provides
-# cpp_sqlite::cpp_sqlite, SQLite3::SQLite3, and boost::boost
+# Link to msd_assets (provides AssetRegistry, transitively provides msd_transfer)
 target_link_libraries(msd_reader PRIVATE
-    msd_transfer
+    msd_assets
 )
 
 # Set output directory to build/{build_type}
