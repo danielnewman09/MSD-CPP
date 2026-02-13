@@ -1,9 +1,6 @@
 #ifndef MSD_SIM_PHYSICS_INERTIAL_ASSET_HPP
 #define MSD_SIM_PHYSICS_INERTIAL_ASSET_HPP
 
-#include <memory>
-#include <vector>
-#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetDynamicState.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetPhysical.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetStaticState.hpp"
@@ -109,11 +106,12 @@ public:
                 double coefficientOfRestitution,
                 double frictionCoefficient);
 
-  // Rule of Five: Move-only type due to std::unique_ptr<Constraint> ownership
-  // Note: Move assignment deleted because base class has reference member
-  // Ticket: 0031_generalized_lagrange_constraints
+  // Rule of Zero: Compiler-generated special members
+  // Note: Assignment operators deleted because base class AssetPhysical has
+  // reference member (ConvexHull&)
+  // Ticket: 0058_constraint_ownership_cleanup
   ~AssetInertial() override = default;
-  AssetInertial(const AssetInertial&) = delete;
+  AssetInertial(const AssetInertial&) = default;
   AssetInertial& operator=(const AssetInertial&) = delete;
   AssetInertial(AssetInertial&&) noexcept = default;
   AssetInertial& operator=(AssetInertial&&) noexcept = delete;
@@ -314,71 +312,10 @@ public:
    */
   void applyAngularImpulse(const AngularVelocity& angularImpulse);
 
-  // ========== NEW: Constraint Management (ticket 0031) ==========
-
-  /**
-   * @brief Add a constraint to this object
-   *
-   * Transfers ownership of the constraint to this asset. The constraint will
-   * be enforced during physics integration.
-   *
-   * @param constraint Constraint to add (ownership transferred)
-   *
-   * @ticket 0031_generalized_lagrange_constraints
-   */
-  void addConstraint(std::unique_ptr<Constraint> constraint);
-
-  /**
-   * @brief Remove constraint at specified index
-   *
-   * @param index Index of constraint to remove [0, getConstraintCount())
-   * @throws std::out_of_range if index >= getConstraintCount()
-   *
-   * @ticket 0031_generalized_lagrange_constraints
-   */
-  void removeConstraint(size_t index);
-
-  /**
-   * @brief Get all constraints (mutable)
-   *
-   * Returns raw pointers for integration (non-owning access).
-   * Used by Integrator to enforce constraints during physics integration.
-   *
-   * @return Vector of non-owning constraint pointers
-   *
-   * @ticket 0031_generalized_lagrange_constraints
-   */
-  std::vector<Constraint*> getConstraints();
-
-  /**
-   * @brief Get all constraints (const)
-   *
-   * Returns raw pointers for query (non-owning access).
-   *
-   * @return Vector of non-owning const constraint pointers
-   *
-   * @ticket 0031_generalized_lagrange_constraints
-   */
-  std::vector<const Constraint*> getConstraints() const;
-
-  /**
-   * @brief Clear all constraints
-   *
-   * Removes all constraints from this object. Quaternion normalization
-   * constraint will need to be manually re-added if desired.
-   *
-   * @ticket 0031_generalized_lagrange_constraints
-   */
-  void clearConstraints();
-
-  /**
-   * @brief Get number of constraints
-   *
-   * @return Number of constraints attached to this object
-   *
-   * @ticket 0031_generalized_lagrange_constraints
-   */
-  size_t getConstraintCount() const;
+  // Constraint management removed (ticket 0058_constraint_ownership_cleanup)
+  // Constraints are now owned solely by CollisionPipeline for ephemeral
+  // collision response. Quaternion normalization is handled directly by
+  // the integrator via state.orientation.normalize().
 
   // ========== Transfer Object Support ==========
 
@@ -417,9 +354,6 @@ private:
   // Per-frame mutable state (kinematic + force/torque accumulators)
   // Ticket: 0056h_asset_dynamic_state_struct
   AssetDynamicState dynamicState_;
-
-  // Constraint management (ticket 0031)
-  std::vector<std::unique_ptr<Constraint>> constraints_;
 };
 
 }  // namespace msd_sim
