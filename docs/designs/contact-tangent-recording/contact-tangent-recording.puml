@@ -40,6 +40,7 @@ package "msd-sim::Collision" {
     class CollisionPipeline <<modified>> {
         -frictionConstraints_: vector<unique_ptr<FrictionConstraint>>
         -collisions_: vector<CollisionPair>
+        -pairRanges_: vector<PairConstraintRange>
         --
         <<new>> -extractTangentsFromConstraints(): void
         +execute(): void
@@ -63,27 +64,27 @@ package "msd-sim::Collision" {
 }
 
 package "msd-sim::DataRecorder" {
-    class DataRecorder <<modified>> {
+    class DataRecorder {
         --
-        recordCollisions(): void <<modified>>
+        recordCollisions(): void
     }
 }
 
 package "replay (Python)" {
-    class CollisionModel <<modified>> {
+    class CollisionInfo <<modified>> {
         +body_a_id: int
         +body_b_id: int
-        +normal: Vector3D
+        +normal: Vec3
         +penetration_depth: float
-        +contacts: List[ContactPoint]
+        +contacts: list[ContactPoint]
         --
-        <<new>> +tangent1: Optional[Vector3D]
-        <<new>> +tangent2: Optional[Vector3D]
+        <<new>> +tangent1: Vec3 | None
+        <<new>> +tangent2: Vec3 | None
     }
 
     class SimulationService <<modified>> {
         --
-        get_frame_state(): dict <<modified>>
+        get_frame_data(): FrameData <<modified>>
     }
 }
 
@@ -109,13 +110,14 @@ CollisionPipeline ..> FrictionConstraint : extractTangentsFromConstraints()
 DataRecorder ..> CollisionPipeline : reads via getCollisions()
 DataRecorder ..> CollisionResultRecord : writes
 SimulationService ..> CollisionResultRecord : reads
-SimulationService --> CollisionModel : constructs
-ContactOverlay ..> CollisionModel : visualizes
+SimulationService --> CollisionInfo : constructs
+ContactOverlay ..> CollisionInfo : visualizes
 
 note right of CollisionPipeline::extractTangentsFromConstraints
   New method called after createConstraints():
-  - Iterates frictionConstraints_
-  - Matches constraints to collisions_ via body indices
+  - Uses pairRanges_ to index into frictionConstraints_
+  - Reads tangent from first constraint in each pair's range
+  - All contacts in a pair share same tangent basis (same normal)
   - Populates CollisionResult::tangent1/tangent2
 end note
 
