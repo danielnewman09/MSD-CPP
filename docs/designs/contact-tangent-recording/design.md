@@ -80,6 +80,33 @@ struct CollisionResult
   Coordinate tangent1{};  // First tangent direction (zero if no friction)
   Coordinate tangent2{};  // Second tangent direction (zero if no friction)
 
+  // NEW: Deserialize tangent basis from record
+  static CollisionResult fromRecord(
+    const msd_transfer::CollisionResultRecord& record)
+  {
+    CollisionResult result;
+    result.normal =
+      Coordinate{record.normal.x, record.normal.y, record.normal.z};
+    result.penetrationDepth = record.penetrationDepth;
+    result.contactCount = record.contacts.data.size();
+    for (size_t i = 0; i < result.contactCount && i < 4; ++i)
+    {
+      result.contacts[i] =
+        ContactPoint::fromRecord(record.contacts.data[i]);
+    }
+
+    // NEW: Deserialize tangent basis (defaults to zero vector if fields
+    // contain default-initialized Vector3DRecord from older recordings)
+    result.tangent1 = Coordinate{record.tangent1.x,
+                                  record.tangent1.y,
+                                  record.tangent1.z};
+    result.tangent2 = Coordinate{record.tangent2.x,
+                                  record.tangent2.y,
+                                  record.tangent2.z};
+
+    return result;
+  }
+
   [[nodiscard]] msd_transfer::CollisionResultRecord toRecord(
     uint32_t bodyAId,
     uint32_t bodyBId) const
@@ -107,8 +134,8 @@ struct CollisionResult
 - **Current location**: `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp/.cpp`
 - **Changes required**:
   - Add private method `extractTangentsFromConstraints()` called after `createConstraints()`
-  - Iterate `frictionConstraints_` vector, match each constraint to corresponding `CollisionPair` by body indices
-  - Populate `CollisionPair::result.tangent1` and `tangent2` from `FrictionConstraint::getTangent1/2()`
+  - Use `pairRanges_` to index into `frictionConstraints_` correctly (one friction constraint per **contact point**, not per collision pair)
+  - Populate `CollisionPair::result.tangent1` and `tangent2` from the first `FrictionConstraint` in each pair's range (all friction constraints for a given collision share the same tangent basis, since they share the same normal)
 - **Backward compatibility**:
   - Frictionless collisions leave tangents as zero vectors
   - Existing collision pipeline phases unaffected
@@ -128,6 +155,7 @@ private:
 
   std::vector<CollisionPair> collisions_;
   std::vector<std::unique_ptr<FrictionConstraint>> frictionConstraints_;
+  std::vector<PairConstraintRange> pairRanges_;  // Maps collision pairs to constraint ranges
 };
 ```
 
@@ -144,32 +172,36 @@ void CollisionPipeline::execute(/* ... */) {
 }
 
 void CollisionPipeline::extractTangentsFromConstraints() {
-  // For each friction constraint, find the matching collision pair
-  // Friction constraints are created in the same order as collisions
-  // Each collision produces one friction constraint (if friction > 0)
+  // Each contact point produces one friction constraint (1:1 with constraints_).
+  // All friction constraints for a given collision pair share the same tangent
+  // basis (same normal), so we take the tangent from the first constraint in
+  // each pair's range.
+  //
+  // pairRanges_ maps each collision pair to its constraint index range:
+  //   { startIdx, count, pairIdx }
 
-  size_t frictionIdx = 0;
-  for (auto& collision : collisions_) {
-    if (collision.frictionCoefficient > 0.0 && frictionIdx < frictionConstraints_.size()) {
-      const auto& constraint = frictionConstraints_[frictionIdx];
+  if (frictionConstraints_.empty())
+  {
+    return;
+  }
 
-      // Verify body indices match (safety check)
-      if (constraint->bodyAIndex() == collision.bodyAIndex &&
-          constraint->bodyBIndex() == collision.bodyBIndex) {
-        collision.result.tangent1 = constraint->getTangent1();
-        collision.result.tangent2 = constraint->getTangent2();
-      }
-
-      ++frictionIdx;
-    }
+  for (const auto& range : pairRanges_)
+  {
+    auto& collision = collisions_[range.pairIdx];
+    // All friction constraints for this pair share the same tangent basis
+    // (same normal), so take from the first one in the range
+    const auto& fc = frictionConstraints_[range.startIdx];
+    collision.result.tangent1 = fc->getTangent1();
+    collision.result.tangent2 = fc->getTangent2();
   }
 }
 ```
 
 **Design rationale**:
 - Extract tangents AFTER constraint creation to record the actual solver state (even if future changes make tangent selection non-deterministic)
-- Match constraints to collisions by body indices for safety (handles reordering if broadphase changes)
-- Zero tangents for frictionless contacts are valid (visualized as zero-length arrows, effectively invisible)
+- Use `pairRanges_` for correct indexing: `createConstraints()` creates one `FrictionConstraint` per contact point (1:1 with `constraints_`), not per collision pair. Since all contacts in a pair share the same normal, they all have the same tangent basis, so we read from the first constraint in the range.
+- Zero tangents for frictionless collisions are valid (visualized as zero-length arrows, effectively invisible)
+- Early return when `frictionConstraints_` is empty avoids unnecessary iteration
 
 #### DataRecorder (msd-sim)
 - **Current location**: `msd/msd-sim/src/DataRecorder/DataRecorder.cpp`
@@ -179,76 +211,115 @@ void CollisionPipeline::extractTangentsFromConstraints() {
 #### Python Bindings (msd-pybind)
 - **Current location**: `msd/msd-pybind/src/record_bindings.cpp`
 - **Changes required**:
-  - Add `.def_readwrite("tangent1", &CollisionResultRecord::tangent1, py::return_value_policy::reference_internal)`
-  - Add `.def_readwrite("tangent2", &CollisionResultRecord::tangent2, py::return_value_policy::reference_internal)`
+  - Add `.def_readonly("tangent1", &CollisionResultRecord::tangent1)` (matching existing `def_readonly` pattern for all record fields)
+  - Add `.def_readonly("tangent2", &CollisionResultRecord::tangent2)` (no `return_value_policy` needed -- `Vector3DRecord` is a value type, not a pointer/reference)
 - **Backward compatibility**: Fields are optional (older recordings return default Vector3DRecord with zeros)
 
 ```cpp
-py::class_<msd_transfer::CollisionResultRecord, msd_transfer::BaseTransferObject>(
-  m, "CollisionResultRecord")
+py::class_<msd_transfer::CollisionResultRecord>(m, "CollisionResultRecord")
   .def(py::init<>())
-  .def_readwrite("body_a_id", &msd_transfer::CollisionResultRecord::body_a_id)
-  .def_readwrite("body_b_id", &msd_transfer::CollisionResultRecord::body_b_id)
-  .def_readwrite("normal", &msd_transfer::CollisionResultRecord::normal)
-  .def_readwrite("penetrationDepth", &msd_transfer::CollisionResultRecord::penetrationDepth)
-  // NEW
-  .def_readwrite("tangent1", &msd_transfer::CollisionResultRecord::tangent1,
-                 py::return_value_policy::reference_internal)
-  .def_readwrite("tangent2", &msd_transfer::CollisionResultRecord::tangent2,
-                 py::return_value_policy::reference_internal)
-  // ...
+  .def_readonly("id", &msd_transfer::CollisionResultRecord::id)
+  .def_readonly("body_a_id", &msd_transfer::CollisionResultRecord::body_a_id)
+  .def_readonly("body_b_id", &msd_transfer::CollisionResultRecord::body_b_id)
+  .def_readonly("normal", &msd_transfer::CollisionResultRecord::normal)
+  .def_readonly("penetrationDepth", &msd_transfer::CollisionResultRecord::penetrationDepth)
+  // NEW: Tangent basis for friction visualization
+  .def_readonly("tangent1", &msd_transfer::CollisionResultRecord::tangent1)
+  .def_readonly("tangent2", &msd_transfer::CollisionResultRecord::tangent2)
+  // ... contacts, frame_id ...
 ```
 
 #### Replay Python Models (replay)
 - **Current location**: `replay/replay/models.py`
 - **Changes required**:
-  - Add `tangent1: Optional[Vector3D] = None` to `Collision` model
-  - Add `tangent2: Optional[Vector3D] = None` to `Collision` model
+  - Add `tangent1: Vec3 | None = None` to `CollisionInfo` model
+  - Add `tangent2: Vec3 | None = None` to `CollisionInfo` model
 - **Backward compatibility**: Optional fields default to `None` for older recordings
 
 ```python
-class Collision(BaseModel):
+class CollisionInfo(BaseModel):
     body_a_id: int
     body_b_id: int
-    normal: Vector3D
+    normal: Vec3
     penetration_depth: float
-    contacts: List[ContactPoint]
+    contacts: list[ContactPoint]
 
     # NEW: Tangent basis for friction visualization
-    tangent1: Optional[Vector3D] = None
-    tangent2: Optional[Vector3D] = None
+    tangent1: Vec3 | None = None
+    tangent2: Vec3 | None = None
 ```
 
 #### Replay SimulationService (replay)
 - **Current location**: `replay/replay/services/simulation_service.py`
 - **Changes required**:
-  - Read `tangent1` and `tangent2` from `CollisionResultRecord` in `_build_collision_from_record()`
-  - Pass tangent data to `Collision` model constructor
+  - Add tangent extraction inline within the existing collision list comprehension in `get_frame_data()` (no new helper method -- collision construction is inline in the current code at lines 109-138)
+  - Use `Vec3` model (matching existing pattern)
 - **Backward compatibility**: Check if fields exist before reading (graceful fallback to `None`)
 
+The existing collision construction in `get_frame_data()` currently looks like:
+
 ```python
-def _build_collision_from_record(self, record: CollisionResultRecord) -> Collision:
-    normal = Vector3D(x=record.normal.x, y=record.normal.y, z=record.normal.z)
-
-    # NEW: Read tangent basis (backward compatible)
-    tangent1 = None
-    tangent2 = None
-    if hasattr(record, 'tangent1') and record.tangent1:
-        tangent1 = Vector3D(x=record.tangent1.x, y=record.tangent1.y, z=record.tangent1.z)
-    if hasattr(record, 'tangent2') and record.tangent2:
-        tangent2 = Vector3D(x=record.tangent2.x, y=record.tangent2.y, z=record.tangent2.z)
-
-    contacts = [self._build_contact_from_record(c) for c in record.contacts.data]
-
-    return Collision(
-        body_a_id=record.body_a_id,
-        body_b_id=record.body_b_id,
-        normal=normal,
-        penetration_depth=record.penetrationDepth,
-        contacts=contacts,
-        tangent1=tangent1,
-        tangent2=tangent2
+collision_records = self.db.select_collisions_by_frame(frame_id)
+collisions = [
+    CollisionInfo(
+        body_a_id=collision.body_a_id,
+        body_b_id=collision.body_b_id,
+        normal=Vec3(
+            x=collision.normal.x,
+            y=collision.normal.y,
+            z=collision.normal.z,
+        ),
+        penetration_depth=collision.penetrationDepth,
+        contacts=[...],
     )
+    for collision in collision_records
+]
+```
+
+Modified version with tangent extraction (inline, matching existing pattern):
+
+```python
+collision_records = self.db.select_collisions_by_frame(frame_id)
+collisions = [
+    CollisionInfo(
+        body_a_id=collision.body_a_id,
+        body_b_id=collision.body_b_id,
+        normal=Vec3(
+            x=collision.normal.x,
+            y=collision.normal.y,
+            z=collision.normal.z,
+        ),
+        penetration_depth=collision.penetrationDepth,
+        contacts=[
+            ContactPoint(
+                point_a=Vec3(
+                    x=contact.pointA.x,
+                    y=contact.pointA.y,
+                    z=contact.pointA.z,
+                ),
+                point_b=Vec3(
+                    x=contact.pointB.x,
+                    y=contact.pointB.y,
+                    z=contact.pointB.z,
+                ),
+                depth=contact.depth,
+            )
+            for contact in collision.contacts
+        ],
+        # NEW: Tangent basis (backward compatible — None if fields missing)
+        tangent1=Vec3(
+            x=collision.tangent1.x,
+            y=collision.tangent1.y,
+            z=collision.tangent1.z,
+        ) if hasattr(collision, 'tangent1') else None,
+        tangent2=Vec3(
+            x=collision.tangent2.x,
+            y=collision.tangent2.y,
+            z=collision.tangent2.z,
+        ) if hasattr(collision, 'tangent2') else None,
+    )
+    for collision in collision_records
+]
 ```
 
 #### Three.js ContactOverlay (replay/static)
@@ -357,7 +428,7 @@ class ContactOverlay {
 |-----------|-----------|-------------------|
 | `CollisionResult` | `toRecord_WithTangents_SerializesProperly` | Tangent vectors serialize to Vector3DRecord correctly |
 | `CollisionResult` | `fromRecord_WithoutTangents_DefaultsToZero` | Backward compatibility: missing tangents default to zero |
-| `CollisionPipeline` | `extractTangentsFromConstraints_MatchesByBodyIndices` | Tangent data correctly associated with collision pairs |
+| `CollisionPipeline` | `extractTangentsFromConstraints_MatchesByPairRanges` | Tangent data correctly associated with collision pairs via pairRanges_ |
 | `CollisionPipeline` | `extractTangentsFromConstraints_NoFriction_LeavesZeros` | Frictionless collisions keep zero tangents |
 | `TangentBasis` | `computeTangentBasis_Determinism` | Same normal produces same tangent basis every time |
 | `TangentBasis` | `computeTangentBasis_Orthogonality` | t1·t2 = 0, t1·n = 0, t2·n = 0 within tolerance |
@@ -436,6 +507,37 @@ cpp_sqlite handles missing columns gracefully:
 - **Rendering overhead**: +2 ArrowHelper instances per collision (minimal GPU impact)
 
 Estimated total overhead: < 1% for typical scenarios (10-100 collisions per frame)
+
+---
+
+## Architect Revision Notes
+
+**Date**: 2026-02-12
+**Responding to**: Design Review -- Initial Assessment
+
+### Changes Made
+
+| Issue ID | Original | Revised | Rationale |
+|----------|----------|---------|-----------|
+| I1 | `extractTangentsFromConstraints()` iterated `frictionConstraints_` sequentially assuming 1 friction constraint per collision, matched by body indices | Uses `pairRanges_` to index into `frictionConstraints_` by range; reads tangent from first constraint in each pair's range | `createConstraints()` creates one `FrictionConstraint` per contact point (1:1 with `constraints_`), not per collision pair. `pairRanges_` correctly maps collision pairs to their constraint index ranges. All contacts in a pair share the same normal/tangent basis, so reading from the first is correct. |
+| I2 | Used `def_readwrite` with `py::return_value_policy::reference_internal` for tangent bindings | Uses `def_readonly` with no return_value_policy | All existing `CollisionResultRecord` bindings use `def_readonly`. `Vector3DRecord` is a value type, so no return_value_policy is needed. |
+| I3 | Referenced `Vector3D` type and `Collision` model class in Python code | Uses `Vec3` and `CollisionInfo` (actual class names in `replay/replay/models.py`) | Matches the existing codebase. `Vec3` is the 3D vector model; `CollisionInfo` is the collision response model. |
+| I4 | Showed tangent extraction in a new `_build_collision_from_record()` helper method | Shows tangent extraction inline within the existing `get_frame_data()` list comprehension (lines 109-138) | No such helper method exists. Collision construction is inline in `get_frame_data()`. The revision matches the actual code pattern. |
+| I5 | `fromRecord()` tangent deserialization mentioned but implementation not shown | Full `fromRecord()` implementation shown with tangent1/tangent2 deserialization from record fields | Completes the serialization round-trip. Default-initialized `Vector3DRecord` (all zeros) from older recordings produces zero-vector tangents, which is the desired fallback. |
+
+### Diagram Updates
+- Updated note on `CollisionPipeline::extractTangentsFromConstraints` to reference `pairRanges_` indexing instead of body-index matching
+- Updated `CollisionModel` to `CollisionInfo` and `Vector3D` to `Vec3` in the replay package
+
+### Unchanged (Per Reviewer Guidance)
+- CollisionResultRecord extension (tangent1/tangent2 fields with BOOST_DESCRIBE_STRUCT)
+- CollisionResult tangent member placement (geometry-level, not pipeline-level)
+- Placement in execute() flow (after createConstraints(), before clearEphemeralState())
+- DataRecorder zero-change approach (automatic via toRecord())
+- Three.js ContactOverlay design (color scheme, arrow length, toggle)
+- Backward compatibility strategy (zero-vector defaults, optional Python fields)
+- Test plan (round-trip, extraction, determinism, orthogonality)
+- Decision to persist tangents rather than recompute from normal
 
 ---
 
