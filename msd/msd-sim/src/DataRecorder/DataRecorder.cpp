@@ -288,7 +288,9 @@ void DataRecorder::recordStaticAsset(const AssetInertial& asset)
   // Record physical properties (asset_id for geometry lookup)
   // Ticket: 0056e_threejs_core_visualization (R0a)
   auto& physicalDAO = getDAO<msd_transfer::AssetPhysicalStaticRecord>();
-  auto physicalRecord = asset.toStaticRecord(false);  // false = not environment
+  // Call base class method explicitly
+  const AssetPhysical& physicalBase = asset;
+  auto physicalRecord = physicalBase.toStaticRecord(false);  // false = not environment
   physicalDAO.addToBuffer(physicalRecord);
 }
 
