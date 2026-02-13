@@ -2,11 +2,11 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Implementation
+- [x] Ready for Implementation
 - [ ] Implementation Complete — Awaiting Review
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Ready for Implementation
 **Type**: Feature / Testing
 **Priority**: High
 **Assignee**: TBD
@@ -20,47 +20,78 @@
 
 ## Overview
 
-Create a GTest fixture base class that manages the full lifecycle of a replay-enabled simulation test: asset database creation, Engine initialization, recording enablement, and cleanup. Tests inheriting from this fixture get real asset-registry-backed geometry and produce self-contained SQLite recordings viewable in the browser.
+Create a GTest fixture base class and a build-time asset generation executable that together manage the full lifecycle of a replay-enabled simulation test. A standalone `generate_test_assets` executable creates a shared test asset database at build time. The `ReplayEnabledTest` fixture copies this pre-built database per-test, initializes Engine, enables recording, and cleans up. Tests inheriting from this fixture get real asset-registry-backed geometry and produce self-contained SQLite recordings viewable in the browser.
 
 ---
 
 ## Requirements
 
-### R1: Asset Database Creation
+### R1: Test Asset Generator Executable
 
-The fixture's `SetUp()` creates a SQLite database populated with standard test primitives:
+A standalone C++ executable that creates a SQLite database populated with standard test primitives. Runs once at build time via CMake `add_custom_command`.
 
-| Asset Name | Geometry | Purpose |
-|------------|----------|---------|
-| `"unit_cube"` | 1x1x1 cube | Standard dynamic object |
-| `"large_cube"` | 2x2x2 cube | Larger dynamic/environment object |
-| `"floor_slab"` | 100x100x100 cube | Floor/wall environment objects |
+| Asset Name | Factory Call | Purpose |
+|------------|-------------|---------|
+| `"unit_cube"` | `GeometryFactory::createCube(1.0)` | Standard 1x1x1 dynamic object |
+| `"large_cube"` | `GeometryFactory::createCube(2.0)` | Larger dynamic/environment object |
+| `"floor_slab"` | `GeometryFactory::createCube(100.0)` | Floor/wall environment objects |
 
-Uses `GeometryFactory::createCube()` to produce `MeshRecord` and writes `ObjectRecord` entries via cpp_sqlite DAOs. This follows the proven pattern from `EngineIntegrationTest::createTestAssets()`.
+Each asset gets both a visual MeshRecord and a collision MeshRecord, plus an ObjectRecord with FK references to both. Follows the proven pattern from `msd/msd-asset-gen/src/generate_assets.cpp`.
 
-### R2: Engine Lifecycle
+Usage: `generate_test_assets <output.db>`
 
-After creating the asset database:
-1. Create `Engine{dbPath}` — reads geometry via `AssetRegistry` (read-only connection)
-2. Call `engine_.getWorldModel().enableRecording(dbPath)` — `DataRecorder` opens same DB read-write, adds state tables
+Links against `msd_assets` only (lightweight — no `msd_sim` dependency).
 
-On `TearDown()`:
-1. Destroy Engine — RAII triggers `DataRecorder` flush and thread join
-2. If `MSD_KEEP_RECORDINGS` env var is `"0"`, delete the `.db` file
+### R2: CMake Build-Time Integration
 
-### R3: Recording Output Path
-
-Recordings are written to `{MSD_RECORDINGS_DIR}/{TestSuite}_{TestName}.db` where `MSD_RECORDINGS_DIR` is a CMake compile-time define:
+The executable runs as a custom command during build:
 
 ```cmake
-target_compile_definitions(msd_sim_test PRIVATE
-    MSD_RECORDINGS_DIR="${CMAKE_SOURCE_DIR}/replay/recordings"
+# In replay/tools/CMakeLists.txt
+add_executable(generate_test_assets generate_test_assets.cpp)
+target_link_libraries(generate_test_assets PRIVATE msd_assets)
+
+set(TEST_ASSETS_DB "${CMAKE_BINARY_DIR}/test_assets.db")
+add_custom_command(
+  OUTPUT "${TEST_ASSETS_DB}"
+  COMMAND generate_test_assets "${TEST_ASSETS_DB}"
+  DEPENDS generate_test_assets
+  COMMENT "Generating test asset database"
+  VERBATIM
 )
+add_custom_target(test_assets_db ALL DEPENDS "${TEST_ASSETS_DB}")
 ```
 
-The test suite and test name are obtained from `::testing::UnitTest::GetInstance()->current_test_info()`.
+The test executable depends on this target and receives paths via compile definitions:
 
-### R4: Spawn Helpers
+```cmake
+# In msd/msd-sim/test/CMakeLists.txt
+target_compile_definitions(${MSD_SIM_TEST_NAME} PRIVATE
+  MSD_TEST_ASSETS_DB="${CMAKE_BINARY_DIR}/test_assets.db"
+  MSD_RECORDINGS_DIR="${CMAKE_SOURCE_DIR}/replay/recordings"
+)
+add_dependencies(${MSD_SIM_TEST_NAME} test_assets_db)
+```
+
+### R3: Fixture SetUp — Copy and Initialize
+
+The fixture's `SetUp()` does NOT create assets from scratch. Instead:
+
+1. Get test name from `::testing::UnitTest::GetInstance()->current_test_info()`
+2. Build per-test path: `{MSD_RECORDINGS_DIR}/{TestSuite}_{TestName}.db`
+3. Create recordings directory: `fs::create_directories(MSD_RECORDINGS_DIR)`
+4. Copy pre-built asset DB: `fs::copy_file(MSD_TEST_ASSETS_DB, dbPath_, overwrite_existing)`
+5. Create `Engine{dbPath_}` — reads geometry via `AssetRegistry` (read-only)
+6. Call `engine_->getWorldModel().enableRecording(dbPath_)` — `DataRecorder` opens same DB read-write, adds state tables via `CREATE TABLE IF NOT EXISTS`
+
+This preserves the single-database design: each test gets a self-contained `.db` with both geometry tables (from the copy) and state tables (from recording).
+
+### R4: Fixture TearDown
+
+1. Destroy Engine — RAII triggers `DataRecorder` flush and thread join
+2. If `MSD_KEEP_RECORDINGS` env var is `"0"`, delete the `.db` file; otherwise preserve it for the replay viewer
+
+### R5: Spawn Helpers
 
 Convenience methods that delegate to `Engine::spawnInertialObject()` and `Engine::spawnEnvironmentObject()`:
 
@@ -69,7 +100,9 @@ const AssetInertial& spawnCube(const std::string& assetName, const Coordinate& p
 const AssetEnvironment& spawnEnvironment(const std::string& assetName, const Coordinate& position);
 ```
 
-### R5: Simulation Stepping
+These pass a default `AngularCoordinate{}` for orientation.
+
+### R6: Simulation Stepping
 
 ```cpp
 void step(int frames = 1, std::chrono::milliseconds dt = std::chrono::milliseconds{16});
@@ -84,13 +117,16 @@ Tracks cumulative simulation time internally. Each call advances `currentTime_ +
 ### New Files
 | File | Purpose |
 |------|---------|
+| `replay/tools/generate_test_assets.cpp` | Standalone executable that creates test asset database |
 | `msd/msd-sim/test/Replay/ReplayEnabledTest.hpp` | Fixture header |
 | `msd/msd-sim/test/Replay/ReplayEnabledTest.cpp` | Fixture implementation |
+| `msd/msd-sim/test/Replay/CMakeLists.txt` | Add Replay sources to msd_sim_test |
 
 ### Modified Files
 | File | Change |
 |------|--------|
-| `msd/msd-sim/CMakeLists.txt` | Add `test/Replay/ReplayEnabledTest.cpp` to test sources; add `MSD_RECORDINGS_DIR` compile definition |
+| `replay/tools/CMakeLists.txt` | Add `generate_test_assets` target + `add_custom_command` + `add_custom_target(test_assets_db)` |
+| `msd/msd-sim/test/CMakeLists.txt` | Add `add_subdirectory(Replay)`, `MSD_TEST_ASSETS_DB` and `MSD_RECORDINGS_DIR` compile definitions, `add_dependencies` on `test_assets_db` |
 
 ---
 
@@ -98,9 +134,11 @@ Tracks cumulative simulation time internally. Each call advances `currentTime_ +
 
 | Component | Location | Reused For |
 |-----------|----------|------------|
-| `GeometryFactory::createCube()` | `msd/msd-assets/src/GeometryFactory.hpp:43` | Creating MeshRecords for test geometry |
-| `EngineIntegrationTest::createTestAssets()` | `msd/msd-sim/test/EngineIntegrationTest.cpp:89` | Pattern for writing geometry to test DB via DAOs |
+| `generate_assets.cpp` | `msd/msd-asset-gen/src/generate_assets.cpp` | Pattern for `generate_test_assets.cpp` (GeometryFactory + DAO insertion) |
+| `GeometryFactory::createCube()` | `msd/msd-assets/src/GeometryFactory.hpp` | Creating MeshRecords for test geometry |
 | `Engine` | `msd/msd-sim/src/Engine.hpp` | Orchestrates AssetRegistry + WorldModel |
+| `Engine::spawnInertialObject()` | `msd/msd-sim/src/Engine.cpp:46` | Spawn helpers delegate here |
+| `Engine::spawnEnvironmentObject()` | `msd/msd-sim/src/Engine.cpp:77` | Spawn helpers delegate here |
 | `WorldModel::enableRecording()` | `msd/msd-sim/src/Environment/WorldModel.cpp:283` | Enables DataRecorder on existing DB |
 
 ---
@@ -123,8 +161,6 @@ protected:
   std::filesystem::path recordingPath() const;
 
 private:
-  void createAssetDatabase();
-
   std::filesystem::path dbPath_;
   std::unique_ptr<Engine> engine_;
   std::chrono::milliseconds currentTime_{0};
@@ -158,13 +194,15 @@ TEST_F(ReplayEnabledTest, TearDown_ProducesRecordingWithFrames)
 
 ## Acceptance Criteria
 
-1. [ ] **AC1**: Fixture creates SQLite database with MeshRecord/ObjectRecord for standard primitives
-2. [ ] **AC2**: Engine successfully reads geometry from the same database
-3. [ ] **AC3**: DataRecorder successfully writes state tables to the same database
-4. [ ] **AC4**: Recording output path follows `{MSD_RECORDINGS_DIR}/{Suite}_{Test}.db` convention
-5. [ ] **AC5**: `MSD_KEEP_RECORDINGS=0` removes recording on TearDown; default preserves it
-6. [ ] **AC6**: `step()` advances simulation and produces recorded frames
-7. [ ] **AC7**: Existing tests compile and pass without modification
+1. [ ] **AC1**: `generate_test_assets` executable creates SQLite database with MeshRecord/ObjectRecord for unit_cube, large_cube, floor_slab
+2. [ ] **AC2**: CMake runs `generate_test_assets` at build time, producing `build/{type}/test_assets.db`
+3. [ ] **AC3**: Fixture copies pre-built asset DB to per-test recording path
+4. [ ] **AC4**: Engine successfully reads geometry from the copied database
+5. [ ] **AC5**: DataRecorder successfully writes state tables to the same database
+6. [ ] **AC6**: Recording output path follows `{MSD_RECORDINGS_DIR}/{Suite}_{Test}.db` convention
+7. [ ] **AC7**: `MSD_KEEP_RECORDINGS=0` removes recording on TearDown; default preserves it
+8. [ ] **AC8**: `step()` advances simulation and produces recorded frames
+9. [ ] **AC9**: Existing tests compile and pass without modification
 
 ---
 
