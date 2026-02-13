@@ -166,6 +166,22 @@ Key questions for design:
   - Constraint-to-body-ID mapping uses `pairRanges_` to map constraint index → collision pair → body IDs
   - Design pattern unchanged, implementation details updated for new architecture
 
+### Design Revision (Visitor Pattern)
+- **Started**: 2026-02-12 (human feedback before implementation)
+- **Completed**: 2026-02-12
+- **Branch**: 0057-contact-tangent-recording
+- **Artifacts**:
+  - Updated `docs/designs/contact-tangent-recording/design.md` (visitor pattern)
+- **Notes**:
+  - **Major design change per human feedback**: Replaced `toRecord()` returning `std::any` with visitor pattern
+  - Added `ConstraintRecordVisitor` abstract interface with `visit(const ContactConstraintRecord&)` and `visit(const FrictionConstraintRecord&)` overloads
+  - Constraints implement `recordState(visitor, bodyAId, bodyBId)` instead of `toRecord()`
+  - `DataRecorderVisitor` concrete implementation wraps DataRecorder, buffers records to DAOs
+  - `CollisionPipeline::recordConstraints()` creates visitor, iterates constraints, dispatches recordState() calls
+  - Benefits: compile-time type safety, no dynamic_cast, no std::any_cast, compiler enforces handling all constraint types
+  - **Option B confirmed**: CollisionPipeline owns recordConstraints() method, keeps constraints private (no accessors exposed)
+  - Ready for implementation (no additional review cycle needed per human approval)
+
 ---
 
 ## Human Feedback

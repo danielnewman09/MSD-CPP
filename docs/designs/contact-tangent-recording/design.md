@@ -106,23 +106,47 @@ See: `./contact-tangent-recording.puml`
 
 ### Modified Components
 
+#### ConstraintRecordVisitor (msd-transfer)
+- **Location**: `msd/msd-transfer/src/ConstraintRecordVisitor.hpp` (new interface)
+- **Purpose**: Visitor interface for type-safe constraint record dispatching
+- **Type**: Abstract interface
+- **Key interfaces**:
+  ```cpp
+  class ConstraintRecordVisitor {
+  public:
+    virtual ~ConstraintRecordVisitor() = default;
+
+    virtual void visit(const ContactConstraintRecord& record) = 0;
+    virtual void visit(const FrictionConstraintRecord& record) = 0;
+    // Future constraint types add new visit() overloads
+  };
+  ```
+- **Design rationale**:
+  - **Type safety**: Compiler enforces handling of all constraint types (missing visit() overload = compile error)
+  - **No dynamic_cast**: Constraints dispatch via virtual `recordState()` call, not runtime type inspection
+  - **No std::any_cast**: Concrete visitor receives typed record directly
+  - **Extensibility**: New constraint types extend interface with new visit() overload, compiler catches unhandled cases
+
 #### Constraint (msd-sim)
 - **Current location**: `msd/msd-sim/src/Physics/Constraints/Constraint.hpp`
 - **Changes required**:
-  - Add pure virtual method `toRecord(uint32_t bodyAId, uint32_t bodyBId) const` returning `std::any`
-  - Each concrete constraint implements `toRecord()` to return its specific record type wrapped in `std::any`
+  - Add pure virtual method `recordState(ConstraintRecordVisitor& visitor, uint32_t bodyAId, uint32_t bodyBId) const`
+  - Each concrete constraint implements `recordState()` by building its specific record and calling `visitor.visit(record)`
 - **Backward compatibility**: New virtual method added (non-breaking — existing constraints must implement it)
 - **Design rationale**:
-  - `std::any` enables type-erased return (caller uses `std::any_cast<T>` to extract specific record type)
-  - Alternative considered: visitor pattern (rejected as more intrusive — requires visitor interface on each constraint)
-  - Alternative considered: template method pattern (rejected — incompatible with polymorphic base class)
+  - **Visitor pattern**: Constraints build typed records and dispatch to visitor via overload resolution (no type erasure)
+  - **Separation of concerns**: Constraint builds record, visitor decides what to do with it (buffer to DAO, serialize to JSON, etc.)
+  - **vs. std::any**: Compile-time type safety instead of runtime type inspection
+  - **vs. template method**: Compatible with polymorphic base class (visitor is runtime polymorphic)
 
 ```cpp
 // In Constraint base class (Constraint.hpp)
 class Constraint {
 public:
-  // NEW: Serialize constraint state to transfer record
-  [[nodiscard]] virtual std::any toRecord(uint32_t bodyAId, uint32_t bodyBId) const = 0;
+  // NEW: Serialize constraint state via visitor pattern
+  virtual void recordState(ConstraintRecordVisitor& visitor,
+                           uint32_t bodyAId,
+                           uint32_t bodyBId) const = 0;
 
   // ... existing virtual methods ...
 };
@@ -130,20 +154,24 @@ public:
 
 #### FrictionConstraint (msd-sim)
 - **Current location**: `msd/msd-sim/src/Physics/Constraints/FrictionConstraint.hpp`
-- **Changes required**: Implement `toRecord()` method
+- **Changes required**: Implement `recordState()` method
 - **Backward compatibility**: No existing call sites affected (new method implementation)
 
 ```cpp
 // In FrictionConstraint (FrictionConstraint.hpp)
 class FrictionConstraint : public Constraint {
 public:
-  [[nodiscard]] std::any toRecord(uint32_t bodyAId, uint32_t bodyBId) const override;
+  void recordState(ConstraintRecordVisitor& visitor,
+                   uint32_t bodyAId,
+                   uint32_t bodyBId) const override;
 
   // ... existing methods ...
 };
 
 // Implementation (FrictionConstraint.cpp)
-std::any FrictionConstraint::toRecord(uint32_t bodyAId, uint32_t bodyBId) const {
+void FrictionConstraint::recordState(ConstraintRecordVisitor& visitor,
+                                      uint32_t bodyAId,
+                                      uint32_t bodyBId) const {
   msd_transfer::FrictionConstraintRecord record;
   record.body_a_id = bodyAId;
   record.body_b_id = bodyBId;
@@ -159,26 +187,31 @@ std::any FrictionConstraint::toRecord(uint32_t bodyAId, uint32_t bodyBId) const 
   record.friction_coefficient = friction_coefficient_;
   record.normal_lambda = normal_lambda_;
 
-  return record;
+  // Dispatch to visitor via overload resolution
+  visitor.visit(record);
 }
 ```
 
 #### ContactConstraint (msd-sim)
 - **Current location**: `msd/msd-sim/src/Physics/Constraints/ContactConstraint.hpp`
-- **Changes required**: Implement `toRecord()` method
+- **Changes required**: Implement `recordState()` method
 - **Backward compatibility**: No existing call sites affected (new method implementation)
 
 ```cpp
 // In ContactConstraint (ContactConstraint.hpp)
 class ContactConstraint : public Constraint {
 public:
-  [[nodiscard]] std::any toRecord(uint32_t bodyAId, uint32_t bodyBId) const override;
+  void recordState(ConstraintRecordVisitor& visitor,
+                   uint32_t bodyAId,
+                   uint32_t bodyBId) const override;
 
   // ... existing methods ...
 };
 
 // Implementation (ContactConstraint.cpp)
-std::any ContactConstraint::toRecord(uint32_t bodyAId, uint32_t bodyBId) const {
+void ContactConstraint::recordState(ConstraintRecordVisitor& visitor,
+                                     uint32_t bodyAId,
+                                     uint32_t bodyBId) const {
   msd_transfer::ContactConstraintRecord record;
   record.body_a_id = bodyAId;
   record.body_b_id = bodyBId;
@@ -193,60 +226,62 @@ std::any ContactConstraint::toRecord(uint32_t bodyAId, uint32_t bodyBId) const {
   record.restitution = restitution_;
   record.pre_impact_rel_vel_normal = pre_impact_rel_vel_normal_;
 
-  return record;
+  // Dispatch to visitor via overload resolution
+  visitor.visit(record);
 }
 ```
+
+#### DataRecorderVisitor (msd-sim)
+- **Location**: `msd/msd-sim/src/DataRecorder/DataRecorderVisitor.hpp` (new concrete visitor)
+- **Purpose**: Concrete visitor that buffers constraint records to DataRecorder DAOs
+- **Type**: Concrete implementation of `ConstraintRecordVisitor`
+- **Key interfaces**:
+  ```cpp
+  class DataRecorderVisitor : public ConstraintRecordVisitor {
+  public:
+    DataRecorderVisitor(DataRecorder& recorder, uint32_t frameId)
+      : recorder_{recorder}, frameId_{frameId} {}
+
+    void visit(const ContactConstraintRecord& record) override {
+      auto recordCopy = record;
+      recordCopy.frame.id = frameId_;
+      recorder_.getDAO<ContactConstraintRecord>().addToBuffer(recordCopy);
+    }
+
+    void visit(const FrictionConstraintRecord& record) override {
+      auto recordCopy = record;
+      recordCopy.frame.id = frameId_;
+      recorder_.getDAO<FrictionConstraintRecord>().addToBuffer(recordCopy);
+    }
+
+  private:
+    DataRecorder& recorder_;
+    uint32_t frameId_;
+  };
+  ```
+- **Design rationale**:
+  - **Single responsibility**: Visitor handles DAO buffering logic, constraints handle record building
+  - **Type safety**: Each visit() overload receives typed record, no casting required
+  - **Extensibility**: New constraint types add new visit() overload — compiler enforces completeness
 
 #### DataRecorder (msd-sim)
 - **Current location**: `msd/msd-sim/src/DataRecorder/DataRecorder.hpp/.cpp`
-- **Changes required**:
-  - Add `recordConstraintStates(uint32_t frameId, const CollisionPipeline& pipeline)` method
-  - Iterate `pipeline.getContactConstraints()` and `pipeline.getFrictionConstraints()`, call `toRecord()`, set FK, buffer
-- **Backward compatibility**: New method, no existing call sites affected
-
-```cpp
-// In DataRecorder.hpp (new method)
-void recordConstraintStates(uint32_t frameId, const CollisionPipeline& pipeline);
-
-// Implementation (DataRecorder.cpp)
-void DataRecorder::recordConstraintStates(uint32_t frameId, const CollisionPipeline& pipeline) {
-  // Record contact constraints
-  for (const auto& constraint : pipeline.getContactConstraints()) {
-    auto recordAny = constraint->toRecord(
-      pipeline.getBodyAId(constraint.get()),
-      pipeline.getBodyBId(constraint.get())
-    );
-    auto record = std::any_cast<msd_transfer::ContactConstraintRecord>(recordAny);
-    record.frame.id = frameId;
-    getDAO<msd_transfer::ContactConstraintRecord>().addToBuffer(record);
-  }
-
-  // Record friction constraints
-  for (const auto& constraint : pipeline.getFrictionConstraints()) {
-    auto recordAny = constraint->toRecord(
-      pipeline.getBodyAId(constraint.get()),
-      pipeline.getBodyBId(constraint.get())
-    );
-    auto record = std::any_cast<msd_transfer::FrictionConstraintRecord>(recordAny);
-    record.frame.id = frameId;
-    getDAO<msd_transfer::FrictionConstraintRecord>().addToBuffer(record);
-  }
-}
-```
-
-**Design questions**:
-1. **Body ID retrieval**: `CollisionPipeline` needs accessor methods `getBodyAId(const Constraint*)` and `getBodyBId(const Constraint*)` to map constraint pointer to body IDs. Alternative: constraints already store `bodyAIndex()` and `bodyBIndex()`, but those are indices into the solver's body list, not persistent IDs. The pipeline must provide the mapping from index to ID.
-2. **Constraint iteration**: Assumes `CollisionPipeline` exposes `getContactConstraints()` and `getFrictionConstraints()` (currently these are private members). If not exposed, the pipeline must provide a `recordConstraints(DataRecorder&, uint32_t frameId)` method that handles iteration internally.
+- **Changes required**: No changes (visitor pattern removes need for constraint-specific recording methods)
+- **Backward compatibility**: No changes required (CollisionPipeline uses visitor internally)
 
 #### CollisionPipeline (msd-sim)
 - **Current location**: `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp/.cpp`
 - **Current state** ([Ticket 0058](../../tickets/0058_constraint_ownership_cleanup.md)): Single owning container `allConstraints_` with interleaved [CC, FC, CC, FC, ...] storage for friction-enabled contacts. Typed views generated on-demand via `buildSolverView()` and `buildContactView()`.
 - **Changes required**:
-  - Keep constraints private, add `recordConstraints(DataRecorder& recorder, uint32_t frameId)` method that iterates constraints and calls recorder
-  - Internally: iterate `allConstraints_`, use `dynamic_cast<ContactConstraint*>` and `dynamic_cast<FrictionConstraint*>` to extract typed records
+  - Add `recordConstraints(DataRecorder& recorder, uint32_t frameId)` method
+  - Method creates `DataRecorderVisitor`, iterates `allConstraints_`, calls `constraint->recordState(visitor, bodyAId, bodyBId)` for each
   - Lookup collision pair via `pairRanges_` to map constraint index → collision pair → (bodyAId, bodyBId)
+  - Constraints remain private (no accessors exposed)
 - **Backward compatibility**: New method, no breaking changes
-- **Design rationale**: Keeps constraint ownership encapsulated, follows existing `CollisionPipeline` pattern of exposing high-level operations rather than raw data
+- **Design rationale**:
+  - **Option B from design discussion**: Pipeline owns the recording method, keeps constraints encapsulated
+  - **Visitor pattern**: No dynamic_cast or std::any_cast — constraints dispatch via virtual call
+  - **Separation of concerns**: Pipeline handles iteration and body ID mapping, constraints handle record building, visitor handles DAO buffering
 
 ```cpp
 // CollisionPipeline.hpp (new method)
@@ -258,37 +293,30 @@ private:
   std::vector<std::unique_ptr<Constraint>> allConstraints_;  // Single owning container (ticket 0058)
   std::vector<CollisionPair> collisions_;  // Maps collision pairs to body IDs
   std::vector<PairConstraintRange> pairRanges_;  // Maps constraint index → collision pair
+
+  // Helper: Map constraint index to collision pair index
+  size_t findPairIndexForConstraint(size_t constraintIdx) const;
 };
 
 // Implementation (CollisionPipeline.cpp)
 void CollisionPipeline::recordConstraints(DataRecorder& recorder, uint32_t frameId) const {
+  // Create visitor wrapping DataRecorder
+  DataRecorderVisitor visitor{recorder, frameId};
+
   // Iterate all constraints (interleaved [CC, FC, CC, FC, ...] or all CC if no friction)
   for (size_t i = 0; i < allConstraints_.size(); ++i) {
     const auto& constraint = allConstraints_[i];
 
     // Find collision pair for this constraint (via pairRanges_ lookup)
-    // pairRanges_ maps constraint blocks to collision pairs
-    size_t pairIdx = findPairIndexForConstraint(i);  // Helper method
+    size_t pairIdx = findPairIndexForConstraint(i);
     const auto& pair = collisions_[pairIdx];
 
-    // Dispatch based on concrete type
-    if (auto* cc = dynamic_cast<ContactConstraint*>(constraint.get())) {
-      auto recordAny = cc->toRecord(pair.bodyAId, pair.bodyBId);
-      auto record = std::any_cast<msd_transfer::ContactConstraintRecord>(recordAny);
-      record.frame.id = frameId;
-      recorder.getDAO<msd_transfer::ContactConstraintRecord>().addToBuffer(record);
-    } else if (auto* fc = dynamic_cast<FrictionConstraint*>(constraint.get())) {
-      auto recordAny = fc->toRecord(pair.bodyAId, pair.bodyBId);
-      auto record = std::any_cast<msd_transfer::FrictionConstraintRecord>(recordAny);
-      record.frame.id = frameId;
-      recorder.getDAO<msd_transfer::FrictionConstraintRecord>().addToBuffer(record);
-    }
+    // Constraint builds record and dispatches to visitor (no casting here)
+    constraint->recordState(visitor, pair.bodyAId, pair.bodyBId);
   }
 }
 
 // Helper: Map constraint index to collision pair index
-// For friction-enabled: [CC_0, FC_0, CC_1, FC_1, ...] → pairIdx = i / 2
-// For no friction: [CC_0, CC_1, ...] → pairIdx via pairRanges_ lookup
 size_t CollisionPipeline::findPairIndexForConstraint(size_t constraintIdx) const {
   // Iterate pairRanges_ to find which pair owns this constraint index
   for (const auto& range : pairRanges_) {
@@ -546,10 +574,12 @@ class ContactOverlay {
 
 | New Component | Existing Component | Integration Type | Notes |
 |---------------|-------------------|------------------|-------|
-| FrictionConstraintRecord | FrictionConstraint::toRecord() | Serialization | Constraint calls .toRecord() on member fields (Coordinate -> Vector3D) |
-| ContactConstraintRecord | ContactConstraint::toRecord() | Serialization | Similar pattern to FrictionConstraint |
-| DataRecorder::recordConstraintStates() | CollisionPipeline | Iteration delegation | Pipeline exposes recordConstraints() method encapsulating iteration |
-| WorldModel::recordCurrentFrame() | DataRecorder::recordConstraintStates() | Recording orchestration | Called alongside existing recordCollisions() |
+| ConstraintRecordVisitor | Constraint::recordState() | Visitor pattern | Abstract interface for type-safe dispatching |
+| DataRecorderVisitor | ConstraintRecordVisitor | Concrete visitor | Buffers records to DataRecorder DAOs |
+| FrictionConstraintRecord | FrictionConstraint::recordState() | Serialization | Constraint calls .toRecord() on member fields (Coordinate -> Vector3D), dispatches to visitor |
+| ContactConstraintRecord | ContactConstraint::recordState() | Serialization | Similar pattern to FrictionConstraint |
+| CollisionPipeline::recordConstraints() | DataRecorderVisitor | Iteration orchestration | Pipeline creates visitor, iterates constraints, dispatches recordState() calls |
+| WorldModel::recordCurrentFrame() | CollisionPipeline::recordConstraints() | Recording orchestration | Called alongside existing recordCollisions() |
 | Python FrictionConstraintInfo | FrictionConstraintRecord | Binding | pybind11 exposes fields via .def_readonly() |
 | Three.js ContactOverlay | FrameState.constraints | Rendering | Iterates constraint list and renders arrows |
 
@@ -597,14 +627,18 @@ class ContactOverlay {
    - ✅ **Resolved** (Ticket 0058): CollisionPipeline owns the mapping via `collisions_` vector (bodyAId, bodyBId per collision)
    - Pipeline maps constraint index → collision pair via `pairRanges_` → extract body IDs
 
-2. **Polymorphic constraint recording pattern** — How to extend to future constraint types?
+2. **Polymorphic constraint recording pattern**
+   - ✅ **Resolved** (Human feedback): Use visitor pattern instead of std::any
    - Each new constraint type (HingeConstraint, MotorConstraint) adds:
      - New transfer record (`HingeConstraintRecord`) in msd-transfer
-     - `toRecord()` implementation returning its record type wrapped in `std::any`
-     - New iteration branch in `CollisionPipeline::recordConstraints()` or new recording method in DataRecorder
-   - **Open question**: Is the `std::any` + `any_cast` pattern acceptable, or should we use a different polymorphic approach?
-   - **Alternative**: Template-based dispatch (requires compile-time knowledge of all types)
-   - **Alternative**: Visitor pattern (more intrusive, requires visitor interface on each constraint)
+     - `recordState(visitor, bodyAId, bodyBId)` implementation that builds record and calls `visitor.visit(record)`
+     - New `visit(const HingeConstraintRecord&)` overload on `ConstraintRecordVisitor` interface
+   - **Benefits**: Compile-time type safety, no dynamic_cast, no std::any_cast, compiler enforces handling all constraint types
+
+3. **Constraint iteration and access**
+   - ✅ **Resolved** (Human feedback): Option B — `CollisionPipeline::recordConstraints(DataRecorder&, frameId)` method
+   - Pipeline keeps constraints private, handles iteration and body ID mapping internally
+   - No constraint accessors exposed (encapsulation maintained)
 
 ### Prototype Required
 
@@ -667,14 +701,20 @@ Estimated total overhead: < 2% for typical scenarios (10-100 constraints per fra
 This design establishes a general-purpose constraint state recording pattern while achieving the immediate goal of tangent vector visualization. Key architectural decisions:
 
 1. **Separate transfer records per constraint type** — Schema flexibility for evolving constraint state (FrictionConstraint has tangents, ContactConstraint has restitution, future types have their own state)
-2. **Virtual toRecord() method on Constraint base** — Polymorphic serialization without tight coupling to DataRecorder
-3. **std::any for type-erased return** — Enables heterogeneous constraint iteration without template metaprogramming or visitor pattern complexity
-4. **CollisionPipeline encapsulation** — Pipeline handles constraint-to-body-ID mapping and iteration, DataRecorder just buffers records
-5. **Vector3D for tangent vectors** — Type-safe direction semantics, avoids `globalToLocal` overload bug
+2. **Visitor pattern for polymorphic dispatching** — Type-safe constraint recording without dynamic_cast or std::any_cast
+3. **Virtual recordState() method on Constraint base** — Each constraint builds its record and dispatches to visitor via overload resolution
+4. **CollisionPipeline encapsulation (Option B)** — Pipeline owns `recordConstraints()` method, keeps constraints private, handles iteration and body ID mapping internally
+5. **DataRecorderVisitor concrete implementation** — Wraps DataRecorder, buffers records to appropriate DAOs based on type
+6. **Vector3D for tangent vectors** — Type-safe direction semantics, avoids `globalToLocal` overload bug
 
 The pattern is extensible: adding a `HingeConstraint` requires only:
 - Define `HingeConstraintRecord` struct
-- Implement `toRecord()` on `HingeConstraint`
-- Add iteration branch in `CollisionPipeline::recordConstraints()` or DataRecorder
+- Add `visit(const HingeConstraintRecord&)` overload to `ConstraintRecordVisitor` interface
+- Implement `recordState()` on `HingeConstraint` that builds record and calls `visitor.visit(record)`
+- **Compiler enforces completeness** — Missing visit() overload = compile error
 
-Future constraint types integrate seamlessly without modifying the base `Constraint` interface or recording infrastructure.
+Future constraint types integrate seamlessly with compile-time type safety. The visitor pattern provides:
+- **No runtime type inspection** (vs. dynamic_cast approach)
+- **No type erasure** (vs. std::any approach)
+- **Compiler-enforced exhaustiveness** (missing case = build failure)
+- **Single Responsibility** (constraints build records, visitor decides what to do with them)
