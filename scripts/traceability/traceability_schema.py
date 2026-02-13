@@ -19,7 +19,7 @@ Tables:
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def create_schema(db_path: str | Path) -> sqlite3.Connection:
@@ -138,9 +138,32 @@ def create_schema(db_path: str | Path) -> sqlite3.Connection:
         );
         CREATE INDEX IF NOT EXISTS idx_dc_decision ON decision_commits(decision_id);
         CREATE INDEX IF NOT EXISTS idx_dc_snapshot ON decision_commits(snapshot_id);
+
+        -- Record layer field mappings (Ticket: 0061_cross_layer_record_mapping)
+        CREATE TABLE IF NOT EXISTS record_layer_fields (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_name    TEXT NOT NULL,       -- e.g., "EnergyRecord"
+            layer          TEXT NOT NULL,       -- "cpp", "sql", "pybind", "pydantic"
+            field_name     TEXT NOT NULL,       -- field name in that layer
+            field_type     TEXT,                -- type info where available
+            source_field   TEXT,                -- corresponding C++ field (NULL for cpp layer)
+            notes          TEXT                 -- e.g., "ForeignKey → _id suffix"
+        );
+        CREATE INDEX IF NOT EXISTS idx_rlf_record ON record_layer_fields(record_name);
+        CREATE INDEX IF NOT EXISTS idx_rlf_layer ON record_layer_fields(layer);
+
+        -- Record layer mapping (cross-layer associations)
+        CREATE TABLE IF NOT EXISTS record_layer_mapping (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_name     TEXT NOT NULL UNIQUE, -- C++ record name
+            pydantic_model  TEXT,                 -- corresponding Pydantic class (may be NULL)
+            pybind_class    TEXT,                 -- corresponding pybind class (may be NULL)
+            sql_table       TEXT                  -- corresponding SQL table name
+        );
+        CREATE INDEX IF NOT EXISTS idx_rlm_pydantic ON record_layer_mapping(pydantic_model);
     """)
 
-    # FTS5 virtual table (CREATE VIRTUAL TABLE IF NOT EXISTS is supported)
+    # FTS5 virtual tables (CREATE VIRTUAL TABLE IF NOT EXISTS is supported)
     conn.execute("""
         CREATE VIRTUAL TABLE IF NOT EXISTS design_decisions_fts USING fts5(
             dd_id,
@@ -149,6 +172,17 @@ def create_schema(db_path: str | Path) -> sqlite3.Connection:
             alternatives,
             trade_offs,
             content=design_decisions,
+            content_rowid=id,
+            tokenize='porter unicode61'
+        )
+    """)
+
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS record_layer_fields_fts USING fts5(
+            field_name,
+            field_type,
+            notes,
+            content=record_layer_fields,
             content_rowid=id,
             tokenize='porter unicode61'
         )

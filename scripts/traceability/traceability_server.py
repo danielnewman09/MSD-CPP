@@ -492,6 +492,104 @@ class TraceabilityServer:
 
         return self._rows_to_dicts(cursor.fetchall())
 
+    # =========================================================================
+    # Record Layer Mapping Tools (Ticket: 0061_cross_layer_record_mapping)
+    # =========================================================================
+
+    def get_record_mappings(self, record_name: str) -> dict:
+        """Return all four layers' field lists for a record with drift analysis.
+
+        Args:
+            record_name: C++ record name (e.g. 'EnergyRecord').
+
+        Returns:
+            Dict with layers (cpp, sql, pybind, pydantic) and drift analysis.
+        """
+        # Get mapping metadata
+        cursor = self.conn.execute(
+            "SELECT * FROM record_layer_mapping WHERE record_name = ?",
+            (record_name,),
+        )
+        mapping_row = cursor.fetchone()
+        if not mapping_row:
+            return {"error": f"Record '{record_name}' not found"}
+
+        # Get fields for each layer
+        layers = {}
+        for layer in ["cpp", "sql", "pybind", "pydantic"]:
+            cursor = self.conn.execute(
+                """SELECT field_name, field_type, source_field, notes
+                   FROM record_layer_fields
+                   WHERE record_name = ? AND layer = ?
+                   ORDER BY field_name""",
+                (record_name, layer),
+            )
+            layers[layer] = self._rows_to_dicts(cursor.fetchall())
+
+        # Analyze drift
+        cpp_fields = {f["field_name"] for f in layers["cpp"]}
+        pybind_fields = {f["field_name"] for f in layers["pybind"]}
+        pydantic_fields = {f["field_name"] for f in layers["pydantic"]}
+
+        # Fields in C++ but missing from pybind
+        missing_in_pybind = []
+        for f in layers["cpp"]:
+            # Check if the field or its FK-transformed name exists in pybind
+            field_name = f["field_name"]
+            fk_name = f"{field_name}_id"
+            if field_name not in pybind_fields and fk_name not in pybind_fields:
+                missing_in_pybind.append(field_name)
+
+        # Fields in C++ but missing from Pydantic
+        missing_in_pydantic = []
+        for f in layers["cpp"]:
+            field_name = f["field_name"]
+            fk_name = f"{field_name}_id"
+            if field_name not in pydantic_fields and fk_name not in pydantic_fields:
+                missing_in_pydantic.append(field_name)
+
+        # Naming mismatches (e.g., camelCase vs snake_case)
+        naming_mismatches = []
+        # This is complex to detect reliably — skip for now (report via missing lists)
+
+        return {
+            "record": record_name,
+            "pydantic_model": dict(mapping_row).get("pydantic_model"),
+            "layers": layers,
+            "drift": {
+                "missing_in_pybind": missing_in_pybind,
+                "missing_in_pydantic": missing_in_pydantic,
+                "naming_mismatches": naming_mismatches,
+            },
+        }
+
+    def check_record_drift(self) -> list[dict]:
+        """Return all records with fields missing from downstream layers.
+
+        Returns:
+            List of records with drift detected.
+        """
+        cursor = self.conn.execute("SELECT record_name FROM record_layer_mapping")
+        all_records = [row["record_name"] for row in cursor.fetchall()]
+
+        drift_records = []
+        for record_name in all_records:
+            result = self.get_record_mappings(record_name)
+            if "error" in result:
+                continue
+
+            drift = result["drift"]
+            if drift["missing_in_pybind"] or drift["missing_in_pydantic"]:
+                drift_records.append(
+                    {
+                        "record": record_name,
+                        "missing_in_pybind": drift["missing_in_pybind"],
+                        "missing_in_pydantic": drift["missing_in_pydantic"],
+                    }
+                )
+
+        return drift_records
+
 
 def create_mcp_server(db_path: str, codebase_db_path: str | None = None) -> "FastMCP":
     """Create a FastMCP server wrapping the TraceabilityServer."""
@@ -546,6 +644,18 @@ def create_mcp_server(db_path: str, codebase_db_path: str | None = None) -> "Fas
         return json.dumps(
             server.get_snapshot_symbols(commit_sha, file_path), indent=2, default=str
         )
+
+    @mcp.tool()
+    def get_record_mappings(record_name: str) -> str:
+        """Return all four layers' field lists for a record with drift analysis."""
+        return json.dumps(
+            server.get_record_mappings(record_name), indent=2, default=str
+        )
+
+    @mcp.tool()
+    def check_record_drift() -> str:
+        """Return all records with fields missing from downstream layers."""
+        return json.dumps(server.check_record_drift(), indent=2, default=str)
 
     return mcp
 
