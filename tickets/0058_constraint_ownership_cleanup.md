@@ -8,9 +8,9 @@
 - [x] Implementation Complete — Awaiting Review
 - [x] Quality Gate Passed — Awaiting Review
 - [x] Approved — Ready for Documentation Update
-- [ ] Merged / Complete
+- [x] Merged / Complete
 
-**Current Phase**: Approved — Ready for Documentation Update
+**Current Phase**: Merged / Complete
 **Type**: Refactor
 **Priority**: Medium
 **Assignee**: TBD
@@ -223,3 +223,24 @@ Only test code:
   - Minor issues identified (m1: explicit copy test desirable but optional, m2: API simplification opportunity)
   - All core acceptance criteria met (AC1-AC3, AC6)
   - Remaining work: Documentation updates (AC4, AC5)
+
+### Documentation Update Phase
+- **Started**: 2026-02-12
+- **Completed**: 2026-02-12
+- **Branch**: 0058-constraint-ownership-cleanup
+- **PR**: #52
+- **Commits**: 650b4e0, 40cf60f
+- **Issue**: #51
+- **Artifacts**:
+  - Updated: `msd/msd-sim/src/Physics/CLAUDE.md` (AssetInertial description, integration pipeline)
+  - Updated: `msd/msd-sim/src/Physics/RigidBody/CLAUDE.md` (copy semantics, memory ownership, integration workflow)
+  - Updated: `msd/msd-sim/src/Physics/Constraints/CLAUDE.md` (architecture overview, constraint hierarchy, integration)
+  - Updated: `msd/msd-sim/src/Physics/Collision/CLAUDE.md` (CollisionPipeline constraint ownership)
+  - Created: `docs/designs/0058_constraint_ownership_cleanup/doc-sync-summary.md`
+- **Notes**:
+  - Documented AssetInertial transition from move-only to Rule of Zero (ticket 0058)
+  - Documented CollisionPipeline as sole constraint owner with single `allConstraints_` vector
+  - Added historical context for tickets 0045 (quaternion normalization) and 0058 (ownership cleanup)
+  - No new PlantUML diagrams required (existing diagrams remain accurate)
+  - All acceptance criteria complete (AC1-AC6)
+  - Ready for human merge to main
