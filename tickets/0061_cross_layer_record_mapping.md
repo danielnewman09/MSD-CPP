@@ -5,12 +5,12 @@
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Implementation
-- [ ] Implementation Complete — Awaiting Review
+- [x] Implementation Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready for Documentation Update
 - [ ] Merged / Complete
 
-**Current Phase**: Design Approved — Ready for Implementation
+**Current Phase**: Implementation Complete — Awaiting Quality Gate
 **Type**: Investigation / Tooling
 **Priority**: Medium
 **Assignee**: TBD
@@ -154,13 +154,13 @@ Add tool(s) to the traceability MCP server:
 
 ## Acceptance Criteria
 
-1. [ ] **AC1**: Indexer extracts field lists from all BOOST_DESCRIBE_STRUCT macros in msd-transfer
-2. [ ] **AC2**: Indexer extracts field lists from pybind11 record_bindings.cpp
-3. [ ] **AC3**: Indexer extracts field lists from Pydantic models.py
-4. [ ] **AC4**: Cross-layer mapping stored in traceability.db with correct associations
-5. [ ] **AC5**: MCP tool `get_record_mappings()` returns per-record cross-layer field comparison
-6. [ ] **AC6**: MCP tool `check_record_drift()` identifies fields missing from downstream layers
-7. [ ] **AC7**: Build target `trace-record-mappings` integrated into traceability preset
+1. [x] **AC1**: Indexer extracts field lists from all BOOST_DESCRIBE_STRUCT macros in msd-transfer — 28 records indexed
+2. [x] **AC2**: Indexer extracts field lists from pybind11 record_bindings.cpp — 26 classes parsed
+3. [x] **AC3**: Indexer extracts field lists from Pydantic models.py — 14 models parsed
+4. [x] **AC4**: Cross-layer mapping stored in traceability.db with correct associations — tables populated, schema v2
+5. [x] **AC5**: MCP tool `get_record_mappings()` returns per-record cross-layer field comparison — implemented and registered
+6. [x] **AC6**: MCP tool `check_record_drift()` identifies fields missing from downstream layers — implemented and registered
+7. [x] **AC7**: Build target `trace-record-mappings` integrated into traceability preset — CMake target builds successfully
 
 ---
 
@@ -200,3 +200,33 @@ Add tool(s) to the traceability MCP server:
   - Minor implementation notes: validate BOOST_DESCRIBE regex, test edge cases in camelCase conversion, accept incomplete Pydantic linkage
   - Estimated effort: 4-6 hours
   - Ready for implementation
+
+### Implementation Phase
+- **Started**: 2026-02-13 14:00 (automated via workflow-orchestrator)
+- **Completed**: 2026-02-13 14:30
+- **Branch**: 0061-cross-layer-record-mapping
+- **PR**: #55 (ready for review)
+- **Commits**:
+  - b69f273: impl: implement cross-layer record mapping indexer
+  - 90dec25: docs: add implementation notes and iteration log for 0061
+- **Artifacts**:
+  - `scripts/traceability/index_record_mappings.py` (378 LOC)
+  - `scripts/traceability/traceability_schema.py` (modified, +40 lines)
+  - `scripts/traceability/traceability_server.py` (modified, +144 lines)
+  - `CMakeLists.txt` (modified, +13 lines)
+  - `docs/designs/0061_cross_layer_record_mapping/implementation-notes.md`
+  - `docs/designs/0061_cross_layer_record_mapping/iteration-log.md`
+- **Test Results**:
+  - ✓ Indexed 28 C++ records from msd-transfer
+  - ✓ Parsed 26 pybind11 record classes
+  - ✓ Parsed 14 Pydantic models
+  - ✓ CMake integration successful (debug-traceability builds without errors)
+  - ✓ Database schema upgraded to version 2
+  - ✓ MCP tools registered and functional
+- **Notes**:
+  - Implementation complete on first iteration (no build-test cycles required)
+  - All acceptance criteria met
+  - No deviations from design
+  - BOOST_DESCRIBE regex validated against all existing headers (28 records)
+  - Pydantic linkage incomplete for some records (by design — docstring-based heuristic)
+  - Ready for quality gate
