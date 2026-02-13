@@ -435,3 +435,139 @@ Add to `debug-traceability` preset dependencies.
   }
 ]
 ```
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-13
+**Status**: APPROVED WITH NOTES
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | Python module naming follows conventions (snake_case functions, PascalCase classes). Function names are clear and descriptive. |
+| Namespace organization | ✓ | New indexer follows existing pattern in `scripts/traceability/`. Database tables use appropriate naming prefix (`record_layer_*`). |
+| File/folder structure | ✓ | Single new file `index_record_mappings.py` matches pattern from `index_decisions.py`, `index_symbols.py`. Schema changes in existing `traceability_schema.py`. |
+| Dependency direction | ✓ | No circular dependencies. Indexer reads source files unidirectionally. Database schema is independent. MCP server reads database tables. |
+
+#### C++ Design Quality
+
+*Note: This is a Python tooling feature with no C++ code. C++ design quality assessment is N/A.*
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Python code quality | ✓ | Design proposes type hints (`str \| None`, `list[dict]`), appropriate use of `ast` module for Python parsing (safer than regex), clear separation of parsing functions. |
+| Error handling | ✓ | Design specifies skip-with-warning for malformed inputs, abort on database errors, proper exit codes. |
+| Module organization | ✓ | Functions appropriately scoped (parsing functions at module level, orchestration in `main()`). |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Parsing complexity | ✓ | BOOST_DESCRIBE parsing is regex-based (well-defined format). pybind11 parsing is regex-based (predictable patterns). Pydantic parsing uses Python AST (robust). All three approaches are proven. |
+| Database schema | ✓ | Schema design is straightforward. Two new tables with appropriate indexes. FTS5 index follows existing pattern. Safe upgrade path (CREATE TABLE IF NOT EXISTS). |
+| Build integration | ✓ | CMake target pattern matches existing `trace-git`, `trace-symbols`, `trace-decisions`. PYTHONPATH setup is standard. |
+| Runtime dependencies | ✓ | All dependencies are already present (Python standard library: `re`, `ast`, `pathlib`, `sqlite3`). No new external dependencies. |
+| Thread safety | ✓ | Single-threaded indexer (stated explicitly). Idempotent (safe to re-run). |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | Parsing functions are pure (input string → output dict). Can be unit tested independently with sample inputs. |
+| Mockable dependencies | ✓ | Database connection can be mocked. File reading can be stubbed with string content. |
+| Observable state | ✓ | Database tables can be queried directly for verification. MCP tools provide programmatic access for integration tests. |
+| Test coverage | ✓ | Design document specifies comprehensive unit tests (9 test cases for parsers) and integration tests (4 test cases for full workflow). |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | BOOST_DESCRIBE regex may fail on unusual macro formatting (multi-line, comments) | Technical | Low | Low | Test against all existing msd-transfer headers. Fallback: skip with warning. | No |
+| R2 | pybind11 binding patterns may evolve and break regex | Maintenance | Low | Medium | Use robust multi-line regex patterns. Version the script with ticket numbers to track compatibility. | No |
+| R3 | Pydantic model docstrings may not reliably indicate C++ record name | Technical | Medium | Low | Fallback to naming convention (strip "Response" suffix, match PascalCase). Verified in implementation. | No |
+| R4 | Intentional omissions flagged as drift causing noise | Maintenance | High | Low | Recommendation in design: report all, human reviews. Could add config file in future ticket if noise is excessive. | No |
+| R5 | SQL type inference from C++ types may be incomplete | Technical | Low | Low | Design covers common types (double→REAL, uint32_t→INTEGER, ForeignKey→INTEGER). Unmapped types logged as warnings. | No |
+
+### Notes for Implementation
+
+1. **BOOST_DESCRIBE Parsing Robustness**: The design correctly identifies the macro format is predictable, but should handle edge cases:
+   - Multi-line macro invocations (parentheses split across lines)
+   - C-style comments between macro name and arguments
+   - Whitespace variations (tabs vs spaces)
+   - **Recommendation**: Test the regex against ALL existing headers in msd-transfer/src/ during implementation to verify coverage.
+
+2. **ForeignKey Transformation Detection**: The design hard-codes FK suffix transformation (`ForeignKey<T> field` → `field_id`). This is correct and matches existing code patterns in record_bindings.cpp.
+   - **Example verified**: `EnergyRecord::body` (ForeignKey) → pybind `.def_property_readonly("body_id", ...)` → Pydantic `body_id: int`
+   - **Note**: This transformation is consistent across all existing records and unlikely to change.
+
+3. **Naming Case Conversion**: The design mentions `camelCase` → `snake_case` but provides limited examples.
+   - **Verified pattern**: `penetrationDepth` → `penetration_depth` in CollisionResultRecord
+   - **Edge case to handle**: `pointA` → `point_a` (single letter suffix)
+   - **Recommendation**: Use a robust case-splitting regex that handles both standard camelCase and single-letter suffixes.
+
+4. **Pydantic Model Linkage**: The design proposes inferring C++ record names from Pydantic class names or docstrings.
+   - **Observed pattern in models.py**: Class names generally match C++ record names minus "Record" suffix
+     - Example: `EnergyRecord` (C++) → `EnergyPoint` (Pydantic) — **mismatch**
+     - Example: `CollisionResultRecord` (C++) → `CollisionInfo` (Pydantic) — **mismatch**
+   - **Recommendation**: Rely on docstrings ("From {RecordName}") where present. Naming heuristics are unreliable. This may result in NULL `pydantic_model` for some records — acceptable for a visibility tool.
+
+5. **Schema Version Increment**: The design correctly specifies incrementing `SCHEMA_VERSION` to 2. This triggers proper upgrade behavior in existing database connections.
+
+6. **FTS5 Index Content**: The design proposes indexing `field_name`, `field_type`, and `notes`. This is appropriate.
+   - **Use case validated**: "find all ForeignKey<SimulationFrameRecord> fields" — searches `field_type` column
+   - **Use case validated**: "find fields with transformation notes" — searches `notes` column
+
+### Open Questions — Design Decisions Resolved
+
+The design document lists 4 open questions. All recommendations are sound:
+
+1. **SQL Schema Extraction** — Option A (parse from BOOST_DESCRIBE) is correct. cpp_sqlite type mapping is deterministic.
+2. **Naming Transformation** — Option A (hard-code) is correct. Two transformations are well-established (FK suffix, snake_case).
+3. **Intentional Omissions** — Option B (report all) is correct for a visibility tool. Noise can be filtered by user or future enhancement.
+4. **FTS Index Scope** — Option B (include type) is correct. Type search is useful and index overhead is negligible.
+
+**All recommendations approved.** No additional human input required on these questions.
+
+### Prototype Guidance
+
+**No prototypes required.**
+
+**Rationale**: All components follow established patterns with proven technologies:
+- BOOST_DESCRIBE parsing: regex on well-defined format (similar to existing DD block parsing in `index_decisions.py`)
+- pybind11 parsing: regex on predictable patterns
+- Pydantic parsing: Python `ast` module (robust, standard library)
+- Database schema: SQLite with FTS5 (already used in existing traceability tables)
+- MCP tool exposure: existing pattern from `search_decisions`, `get_decision` tools
+
+All risks are low-to-medium likelihood with low-to-medium impact, and all have clear mitigation strategies that don't require prototyping.
+
+### Summary
+
+This design is **APPROVED WITH NOTES** for implementation.
+
+**Strengths:**
+- Follows existing traceability indexer patterns closely (`index_decisions.py`, `index_symbols.py`)
+- Well-defined schema with appropriate indexes and FTS5 search capability
+- Clear separation of concerns (parsing functions → database population → MCP exposure)
+- Comprehensive test plan covering both unit and integration scenarios
+- All open questions have sound recommendations that align with project conventions
+
+**Minor concerns addressed in notes:**
+- Pydantic model linkage may be incomplete (some records won't map via naming convention)
+- Edge cases in camelCase → snake_case conversion should be tested
+- BOOST_DESCRIBE regex should be validated against all existing headers
+
+**Recommended next steps:**
+1. Proceed to implementation following the design as specified
+2. During implementation, validate BOOST_DESCRIBE regex against all msd-transfer headers
+3. Test case-splitting regex against known examples (`pointA`, `pointB`, `penetrationDepth`)
+4. Accept that some Pydantic model mappings may be NULL (tool is for visibility, not enforcement)
+
+**Estimated implementation effort**: 4-6 hours (no prototypes required, straightforward indexer following existing pattern)
