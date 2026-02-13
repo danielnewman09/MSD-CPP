@@ -457,92 +457,21 @@ TEST(DistanceConstraintTest, TypeName)
 // ===========================================================================
 
 // ============================================================================
-// AssetInertial Constraint Management Tests
+// AssetInertial Constraint Management Tests - REMOVED
 // ============================================================================
-
-TEST(AssetInertialConstraintTest, DefaultConstraint_EmptyList)
-{
-  // Test: AssetInertial now defaults to empty constraint list
-  // Ticket 0045: Removed default UnitQuaternionConstraint
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull hull{cubePoints};
-  ReferenceFrame frame{Coordinate{0.0, 0.0, 0.0}};
-
-  AssetInertial asset{0, 0, hull, 10.0, frame};
-
-  EXPECT_EQ(0, asset.getConstraintCount());
-  auto constraints = asset.getConstraints();
-  EXPECT_EQ(0, constraints.size());
-}
-
-TEST(AssetInertialConstraintTest, AddConstraint)
-{
-  // Test: addConstraint() correctly adds constraint
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull hull{cubePoints};
-  ReferenceFrame frame{Coordinate{0.0, 0.0, 0.0}};
-
-  AssetInertial asset{0, 0, hull, 10.0, frame};
-
-  auto distConstraint = std::make_unique<DistanceConstraint>(5.0);
-  asset.addConstraint(std::move(distConstraint));
-
-  // Ticket 0045: No default constraint, so count is 1 not 2
-  EXPECT_EQ(1, asset.getConstraintCount());
-}
-
-TEST(AssetInertialConstraintTest, RemoveConstraint)
-{
-  // Test: removeConstraint() correctly removes constraint
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull hull{cubePoints};
-  ReferenceFrame frame{Coordinate{0.0, 0.0, 0.0}};
-
-  AssetInertial asset{0, 0, hull, 10.0, frame};
-
-  auto distConstraint = std::make_unique<DistanceConstraint>(5.0);
-  asset.addConstraint(std::move(distConstraint));
-  // Ticket 0045: No default constraint
-  EXPECT_EQ(1, asset.getConstraintCount());
-
-  asset.removeConstraint(0);  // Remove DistanceConstraint (now at index 0)
-  EXPECT_EQ(0, asset.getConstraintCount());
-}
-
-TEST(AssetInertialConstraintTest, ClearConstraints)
-{
-  // Test: clearConstraints() removes all constraints
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull hull{cubePoints};
-  ReferenceFrame frame{Coordinate{0.0, 0.0, 0.0}};
-
-  AssetInertial asset{0, 0, hull, 10.0, frame};
-
-  asset.clearConstraints();
-
-  EXPECT_EQ(0, asset.getConstraintCount());
-}
-
-TEST(AssetInertialConstraintTest, GetConstraints_ReturnsNonOwningPointers)
-{
-  // Test: getConstraints() returns pointers for use in solver
-  // Ticket 0045: Default constraint list is now empty
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull hull{cubePoints};
-  ReferenceFrame frame{Coordinate{0.0, 0.0, 0.0}};
-
-  AssetInertial asset{0, 0, hull, 10.0, frame};
-
-  // Add a constraint for testing
-  asset.addConstraint(std::make_unique<UnitQuaternionConstraint>());
-
-  auto constraints = asset.getConstraints();
-
-  EXPECT_EQ(1, constraints.size());
-  EXPECT_NE(nullptr, constraints[0]);
-  // Pointer should remain valid after call
-  EXPECT_EQ("UnitQuaternionConstraint", constraints[0]->typeName());
-}
+// Ticket: 0058_constraint_ownership_cleanup
+//
+// AssetInertial no longer owns constraints. Constraint ownership has been
+// consolidated to CollisionPipeline for ephemeral collision response.
+// Quaternion normalization is handled directly by the integrator via
+// state.orientation.normalize().
+//
+// The following tests are removed:
+// - DefaultConstraint_EmptyList
+// - AddConstraint
+// - RemoveConstraint
+// - ClearConstraints
+// - GetConstraints_ReturnsNonOwningPointers
 
 // ============================================================================
 // Integration Tests: Constraint Enforcement During Physics
@@ -611,42 +540,7 @@ TEST(ConstraintIntegrationTest, QuaternionRemainNormalized_1000Steps)
     1.0, qNorm, 1e-4);  // Slightly looser tolerance for long simulation
 }
 
-TEST(ConstraintIntegrationTest, MultipleConstraints_BothEnforced)
-{
-  // Test: Multiple constraints (quaternion + distance) are both enforced
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull hull{cubePoints};
-  ReferenceFrame frame{Coordinate{5.0, 0.0, 0.0}};  // Start at distance 5
-
-  AssetInertial asset{0, 0, hull, 10.0, frame};
-  asset.getInertialState().position = Coordinate{5.0, 0.0, 0.0};
-
-  // Add distance constraint
-  auto distConstraint = std::make_unique<DistanceConstraint>(5.0);
-  asset.addConstraint(std::move(distConstraint));
-
-  SemiImplicitEulerIntegrator integrator;
-
-  const double dt = 0.016;
-  const int steps = 100;
-
-  for (int i = 0; i < steps; ++i)
-  {
-    // Ticket 0045: Removed constraints parameter
-    integrator.step(asset.getInertialState(),
-                    Coordinate{0.0, 0.0, -98.1},
-                    Coordinate{0.0, 0.0, 0.0},
-                    asset.getMass(),
-                    asset.getInverseInertiaTensor(),
-                    dt);
-  }
-
-  // Check quaternion normalization
-  double qNorm = asset.getInertialState().orientation.norm();
-  EXPECT_NEAR(1.0, qNorm, 1e-4);
-
-  // Check distance constraint (note: constraint forces may not perfectly
-  // maintain distance with direct projection; this tests the solver runs
-  // without error) The solver provides stabilization forces but explicit
-  // projection isn't done
-}
+// Removed test: MultipleConstraints_BothEnforced
+// Ticket: 0058_constraint_ownership_cleanup
+// This test used AssetInertial::addConstraint() which has been removed.
+// Constraint management is now owned solely by CollisionPipeline.
