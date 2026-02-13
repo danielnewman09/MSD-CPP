@@ -94,7 +94,8 @@ void CollisionPipeline::execute(
   createConstraints(inertialAssets, environmentalAssets, dt);
 
   // Early return if no constraints created
-  if (constraints_.empty())
+  // Ticket: 0058_constraint_ownership_cleanup
+  if (allConstraints_.empty())
   {
     clearEphemeralState();
     return;
@@ -113,10 +114,11 @@ void CollisionPipeline::execute(
   correctPositions(inertialAssets, environmentalAssets, numBodies);
 
   // Capture solver diagnostics (lightweight value copy)
+  // Ticket: 0058_constraint_ownership_cleanup
   solverData_.iterations = solveResult.iterations;
   solverData_.residual = solveResult.residual;
   solverData_.converged = solveResult.converged;
-  solverData_.numConstraints = constraintPtrs_.size();
+  solverData_.numConstraints = allConstraints_.size();
   solverData_.numContacts = collisions_.size();
 
   // Clear ephemeral state (references/pointers) but keep collisions_ and
@@ -230,10 +232,13 @@ void CollisionPipeline::createConstraints(
     }
   }
 
+  // Ticket: 0058_constraint_ownership_cleanup
+  // Store all constraints in allConstraints_ with interleaved pattern when
+  // friction is active: [CC_0, FC_0, CC_1, FC_1, ...]
   for (size_t p = 0; p < collisions_.size(); ++p)
   {
     const auto& pair = collisions_[p];
-    size_t const rangeStart = constraints_.size();
+    size_t const rangeStart = allConstraints_.size();
 
     // Extract states based on body index mapping
     const InertialState& stateA =
@@ -264,9 +269,13 @@ void CollisionPipeline::createConstraints(
     {
       const auto& cc = contactConstraints[ci];
 
+      // Store ContactConstraint in allConstraints_
+      allConstraints_.push_back(std::move(contactConstraints[ci]));
+
       if (anyFriction)
       {
         // Create matching FrictionConstraint with same contact geometry.
+        // Store immediately after its ContactConstraint for interleaved pattern.
         // Uses per-pair friction coefficient (may be 0 for frictionless pairs).
         auto fc = std::make_unique<FrictionConstraint>(
           pair.bodyAIndex,
@@ -278,16 +287,13 @@ void CollisionPipeline::createConstraints(
           comB,
           pair.frictionCoefficient);
 
-        frictionConstraints_.push_back(std::move(fc));
+        allConstraints_.push_back(std::move(fc));
       }
-
-      // Move contact constraint into pipeline storage
-      constraints_.push_back(std::move(contactConstraints[ci]));
     }
 
-    // Track constraint range (number of contact points, not total constraints)
-    pairRanges_.push_back(
-      {rangeStart, constraints_.size() - rangeStart, p});
+    // Track constraint range (number of ContactConstraints for this pair)
+    size_t const numContacts = contactConstraints.size();
+    pairRanges_.push_back({rangeStart, numContacts, p});
   }
 }
 
@@ -323,52 +329,56 @@ void CollisionPipeline::assembleSolverInput(
 ConstraintSolver::SolveResult
 CollisionPipeline::solveConstraintsWithWarmStart(double dt)
 {
-  const bool hasFriction = !frictionConstraints_.empty();
-
-  // Build constraint pointer lists
-  normalConstraintPtrs_.reserve(constraints_.size());
-  for (size_t i = 0; i < constraints_.size(); ++i)
+  // Ticket: 0058_constraint_ownership_cleanup
+  // Determine friction mode based on constraint types in allConstraints_
+  bool hasFriction = false;
+  for (const auto& c : allConstraints_)
   {
-    normalConstraintPtrs_.push_back(constraints_[i].get());
-  }
-
-  if (hasFriction)
-  {
-    // Ticket 0052d: Build interleaved constraint pointer list
-    // [CC_0, FC_0, CC_1, FC_1, ...]
-    // constraints_ and frictionConstraints_ have 1:1 correspondence
-    constraintPtrs_.reserve(constraints_.size() + frictionConstraints_.size());
-    for (size_t i = 0; i < constraints_.size(); ++i)
+    if (dynamic_cast<FrictionConstraint*>(c.get()))
     {
-      constraintPtrs_.push_back(constraints_[i].get());
-      constraintPtrs_.push_back(frictionConstraints_[i].get());
+      hasFriction = true;
+      break;
     }
-  }
-  else
-  {
-    // No friction: solver sees only ContactConstraints → ASM path
-    constraintPtrs_ = normalConstraintPtrs_;
   }
 
   // Lambdas per contact: 3 with friction (n, t1, t2), 1 without
   const size_t lambdasPerContact = hasFriction ? 3 : 1;
 
   // ===== Phase 3.5: Warm-Start from Contact Cache =====
-  const size_t totalRows = constraints_.size() * lambdasPerContact;
+  // Ticket: 0058_constraint_ownership_cleanup
+  // Count ContactConstraints (half of total if friction active, all otherwise)
+  size_t numContacts = 0;
+  for (const auto& c : allConstraints_)
+  {
+    if (dynamic_cast<ContactConstraint*>(c.get()))
+    {
+      ++numContacts;
+    }
+  }
+  const size_t totalRows = numContacts * lambdasPerContact;
   Eigen::VectorXd initialLambda =
     Eigen::VectorXd::Zero(static_cast<Eigen::Index>(totalRows));
 
   // Helper: extract contact world-space points for a collision pair's
   // constraint range. Contact point = comA + leverArmA.
+  // Ticket: 0058_constraint_ownership_cleanup
+  // With interleaved pattern [CC, FC, CC, FC, ...], ContactConstraints are
+  // at even indices when friction is active, sequential otherwise.
   auto extractContactPoints =
-    [this](const PairConstraintRange& range,
-           const CollisionPair& pair) -> std::vector<Coordinate>
+    [this, hasFriction](const PairConstraintRange& range,
+                        const CollisionPair& pair) -> std::vector<Coordinate>
   {
     std::vector<Coordinate> points;
     points.reserve(range.count);
+    const size_t stride = hasFriction ? 2 : 1;
     for (size_t ci = 0; ci < range.count; ++ci)
     {
-      const auto& contact = constraints_[range.startIdx + ci];
+      const size_t idx = range.startIdx + ci * stride;
+      auto* contact = dynamic_cast<ContactConstraint*>(allConstraints_[idx].get());
+      if (!contact)
+      {
+        continue;  // Skip non-contact constraints
+      }
       const InertialState& stateA = states_[pair.bodyAIndex].get();
       points.push_back(Coordinate{stateA.position + contact->getLeverArmA()});
     }
@@ -404,7 +414,9 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
   }
 
   // ===== Phase 4: Solve with warm-starting =====
-  auto solveResult = constraintSolver_.solve(constraintPtrs_,
+  // Ticket: 0058_constraint_ownership_cleanup
+  auto constraintPtrs = buildSolverView(hasFriction);
+  auto solveResult = constraintSolver_.solve(constraintPtrs,
                                               states_,
                                               inverseMasses_,
                                               inverseInertias_,
@@ -489,7 +501,9 @@ void CollisionPipeline::correctPositions(
   }
 
   // Ticket 0052d: Pass only normal constraints to position corrector
-  positionCorrector_.correctPositions(normalConstraintPtrs_,
+  // Ticket: 0058_constraint_ownership_cleanup
+  auto contactView = buildContactView();
+  positionCorrector_.correctPositions(contactView,
                                       mutableStates,
                                       inverseMasses_,
                                       inverseInertias_,
@@ -504,14 +518,57 @@ void CollisionPipeline::clearEphemeralState()
   // dangling refs when assets are modified between frames.
   // Does NOT clear collisions_ or solverData_ — those are value types owned
   // by the pipeline, safe to read between frames via getCollisions()/getSolverData().
-  constraints_.clear();
-  frictionConstraints_.clear();
+  // Ticket: 0058_constraint_ownership_cleanup
+  allConstraints_.clear();
   states_.clear();
   inverseMasses_.clear();
   inverseInertias_.clear();
-  constraintPtrs_.clear();
-  normalConstraintPtrs_.clear();
   pairRanges_.clear();
+}
+
+std::vector<Constraint*>
+CollisionPipeline::buildSolverView(bool interleaved) const
+{
+  std::vector<Constraint*> view;
+
+  if (!interleaved)
+  {
+    // No friction: return all constraints in storage order
+    view.reserve(allConstraints_.size());
+    for (const auto& c : allConstraints_)
+    {
+      view.push_back(c.get());
+    }
+  }
+  else
+  {
+    // Friction active: return interleaved [CC_0, FC_0, CC_1, FC_1, ...]
+    // Relies on constraint storage pattern: ContactConstraint followed by
+    // its matching FrictionConstraint (established in createConstraints)
+    view.reserve(allConstraints_.size());
+    for (const auto& c : allConstraints_)
+    {
+      view.push_back(c.get());
+    }
+  }
+
+  return view;
+}
+
+std::vector<Constraint*> CollisionPipeline::buildContactView() const
+{
+  std::vector<Constraint*> view;
+  view.reserve(allConstraints_.size() / 2);  // Rough estimate
+
+  for (const auto& c : allConstraints_)
+  {
+    if (dynamic_cast<ContactConstraint*>(c.get()))
+    {
+      view.push_back(c.get());
+    }
+  }
+
+  return view;
 }
 
 }  // namespace msd_sim
