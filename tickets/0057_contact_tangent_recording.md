@@ -1,0 +1,150 @@
+# Ticket 0057: Contact Tangent Vector Recording
+
+## Status
+- [x] Draft
+- [x] Ready for Design
+- [ ] Design Complete — Awaiting Review
+- [ ] Implementation Complete — Awaiting Review
+- [ ] Merged / Complete
+
+**Current Phase**: Design Complete — Awaiting Review
+**Type**: Feature
+**Priority**: Medium
+**Assignee**: TBD
+**Created**: 2026-02-12
+**Generate Tutorial**: No
+**Parent Ticket**: [0056f_threejs_overlays](0056f_threejs_overlays.md)
+**Depends On**: [0056b_collision_pipeline_data_extraction](0056b_collision_pipeline_data_extraction.md)
+
+---
+
+## Overview
+
+Record contact tangent vectors (t1, t2) from the constraint solver into the simulation recording database so they can be visualized as arrows in the Three.js replay viewer. Currently, only the collision normal is persisted; the tangent basis is computed transiently in `FrictionConstraint` and discarded after solving.
+
+This ticket covers the full pipeline: exposing tangent data from the solver, adding transfer records, recording to SQLite, serving via the REST API, and rendering as Three.js arrows.
+
+---
+
+## Background
+
+### Current State
+- `CollisionResult` stores `normal`, `penetrationDepth`, `contacts[4]`, `contactCount`
+- `CollisionResultRecord` persists `normal` (Vector3DRecord), `penetrationDepth`, `contacts` (RepeatedField)
+- `FrictionConstraint` computes `tangent1_`, `tangent2_` via `TangentBasis::computeTangentBasis(normal)` and exposes `getTangent1()`, `getTangent2()` getters
+- Tangent vectors are discarded after constraint solving — not exposed through `CollisionPipeline` or recorded by `DataRecorder`
+
+### Design Challenge
+The tangent basis currently lives in `FrictionConstraint`, which is created inside `CollisionPipeline::createConstraints()` and owned by the pipeline's constraint vectors. The recording happens in `DataRecorder::recordCollisions()` which iterates `CollisionPipeline::getCollisions()` — but `CollisionPair` only contains `CollisionResult`, not the constraint-derived tangent data.
+
+Key questions for design:
+1. **Where to store tangent vectors**: On `CollisionResult` (geometry-level) vs. on `CollisionPair` (pipeline-level) vs. new struct
+2. **When to compute**: At collision detection time (deterministic from normal) vs. extracted from `FrictionConstraint` after constraint creation
+3. **Granularity**: Per-collision (shared tangent frame) vs. per-contact-point (each contact could have different tangent frame, though currently they share the collision normal)
+4. **Transfer record design**: Extend `CollisionResultRecord` with tangent fields vs. new `ContactFrameRecord`
+
+---
+
+## Requirements
+
+### R1: Expose Tangent Vectors from Pipeline
+- After constraint creation, tangent vectors (t1, t2) must be accessible for recording
+- Must be associated with the correct collision pair (body A, body B)
+
+### R2: Transfer Record for Tangent Vectors
+- `CollisionResultRecord` extended with `tangent1` and `tangent2` (Vector3DRecord)
+- Backward compatible: older recordings without tangent fields should still load
+
+### R3: DataRecorder Persistence
+- `DataRecorder::recordCollisions()` writes tangent vectors alongside existing collision data
+- No additional SQL queries — tangent data written in same buffer pass
+
+### R4: REST API Exposure
+- `/api/v1/simulations/{id}/frames/{frame_id}/state` collision objects include `tangent1` and `tangent2`
+- Python bindings (`msd_reader`) expose tangent fields on collision records
+
+### R5: Three.js Arrow Visualization
+- Two arrows (t1=green, t2=blue) rendered at contact midpoint when overlay enabled
+- Normal arrow (red) already planned in 0056f — this ticket adds tangent arrows
+- Arrows visible only on frames with active collisions
+- Toggle via overlay controls (shared with contact normal toggle or separate)
+
+---
+
+## Files to Create/Modify
+
+### C++ (msd-sim, msd-transfer)
+| File | Change |
+|------|--------|
+| `msd-transfer/src/CollisionResultRecord.hpp` | Add `tangent1`, `tangent2` Vector3DRecord fields |
+| `msd-sim/src/Physics/Collision/CollisionPipeline.hpp` | Expose tangent data on `CollisionPair` or new accessor |
+| `msd-sim/src/Physics/Collision/CollisionPipeline.cpp` | Populate tangent data after constraint creation |
+| `msd-sim/src/DataRecorder/DataRecorder.cpp` | Write tangent vectors in `recordCollisions()` |
+| `msd-sim/src/Physics/Collision/CollisionResult.hpp` | Possibly add tangent fields (design decision) |
+
+### Python (replay)
+| File | Change |
+|------|--------|
+| `msd-pybind/src/record_bindings.cpp` | Expose tangent fields on CollisionResultRecord |
+| `replay/replay/models.py` | Add `tangent1`, `tangent2` to collision response model |
+| `replay/replay/services/simulation_service.py` | Read tangent fields from database |
+
+### Frontend (replay/static)
+| File | Change |
+|------|--------|
+| `replay/static/js/overlays/contacts.js` | Add tangent arrow rendering (new file from 0056f) |
+
+---
+
+## Test Plan
+
+### Unit Tests
+1. `TangentBasis` determinism: same normal produces same tangent basis
+2. `CollisionPair` tangent data populated after pipeline execution
+3. `CollisionResultRecord` round-trip: write tangent vectors, read back, verify
+
+### Integration Tests
+1. Run `generate_test_recording` with friction-enabled scenario
+2. Verify tangent vectors present in recording database
+3. Verify REST API returns tangent data on collision frames
+4. Verify tangent vectors are orthogonal to collision normal (within tolerance)
+
+### Manual Tests
+1. Open replay viewer, navigate to collision frame
+2. Enable contact overlay — verify three orthogonal arrows (red=normal, green=t1, blue=t2)
+3. Verify arrows disappear on non-collision frames
+
+---
+
+## Acceptance Criteria
+
+1. [ ] **AC1**: `CollisionPair` exposes tangent1/tangent2 after pipeline execution
+2. [ ] **AC2**: `CollisionResultRecord` persists tangent vectors to SQLite
+3. [ ] **AC3**: REST API collision objects include tangent1 and tangent2
+4. [ ] **AC4**: Three.js renders tangent arrows at contact points on collision frames
+5. [ ] **AC5**: Tangent vectors are unit length and orthogonal to normal (verified by test)
+6. [ ] **AC6**: Older recordings without tangent fields load without error (backward compat)
+
+---
+
+## Workflow Log
+
+### Design Phase
+- **Started**: 2026-02-12 (orchestrator invocation)
+- **Completed**: 2026-02-12
+- **Branch**: 0057-contact-tangent-recording
+- **PR**: #50 (draft)
+- **Artifacts**:
+  - `docs/designs/contact-tangent-recording/design.md`
+  - `docs/designs/contact-tangent-recording/contact-tangent-recording.puml`
+- **Notes**:
+  - Decided to store tangents on `CollisionResult` (geometry-level) for serialization alignment with existing pattern
+  - Extract tangents from `FrictionConstraint` after constraint creation to record actual solver state
+  - Backward compatible: optional Vector3DRecord fields default to zero for older recordings
+  - Open questions: arrow length scaling (fixed vs force-scaled), toggle UI design (single vs separate)
+
+---
+
+## Human Feedback
+
+{Add feedback here at any point. Agents will read this section.}
