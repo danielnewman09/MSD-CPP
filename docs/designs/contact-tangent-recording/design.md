@@ -240,52 +240,64 @@ void DataRecorder::recordConstraintStates(uint32_t frameId, const CollisionPipel
 
 #### CollisionPipeline (msd-sim)
 - **Current location**: `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp/.cpp`
+- **Current state** ([Ticket 0058](../../tickets/0058_constraint_ownership_cleanup.md)): Single owning container `allConstraints_` with interleaved [CC, FC, CC, FC, ...] storage for friction-enabled contacts. Typed views generated on-demand via `buildSolverView()` and `buildContactView()`.
 - **Changes required**:
-  - **Option A** (minimal): Add accessor methods `getContactConstraints()` and `getFrictionConstraints()` to expose constraint vectors for iteration by `DataRecorder`
-  - **Option B** (encapsulated): Keep constraints private, add `recordConstraints(DataRecorder& recorder, uint32_t frameId)` method that iterates constraints and calls recorder
-  - Add method to map constraint pointer to body IDs: `getBodyAId(const Constraint*)`, `getBodyBId(const Constraint*)`
-- **Backward compatibility**: New methods, no breaking changes
-- **Recommendation**: **Option B** — keeps constraint ownership encapsulated, follows existing `CollisionPipeline` pattern of exposing high-level operations rather than raw data
+  - Keep constraints private, add `recordConstraints(DataRecorder& recorder, uint32_t frameId)` method that iterates constraints and calls recorder
+  - Internally: iterate `allConstraints_`, use `dynamic_cast<ContactConstraint*>` and `dynamic_cast<FrictionConstraint*>` to extract typed records
+  - Lookup collision pair via `pairRanges_` to map constraint index → collision pair → (bodyAId, bodyBId)
+- **Backward compatibility**: New method, no breaking changes
+- **Design rationale**: Keeps constraint ownership encapsulated, follows existing `CollisionPipeline` pattern of exposing high-level operations rather than raw data
 
 ```cpp
-// Option B: CollisionPipeline.hpp (new method)
+// CollisionPipeline.hpp (new method)
 class CollisionPipeline {
 public:
   void recordConstraints(DataRecorder& recorder, uint32_t frameId) const;
 
 private:
-  std::vector<std::unique_ptr<ContactConstraint>> constraints_;
-  std::vector<std::unique_ptr<FrictionConstraint>> frictionConstraints_;
+  std::vector<std::unique_ptr<Constraint>> allConstraints_;  // Single owning container (ticket 0058)
   std::vector<CollisionPair> collisions_;  // Maps collision pairs to body IDs
+  std::vector<PairConstraintRange> pairRanges_;  // Maps constraint index → collision pair
 };
 
 // Implementation (CollisionPipeline.cpp)
 void CollisionPipeline::recordConstraints(DataRecorder& recorder, uint32_t frameId) const {
-  // Iterate contact constraints (one per contact point, mapped by pairRanges_)
-  for (size_t i = 0; i < constraints_.size(); ++i) {
-    const auto& constraint = constraints_[i];
+  // Iterate all constraints (interleaved [CC, FC, CC, FC, ...] or all CC if no friction)
+  for (size_t i = 0; i < allConstraints_.size(); ++i) {
+    const auto& constraint = allConstraints_[i];
 
     // Find collision pair for this constraint (via pairRanges_ lookup)
-    const auto& pair = findPairForConstraintIndex(i);  // Helper method
+    // pairRanges_ maps constraint blocks to collision pairs
+    size_t pairIdx = findPairIndexForConstraint(i);  // Helper method
+    const auto& pair = collisions_[pairIdx];
 
-    auto recordAny = constraint->toRecord(pair.bodyAId, pair.bodyBId);
-    auto record = std::any_cast<msd_transfer::ContactConstraintRecord>(recordAny);
-    record.frame.id = frameId;
-    recorder.getDAO<msd_transfer::ContactConstraintRecord>().addToBuffer(record);
+    // Dispatch based on concrete type
+    if (auto* cc = dynamic_cast<ContactConstraint*>(constraint.get())) {
+      auto recordAny = cc->toRecord(pair.bodyAId, pair.bodyBId);
+      auto record = std::any_cast<msd_transfer::ContactConstraintRecord>(recordAny);
+      record.frame.id = frameId;
+      recorder.getDAO<msd_transfer::ContactConstraintRecord>().addToBuffer(record);
+    } else if (auto* fc = dynamic_cast<FrictionConstraint*>(constraint.get())) {
+      auto recordAny = fc->toRecord(pair.bodyAId, pair.bodyBId);
+      auto record = std::any_cast<msd_transfer::FrictionConstraintRecord>(recordAny);
+      record.frame.id = frameId;
+      recorder.getDAO<msd_transfer::FrictionConstraintRecord>().addToBuffer(record);
+    }
   }
+}
 
-  // Iterate friction constraints (one per contact point, same indexing as contact constraints)
-  for (size_t i = 0; i < frictionConstraints_.size(); ++i) {
-    const auto& constraint = frictionConstraints_[i];
-
-    // Find collision pair for this constraint (via pairRanges_ lookup)
-    const auto& pair = findPairForConstraintIndex(i);  // Helper method
-
-    auto recordAny = constraint->toRecord(pair.bodyAId, pair.bodyBId);
-    auto record = std::any_cast<msd_transfer::FrictionConstraintRecord>(recordAny);
-    record.frame.id = frameId;
-    recorder.getDAO<msd_transfer::FrictionConstraintRecord>().addToBuffer(record);
+// Helper: Map constraint index to collision pair index
+// For friction-enabled: [CC_0, FC_0, CC_1, FC_1, ...] → pairIdx = i / 2
+// For no friction: [CC_0, CC_1, ...] → pairIdx via pairRanges_ lookup
+size_t CollisionPipeline::findPairIndexForConstraint(size_t constraintIdx) const {
+  // Iterate pairRanges_ to find which pair owns this constraint index
+  for (const auto& range : pairRanges_) {
+    if (constraintIdx >= range.startIdx && constraintIdx < range.startIdx + range.count) {
+      return range.pairIdx;
+    }
   }
+  // Should never reach here if pairRanges_ is correct
+  throw std::logic_error("Constraint index not found in pairRanges_");
 }
 ```
 
@@ -581,18 +593,11 @@ class ContactOverlay {
 
 ### Design Decisions (Human Input Needed)
 
-1. **CollisionPipeline constraint access pattern**
-   - Option A: Expose `getContactConstraints()` and `getFrictionConstraints()` accessors — DataRecorder iterates constraints directly
-   - Option B: Keep constraints private, pipeline provides `recordConstraints(DataRecorder&, uint32_t frameId)` method — Pipeline handles iteration and body ID mapping internally
-   - Recommendation: **Option B** — Maintains encapsulation, follows existing CollisionPipeline pattern of exposing operations rather than data
+1. **Constraint-to-body-ID mapping**
+   - ✅ **Resolved** (Ticket 0058): CollisionPipeline owns the mapping via `collisions_` vector (bodyAId, bodyBId per collision)
+   - Pipeline maps constraint index → collision pair via `pairRanges_` → extract body IDs
 
-2. **Constraint-to-body-ID mapping**
-   - Currently constraints store `bodyAIndex()` and `bodyBIndex()` (indices into solver body list)
-   - Recording needs persistent body IDs (uint32_t from AssetInertial::getId())
-   - CollisionPipeline owns the mapping via `collisions_` vector (bodyAId, bodyBId per collision)
-   - **Design**: CollisionPipeline must map constraint index to collision pair via `pairRanges_`, then extract body IDs
-
-3. **Polymorphic constraint recording pattern** — How to extend to future constraint types?
+2. **Polymorphic constraint recording pattern** — How to extend to future constraint types?
    - Each new constraint type (HingeConstraint, MotorConstraint) adds:
      - New transfer record (`HingeConstraintRecord`) in msd-transfer
      - `toRecord()` implementation returning its record type wrapped in `std::any`

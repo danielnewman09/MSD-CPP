@@ -3,11 +3,12 @@
 ## Status
 - [x] Draft
 - [x] Ready for Design
-- [ ] Design Complete — Awaiting Review
+- [x] Design Complete — Awaiting Review
+- [ ] Design Approved — Ready for Implementation
 - [ ] Implementation Complete — Awaiting Review
 - [ ] Merged / Complete
 
-**Current Phase**: Design Complete — Awaiting Review
+**Current Phase**: Design Approved — Ready for Implementation
 **Type**: Feature
 **Priority**: Medium
 **Assignee**: TBD
@@ -151,6 +152,19 @@ Key questions for design:
   - Tangent vectors stored as `Vector3DRecord` (directions, not points) to avoid `globalToLocal` overload bug
   - Immediate goal (tangent visualization) achieved as side effect of extensible general pattern
   - Open questions: CollisionPipeline access pattern (Option B: `recordConstraints()` method preferred)
+
+### Design Update (Post-0058)
+- **Started**: 2026-02-12 (orchestrator invocation after 0058 merge)
+- **Completed**: 2026-02-12
+- **Branch**: 0057-contact-tangent-recording (rebased onto main)
+- **Artifacts**:
+  - Updated `docs/designs/contact-tangent-recording/design.md`
+- **Notes**:
+  - Updated design to reflect ticket 0058 constraint ownership refactor
+  - CollisionPipeline now uses single `allConstraints_` vector with interleaved [CC, FC, ...] storage
+  - Recording iteration uses `dynamic_cast` to dispatch on constraint type
+  - Constraint-to-body-ID mapping uses `pairRanges_` to map constraint index → collision pair → body IDs
+  - Design pattern unchanged, implementation details updated for new architecture
 
 ---
 
