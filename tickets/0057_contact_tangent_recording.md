@@ -129,8 +129,15 @@ Key questions for design:
 
 ## Workflow Log
 
-### Design Phase
+### Design Phase (Initial)
 - **Started**: 2026-02-12 (orchestrator invocation)
+- **Completed**: 2026-02-12
+- **Status**: REJECTED (human feedback)
+- **Artifacts**: Superseded by redesign (see below)
+- **Reason for rejection**: Architectural approach of storing tangent data on `CollisionResult` was too narrow; did not generalize to future constraint types
+
+### Design Phase (Redesign)
+- **Started**: 2026-02-12 (orchestrator invocation after human feedback)
 - **Completed**: 2026-02-12
 - **Branch**: 0057-contact-tangent-recording
 - **PR**: #50 (draft)
@@ -138,13 +145,18 @@ Key questions for design:
   - `docs/designs/contact-tangent-recording/design.md`
   - `docs/designs/contact-tangent-recording/contact-tangent-recording.puml`
 - **Notes**:
-  - Decided to store tangents on `CollisionResult` (geometry-level) for serialization alignment with existing pattern
-  - Extract tangents from `FrictionConstraint` after constraint creation to record actual solver state
-  - Backward compatible: optional Vector3DRecord fields default to zero for older recordings
-  - Open questions: arrow length scaling (fixed vs force-scaled), toggle UI design (single vs separate)
+  - **Major architectural shift**: Designed general-purpose constraint state recording system where each constraint type implements `toRecord()` virtual method
+  - Separate transfer records per constraint type: `FrictionConstraintRecord`, `ContactConstraintRecord` (future: `HingeConstraintRecord`, etc.)
+  - CollisionPipeline encapsulates constraint-to-body-ID mapping and recording iteration
+  - Tangent vectors stored as `Vector3DRecord` (directions, not points) to avoid `globalToLocal` overload bug
+  - Immediate goal (tangent visualization) achieved as side effect of extensible general pattern
+  - Open questions: CollisionPipeline access pattern (Option B: `recordConstraints()` method preferred)
 
 ---
 
 ## Human Feedback
 
-{Add feedback here at any point. Agents will read this section.}
+- Arrow length: **fixed** (1.0 units) — no force-magnitude scaling
+- Toggle UI: **single "Contact Overlay" toggle** for normal + t1 + t2 arrows together
+- **Type correction**: tangent vectors must be `Vector3D`, not `Coordinate` — they are directions, not points (avoids `globalToLocal` overload bug)
+- **Architecture change**: Do NOT store tangent data on `CollisionResult`. Instead, design a **constraint state recording system** where each constraint class (`FrictionConstraint`, `ContactConstraint`, etc.) can persist its own solver state directly. This is more scalable — future constraint types (joints, motors) would plug into the same recording pattern rather than threading data backward into collision results. The immediate goal (tangent arrows) is achieved by recording `FrictionConstraint` state (tangent1, tangent2, lambda_t1, lambda_t2), but the infrastructure should generalize.
