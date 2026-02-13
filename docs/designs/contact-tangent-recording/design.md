@@ -541,7 +541,93 @@ Estimated total overhead: < 1% for typical scenarios (10-100 collisions per fram
 
 ---
 
-## Design Review -- Initial Assessment
+## Design Review -- Final Assessment
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-12
+**Status**: APPROVED
+**Iteration**: 1 of 1
+
+### Revision Verification
+
+All five issues from the initial assessment have been addressed correctly:
+
+| Issue ID | Status | Verification |
+|----------|--------|--------------|
+| I1 | Resolved | `extractTangentsFromConstraints()` now iterates `pairRanges_` and reads tangent from `frictionConstraints_[range.startIdx]`. Confirmed `PairConstraintRange` has `{startIdx, count, pairIdx}` members (CollisionPipeline.hpp line 333-338). Confirmed `createConstraints()` creates one `FrictionConstraint` per contact point with 1:1 correspondence to `constraints_` (CollisionPipeline.cpp lines 263-286). The revised logic correctly handles multi-contact manifolds. |
+| I2 | Resolved | Python bindings now use `def_readonly` with no `return_value_policy`, matching the existing pattern at `record_bindings.cpp` lines 180-196 where all `CollisionResultRecord` fields use `def_readonly`. |
+| I3 | Resolved | Python model references corrected to `Vec3` and `CollisionInfo`, matching the actual class names in `replay/replay/models.py` lines 10-60. |
+| I4 | Resolved | SimulationService integration now shows inline tangent extraction within the existing `get_frame_data()` list comprehension (lines 109-138 of `simulation_service.py`), with `hasattr()` guard for backward compatibility. No spurious helper method introduced. |
+| I5 | Resolved | `fromRecord()` implementation shown in full with tangent1/tangent2 deserialization from `record.tangent1.x/y/z` and `record.tangent2.x/y/z`. Correctly handles older recordings where default-initialized `Vector3DRecord` (all zeros) produces zero-vector tangents. |
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | PASS | `tangent1`, `tangent2` follow `snake_case_` member convention; `extractTangentsFromConstraints()` follows `camelCase` method convention; `Vec3`, `CollisionInfo` match existing Python model names |
+| Namespace organization | PASS | All changes within existing namespaces (`msd_sim`, `msd_transfer`, replay Python package) |
+| File structure | PASS | Modifications to existing files only; no new files created (except `contacts.js` which is a 0056f dependency) |
+| Dependency direction | PASS | Data flows correctly: `FrictionConstraint` -> `CollisionResult` -> `CollisionResultRecord` -> Python bindings -> REST API -> frontend. No reverse dependencies introduced. |
+
+#### C++ Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | PASS | No new resource ownership; tangent fields are value types on existing structs |
+| Smart pointer appropriateness | PASS | `extractTangentsFromConstraints()` accesses `frictionConstraints_` via existing `unique_ptr` vector; no new ownership patterns |
+| Value/reference semantics | PASS | `Coordinate tangent1{}` and `tangent2{}` are value members on `CollisionResult` (value type struct); `Vector3DRecord tangent1/tangent2` are value members on transfer record |
+| Rule of 0/3/5 | PASS | `CollisionResult` already has Rule of Five with `=default`; adding value-type members does not change this |
+| Const correctness | PASS | `toRecord()` is `[[nodiscard]]` const; `getTangent1()/getTangent2()` return `const Coordinate&` |
+| Exception safety | PASS | No new exception sources; tangent extraction is a simple value copy from existing constraint state |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | PASS | `CollisionResult.hpp` already includes `CollisionResultRecord.hpp` and `Vector3D.hpp`; no new includes needed |
+| Template complexity | PASS | No templates involved; straightforward struct extension |
+| Memory strategy | PASS | +48 bytes per `CollisionResultRecord` (2 x `Vector3DRecord` with 3 doubles); +48 bytes per `CollisionResult` (2 x `Coordinate`). Negligible for typical workloads. |
+| Thread safety | PASS | `extractTangentsFromConstraints()` runs within single-threaded `execute()` flow; no concurrent access concerns |
+| Build integration | PASS | No new source files, no new CMake targets; existing build presets sufficient |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | PASS | `CollisionResult` round-trip testable in isolation; tangent basis determinism testable via `TangentBasis::computeTangentBasis()` directly |
+| Mockable dependencies | PASS | `extractTangentsFromConstraints()` depends only on `frictionConstraints_` and `pairRanges_` vectors; `CollisionPipelineTest` friend class enables direct testing |
+| Observable state | PASS | Tangent values observable via `CollisionResult::tangent1/tangent2` after pipeline execution; REST API exposes values for integration testing |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | `Vector3DRecord` default initialization: if `Vector3DRecord` fields default to NaN instead of zero, older recordings would produce NaN tangents rather than zero vectors | Integration | Low | Low | Verified: `Vector3DRecord` members default to `0.0` (double default initialization), confirmed in `Vector3DRecord.hpp`. Zero-vector tangents are the correct fallback. | No |
+| R2 | `hasattr()` guard in Python service may mask attribute errors unrelated to version compatibility | Maintenance | Low | Low | The `hasattr()` pattern is only needed during the transition period. Once all recordings include tangent fields, it can be simplified. Acceptable for MVP. | No |
+
+### Diagram Consistency
+
+The PlantUML diagram (`contact-tangent-recording.puml`) has been updated to reflect the revised design:
+- `CollisionInfo` (not `Collision`) in the replay package
+- `Vec3` (not `Vector3D`) as the Python vector type
+- `extractTangentsFromConstraints()` note references `pairRanges_` indexing
+- All relationships and data flow arrows are accurate
+
+### Open Questions Resolution
+
+Both open questions have been resolved by human feedback:
+1. **Arrow length**: Fixed at 1.0 units (Option A selected)
+2. **Toggle UI**: Single "Contact Overlay" toggle (Option A selected)
+
+### Summary
+
+The revised design is well-crafted and ready for implementation. All five issues from the initial review have been correctly addressed. The `extractTangentsFromConstraints()` method now properly uses `pairRanges_` for multi-contact manifold indexing, Python bindings match existing patterns, model names are correct, the SimulationService integration is inline with the existing code pattern, and `fromRecord()` deserialization is complete. No prototypes are required -- all changes are straightforward extensions of existing patterns with well-understood behavior. The design can proceed directly to implementation.
+
+---
+
+## Design Review -- Initial Assessment (Iteration 0)
 
 **Reviewer**: Design Review Agent
 **Date**: 2026-02-12
