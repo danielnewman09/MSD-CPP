@@ -1,0 +1,115 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "Traceability Database Schema" {
+    class record_layer_fields <<new>> {
+        +id: INTEGER PRIMARY KEY
+        +record_name: TEXT NOT NULL
+        +layer: TEXT NOT NULL
+        +field_name: TEXT NOT NULL
+        +field_type: TEXT
+        +source_field: TEXT
+        +notes: TEXT
+    }
+
+    class record_layer_mapping <<new>> {
+        +id: INTEGER PRIMARY KEY
+        +record_name: TEXT NOT NULL
+        +pydantic_model: TEXT
+        +pybind_class: TEXT
+        +sql_table: TEXT
+    }
+
+    class record_layer_fields_fts <<new>> {
+        <<FTS5 virtual table>>
+        +field_name
+        +field_type
+        +notes
+    }
+}
+
+package "Indexer Script" {
+    class index_record_mappings.py <<new>> {
+        +parse_boost_describe_fields()
+        +parse_pybind_bindings()
+        +parse_pydantic_models()
+        +extract_field_mappings()
+        +populate_database()
+    }
+
+    class BoostDescribeParser <<new>> {
+        +parse_struct_declaration()
+        +extract_macro_fields()
+        +identify_field_types()
+    }
+
+    class PybindParser <<new>> {
+        +parse_class_bindings()
+        +extract_def_readonly()
+        +extract_def_property_readonly()
+        +map_fk_transformations()
+    }
+
+    class PydanticParser <<new>> {
+        +parse_class_definitions()
+        +extract_field_names()
+        +infer_cpp_record_mapping()
+    }
+}
+
+package "MCP Server" <<modified>> {
+    class traceability_server.py <<modified>> {
+        +get_record_mappings()
+        +check_record_drift()
+    }
+}
+
+package "Source Files" {
+    class "msd-transfer/*.hpp" {
+        BOOST_DESCRIBE_STRUCT macros
+    }
+
+    class "msd-pybind/record_bindings.cpp" {
+        pybind11 .def_readonly()
+        pybind11 .def_property_readonly()
+    }
+
+    class "replay/models.py" {
+        Pydantic BaseModel classes
+    }
+}
+
+' Relationships
+index_record_mappings.py --> BoostDescribeParser : uses
+index_record_mappings.py --> PybindParser : uses
+index_record_mappings.py --> PydanticParser : uses
+index_record_mappings.py --> record_layer_fields : populates
+index_record_mappings.py --> record_layer_mapping : populates
+
+BoostDescribeParser --> "msd-transfer/*.hpp" : parses
+PybindParser --> "msd-pybind/record_bindings.cpp" : parses
+PydanticParser --> "replay/models.py" : parses
+
+traceability_server.py --> record_layer_fields : queries
+traceability_server.py --> record_layer_mapping : queries
+
+record_layer_fields_fts --> record_layer_fields : indexes
+
+note right of traceability_server.py
+  New MCP tools:
+  • get_record_mappings(record_name)
+  • check_record_drift()
+end note
+
+note bottom of index_record_mappings.py
+  Incremental indexer following
+  existing pattern from:
+  • index_git_history.py
+  • index_symbols.py
+  • index_decisions.py
+end note
+
+@enduml
