@@ -193,7 +193,17 @@ cd replay && uvicorn replay.app:app --reload
   - `replay/recordings/.gitkeep` — Recordings directory placeholder
   - `replay/README.md` — Added Quick Start section
   - `CMakeLists.txt` — Added replay/tools subdirectory
-- **Notes**: All requirements implemented. Known issue: DataRecorder flush crash on 0056d branch prevents database population during destructor. This is a pre-existing issue on 0056d branch that will be resolved when rebasing onto main (where DataRecorder improvements from 0056i/0056j exist). The code is correct and all components function as designed.
+- **Notes**: All requirements implemented.
+
+### Post-Implementation Bug Fixes
+- **Date**: 2026-02-12
+- **Commit**: ce28674
+- **Fixes**:
+  1. **Segfault in DataRecorder destructor**: `Database::insert()` for nested ValidTransferObject types lazily creates DAOs during flush, mutating `daoCreationOrder_` while `flushAllDAOs()` iterates it. Fix: pre-create all 20+ DAOs in constructor before starting recorder thread.
+  2. **Silent insert failure for CollisionResultRecord, SolverDiagnosticRecord, AssetInertialStaticRecord**: `recordCollisions()`, `recordSolverDiagnostics()`, and `recordStaticAsset()` pre-assigned IDs via `incrementIdCounter()` before `addToBuffer()`. During flush, `DAO::insert()` rejected records because `data.id <= idCounter_` (counter already bumped). Fix: let DAO auto-assign IDs during flush by leaving `id` at `UINT32_MAX`.
+  3. **Frozen simulation time in generate_test_recording.cpp**: Passed constant `10ms` to `WorldModel::update()` instead of accumulating absolute time `(i+1)*10ms`. After frame 1, `dt = (10-10)/1000 = 0` so physics never advanced. Fix: pass accumulating time.
+  4. **Empty AssetDynamicStateRecord table**: `recordInertialStates()` recorded via `InertialStateRecord` DAO directly instead of via parent `AssetDynamicStateRecord`. Fix: record via `AssetDynamicStateRecord` which auto-inserts nested records.
+- **Verified**: All tables populated — 300 frames, 300 states, 158 collisions, 300 solver diagnostics, 1 static asset, 300 energy records, 298 distinct z positions
 
 ---
 

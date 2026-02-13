@@ -1,6 +1,7 @@
 #!/bin/bash
 # Start the MSD Replay FastAPI server
 # Ticket: 0056k_example_workflow_test_recording
+# Ticket: 0056e_threejs_core_visualization (R0e - Two-database architecture)
 
 set -e
 
@@ -8,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV_DIR="$PROJECT_ROOT/.venv"
 BUILD_DIR="$PROJECT_ROOT/build/Debug/debug"
+ASSETS_DB="$SCRIPT_DIR/recordings/assets.db"
 RECORDING_DB="$SCRIPT_DIR/recordings/test_cube_drop.db"
 
 # --- 1. Ensure venv exists ---
@@ -32,7 +34,20 @@ if ! python3 -c "import msd_reader" 2>/dev/null; then
     exit 1
 fi
 
-# --- 4. Generate test recording if missing ---
+# --- 4. Generate asset database if missing ---
+mkdir -p "$SCRIPT_DIR/recordings"
+if [ ! -f "$ASSETS_DB" ]; then
+    ASSET_GEN="$BUILD_DIR/generate_assets"
+    if [ ! -f "$ASSET_GEN" ]; then
+        echo "ERROR: generate_assets not found at $ASSET_GEN"
+        echo "Build it first: cmake --build --preset conan-debug --target generate_assets"
+        exit 1
+    fi
+    echo "Generating asset database..."
+    "$ASSET_GEN" "$ASSETS_DB"
+fi
+
+# --- 5. Generate test recording if missing ---
 if [ ! -f "$RECORDING_DB" ]; then
     GENERATOR="$BUILD_DIR/generate_test_recording"
     if [ ! -f "$GENERATOR" ]; then
@@ -40,14 +55,19 @@ if [ ! -f "$RECORDING_DB" ]; then
         echo "Build it first: cmake --build --preset conan-debug --target generate_test_recording"
         exit 1
     fi
-    mkdir -p "$SCRIPT_DIR/recordings"
     echo "Generating test recording..."
-    "$GENERATOR" "$RECORDING_DB"
+    "$GENERATOR" "$ASSETS_DB" "$RECORDING_DB"
 fi
 
-# --- 5. Start FastAPI server ---
+# --- 6. Export environment variables ---
+export MSD_RECORDINGS_DIR="$SCRIPT_DIR/recordings"
+export MSD_ASSETS_DB="$ASSETS_DB"
+
+# --- 7. Start FastAPI server ---
 echo ""
 echo "Starting replay server..."
+echo "  Asset DB:  $ASSETS_DB"
+echo "  Recording: $RECORDING_DB"
 echo "  API:  http://localhost:8000/api/v1"
 echo "  Docs: http://localhost:8000/docs"
 echo ""

@@ -275,6 +275,7 @@ void DataRecorder::recordSolverDiagnostics(uint32_t frameId,
 
 void DataRecorder::recordStaticAsset(const AssetInertial& asset)
 {
+  // Record inertial properties (mass, restitution, friction)
   auto& staticDAO = getDAO<msd_transfer::AssetInertialStaticRecord>();
 
   msd_transfer::AssetInertialStaticRecord record{};
@@ -283,6 +284,12 @@ void DataRecorder::recordStaticAsset(const AssetInertial& asset)
   record.restitution = asset.getCoefficientOfRestitution();
   record.friction = asset.getFrictionCoefficient();
   staticDAO.addToBuffer(record);
+
+  // Record physical properties (asset_id for geometry lookup)
+  // Ticket: 0056e_threejs_core_visualization (R0a)
+  auto& physicalDAO = getDAO<msd_transfer::AssetPhysicalStaticRecord>();
+  auto physicalRecord = asset.toStaticRecord(false);  // false = not environment
+  physicalDAO.addToBuffer(physicalRecord);
 }
 
 }  // namespace msd_sim
