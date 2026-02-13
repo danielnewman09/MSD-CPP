@@ -115,11 +115,15 @@ PYBIND_CLASS_RE = re.compile(
     re.DOTALL,
 )
 
-# .def_readonly("field", &RecordType::field)
-DEF_READONLY_RE = re.compile(r'\.def_readonly\("(\w+)",\s*&\w+::(\w+)\)')
+# .def_readonly("field", &msd_transfer::RecordType::field)
+DEF_READONLY_RE = re.compile(
+    r'\.def_readonly\(\s*"(\w+)",\s*&[\w:]+::(\w+)\)', re.DOTALL
+)
 
 # .def_property_readonly("field_id", [](const Record& r) { return r.field.id; })
-DEF_PROPERTY_READONLY_RE = re.compile(r'\.def_property_readonly\("(\w+)"')
+DEF_PROPERTY_READONLY_RE = re.compile(
+    r'\.def_property_readonly\(\s*"(\w+)"', re.DOTALL
+)
 
 
 def parse_pybind_bindings(bindings_content: str) -> dict[str, list[dict[str, Any]]]:
