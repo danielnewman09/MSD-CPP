@@ -30,7 +30,7 @@
 
 void createCubeAsset(cpp_sqlite::Database& db,
                      const std::string& name,
-                     float size)
+                     double size)
 {
   std::cout << "Creating " << name << " asset (size=" << size << ")..."
             << "\n";
@@ -84,9 +84,9 @@ int main(int argc, char* argv[])
     cpp_sqlite::Database db{dbPath, true, logger.getLogger()};
 
     // Create the test primitive assets
-    createCubeAsset(db, "unit_cube", 1.0f);
-    createCubeAsset(db, "large_cube", 2.0f);
-    createCubeAsset(db, "floor_slab", 100.0f);
+    createCubeAsset(db, "unit_cube", 1.0);
+    createCubeAsset(db, "large_cube", 2.0);
+    createCubeAsset(db, "floor_slab", 100.0);
 
     std::cout << "\nTest asset database created successfully!" << "\n";
     std::cout << "Database location: " << dbPath << "\n";
