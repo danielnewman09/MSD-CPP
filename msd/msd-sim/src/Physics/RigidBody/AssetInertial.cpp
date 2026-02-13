@@ -1,7 +1,6 @@
 #include <stdexcept>
 
 #include "msd-assets/src/Geometry.hpp"
-#include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialCalculations.hpp"
@@ -256,55 +255,7 @@ void AssetInertial::applyAngularImpulse(const AngularVelocity& angularImpulse)
   // 0030)
 }
 
-// ========== Constraint Management (ticket 0031) ==========
-
-void AssetInertial::addConstraint(std::unique_ptr<Constraint> constraint)
-{
-  constraints_.push_back(std::move(constraint));
-}
-
-void AssetInertial::removeConstraint(size_t index)
-{
-  if (index >= constraints_.size())
-  {
-    throw std::out_of_range(
-      "Constraint index out of range: " + std::to_string(index) +
-      " >= " + std::to_string(constraints_.size()));
-  }
-  constraints_.erase(constraints_.begin() + static_cast<std::ptrdiff_t>(index));
-}
-
-std::vector<Constraint*> AssetInertial::getConstraints()
-{
-  std::vector<Constraint*> result;
-  result.reserve(constraints_.size());
-  for (auto& constraint : constraints_)
-  {
-    result.push_back(constraint.get());
-  }
-  return result;
-}
-
-std::vector<const Constraint*> AssetInertial::getConstraints() const
-{
-  std::vector<const Constraint*> result;
-  result.reserve(constraints_.size());
-  for (const auto& constraint : constraints_)
-  {
-    result.push_back(constraint.get());
-  }
-  return result;
-}
-
-void AssetInertial::clearConstraints()
-{
-  constraints_.clear();
-}
-
-size_t AssetInertial::getConstraintCount() const
-{
-  return constraints_.size();
-}
+// Constraint management removed (ticket 0058_constraint_ownership_cleanup)
 
 // ========== Transfer Object Support ==========
 

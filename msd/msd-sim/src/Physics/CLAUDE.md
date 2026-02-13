@@ -52,7 +52,7 @@ Collision System (see Collision/CLAUDE.md)
 The RigidBody sub-module provides the core rigid body representation for dynamic objects in the simulation. It includes convex hull geometry, inertial properties calculation, quaternion-based orientation, and complete dynamic state representation.
 
 **Key Components**:
-- **AssetInertial**: Complete dynamic rigid body with mass, inertia, forces, impulses, and constraints
+- **AssetInertial**: Complete dynamic rigid body with mass, inertia, forces, and impulses (copyable via Rule of Zero as of ticket 0058)
 - **AssetPhysical**: Base geometric element with collision hull and reference frame
 - **InertialState**: Complete kinematic state with quaternion-based orientation (14-component state vector)
 - **ConvexHull**: 3D convex hull via Qhull for collision detection and mass properties
@@ -141,11 +141,12 @@ The Integration sub-module provides an abstract interface for numerical integrat
 
 Every `AssetInertial` object's state is advanced each frame by calling `integrator_->step()` with:
 - External forces (gravity, user forces)
-- Constraint vector (quaternion normalization, joints, etc.)
 - Mass properties (mass, inverse inertia tensor)
 - Timestep (typically 16.67ms for 60 FPS)
 
-The integrator computes unconstrained accelerations, solves the constraint system using `ConstraintSolver`, applies total accelerations, updates velocities and positions, and enforces constraints.
+The integrator computes unconstrained accelerations, applies total accelerations, updates velocities and positions, and normalizes quaternions directly via `state.orientation.normalize()`.
+
+**Note**: As of ticket 0045, the integrator no longer uses `ConstraintSolver` or accepts constraints. Constraint solving is handled separately by `CollisionPipeline` for contact/friction constraints (see [Collision/CLAUDE.md](Collision/CLAUDE.md)).
 
 #### Detailed Documentation
 

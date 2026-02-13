@@ -13,10 +13,9 @@ AssetInertial (Complete dynamic object)
     ├── InertialState (14-component kinematic state)
     │   ├── Position/Velocity/Acceleration (Linear: 3+3+3)
     │   └── Quaternion/QuaternionRate (Angular: 4+4, no gimbal lock)
-    ├── Mass Properties
-    │   ├── Mass, Inertia Tensor (Mirtich algorithm)
-    │   └── Center of Mass (from Qhull)
-    └── Constraints (Lagrange multipliers)
+    └── Mass Properties
+        ├── Mass, Inertia Tensor (Mirtich algorithm)
+        └── Center of Mass (from Qhull)
 
 AssetEnvironment (Static object - no dynamics)
     └── AssetPhysical (hull + transform only)
@@ -61,9 +60,11 @@ Previous tetrahedron decomposition had ~10-15% error with ad-hoc scaling. Mirtic
 
 Forces are accumulated during a frame, then cleared after integration. Multiple systems (gravity, constraints, user input) can contribute independently.
 
-### Move-Only AssetInertial
+### AssetInertial Copy Semantics
 
-`AssetInertial` is move-only because it owns constraints via `std::vector<std::unique_ptr<Constraint>>`. Copy semantics would require deep-copying constraints, which is rarely needed and potentially expensive.
+**As of [Ticket 0058](../../../../../tickets/0058_constraint_ownership_cleanup.md)**, `AssetInertial` follows the Rule of Zero with default copy and move semantics. All member variables are copyable by value (mass, inertia tensors, state, coefficients), enabling straightforward object copies when needed.
+
+**Historical note**: Prior to ticket 0058, AssetInertial was move-only due to owning constraints via `std::vector<std::unique_ptr<Constraint>>`. Constraint ownership was removed as vestigial after ticket 0045 moved quaternion normalization to direct `state.orientation.normalize()` calls.
 
 ---
 
@@ -88,9 +89,9 @@ Forces are accumulated during a frame, then cleared after integration. Multiple 
 |-----------|-----------|
 | ConvexHull vertices/facets | Owned by value (`std::vector`) |
 | AssetPhysical hull reference | Non-owning (caller ensures lifetime) |
-| AssetInertial constraints | Owned via `std::unique_ptr` |
 | InertialState | Value in AssetInertial |
 | Inertia tensors | Cached by value |
+| Constraints (contact/friction) | Owned by CollisionPipeline (ephemeral, per-frame) |
 
 ### Thread Safety
 
@@ -107,20 +108,20 @@ Forces are accumulated during a frame, then cleared after integration. Multiple 
 1. Force Accumulation
    └── applyForce(), applyTorque(), applyForceAtPoint()
 
-2. Constraint Enforcement
-   └── UnitQuaternionConstraint, joints, contacts
-
-3. Integration (Lagrangian mechanics)
+2. Integration (Lagrangian mechanics)
    └── Integrator::step() computes accelerations, updates state
+   └── Quaternion normalization via state.orientation.normalize()
 
-4. Collision Response
-   └── applyImpulse(), applyAngularImpulse()
+3. Collision Detection & Response
+   └── CollisionPipeline creates ephemeral ContactConstraints
+   └── ConstraintSolver enforces non-penetration
+   └── PositionCorrector handles post-solve position errors
 
-5. Force Clearing
+4. Force Clearing
    └── clearForces() prepares for next frame
 ```
 
-Every `AssetInertial` owns a `UnitQuaternionConstraint` by default. Additional constraints added via `addConstraint()`.
+**Note**: As of ticket 0045, quaternion normalization is handled directly by the integrator (`state.orientation.normalize()`), not via constraints. Contact/friction constraints are ephemeral and owned by `CollisionPipeline`, not `AssetInertial`.
 
 ---
 
