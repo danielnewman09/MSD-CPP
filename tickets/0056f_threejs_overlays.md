@@ -2,11 +2,11 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Review
+- [x] Ready for Implementation
+- [x] Implementation Complete — Awaiting Review
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Implementation Complete — Awaiting Review
 **Type**: Feature
 **Priority**: Low
 **Assignee**: TBD
@@ -148,3 +148,29 @@ This is the ticket that transforms the viewer from a simple body-motion replay i
 ## Human Feedback
 
 {Add feedback here at any point. Agents will read this section.}
+
+---
+
+## Workflow Log
+
+### Preparation Phase
+- **Started**: 2026-02-13 (orchestrator)
+- **Completed**: 2026-02-13
+- **Branch**: 0056f-threejs-overlays (exists, based on 0056e)
+- **Artifacts**: None yet
+- **Notes**: Ticket advanced to Ready for Implementation. The branch already contains the full 0056e implementation (5 commits of proven code). Implementation will ADD overlay modules on top of existing viewer infrastructure.
+
+### Implementation Phase
+- **Started**: 2026-02-13 (orchestrator)
+- **Completed**: 2026-02-13
+- **Branch**: 0056f-threejs-overlays
+- **Commit**: 712b404
+- **PR**: N/A (sub-ticket, will merge to parent branch)
+- **Artifacts**:
+  - `replay/static/js/overlays/contacts.js` (159 lines) — Contact points and normals
+  - `replay/static/js/overlays/forces.js` (168 lines) — Constraint and gravity forces
+  - `replay/static/js/overlays/energy.js` (170 lines) — Chart.js energy graph
+  - `replay/static/js/overlays/inspector.js` (181 lines) — Body selection and properties
+  - `replay/static/js/overlays/solver.js` (75 lines) — Solver diagnostics display
+  - Modified: `index.html`, `style.css`, `app.js`, `scene.js`, `ui.js`
+- **Notes**: All 8 overlay requirements (R1-R8) implemented. Each overlay is independently toggleable. Default state: Energy graph enabled. Contact point/normal visualization uses red spheres and arrows. Constraint forces use green arrows with logarithmic scaling. Gravity uses blue arrows proportional to mass. Inspector uses raycasting for body selection. Solver diagnostics highlight non-convergence in red. Chart.js integration for energy graph with frame marker annotation.

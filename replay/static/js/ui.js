@@ -1,11 +1,19 @@
 // Ticket: 0056e_threejs_core_visualization
 // UI controls binding and updates
 
+// Ticket: 0056f_threejs_overlays
+import { ContactOverlay } from './overlays/contacts.js';
+import { ForceOverlay } from './overlays/forces.js';
+import { EnergyOverlay } from './overlays/energy.js';
+import { InspectorOverlay } from './overlays/inspector.js';
+import { SolverOverlay } from './overlays/solver.js';
+
 export class UIController {
-    constructor(dataLoader, sceneManager, playbackController) {
+    constructor(dataLoader, sceneManager, playbackController, overlaysRef) {
         this.dataLoader = dataLoader;
         this.sceneManager = sceneManager;
         this.playbackController = playbackController;
+        this.overlaysRef = overlaysRef;  // Reference to window.overlays
 
         this.elements = {
             simSelect: document.getElementById('sim-select'),
@@ -18,6 +26,17 @@ export class UIController {
             speedBtns: document.querySelectorAll('.speed-btn'),
             resetCameraBtn: document.getElementById('btn-reset-camera'),
             loadingIndicator: document.getElementById('loading-indicator'),
+            // Ticket: 0056f_threejs_overlays
+            toggleContactPoints: document.getElementById('toggle-contact-points'),
+            toggleContactNormals: document.getElementById('toggle-contact-normals'),
+            toggleConstraintForces: document.getElementById('toggle-constraint-forces'),
+            toggleGravity: document.getElementById('toggle-gravity'),
+            toggleEnergy: document.getElementById('toggle-energy'),
+            toggleInspector: document.getElementById('toggle-inspector'),
+            toggleSolver: document.getElementById('toggle-solver'),
+            energyChartCanvas: document.getElementById('energy-chart'),
+            inspectorPanel: document.getElementById('inspector-panel').querySelector('.inspector-content'),
+            solverStatus: document.getElementById('solver-status'),
         };
 
         this.bindEvents();
@@ -93,6 +112,64 @@ export class UIController {
                     break;
             }
         });
+
+        // Ticket: 0056f_threejs_overlays
+        // Overlay toggle controls
+        if (this.elements.toggleContactPoints) {
+            this.elements.toggleContactPoints.addEventListener('change', (e) => {
+                if (this.overlaysRef.contacts) {
+                    this.overlaysRef.contacts.setPointsEnabled(e.target.checked);
+                }
+            });
+        }
+
+        if (this.elements.toggleContactNormals) {
+            this.elements.toggleContactNormals.addEventListener('change', (e) => {
+                if (this.overlaysRef.contacts) {
+                    this.overlaysRef.contacts.setNormalsEnabled(e.target.checked);
+                }
+            });
+        }
+
+        if (this.elements.toggleConstraintForces) {
+            this.elements.toggleConstraintForces.addEventListener('change', (e) => {
+                if (this.overlaysRef.forces) {
+                    this.overlaysRef.forces.setConstraintEnabled(e.target.checked);
+                }
+            });
+        }
+
+        if (this.elements.toggleGravity) {
+            this.elements.toggleGravity.addEventListener('change', (e) => {
+                if (this.overlaysRef.forces) {
+                    this.overlaysRef.forces.setGravityEnabled(e.target.checked);
+                }
+            });
+        }
+
+        if (this.elements.toggleEnergy) {
+            this.elements.toggleEnergy.addEventListener('change', async (e) => {
+                if (this.overlaysRef.energy) {
+                    await this.overlaysRef.energy.setEnabled(e.target.checked);
+                }
+            });
+        }
+
+        if (this.elements.toggleInspector) {
+            this.elements.toggleInspector.addEventListener('change', (e) => {
+                if (this.overlaysRef.inspector) {
+                    this.overlaysRef.inspector.setEnabled(e.target.checked);
+                }
+            });
+        }
+
+        if (this.elements.toggleSolver) {
+            this.elements.toggleSolver.addEventListener('change', (e) => {
+                if (this.overlaysRef.solver) {
+                    this.overlaysRef.solver.setEnabled(e.target.checked);
+                }
+            });
+        }
     }
 
     /**
@@ -141,6 +218,10 @@ export class UIController {
             this.elements.timelineSlider.max = metadata.total_frames - 1;
             this.elements.timelineSlider.value = 0;
 
+            // Ticket: 0056f_threejs_overlays
+            // Initialize overlays with metadata
+            this.initializeOverlays(metadata);
+
             // Load first frame
             await this.playbackController.setFrame(0);
 
@@ -174,6 +255,12 @@ export class UIController {
         // Update time display (assuming 10ms per frame from generate_test_recording)
         const simulationTime = (currentFrame * 10) / 1000;  // Convert to seconds
         this.elements.timeDisplay.textContent = `Time: ${simulationTime.toFixed(3)}s`;
+
+        // Ticket: 0056f_threejs_overlays
+        // Update energy chart current frame marker
+        if (this.overlaysRef.energy) {
+            this.overlaysRef.energy.updateCurrentFrame(currentFrame);
+        }
     }
 
     /**
@@ -227,5 +314,44 @@ export class UIController {
      */
     hideLoading() {
         this.elements.loadingIndicator.classList.add('hidden');
+    }
+
+    /**
+     * Ticket: 0056f_threejs_overlays
+     * Initialize overlay modules after metadata is loaded
+     * @param {Object} metadata
+     */
+    initializeOverlays(metadata) {
+        // Contact overlay
+        this.overlaysRef.contacts = new ContactOverlay(this.sceneManager.scene);
+
+        // Force overlay
+        this.overlaysRef.forces = new ForceOverlay(this.sceneManager.scene, metadata);
+
+        // Energy overlay
+        this.overlaysRef.energy = new EnergyOverlay(
+            this.dataLoader,
+            this.elements.energyChartCanvas
+        );
+
+        // Inspector overlay
+        this.overlaysRef.inspector = new InspectorOverlay(
+            this.sceneManager.camera,
+            this.sceneManager.scene,
+            this.sceneManager,
+            metadata
+        );
+        this.overlaysRef.inspector.setPanelElement(
+            document.getElementById('inspector-panel')
+        );
+
+        // Solver overlay
+        this.overlaysRef.solver = new SolverOverlay();
+        this.overlaysRef.solver.setStatusElement(this.elements.solverStatus);
+
+        // Apply default states from checkboxes
+        if (this.elements.toggleEnergy.checked) {
+            this.overlaysRef.energy.setEnabled(true);
+        }
     }
 }

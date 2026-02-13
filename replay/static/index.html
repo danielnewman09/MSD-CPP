@@ -18,6 +18,28 @@
             <div class="spinner"></div>
             <div>Loading simulation...</div>
         </div>
+
+        <!-- Ticket: 0056f_threejs_overlays -->
+        <!-- Energy Chart Overlay -->
+        <div id="energy-chart-container" class="overlay-panel energy-chart hidden">
+            <div class="panel-header">
+                Energy vs Frame
+                <button id="btn-minimize-energy" class="btn-minimize">−</button>
+            </div>
+            <canvas id="energy-chart"></canvas>
+        </div>
+
+        <!-- Inspector Panel -->
+        <div id="inspector-panel" class="overlay-panel inspector hidden">
+            <div class="inspector-content">
+                <em>Click a body to inspect</em>
+            </div>
+        </div>
+
+        <!-- Solver Diagnostics Bar -->
+        <div id="solver-status" class="solver-diagnostics hidden">
+            <em>No solver data</em>
+        </div>
     </div>
 
     <div id="controls-panel">
@@ -61,6 +83,42 @@
         <div class="control-group">
             <button id="btn-reset-camera">Reset Camera</button>
         </div>
+
+        <!-- Ticket: 0056f_threejs_overlays -->
+        <!-- Overlay Toggles -->
+        <div class="control-group overlay-toggles">
+            <label>Overlays:</label>
+            <div class="toggle-grid">
+                <label class="toggle-label">
+                    <input type="checkbox" id="toggle-contact-points">
+                    Contact Points
+                </label>
+                <label class="toggle-label">
+                    <input type="checkbox" id="toggle-contact-normals">
+                    Contact Normals
+                </label>
+                <label class="toggle-label">
+                    <input type="checkbox" id="toggle-constraint-forces">
+                    Constraint Forces
+                </label>
+                <label class="toggle-label">
+                    <input type="checkbox" id="toggle-gravity">
+                    Gravity Arrows
+                </label>
+                <label class="toggle-label">
+                    <input type="checkbox" id="toggle-energy" checked>
+                    Energy Graph
+                </label>
+                <label class="toggle-label">
+                    <input type="checkbox" id="toggle-inspector">
+                    Body Inspector
+                </label>
+                <label class="toggle-label">
+                    <input type="checkbox" id="toggle-solver">
+                    Solver Diagnostics
+                </label>
+            </div>
+        </div>
     </div>
 
     <!-- Three.js from CDN -->
@@ -72,6 +130,11 @@
         }
     }
     </script>
+
+    <!-- Ticket: 0056f_threejs_overlays -->
+    <!-- Chart.js for energy graph -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 
     <!-- Application modules -->
     <script type="module" src="/static/js/app.js"></script>
