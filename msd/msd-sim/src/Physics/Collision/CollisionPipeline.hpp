@@ -290,8 +290,8 @@ private:
    * @brief Clear ephemeral solver state (references, pointers, constraints)
    *
    * Clears vectors that hold references or pointers to external objects
-   * (states_, constraintPtrs_, etc.) to prevent dangling references when
-   * assets are modified between frames. Also clears constraints.
+   * (states_, etc.) to prevent dangling references when assets are modified
+   * between frames. Also clears constraints.
    *
    * Does NOT clear collisions_ — those are value types (owned by pipeline)
    * and are cleared at the start of the next execute() call. This allows
@@ -299,8 +299,42 @@ private:
    * snapshot copy.
    *
    * Preserves capacity to avoid reallocation (NFR-1).
+   *
+   * Ticket: 0058_constraint_ownership_cleanup
    */
   void clearEphemeralState();
+
+  /**
+   * @brief Build solver view (all constraints as Constraint*)
+   *
+   * Generates a vector of raw pointers for ConstraintSolver::solve().
+   * The view is temporary (not stored) and valid only within the calling
+   * scope.
+   *
+   * @param interleaved If true (friction active), returns [CC_0, FC_0, CC_1,
+   * FC_1, ...]. If false, returns all constraints in storage order.
+   * @return Vector of non-owning Constraint* pointers
+   *
+   * Ticket: 0058_constraint_ownership_cleanup
+   */
+  std::vector<Constraint*> buildSolverView(bool interleaved) const;
+
+  /**
+   * @brief Build contact-only view (ContactConstraint* via dynamic_cast)
+   *
+   * Generates a vector of Constraint* pointers containing only
+   * ContactConstraint instances for PositionCorrector::correctPositions().
+   * Filters allConstraints_ using dynamic_cast to extract only
+   * ContactConstraint instances.
+   *
+   * The view is temporary (not stored) and valid only within the calling
+   * scope.
+   *
+   * @return Vector of non-owning Constraint* pointers (ContactConstraints only)
+   *
+   * Ticket: 0058_constraint_ownership_cleanup
+   */
+  std::vector<Constraint*> buildContactView() const;
 
   CollisionHandler collisionHandler_;
   ConstraintSolver constraintSolver_;
@@ -314,13 +348,11 @@ private:
   SolverData solverData_;
 
   // Ephemeral solver state (cleared at end of execute to prevent dangling refs)
-  std::vector<std::unique_ptr<ContactConstraint>> constraints_;
-  std::vector<std::unique_ptr<FrictionConstraint>> frictionConstraints_;
+  // Ticket: 0058_constraint_ownership_cleanup
+  std::vector<std::unique_ptr<Constraint>> allConstraints_;  // Single owning container
   std::vector<std::reference_wrapper<const InertialState>> states_;
   std::vector<double> inverseMasses_;
   std::vector<Eigen::Matrix3d> inverseInertias_;
-  std::vector<Constraint*> constraintPtrs_;
-  std::vector<Constraint*> normalConstraintPtrs_;
 
   // Cache and position correction (ticket 0044)
   ContactCache contactCache_;

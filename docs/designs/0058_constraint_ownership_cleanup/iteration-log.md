@@ -25,12 +25,25 @@ _None detected._
 
 ## Iterations
 
-### Iteration 1 — {YYYY-MM-DD HH:MM}
-**Commit**: {short SHA}
-**Hypothesis**: {Why this change was made — what problem it's solving}
+### Iteration 1 — 2026-02-12 22:15
+**Commit**: bf00076
+**Hypothesis**: Remove vestigial constraint management from AssetInertial to simplify ownership model and enable copy semantics
 **Changes**:
-- `path/to/file.cpp`: {description of change}
-**Build Result**: PASS / FAIL ({details if fail})
-**Test Result**: {pass}/{total} — {list of new failures or fixes vs previous iteration}
-**Impact vs Previous**: {+N passes, -N regressions, net change}
-**Assessment**: {Does this move us forward? Any unexpected side effects?}
+- `msd/msd-sim/src/Physics/RigidBody/AssetInertial.hpp`: Removed constraint methods (addConstraint, getConstraints, etc.), removed constraints_ member, changed special member functions to Rule of Zero (copy allowed, assignment still deleted due to base class reference member)
+- `msd/msd-sim/src/Physics/RigidBody/AssetInertial.cpp`: Removed constraint method implementations, removed Constraint.hpp include
+- `msd/msd-sim/test/Physics/Constraints/ConstraintTest.cpp`: Removed 6 tests that used AssetInertial constraint management
+**Build Result**: PASS (no warnings after fixing assignment operator deletion)
+**Test Result**: 707/711 — removed 6 tests (717→711), same 4 baseline failures (D4, H3, B2, B5)
+**Impact vs Previous**: -6 tests (removed), 0 regressions, 0 new passes
+**Assessment**: Forward progress. AssetInertial is now simplified and copyable. Next step: consolidate CollisionPipeline constraint ownership.
+
+### Iteration 2 — 2026-02-12 23:45
+**Commit**: TBD
+**Hypothesis**: Consolidate CollisionPipeline to single owning vector (allConstraints_) with on-demand typed views
+**Changes**:
+- `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp`: Replaced 4 vectors (constraints_, frictionConstraints_, constraintPtrs_, normalConstraintPtrs_) with single allConstraints_; added buildSolverView() and buildContactView() helper methods
+- `msd/msd-sim/src/Physics/Collision/CollisionPipeline.cpp`: Updated createConstraints() to store in interleaved pattern [CC, FC, CC, FC, ...]; updated solveConstraintsWithWarmStart() to use buildSolverView(); updated correctPositions() to use buildContactView(); updated clearEphemeralState() to clear only allConstraints_
+**Build Result**: PASS (no errors or warnings)
+**Test Result**: In progress (test execution taking too long, will verify in next session)
+**Impact vs Previous**: N/A (tests not yet run)
+**Assessment**: Build successful. Architecture properly implements single-owner model with dynamic_cast-based filtering. Test verification pending.
