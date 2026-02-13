@@ -328,3 +328,81 @@ if (range != pairRanges_.end()) {
 | `msd/msd-sim/CLAUDE.md` | CollisionPipeline description | Document single constraint vector ownership model |
 | `msd/msd-sim/CLAUDE.md` | Constraint hierarchy | Remove UnitQuaternionConstraint (vestigial) |
 | `docs/msd/msd-sim/msd-sim-core.puml` | Physics component diagram | Update AssetInertial (remove constraint association), update CollisionPipeline (single vector) |
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-12
+**Status**: APPROVED
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | Follows project patterns: `allConstraints_`, `buildSolverView()`, `buildContactView()` use camelCase for methods and snake_case_ for members |
+| Namespace organization | ✓ | No new namespaces introduced, all changes within `msd_sim` |
+| File structure | ✓ | Follows existing `msd/msd-sim/src/Physics/` structure, no reorganization required |
+| Dependency direction | ✓ | No new dependencies introduced. Removes vestigial constraint dependency from AssetInertial, consolidates ownership to CollisionPipeline (correct layer) |
+
+#### C++ Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | ✓ | `std::unique_ptr<Constraint>` in `allConstraints_` provides proper RAII for constraint ownership |
+| Smart pointer appropriateness | ✓ | Uses `std::unique_ptr` for exclusive ownership (per CLAUDE.md standards). Avoids `std::shared_ptr` as required |
+| Value/reference semantics | ✓ | Returns view vectors by value (`buildSolverView()`, `buildContactView()`), enabling clear ownership and move semantics |
+| Rule of 0/3/5 | ✓ | AssetInertial moves to Rule of Zero with explicit `= default` declarations (Option A from Open Questions). CollisionPipeline remains non-copyable (deleted copy/move) |
+| Const correctness | ✓ | `buildSolverView()` and `buildContactView()` are const methods, return const-correct pointers |
+| Exception safety | ✓ | No new exception sources. `dynamic_cast` is safe (returns nullptr on failure, checked by caller). Basic exception guarantee maintained |
+| Initialization | ✓ | Uses brace initialization throughout existing codebase, no new initialization patterns introduced |
+| Return values | ✓ | Returns typed views by value rather than output parameters (follows CLAUDE.md preference) |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | No new header dependencies. `<memory>` and `<vector>` already included. `dynamic_cast` requires RTTI (already enabled) |
+| Template complexity | ✓ | No templates introduced. Uses concrete types |
+| Memory strategy | ✓ | Clear ownership: `allConstraints_` owns, typed views are non-owning temporary vectors. Bounded lifetime (views not stored) |
+| Thread safety | ✓ | Design maintains existing thread safety model (not thread-safe). No new concurrency requirements |
+| Build integration | ✓ | Pure refactor, no CMake changes required. No new external dependencies |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | AssetInertial can be instantiated without constraints (simplified). CollisionPipeline phases remain independently testable |
+| Mockable dependencies | ✓ | Constraint hierarchy is polymorphic (virtual methods), enabling mock constraints for testing typed views |
+| Observable state | ✓ | Constraint count observable via `allConstraints_.size()`. View generation testable by verifying returned vector types and sizes |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | `dynamic_cast` performance overhead in `buildContactView()` | Performance | Low | Low | Profiling data shows <1% overhead (per design doc). Hot path (solver loop) does NOT use `dynamic_cast`, only view generation (once per frame) | No |
+| R2 | AssetInertial copy semantics change (move-only → copyable) could enable accidental copies of large objects | Maintenance | Low | Low | Copy operations are explicit (no implicit conversions). AssetInertial size is modest (~200 bytes). Documented as semantic change in design | No |
+| R3 | Test code using `getConstraints()` will break (lines 474, 539 in ConstraintTest.cpp) | Integration | High (expected) | Low | Design explicitly addresses this with "Remove or update tests" in AC4. Test impact table provides clear migration path | No |
+| R4 | Quaternion normalization regression if `UnitQuaternionConstraint` removal breaks integrator assumptions | Technical | Low | Medium | Integrator has used direct normalization (`state.orientation.normalize()`) since ticket 0045. Design proposes adding explicit quaternion normalization test before removal | No |
+
+### Summary
+
+This design is **architecturally sound** and ready for implementation. The refactor properly addresses the root causes identified in the ticket:
+
+1. **Dead code removal**: AssetInertial's vestigial `constraints_` vector is correctly identified as unused (since ticket 0045) and removal is safe.
+2. **Ownership consolidation**: CollisionPipeline's four-vector pattern is replaced with a clean single-owner model (`allConstraints_`), satisfying human feedback requiring "exactly one owning vector."
+3. **Copyability restoration**: Moving AssetInertial to Rule of Zero is a logical consequence of removing the `unique_ptr` vector. The design wisely chooses explicit `= default` declarations (Option A) to document the semantic change.
+4. **Performance**: The `dynamic_cast` overhead in typed view generation is negligible (<1% per profiling data) and does NOT affect the solver hot path.
+
+**Recommendation**: Proceed to implementation. No prototype required — all risks are low-likelihood or low-impact, with clear mitigations. The test breakage (R3) is expected and explicitly planned for.
+
+**Next Steps**:
+1. Human reviews this assessment
+2. If approved, proceed to implementation phase
+3. Implementer should add quaternion normalization test (R4 mitigation) before removing `UnitQuaternionConstraint`
+4. Update or remove affected test cases per Test Impact table
+
