@@ -137,6 +137,24 @@ export class SceneManager {
             const q = state.orientation;
             mesh.quaternion.set(q.x, q.y, q.z, q.w);
         });
+
+        // Ticket: 0056f_threejs_overlays
+        // Update overlays if available
+        if (window.overlays) {
+            if (window.overlays.contacts) {
+                window.overlays.contacts.update(frameData);
+            }
+            if (window.overlays.forces) {
+                window.overlays.forces.update(frameData);
+                window.overlays.forces.updateGravityPositions(frameData);
+            }
+            if (window.overlays.inspector) {
+                window.overlays.inspector.updateDynamicProperties(frameData);
+            }
+            if (window.overlays.solver) {
+                window.overlays.solver.update(frameData);
+            }
+        }
     }
 
     /**
