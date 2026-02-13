@@ -12,6 +12,8 @@
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
+#include "msd-sim/src/DataRecorder/DataRecorder.hpp"
+#include "msd-sim/src/DataRecorder/DataRecorderVisitor.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
@@ -580,6 +582,40 @@ std::vector<Constraint*> CollisionPipeline::buildContactView() const
   }
 
   return view;
+}
+
+void CollisionPipeline::recordConstraints(DataRecorder& recorder, uint32_t frameId) const
+{
+  // Create visitor wrapping DataRecorder
+  DataRecorderVisitor visitor{recorder, frameId};
+
+  // Iterate all constraints (interleaved [CC, FC, CC, FC, ...] or all CC if no friction)
+  for (size_t i = 0; i < allConstraints_.size(); ++i)
+  {
+    const auto& constraint = allConstraints_[i];
+
+    // Find collision pair for this constraint (via pairRanges_ lookup)
+    size_t pairIdx = findPairIndexForConstraint(i);
+    const auto& pair = collisions_[pairIdx];
+
+    // Constraint builds record and dispatches to visitor (no casting here)
+    constraint->recordState(visitor, pair.bodyAId, pair.bodyBId);
+  }
+}
+
+size_t CollisionPipeline::findPairIndexForConstraint(size_t constraintIdx) const
+{
+  // Iterate pairRanges_ to find which pair owns this constraint index
+  for (const auto& range : pairRanges_)
+  {
+    if (constraintIdx >= range.startIdx && constraintIdx < range.startIdx + range.count)
+    {
+      return range.pairIdx;
+    }
+  }
+
+  // Should never reach here if pairRanges_ is correct
+  throw std::logic_error("Constraint index not found in pairRanges_");
 }
 
 }  // namespace msd_sim

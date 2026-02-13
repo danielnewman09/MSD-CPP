@@ -3,6 +3,9 @@
 
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
+#include "msd-transfer/src/ConstraintRecordVisitor.hpp"
+#include "msd-transfer/src/ContactConstraintRecord.hpp"
 #include <stdexcept>
 #include <cmath>
 
@@ -113,6 +116,28 @@ bool ContactConstraint::isActive(
 
   Eigen::VectorXd c = evaluate(stateA, stateB, time);
   return c(0) <= kActivationThreshold;
+}
+
+void ContactConstraint::recordState(msd_transfer::ConstraintRecordVisitor& visitor,
+                                     uint32_t bodyAId,
+                                     uint32_t bodyBId) const
+{
+  msd_transfer::ContactConstraintRecord record;
+  record.body_a_id = bodyAId;
+  record.body_b_id = bodyBId;
+
+  // Serialize geometry (convert Coordinate to Vector3D to avoid point semantics)
+  record.normal = Vector3D{contact_normal_.x(), contact_normal_.y(), contact_normal_.z()}.toRecord();
+  record.lever_arm_a = Vector3D{lever_arm_a_.x(), lever_arm_a_.y(), lever_arm_a_.z()}.toRecord();
+  record.lever_arm_b = Vector3D{lever_arm_b_.x(), lever_arm_b_.y(), lever_arm_b_.z()}.toRecord();
+  record.penetration_depth = penetration_depth_;
+
+  // Serialize parameters
+  record.restitution = restitution_;
+  record.pre_impact_rel_vel_normal = pre_impact_rel_vel_normal_;
+
+  // Dispatch to visitor via overload resolution
+  visitor.visit(record);
 }
 
 }  // namespace msd_sim

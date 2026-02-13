@@ -10,6 +10,11 @@
 #include "msd-sim/src/Physics/Constraints/LambdaBounds.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
+// Forward declaration for visitor pattern
+namespace msd_transfer {
+class ConstraintRecordVisitor;
+}
+
 namespace msd_sim
 {
 
@@ -273,6 +278,27 @@ public:
    * @return Human-readable constraint type name
    */
   [[nodiscard]] virtual std::string typeName() const = 0;
+
+  /**
+   * @brief Record constraint state via visitor pattern
+   *
+   * Builds a typed constraint record (ContactConstraintRecord, FrictionConstraintRecord,
+   * etc.) and dispatches to the visitor via overload resolution. The visitor decides
+   * what to do with the record (e.g., buffer to DataRecorder DAO).
+   *
+   * Enables compile-time type-safe constraint recording without dynamic_cast or std::any_cast.
+   * New constraint types extend ConstraintRecordVisitor with a new visit() overload.
+   *
+   * @param visitor Visitor that processes the typed constraint record
+   * @param bodyAId Persistent ID of body A for database FK reference
+   * @param bodyBId Persistent ID of body B for database FK reference (ignored for single-body)
+   *
+   * @see msd_transfer::ConstraintRecordVisitor
+   * @see msd_sim::DataRecorderVisitor
+   */
+  virtual void recordState(msd_transfer::ConstraintRecordVisitor& visitor,
+                           uint32_t bodyAId,
+                           uint32_t bodyBId) const = 0;
 
 protected:
   /**

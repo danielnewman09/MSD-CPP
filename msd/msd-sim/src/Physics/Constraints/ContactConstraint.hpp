@@ -119,6 +119,10 @@ public:
     return "ContactConstraint";
   }
 
+  void recordState(msd_transfer::ConstraintRecordVisitor& visitor,
+                   uint32_t bodyAId,
+                   uint32_t bodyBId) const override;
+
   // ===== Accessors =====
 
   [[nodiscard]] const Coordinate& getContactNormal()

@@ -69,6 +69,10 @@ public:
   [[nodiscard]] LambdaBounds lambdaBounds() const override;
   [[nodiscard]] std::string typeName() const override;
 
+  void recordState(msd_transfer::ConstraintRecordVisitor& visitor,
+                   uint32_t bodyAId,
+                   uint32_t bodyBId) const override;
+
   /**
    * @brief Get target distance from origin
    * @return Target distance [m]

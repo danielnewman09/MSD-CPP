@@ -106,4 +106,14 @@ double DistanceConstraint::getTargetDistance() const
   return targetDistance_;
 }
 
+void DistanceConstraint::recordState(msd_transfer::ConstraintRecordVisitor& /* visitor */,
+                                      uint32_t /* bodyAId */,
+                                      uint32_t /* bodyBId */) const
+{
+  // Stub implementation: DistanceConstraint is a single-body example constraint
+  // that is not currently used in production (vestigial from ticket 0043).
+  // No recording needed as this constraint is never instantiated by CollisionPipeline.
+  // Ticket: 0057_contact_tangent_recording
+}
+
 }  // namespace msd_sim

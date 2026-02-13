@@ -2,6 +2,9 @@
 // Design: docs/designs/0035a_tangent_basis_and_friction_constraint/design.md
 
 #include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
+#include "msd-transfer/src/ConstraintRecordVisitor.hpp"
+#include "msd-transfer/src/FrictionConstraintRecord.hpp"
 #include <cmath>
 #include <numbers>
 #include <stdexcept>
@@ -163,6 +166,29 @@ std::pair<double, double> FrictionConstraint::getFrictionBounds() const
   const double bound = (friction_coefficient_ / kSqrt2) * normal_lambda_;
 
   return {-bound, bound};
+}
+
+void FrictionConstraint::recordState(msd_transfer::ConstraintRecordVisitor& visitor,
+                                      uint32_t bodyAId,
+                                      uint32_t bodyBId) const
+{
+  msd_transfer::FrictionConstraintRecord record;
+  record.body_a_id = bodyAId;
+  record.body_b_id = bodyBId;
+
+  // Serialize geometry (convert Coordinate to Vector3D to avoid point semantics)
+  record.normal = Vector3D{contact_normal_.x(), contact_normal_.y(), contact_normal_.z()}.toRecord();
+  record.tangent1 = Vector3D{tangent1_.x(), tangent1_.y(), tangent1_.z()}.toRecord();
+  record.tangent2 = Vector3D{tangent2_.x(), tangent2_.y(), tangent2_.z()}.toRecord();
+  record.lever_arm_a = Vector3D{lever_arm_a_.x(), lever_arm_a_.y(), lever_arm_a_.z()}.toRecord();
+  record.lever_arm_b = Vector3D{lever_arm_b_.x(), lever_arm_b_.y(), lever_arm_b_.z()}.toRecord();
+
+  // Serialize parameters
+  record.friction_coefficient = friction_coefficient_;
+  record.normal_lambda = normal_lambda_;
+
+  // Dispatch to visitor via overload resolution
+  visitor.visit(record);
 }
 
 }  // namespace msd_sim
