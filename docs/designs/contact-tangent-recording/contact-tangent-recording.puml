@@ -5,16 +5,29 @@ skinparam class {
 }
 
 package "msd-transfer" {
-    struct CollisionResultRecord <<modified>> {
+    struct FrictionConstraintRecord <<new>> {
         +body_a_id: uint32_t
         +body_b_id: uint32_t
         +normal: Vector3DRecord
-        +penetrationDepth: double
-        +contacts: RepeatedField<ContactPointRecord>
+        +tangent1: Vector3DRecord
+        +tangent2: Vector3DRecord
+        +lever_arm_a: Vector3DRecord
+        +lever_arm_b: Vector3DRecord
+        +friction_coefficient: double
+        +normal_lambda: double
         +frame: ForeignKey<SimulationFrameRecord>
-        --
-        <<new>> +tangent1: Vector3DRecord
-        <<new>> +tangent2: Vector3DRecord
+    }
+
+    struct ContactConstraintRecord <<new>> {
+        +body_a_id: uint32_t
+        +body_b_id: uint32_t
+        +normal: Vector3DRecord
+        +lever_arm_a: Vector3DRecord
+        +lever_arm_b: Vector3DRecord
+        +penetration_depth: double
+        +restitution: double
+        +pre_impact_rel_vel_normal: double
+        +frame: ForeignKey<SimulationFrameRecord>
     }
 
     struct Vector3DRecord {
@@ -22,32 +35,67 @@ package "msd-transfer" {
         +y: double
         +z: double
     }
+
+    struct SimulationFrameRecord {
+        +id: uint32_t
+        +simulation_time: double
+        +wall_clock_time: int64_t
+    }
+}
+
+package "msd-sim::Constraints" {
+    abstract class Constraint <<modified>> {
+        +{abstract} dimension(): int
+        +{abstract} evaluate(): VectorXd
+        +{abstract} jacobian(): MatrixXd
+        +{abstract} lambdaBounds(): LambdaBounds
+        +{abstract} typeName(): string
+        --
+        <<new>> +{abstract} toRecord(bodyAId, bodyBId): std::any
+    }
+
+    class FrictionConstraint <<modified>> {
+        -contact_normal_: Coordinate
+        -tangent1_: Coordinate
+        -tangent2_: Coordinate
+        -lever_arm_a_: Coordinate
+        -lever_arm_b_: Coordinate
+        -friction_coefficient_: double
+        -normal_lambda_: double
+        --
+        +getTangent1(): const Coordinate&
+        +getTangent2(): const Coordinate&
+        <<new>> +toRecord(bodyAId, bodyBId): std::any
+    }
+
+    class ContactConstraint <<modified>> {
+        -contact_normal_: Coordinate
+        -lever_arm_a_: Coordinate
+        -lever_arm_b_: Coordinate
+        -penetration_depth_: double
+        -restitution_: double
+        -pre_impact_rel_vel_normal_: double
+        --
+        +getContactNormal(): const Coordinate&
+        +getPenetrationDepth(): double
+        +getRestitution(): double
+        <<new>> +toRecord(bodyAId, bodyBId): std::any
+    }
 }
 
 package "msd-sim::Collision" {
-    class CollisionResult <<modified>> {
-        +normal: Coordinate
-        +penetrationDepth: double
-        +contacts: array<ContactPoint, 4>
-        +contactCount: size_t
-        --
-        <<new>> +tangent1: Coordinate
-        <<new>> +tangent2: Coordinate
-        +toRecord(): CollisionResultRecord
-        +fromRecord(): CollisionResult
-    }
-
     class CollisionPipeline <<modified>> {
+        -constraints_: vector<unique_ptr<ContactConstraint>>
         -frictionConstraints_: vector<unique_ptr<FrictionConstraint>>
         -collisions_: vector<CollisionPair>
         -pairRanges_: vector<PairConstraintRange>
         --
-        <<new>> -extractTangentsFromConstraints(): void
         +execute(): void
         +getCollisions(): const vector<CollisionPair>&
+        <<new>> +recordConstraints(recorder, frameId): void
     }
 
-    struct CollisionPair <<modified>> {
+    struct CollisionPair {
         +bodyAIndex: size_t
         +bodyBIndex: size_t
         +bodyAId: uint32_t
@@ -56,35 +104,70 @@ package "msd-sim::Collision" {
         +restitution: double
         +frictionCoefficient: double
     }
-
-    class FrictionConstraint {
-        +getTangent1(): const Coordinate&
-        +getTangent2(): const Coordinate&
-    }
 }
 
 package "msd-sim::DataRecorder" {
-    class DataRecorder {
+    class DataRecorder <<modified>> {
+        -database_: unique_ptr<Database>
+        -flushInterval_: chrono::milliseconds
+        -nextFrameId_: atomic<uint32_t>
         --
-        recordCollisions(): void
+        +recordFrame(simTime): uint32_t
+        +getDAO<T>(): DAO<T>&
+        +flush(): void
+        +recordInertialStates(frameId, assets): void
+        +recordCollisions(frameId, pipeline): void
+        +recordSolverDiagnostics(frameId, pipeline): void
+        <<new>> +recordConstraintStates(frameId, pipeline): void
+    }
+}
+
+package "msd-sim::Environment" {
+    class WorldModel <<modified>> {
+        -inertialAssets_: vector<AssetInertial>
+        -environmentalAssets_: vector<AssetEnvironment>
+        -collisionPipeline_: CollisionPipeline
+        -dataRecorder_: unique_ptr<DataRecorder>
+        --
+        +update(dt): void
+        -recordCurrentFrame(): void
     }
 }
 
 package "replay (Python)" {
-    class CollisionInfo <<modified>> {
+    class FrictionConstraintInfo <<new>> {
         +body_a_id: int
         +body_b_id: int
         +normal: Vec3
+        +tangent1: Vec3
+        +tangent2: Vec3
+        +lever_arm_a: Vec3
+        +lever_arm_b: Vec3
+        +friction_coefficient: float
+        +normal_lambda: float
+    }
+
+    class ContactConstraintInfo <<new>> {
+        +body_a_id: int
+        +body_b_id: int
+        +normal: Vec3
+        +lever_arm_a: Vec3
+        +lever_arm_b: Vec3
         +penetration_depth: float
-        +contacts: list[ContactPoint]
-        --
-        <<new>> +tangent1: Vec3 | None
-        <<new>> +tangent2: Vec3 | None
+        +restitution: float
+        +pre_impact_rel_vel_normal: float
+    }
+
+    class FrameState <<modified>> {
+        +time: float
+        +objects: list[ObjectState]
+        +collisions: list[CollisionInfo]
+        <<new>> +constraints: list[FrictionConstraintInfo | ContactConstraintInfo]
     }
 
     class SimulationService <<modified>> {
         --
-        get_frame_data(): FrameData <<modified>>
+        +get_frame_data(sim_id, frame_id): FrameState
     }
 }
 
@@ -94,46 +177,86 @@ package "replay/static (Three.js)" {
         <<new>> -tangent1Arrows_: Map<string, ArrowHelper>
         <<new>> -tangent2Arrows_: Map<string, ArrowHelper>
         --
-        +update(collisions): void <<modified>>
-        <<new>> -createTangentArrow(contact, tangent, color): ArrowHelper
-        <<new>> -updateTangentArrows(): void
+        +update(frameState, objects): void
+        +clear(): void
     }
 }
 
-' Relationships
-CollisionResultRecord --> Vector3DRecord : tangent1, tangent2
-CollisionResult --> CollisionResultRecord : toRecord()
-CollisionPipeline --> FrictionConstraint : owns
-CollisionPipeline --> CollisionPair : owns
-CollisionPair --> CollisionResult : contains
-CollisionPipeline ..> FrictionConstraint : extractTangentsFromConstraints()
-DataRecorder ..> CollisionPipeline : reads via getCollisions()
-DataRecorder ..> CollisionResultRecord : writes
-SimulationService ..> CollisionResultRecord : reads
-SimulationService --> CollisionInfo : constructs
-ContactOverlay ..> CollisionInfo : visualizes
+' Relationships - Transfer Records
+FrictionConstraintRecord --> Vector3DRecord : normal, tangent1, tangent2, lever_arm_a, lever_arm_b
+FrictionConstraintRecord --> SimulationFrameRecord : frame FK
+ContactConstraintRecord --> Vector3DRecord : normal, lever_arm_a, lever_arm_b
+ContactConstraintRecord --> SimulationFrameRecord : frame FK
 
-note right of CollisionPipeline::extractTangentsFromConstraints
-  New method called after createConstraints():
-  - Uses pairRanges_ to index into frictionConstraints_
-  - Reads tangent from first constraint in each pair's range
-  - All contacts in a pair share same tangent basis (same normal)
-  - Populates CollisionResult::tangent1/tangent2
+' Relationships - Constraint Hierarchy
+FrictionConstraint --|> Constraint
+ContactConstraint --|> Constraint
+
+' Relationships - Serialization
+FrictionConstraint ..> FrictionConstraintRecord : toRecord()
+ContactConstraint ..> ContactConstraintRecord : toRecord()
+
+' Relationships - Ownership
+CollisionPipeline --> FrictionConstraint : owns
+CollisionPipeline --> ContactConstraint : owns
+CollisionPipeline --> CollisionPair : owns
+WorldModel --> CollisionPipeline : owns
+WorldModel --> DataRecorder : owns
+
+' Relationships - Recording Flow
+CollisionPipeline ..> DataRecorder : recordConstraints()
+DataRecorder ..> FrictionConstraintRecord : buffers via DAO
+DataRecorder ..> ContactConstraintRecord : buffers via DAO
+WorldModel ..> CollisionPipeline : delegates recording
+
+' Relationships - Python
+SimulationService ..> FrictionConstraintRecord : reads from DB
+SimulationService ..> ContactConstraintRecord : reads from DB
+SimulationService --> FrictionConstraintInfo : constructs
+SimulationService --> ContactConstraintInfo : constructs
+ContactOverlay ..> FrameState : visualizes constraints
+
+note right of Constraint::toRecord
+  New virtual method for polymorphic serialization:
+  - Returns std::any wrapping constraint-specific record
+  - Enables heterogeneous constraint iteration
+  - Caller uses std::any_cast<T> to extract typed record
 end note
 
-note right of CollisionResultRecord::tangent1
-  Backward compatible:
-  - Optional fields in pybind
-  - Default to (0,0,0) if missing
-  - Old recordings load without error
+note right of FrictionConstraint::toRecord
+  Serialization:
+  - Converts Coordinate → Vector3D (direction, not point)
+  - Wraps FrictionConstraintRecord in std::any
+  - Sets body IDs from parameters (not constraint indices)
+  Example:
+    record.tangent1 = Vector3D{tangent1_.x(), ...}.toRecord();
+end note
+
+note right of CollisionPipeline::recordConstraints
+  Encapsulated recording:
+  - Iterates constraints_ and frictionConstraints_
+  - Maps constraint index → collision pair via pairRanges_
+  - Extracts body IDs (bodyAId, bodyBId) from CollisionPair
+  - Calls constraint->toRecord(bodyAId, bodyBId)
+  - Casts std::any → typed record
+  - Sets frame FK and buffers via DataRecorder::getDAO<T>()
+end note
+
+note right of FrictionConstraintRecord
+  Separate table per constraint type for schema flexibility:
+  - FrictionConstraint has tangents, mu, normal_lambda
+  - ContactConstraint has penetration, restitution
+  - Future types (Hinge, Motor) have their own state
+  Backward compatible: older recordings load without error
 end note
 
 note right of ContactOverlay
-  Renders 3 arrows per contact:
-  - Red: normal
-  - Green: tangent1
-  - Blue: tangent2
-  All arrows at contact midpoint
+  Renders 3 orthogonal arrows per friction constraint:
+  - Red: normal (from 0056f)
+  - Green: tangent1 (NEW)
+  - Blue: tangent2 (NEW)
+  Contact point = body A position + lever_arm_a
+  Fixed 1.0 unit length (no force scaling)
 end note
 
 @enduml
