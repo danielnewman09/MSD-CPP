@@ -53,37 +53,34 @@ export class ForceOverlay {
         // Clear previous constraint forces
         this.clearConstraintArrows();
 
-        if (!this.constraintEnabled || !frameData || !frameData.states) return;
+        if (!this.constraintEnabled || !frameData) return;
 
-        frameData.states.forEach(state => {
-            // Skip environment bodies
-            const bodyMetadata = this.metadata.bodies.find(b => b.body_id === state.body_id);
-            if (!bodyMetadata || bodyMetadata.is_environment) return;
+        // Visualize constraint forces from collision data.
+        // Each collision has a normal — show the normal as a force arrow at each
+        // contact midpoint, with length proportional to penetration depth.
+        if (!frameData.collisions) return;
 
-            // Check if state has constraint force data
-            if (!state.constraint_force) return;
-
-            const force = new THREE.Vector3(
-                state.constraint_force.x,
-                state.constraint_force.y,
-                state.constraint_force.z
+        frameData.collisions.forEach(collision => {
+            const normal = new THREE.Vector3(
+                collision.normal.x,
+                collision.normal.y,
+                collision.normal.z
             );
 
-            const magnitude = force.length();
+            collision.contacts.forEach(contact => {
+                const midpoint = new THREE.Vector3(
+                    (contact.point_a.x + contact.point_b.x) / 2,
+                    (contact.point_a.y + contact.point_b.y) / 2,
+                    (contact.point_a.z + contact.point_b.z) / 2
+                );
 
-            // Skip below threshold
-            if (magnitude < this.minForce) return;
+                // Scale arrow by penetration depth (proxy for constraint force magnitude)
+                const magnitude = Math.abs(contact.depth);
+                if (magnitude < this.minForce) return;
 
-            // Logarithmic scaling: length = log1p(|F|) * scale
-            const arrowLength = Math.log1p(magnitude) * this.constraintScale;
-
-            const origin = new THREE.Vector3(
-                state.position.x,
-                state.position.y,
-                state.position.z
-            );
-
-            this.addConstraintArrow(origin, force, arrowLength);
+                const arrowLength = Math.log1p(magnitude * 100) * this.constraintScale;
+                this.addConstraintArrow(midpoint, normal.clone(), arrowLength);
+            });
         });
     }
 

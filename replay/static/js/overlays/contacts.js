@@ -50,41 +50,39 @@ export class ContactOverlay {
         this.clearPoints();
         this.clearNormals();
 
-        if (!frameData || !frameData.contacts) return;
+        if (!frameData || !frameData.collisions) return;
 
-        frameData.contacts.forEach(contact => {
-            // Contact point (midpoint of pointA and pointB)
-            if (this.enabled) {
+        // API returns collisions[], each with a contacts[] array and pair-level normal
+        frameData.collisions.forEach(collision => {
+            const normal = new THREE.Vector3(
+                collision.normal.x,
+                collision.normal.y,
+                collision.normal.z
+            );
+
+            collision.contacts.forEach(contact => {
+                // Contact point (midpoint of pointA and pointB)
                 const midpoint = new THREE.Vector3(
                     (contact.point_a.x + contact.point_b.x) / 2,
                     (contact.point_a.y + contact.point_b.y) / 2,
                     (contact.point_a.z + contact.point_b.z) / 2
                 );
-                this.addContactPoint(midpoint);
-            }
 
-            // Contact normal arrow
-            if (this.showNormals) {
-                const midpoint = new THREE.Vector3(
-                    (contact.point_a.x + contact.point_b.x) / 2,
-                    (contact.point_a.y + contact.point_b.y) / 2,
-                    (contact.point_a.z + contact.point_b.z) / 2
-                );
+                if (this.enabled) {
+                    this.addContactPoint(midpoint);
+                }
 
-                const normal = new THREE.Vector3(
-                    contact.normal.x,
-                    contact.normal.y,
-                    contact.normal.z
-                );
+                // Contact normal arrow (from pair-level normal)
+                if (this.showNormals) {
+                    // Length proportional to penetration depth (with minimum)
+                    const arrowLength = Math.max(
+                        this.minArrowLength,
+                        Math.abs(contact.depth) * this.penetrationScale
+                    );
 
-                // Length proportional to penetration depth (with minimum)
-                const arrowLength = Math.max(
-                    this.minArrowLength,
-                    Math.abs(contact.penetration_depth) * this.penetrationScale
-                );
-
-                this.addContactNormal(midpoint, normal, arrowLength);
-            }
+                    this.addContactNormal(midpoint, normal.clone(), arrowLength);
+                }
+            });
         });
     }
 

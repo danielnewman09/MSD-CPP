@@ -39,19 +39,22 @@ export class SceneManager {
         directionalLight.position.set(10, 20, 10);
         this.scene.add(directionalLight);
 
-        // Ground grid — rotated to XY plane (Z-up coordinate system)
-        const gridHelper = new THREE.GridHelper(100, 100, 0x4a9eff, 0x3a3a3a);
-        gridHelper.rotation.x = Math.PI / 2;  // Rotate from XZ to XY plane
-        this.scene.add(gridHelper);
-
-        // Axis helpers
-        const axesHelper = new THREE.AxesHelper(5);
+        // Small axis helper at origin for orientation reference
+        const axesHelper = new THREE.AxesHelper(2);
         this.scene.add(axesHelper);
 
-        // OrbitControls
+        // OrbitControls — right-click (or two-finger) to pan the focus point
         this.controls = new OrbitControls(this.camera, canvas);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.05;
+        this.controls.enablePan = true;
+        this.controls.screenSpacePanning = true;  // Pan in screen plane (intuitive)
+        this.controls.panSpeed = 1.0;
+        this.controls.mouseButtons = {
+            LEFT: THREE.MOUSE.ROTATE,
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: THREE.MOUSE.PAN
+        };
 
         // Window resize handler
         window.addEventListener('resize', () => this.onWindowResize());

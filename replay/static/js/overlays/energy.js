@@ -28,23 +28,65 @@ export class EnergyOverlay {
     }
 
     /**
-     * Load energy data from API
+     * Load energy data from API.
+     *
+     * Fetches per-body energy for each dynamic body and aggregates into
+     * system-level totals with KE/PE component breakdown.
      */
     async loadEnergyData() {
         if (!this.dataLoader.currentSimId) return;
 
         try {
-            const response = await fetch(
-                `/api/v1/simulations/${this.dataLoader.currentSimId}/energy`
-            );
-
-            if (!response.ok) {
-                console.warn('Energy data not available:', response.statusText);
+            const metadata = this.dataLoader.getMetadata();
+            if (!metadata || !metadata.bodies) {
                 this.energyData = null;
                 return;
             }
 
-            this.energyData = await response.json();
+            // Get dynamic (non-environment) body IDs
+            const dynamicBodies = metadata.bodies.filter(b => !b.is_environment);
+
+            if (dynamicBodies.length === 0) {
+                this.energyData = null;
+                return;
+            }
+
+            // Fetch per-body energy for all dynamic bodies
+            const bodyEnergyPromises = dynamicBodies.map(body =>
+                fetch(`/api/v1/simulations/${this.dataLoader.currentSimId}/energy/${body.body_id}`)
+                    .then(r => r.ok ? r.json() : [])
+            );
+
+            const allBodyEnergies = await Promise.all(bodyEnergyPromises);
+
+            // Aggregate across bodies per frame_id
+            const frameMap = new Map();  // frame_id -> {linear_ke, rotational_ke, potential_e, total_e}
+
+            allBodyEnergies.forEach(bodyEnergy => {
+                bodyEnergy.forEach(point => {
+                    const existing = frameMap.get(point.frame_id);
+                    if (existing) {
+                        existing.linear_ke += point.linear_ke;
+                        existing.rotational_ke += point.rotational_ke;
+                        existing.potential_e += point.potential_e;
+                        existing.total_e += point.total_e;
+                    } else {
+                        frameMap.set(point.frame_id, {
+                            frame_id: point.frame_id,
+                            simulation_time: point.simulation_time,
+                            linear_ke: point.linear_ke,
+                            rotational_ke: point.rotational_ke,
+                            potential_e: point.potential_e,
+                            total_e: point.total_e,
+                        });
+                    }
+                });
+            });
+
+            // Sort by frame_id
+            this.energyData = Array.from(frameMap.values())
+                .sort((a, b) => a.frame_id - b.frame_id);
+
         } catch (error) {
             console.warn('Failed to load energy data:', error);
             this.energyData = null;
@@ -68,11 +110,11 @@ export class EnergyOverlay {
         const ctx = this.canvas.getContext('2d');
 
         // Extract data arrays
-        const frames = this.energyData.map(e => e.frame_number);
-        const totalEnergy = this.energyData.map(e => e.total_energy);
+        const frames = this.energyData.map(e => e.frame_id);
+        const totalEnergy = this.energyData.map(e => e.total_e);
         const linearKE = this.energyData.map(e => e.linear_ke);
         const rotationalKE = this.energyData.map(e => e.rotational_ke);
-        const potentialEnergy = this.energyData.map(e => e.potential_energy);
+        const potentialEnergy = this.energyData.map(e => e.potential_e);
 
         this.chart = new Chart(ctx, {
             type: 'line',
@@ -128,7 +170,7 @@ export class EnergyOverlay {
                     x: {
                         title: {
                             display: true,
-                            text: 'Frame Number',
+                            text: 'Frame',
                             color: '#e0e0e0'
                         },
                         ticks: { color: '#a0a0a0' },

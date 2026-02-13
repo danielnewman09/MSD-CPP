@@ -28,19 +28,20 @@ export class SolverOverlay {
     update(frameData) {
         if (!this.enabled || !this.statusElement) return;
 
-        if (!frameData || !frameData.solver_diagnostics) {
+        if (!frameData || !frameData.solver) {
             this.statusElement.innerHTML = '<em>No solver data available</em>';
             this.statusElement.classList.remove('solver-failed');
             return;
         }
 
-        const diag = frameData.solver_diagnostics;
+        const diag = frameData.solver;
 
         const html = `
             <span class="solver-label">Solver:</span>
-            <span class="solver-value">Iterations: ${diag.iteration_count}</span>
+            <span class="solver-value">Iterations: ${diag.iterations}</span>
             <span class="solver-value">Residual: ${diag.residual.toExponential(2)}</span>
-            <span class="solver-value">Constraints: ${diag.active_constraints}</span>
+            <span class="solver-value">Constraints: ${diag.num_constraints}</span>
+            <span class="solver-value">Contacts: ${diag.num_contacts}</span>
             <span class="solver-status ${diag.converged ? 'converged' : 'diverged'}">
                 ${diag.converged ? 'CONVERGED' : 'DIVERGED'}
             </span>

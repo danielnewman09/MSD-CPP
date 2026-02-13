@@ -145,8 +145,8 @@ export class InspectorOverlay {
                 <span class="value">${bodyId}</span>
             </div>
             <div class="inspector-row">
-                <span class="label">Asset Name:</span>
-                <span class="value">${bodyMetadata.asset_name || 'N/A'}</span>
+                <span class="label">Asset ID:</span>
+                <span class="value">${bodyMetadata.asset_id ?? 'N/A'}</span>
             </div>
             <div class="inspector-row">
                 <span class="label">Mass:</span>
@@ -158,11 +158,15 @@ export class InspectorOverlay {
             </div>
             <div class="inspector-row">
                 <span class="label">Friction:</span>
-                <span class="value">${bodyMetadata.friction_coefficient.toFixed(3)}</span>
+                <span class="value">${bodyMetadata.friction.toFixed(3)}</span>
+            </div>
+            <div class="inspector-row">
+                <span class="label">Type:</span>
+                <span class="value">${bodyMetadata.is_environment ? 'Environment' : 'Dynamic'}</span>
             </div>
             <div class="inspector-section">Dynamic Properties (per frame)</div>
             <div id="inspector-dynamic">
-                <em>Select a body to see dynamic properties</em>
+                <em>Play simulation to see dynamic properties</em>
             </div>
         `;
 
@@ -182,6 +186,9 @@ export class InspectorOverlay {
         const dynamicDiv = document.getElementById('inspector-dynamic');
         if (!dynamicDiv) return;
 
+        const vel = state.velocity;
+        const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z);
+
         const html = `
             <div class="inspector-row">
                 <span class="label">Position:</span>
@@ -189,11 +196,15 @@ export class InspectorOverlay {
             </div>
             <div class="inspector-row">
                 <span class="label">Velocity:</span>
-                <span class="value">(${state.linear_velocity.x.toFixed(3)}, ${state.linear_velocity.y.toFixed(3)}, ${state.linear_velocity.z.toFixed(3)})</span>
+                <span class="value">(${vel.x.toFixed(3)}, ${vel.y.toFixed(3)}, ${vel.z.toFixed(3)})</span>
             </div>
             <div class="inspector-row">
-                <span class="label">Angular Vel:</span>
-                <span class="value">(${state.angular_velocity.x.toFixed(3)}, ${state.angular_velocity.y.toFixed(3)}, ${state.angular_velocity.z.toFixed(3)})</span>
+                <span class="label">Speed:</span>
+                <span class="value">${speed.toFixed(3)} m/s</span>
+            </div>
+            <div class="inspector-row">
+                <span class="label">Orientation:</span>
+                <span class="value">q(${state.orientation.w.toFixed(3)}, ${state.orientation.x.toFixed(3)}, ${state.orientation.y.toFixed(3)}, ${state.orientation.z.toFixed(3)})</span>
             </div>
         `;
 
