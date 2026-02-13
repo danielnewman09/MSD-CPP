@@ -4,9 +4,9 @@
 - [x] Draft
 - [x] Ready for Implementation
 - [x] Implementation Complete — Awaiting Review
-- [ ] Merged / Complete
+- [x] Merged / Complete
 
-**Current Phase**: Implementation Complete — Awaiting Review (expanded scope: 0056h + type-safety refactoring)
+**Current Phase**: Merged / Complete
 **Type**: Infrastructure
 **Priority**: High
 **Assignee**: TBD

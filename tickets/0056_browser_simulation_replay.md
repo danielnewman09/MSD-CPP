@@ -3,11 +3,11 @@
 ## Status
 - [x] Draft
 - [x] Ready for Design
-- [ ] Design Complete
-- [ ] Implementation Complete
+- [x] Design Complete
+- [x] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Ready for Design
+**Current Phase**: Implementation Complete (10/11 subtasks merged, 0056g remaining)
 **Type**: Feature / Infrastructure
 **Priority**: Medium
 **Assignee**: TBD
@@ -16,16 +16,20 @@
 
 ### Subtasks
 
-| Subtask | Description | Priority | Dependencies | Status |
-|---------|-------------|----------|--------------|--------|
-| 0056a | Collision & force transfer record types | High | None | PENDING |
-| 0056b | CollisionPipeline data extraction + extended recording | High | 0056a | PENDING |
-| 0056c | Python bindings (pybind11) | High | 0056a, 0056b | PENDING |
-| 0056d | FastAPI backend | Medium | 0056c | PENDING |
-| 0056e | Three.js core visualization | Medium | 0056d | PENDING |
-| 0056f | Three.js overlays and debugging tools | Low | 0056e | PENDING |
-| 0056g | Replay-enabled test pattern + asset-gen extensions | Medium | 0056b | PENDING |
-| 0056h | AssetDynamicState domain struct + AssetInertial refactor | Medium | 0056a | PENDING |
+| Subtask | Description | Priority | Dependencies | Status | PR |
+|---------|-------------|----------|--------------|--------|----|
+| 0056a | Collision & force transfer record types | High | None | MERGED | #42 |
+| 0056b | CollisionPipeline data extraction + extended recording | High | 0056a | MERGED | #43 |
+| 0056b1 | Eliminate snapshot layer | High | 0056b | MERGED | #44 |
+| 0056c | Python bindings (pybind11) | High | 0056a, 0056b | MERGED | #45 |
+| 0056d | FastAPI backend | Medium | 0056c | MERGED | #46 |
+| 0056e | Three.js core visualization | Medium | 0056d | MERGED | #49 |
+| 0056f | Three.js overlays and debugging tools | Low | 0056e | MERGED | #53 |
+| 0056g | Replay-enabled test pattern + asset-gen extensions | Medium | 0056b | DRAFT | — |
+| 0056h | AssetDynamicState domain struct + AssetInertial refactor | Medium | 0056a | MERGED | #42 |
+| 0056i | Static asset recording & FK linkage | Medium | 0056a | MERGED | #44 |
+| 0056j | Domain-aware DataRecorder | Medium | 0056b | MERGED | #44 |
+| 0056k | Example workflow with test recording | Medium | 0056d | MERGED | #48 |
 
 ---
 

@@ -4,9 +4,9 @@
 - [x] Draft
 - [x] Ready for Implementation
 - [x] Implementation Complete — Awaiting Review
-- [ ] Merged / Complete
+- [x] Merged / Complete
 
-**Current Phase**: Implementation Complete — Awaiting Review
+**Current Phase**: Merged / Complete
 **Type**: Feature
 **Priority**: Medium
 **Assignee**: TBD
