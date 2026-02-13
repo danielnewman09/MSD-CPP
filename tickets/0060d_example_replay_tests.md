@@ -19,19 +19,26 @@
 
 ## Overview
 
-Create 2-3 representative simulation tests that demonstrate the full replay-enabled test pattern. These tests:
+Create 2-3 representative simulation tests that demonstrate the full replay-enabled test pattern across both languages:
+
+**C++ GTest** (produces recordings):
 - Inherit from `ReplayEnabledTest` (use real asset database, no `createCubePoints()`)
 - Run multi-frame simulations with recording enabled
-- Use both traditional in-memory assertions AND recording-based assertions via `RecordingQuery` and `ReplayMatchers`
+- Use traditional in-memory assertions (position checks, velocity checks)
 - Produce `.db` files in `replay/recordings/` viewable in the browser
 
-These serve as reference implementations for future test authors migrating from the `createCubePoints()` pattern.
+**Python pytest** (validates recordings):
+- Read the `.db` files produced by C++ tests
+- Use `RecordingQuery` and assertion helpers to validate physics invariants
+- Verify recording database completeness (geometry + state tables)
+
+These serve as reference implementations for future test authors.
 
 ---
 
 ## Requirements
 
-### R1: Cube Drop Test
+### R1: Cube Drop Test — C++ Side
 
 **Scenario**: Single cube dropped from height onto the Engine's default floor.
 
@@ -46,18 +53,42 @@ TEST_F(ReplayDropTest, CubeDropsAndSettles) {
 
   step(300);  // ~5 seconds
 
-  // Traditional assertion
+  // Traditional in-memory assertions
   EXPECT_GT(world().getObject(cubeId).getInertialState().position.z(), -60.0);
-
-  // Recording-based assertions
-  auto q = query();
-  EXPECT_GT(q.frameCount(), 290);
-  EXPECT_THAT(recordingPath().string(), NeverPenetratesBelow(cubeId, -11.0));
-  EXPECT_THAT(recordingPath().string(), BodyComesToRest(cubeId, 0.5));
 }
 ```
 
-### R2: Two-Body Collision Test
+### R2: Cube Drop Test — Python Side
+
+```python
+from replay.testing import RecordingQuery, recording_for
+from replay.testing.assertions import (
+    assert_never_penetrates_below,
+    assert_body_comes_to_rest,
+)
+
+
+def test_cube_drop_recording_valid():
+    """Verify the cube drop recording contains expected data."""
+    db_path = recording_for("ReplayDropTest", "CubeDropsAndSettles")
+    q = RecordingQuery(db_path)
+    assert q.frame_count() > 290
+
+
+def test_cube_drop_never_penetrates_floor():
+    """Verify cube never falls through the floor."""
+    db_path = recording_for("ReplayDropTest", "CubeDropsAndSettles")
+    # body_id obtained from C++ test output or known from spawn order
+    assert_never_penetrates_below(db_path, body_id=1, z_min=-11.0)
+
+
+def test_cube_drop_settles():
+    """Verify cube comes to rest after dropping."""
+    db_path = recording_for("ReplayDropTest", "CubeDropsAndSettles")
+    assert_body_comes_to_rest(db_path, body_id=1, speed_threshold=0.5)
+```
+
+### R3: Two-Body Collision Test — C++ Side
 
 **Scenario**: Two cubes collide head-on, high above the floor (z=50) to isolate collision from floor interaction.
 
@@ -80,43 +111,61 @@ TEST_F(ReplayCollisionTest, TwoCubesCollide) {
 
   step(10);
 
-  // Traditional assertion
+  // Traditional in-memory assertions
   double vAxFinal = world().getObject(idA).getInertialState().velocity.x();
   double vBxFinal = world().getObject(idB).getInertialState().velocity.x();
   EXPECT_NE(2.0, vAxFinal);
   EXPECT_NE(-2.0, vBxFinal);
-
-  // Recording-based assertions
-  auto q = query();
-  EXPECT_GT(q.totalContactFrames(), 0);
-  EXPECT_GT(q.contactFramesBetween(idA, idB), 0);
 }
 ```
 
-### R3: Recording Validity Test
+### R4: Two-Body Collision Test — Python Side
+
+```python
+def test_collision_has_contact_events():
+    """Verify collision was detected and recorded."""
+    db_path = recording_for("ReplayCollisionTest", "TwoCubesCollide")
+    q = RecordingQuery(db_path)
+    assert q.total_contact_frames() > 0
+
+
+def test_collision_between_specific_bodies():
+    """Verify contact events between the two specific cubes."""
+    db_path = recording_for("ReplayCollisionTest", "TwoCubesCollide")
+    q = RecordingQuery(db_path)
+    # body_ids from spawn order (1 and 2, after floor at 0)
+    assert q.contact_frames_between(1, 2) > 0
+```
+
+### R5: Recording Validity Test — Python Side
 
 **Scenario**: Verify the recording database produced by a replay-enabled test is self-contained and contains all expected record types.
 
-```cpp
-TEST_F(ReplayDropTest, RecordingContainsAllRecordTypes) {
-  spawnCube("unit_cube", Coordinate{0.0, 0.0, 5.0});
-  step(50);
+```python
+import sqlite3
 
-  auto q = query();
+def test_recording_contains_geometry_and_state():
+    """Verify recording DB has both geometry and simulation state tables."""
+    db_path = recording_for("ReplayDropTest", "CubeDropsAndSettles")
 
-  // Geometry present (from fixture setup)
-  // Verified by opening DB and checking MeshRecord table
-  cpp_sqlite::Database db{recordingPath().string(), false};
-  auto& meshDAO = db.getDAO<msd_transfer::MeshRecord>();
-  EXPECT_GT(meshDAO.selectAll().size(), 0);
+    conn = sqlite3.connect(str(db_path))
+    tables = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+    conn.close()
 
-  // State present (from recording)
-  EXPECT_GT(q.frameCount(), 0);
+    # Geometry tables (written by fixture SetUp)
+    assert "mesh_records" in tables or any("mesh" in t.lower() for t in tables)
 
-  // Verify recording is viewable (has both geometry and state tables)
-  auto& frameDAO = db.getDAO<msd_transfer::SimulationFrameRecord>();
-  EXPECT_GT(frameDAO.selectAll().size(), 0);
-}
+    # State tables (written by DataRecorder)
+    assert "simulation_frame_records" in tables or any("frame" in t.lower() for t in tables)
+
+
+def test_recording_has_frames():
+    """Verify recording contains simulation frame data."""
+    db_path = recording_for("ReplayDropTest", "CubeDropsAndSettles")
+    q = RecordingQuery(db_path)
+    assert q.frame_count() > 0
 ```
 
 ---
@@ -126,8 +175,10 @@ TEST_F(ReplayDropTest, RecordingContainsAllRecordTypes) {
 ### New Files
 | File | Purpose |
 |------|---------|
-| `msd/msd-sim/test/Replay/DropTest.cpp` | Cube drop test with recording assertions |
-| `msd/msd-sim/test/Replay/CollisionTest.cpp` | Two-body collision test with recording assertions |
+| `msd/msd-sim/test/Replay/DropTest.cpp` | C++ cube drop test with in-memory assertions |
+| `msd/msd-sim/test/Replay/CollisionTest.cpp` | C++ two-body collision test with in-memory assertions |
+| `replay/tests/test_drop_recording.py` | Python recording validation for cube drop |
+| `replay/tests/test_collision_recording.py` | Python recording validation for collision |
 
 ### Modified Files
 | File | Change |
@@ -136,39 +187,57 @@ TEST_F(ReplayDropTest, RecordingContainsAllRecordTypes) {
 
 ---
 
+## Test Execution Order
+
+The two-language pattern requires running C++ tests first to produce recordings, then Python tests to validate them:
+
+```bash
+# Step 1: Build and run C++ tests (produces .db files)
+cmake --build --preset debug-sim-only --target msd_sim_test
+./build/Debug/debug/msd_sim_test --gtest_filter="Replay*"
+
+# Step 2: Run Python recording validation tests
+cd replay
+python -m pytest tests/test_drop_recording.py tests/test_collision_recording.py -v
+```
+
+---
+
 ## Test Plan
 
 ### Automated Tests
 
-All tests in R1-R3 above serve as both the deliverable and the test plan. Additionally:
+All tests in R1-R5 above serve as both the deliverable and the test plan. Additionally:
 
-```cpp
-// Verify tests produce output files
-TEST_F(ReplayDropTest, Recording_FileExists)
-// After step(), verify recordingPath() points to an existing .db file
+**C++ side:**
+- Verify tests produce output `.db` files at expected paths
+- Verify recordings are isolated (one per test)
 
-// Verify recordings are isolated (one per test)
-// Run both DropTest and CollisionTest, verify two separate .db files exist
-```
+**Python side:**
+- Verify `recording_for()` correctly resolves paths
+- Verify `recording_for()` raises `FileNotFoundError` with helpful message when `.db` missing
 
 ### Manual Verification
 
 1. Build and run: `./build/Debug/debug/msd_sim_test --gtest_filter="Replay*"`
 2. Check output: `ls replay/recordings/Replay*.db`
-3. Start viewer: `cd replay && uvicorn replay.app:app --reload`
-4. Open http://localhost:8000 — verify recordings appear in simulation list
-5. Select a recording — verify geometry renders and frames play back
+3. Run Python tests: `cd replay && python -m pytest tests/test_*_recording.py -v`
+4. Start viewer: `cd replay && uvicorn replay.app:app --reload`
+5. Open http://localhost:8000 — verify recordings appear in simulation list
+6. Select a recording — verify geometry renders and frames play back
 
 ---
 
 ## Acceptance Criteria
 
-1. [ ] **AC1**: `ReplayDropTest::CubeDropsAndSettles` passes with both traditional and recording assertions
-2. [ ] **AC2**: `ReplayCollisionTest::TwoCubesCollide` passes and detects contact events
-3. [ ] **AC3**: Recording databases contain both geometry (MeshRecord) and state (SimulationFrameRecord) tables
-4. [ ] **AC4**: Recording files appear in `replay/recordings/` with correct naming
-5. [ ] **AC5**: Recordings load in the FastAPI viewer without modification
-6. [ ] **AC6**: Existing tests unaffected (`--gtest_filter="-Replay*"` all pass)
+1. [ ] **AC1**: `ReplayDropTest::CubeDropsAndSettles` C++ test passes with traditional assertions
+2. [ ] **AC2**: `ReplayCollisionTest::TwoCubesCollide` C++ test passes with traditional assertions
+3. [ ] **AC3**: Python recording validation tests pass for cube drop (frame count, penetration, settling)
+4. [ ] **AC4**: Python recording validation tests pass for collision (contact events)
+5. [ ] **AC5**: Recording databases contain both geometry (MeshRecord) and state (SimulationFrameRecord) tables
+6. [ ] **AC6**: Recording files appear in `replay/recordings/` with correct naming
+7. [ ] **AC7**: Recordings load in the FastAPI viewer without modification
+8. [ ] **AC8**: Existing C++ tests unaffected (`--gtest_filter="-Replay*"` all pass)
 
 ---
 

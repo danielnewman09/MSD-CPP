@@ -14,6 +14,7 @@
 **Generate Tutorial**: No
 **Parent Ticket**: [0060_replay_integrated_gtest](0060_replay_integrated_gtest.md)
 **Depends On**: None
+**Note**: Recording-based query/assertion functionality is handled by the Python layer (0060b, 0060c). This ticket covers the C++ fixture that produces `.db` files only.
 
 ---
 
@@ -76,16 +77,6 @@ void step(int frames = 1, std::chrono::milliseconds dt = std::chrono::millisecon
 
 Tracks cumulative simulation time internally. Each call advances `currentTime_ += dt` per frame and calls `engine_->update(currentTime_)`.
 
-### R6: Query Access
-
-```cpp
-RecordingQuery query();
-```
-
-Lazy-created on first call. The Engine must be destroyed first to flush the recording (or the fixture can call `disableRecording()` before creating the query). The `TearDown()` method handles this automatically — tests calling `query()` should do so as the last step after all simulation is complete.
-
-**Implementation note**: To allow `query()` before `TearDown()`, the fixture should call `world().disableRecording()` on first `query()` call to flush the DataRecorder, then create the `RecordingQuery`.
-
 ---
 
 ## Files to Create/Modify
@@ -131,14 +122,11 @@ protected:
   WorldModel& world();
   std::filesystem::path recordingPath() const;
 
-  RecordingQuery query();  // Defined in 0060b — forward-declared here
-
 private:
   void createAssetDatabase();
 
   std::filesystem::path dbPath_;
   std::unique_ptr<Engine> engine_;
-  std::unique_ptr<RecordingQuery> cachedQuery_;
   std::chrono::milliseconds currentTime_{0};
 };
 ```

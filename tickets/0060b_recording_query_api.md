@@ -1,4 +1,4 @@
-# Ticket 0060b: RecordingQuery Database Query API
+# Ticket 0060b: RecordingQuery Python Query API
 
 ## Status
 - [x] Draft
@@ -19,9 +19,9 @@
 
 ## Overview
 
-Create a C++ query wrapper over recording databases that enables tests to interrogate simulation results after execution. `RecordingQuery` opens a recording `.db` (read-only) and provides typed queries for position/velocity timeseries, energy tracking, and contact event analysis using existing `msd_transfer` record types and `cpp_sqlite` DAOs.
+Create a Python query module over recording databases that enables pytest tests to interrogate simulation results after C++ GTest execution. `RecordingQuery` opens a recording `.db` (read-only) via the existing `msd_reader` pybind11 module and provides typed queries for position/velocity timeseries, energy tracking, and contact event analysis.
 
-This is the core "read from the data recorder for easier interrogation of results" capability.
+This leverages the same `msd_reader` module already used by the FastAPI replay viewer's `SimulationService`, avoiding any duplication of database reading logic in C++.
 
 ---
 
@@ -29,51 +29,51 @@ This is the core "read from the data recorder for easier interrogation of result
 
 ### R1: Frame Queries
 
-```cpp
-size_t frameCount() const;
-double totalSimulationTime() const;
+```python
+def frame_count(self) -> int: ...
+def total_simulation_time(self) -> float: ...
 ```
 
-Read `SimulationFrameRecord` table. `totalSimulationTime()` returns the `simulation_time` of the last frame.
+Read `SimulationFrameRecord` table via `msd_reader`. `total_simulation_time()` returns the `simulation_time` of the last frame.
 
 ### R2: Per-Body Position/Velocity Timeseries
 
-```cpp
-std::vector<Coordinate> positionHistory(uint32_t bodyId) const;
-std::vector<Coordinate> velocityHistory(uint32_t bodyId) const;
-std::vector<double> speedHistory(uint32_t bodyId) const;
+```python
+def position_history(self, body_id: int) -> list[tuple[float, float, float]]: ...
+def velocity_history(self, body_id: int) -> list[tuple[float, float, float]]: ...
+def speed_history(self, body_id: int) -> list[float]: ...
 ```
 
-Read `InertialStateRecord` table, filter by `body_id`, ordered by `frame.id`. Return one entry per recorded frame. `speedHistory()` returns `velocity.norm()` per frame.
+Read `InertialStateRecord` table, filter by `body_id`, ordered by frame ID. Return one entry per recorded frame. `speed_history()` returns velocity magnitude per frame.
 
 ### R3: Per-Body Scalar Aggregates
 
-```cpp
-Coordinate positionAtFrame(uint32_t bodyId, uint32_t frameId) const;
-double minZ(uint32_t bodyId) const;
-double maxZ(uint32_t bodyId) const;
-double maxSpeed(uint32_t bodyId) const;
+```python
+def position_at_frame(self, body_id: int, frame_id: int) -> tuple[float, float, float]: ...
+def min_z(self, body_id: int) -> float: ...
+def max_z(self, body_id: int) -> float: ...
+def max_speed(self, body_id: int) -> float: ...
 ```
 
-Computed from the timeseries data. `minZ()` returns the minimum z-component of position across all frames — useful for "object never fell through the floor" assertions.
+Computed from the timeseries data. `min_z()` returns the minimum z-component of position across all frames — useful for "object never fell through the floor" assertions.
 
 ### R4: System Energy Queries
 
-```cpp
-std::vector<double> systemEnergyHistory() const;
-double maxEnergyDrift() const;
+```python
+def system_energy_history(self) -> list[float]: ...
+def max_energy_drift(self) -> float: ...
 ```
 
-Read `SystemEnergyRecord` table. `systemEnergyHistory()` returns `total_system_e` per frame. `maxEnergyDrift()` computes `max |E(t) - E(0)| / |E(0)|` across all frames — the relative energy error.
+Read `SystemEnergyRecord` table. `system_energy_history()` returns `total_system_e` per frame. `max_energy_drift()` computes `max |E(t) - E(0)| / |E(0)|` across all frames — the relative energy error.
 
 ### R5: Contact Event Queries
 
-```cpp
-size_t totalContactFrames() const;
-size_t contactFramesBetween(uint32_t bodyAId, uint32_t bodyBId) const;
+```python
+def total_contact_frames(self) -> int: ...
+def contact_frames_between(self, body_a_id: int, body_b_id: int) -> int: ...
 ```
 
-Read `CollisionResultRecord` table. `totalContactFrames()` counts distinct frames with at least one collision record. `contactFramesBetween()` counts frames where the specific body pair has a collision record.
+Read `CollisionResultRecord` table. `total_contact_frames()` counts distinct frames with at least one collision record. `contact_frames_between()` counts frames where the specific body pair has a collision record.
 
 ---
 
@@ -82,13 +82,12 @@ Read `CollisionResultRecord` table. `totalContactFrames()` counts distinct frame
 ### New Files
 | File | Purpose |
 |------|---------|
-| `msd/msd-sim/test/Replay/RecordingQuery.hpp` | Query API header |
-| `msd/msd-sim/test/Replay/RecordingQuery.cpp` | Implementation |
+| `replay/replay/testing/recording_query.py` | RecordingQuery class using `msd_reader` |
+| `replay/replay/testing/__init__.py` | Package init, exports RecordingQuery |
+| `replay/tests/test_recording_query.py` | Unit tests for RecordingQuery |
 
 ### Modified Files
-| File | Change |
-|------|--------|
-| `msd/msd-sim/CMakeLists.txt` | Add `test/Replay/RecordingQuery.cpp` to test sources |
+None — this is a new Python module within the existing `replay/` package.
 
 ---
 
@@ -96,48 +95,51 @@ Read `CollisionResultRecord` table. `totalContactFrames()` counts distinct frame
 
 | Component | Location | Reused For |
 |-----------|----------|------------|
-| `cpp_sqlite::Database` | External dependency | Read-only DB connection |
-| `msd_transfer::SimulationFrameRecord` | `msd/msd-transfer/src/SimulationFrameRecord.hpp` | Frame enumeration |
-| `msd_transfer::InertialStateRecord` | `msd/msd-transfer/src/InertialStateRecord.hpp` | Position/velocity queries |
-| `msd_transfer::SystemEnergyRecord` | `msd/msd-transfer/src/SystemEnergyRecord.hpp` | Energy timeseries |
-| `msd_transfer::EnergyRecord` | `msd/msd-transfer/src/EnergyRecord.hpp` | Per-body energy |
-| `msd_transfer::CollisionResultRecord` | `msd/msd-transfer/src/CollisionResultRecord.hpp` | Contact event queries |
+| `msd_reader.Database` | pybind11 module (built from `msd/msd-reader/`) | Read-only DB connection |
+| `msd_reader.Database.select_all_frames()` | pybind11 binding | Frame enumeration |
+| `msd_reader.Database.select_all_states()` | pybind11 binding | Position/velocity queries |
+| `msd_reader.Database.select_all_system_energies()` | pybind11 binding | Energy timeseries |
+| `msd_reader.Database.select_all_collisions()` | pybind11 binding | Contact event queries |
+| `replay.services.simulation_service` | `replay/replay/services/simulation_service.py` | Reference pattern for using `msd_reader` |
 
 ---
 
 ## Interface
 
-```cpp
-class RecordingQuery {
-public:
-  explicit RecordingQuery(const std::string& dbPath);
+```python
+import msd_reader
+from pathlib import Path
+import math
 
-  // Frame queries
-  size_t frameCount() const;
-  double totalSimulationTime() const;
 
-  // Per-body timeseries
-  std::vector<Coordinate> positionHistory(uint32_t bodyId) const;
-  std::vector<Coordinate> velocityHistory(uint32_t bodyId) const;
-  std::vector<double> speedHistory(uint32_t bodyId) const;
+class RecordingQuery:
+    """Query wrapper over a recording database for test assertions."""
 
-  // Per-body aggregates
-  Coordinate positionAtFrame(uint32_t bodyId, uint32_t frameId) const;
-  double minZ(uint32_t bodyId) const;
-  double maxZ(uint32_t bodyId) const;
-  double maxSpeed(uint32_t bodyId) const;
+    def __init__(self, db_path: str | Path) -> None:
+        self._db = msd_reader.Database(str(db_path))
 
-  // System energy
-  std::vector<double> systemEnergyHistory() const;
-  double maxEnergyDrift() const;
+    # Frame queries
+    def frame_count(self) -> int: ...
+    def total_simulation_time(self) -> float: ...
 
-  // Contact events
-  size_t totalContactFrames() const;
-  size_t contactFramesBetween(uint32_t bodyAId, uint32_t bodyBId) const;
+    # Per-body timeseries
+    def position_history(self, body_id: int) -> list[tuple[float, float, float]]: ...
+    def velocity_history(self, body_id: int) -> list[tuple[float, float, float]]: ...
+    def speed_history(self, body_id: int) -> list[float]: ...
 
-private:
-  std::unique_ptr<cpp_sqlite::Database> db_;
-};
+    # Per-body aggregates
+    def position_at_frame(self, body_id: int, frame_id: int) -> tuple[float, float, float]: ...
+    def min_z(self, body_id: int) -> float: ...
+    def max_z(self, body_id: int) -> float: ...
+    def max_speed(self, body_id: int) -> float: ...
+
+    # System energy
+    def system_energy_history(self) -> list[float]: ...
+    def max_energy_drift(self) -> float: ...
+
+    # Contact events
+    def total_contact_frames(self) -> int: ...
+    def contact_frames_between(self, body_a_id: int, body_b_id: int) -> int: ...
 ```
 
 ---
@@ -146,29 +148,39 @@ private:
 
 ### Database Access Pattern
 
-Open the recording database read-only:
-```cpp
-RecordingQuery::RecordingQuery(const std::string& dbPath)
-  : db_{std::make_unique<cpp_sqlite::Database>(dbPath, false)}  // read-only
-{}
-```
+Follow the pattern established by `replay/replay/services/simulation_service.py`:
 
-Use `selectAll()` on the appropriate DAO, then filter/aggregate in C++. For large recordings, consider SQL WHERE clauses if `cpp_sqlite` supports parameterized queries — but for test databases (typically 100-1000 frames), in-memory filtering is fast enough.
+```python
+class RecordingQuery:
+    def __init__(self, db_path: str | Path) -> None:
+        self._db = msd_reader.Database(str(db_path))
+
+    def frame_count(self) -> int:
+        return len(self._db.select_all_frames())
+
+    def total_simulation_time(self) -> float:
+        frames = self._db.select_all_frames()
+        return frames[-1].simulation_time if frames else 0.0
+```
 
 ### Energy Drift Calculation
 
-```cpp
-double RecordingQuery::maxEnergyDrift() const {
-  auto energies = systemEnergyHistory();
-  if (energies.empty() || std::abs(energies[0]) < 1e-12) return 0.0;
+```python
+def max_energy_drift(self) -> float:
+    energies = self.system_energy_history()
+    if not energies or abs(energies[0]) < 1e-12:
+        return 0.0
 
-  double e0 = energies[0];
-  double maxDrift = 0.0;
-  for (double e : energies) {
-    maxDrift = std::max(maxDrift, std::abs(e - e0) / std::abs(e0));
-  }
-  return maxDrift;
-}
+    e0 = energies[0]
+    return max(abs(e - e0) / abs(e0) for e in energies)
+```
+
+### Speed Calculation
+
+```python
+def speed_history(self, body_id: int) -> list[float]:
+    velocities = self.velocity_history(body_id)
+    return [math.sqrt(vx**2 + vy**2 + vz**2) for vx, vy, vz in velocities]
 ```
 
 ---
@@ -177,34 +189,37 @@ double RecordingQuery::maxEnergyDrift() const {
 
 ### Unit Tests
 
-```cpp
-TEST(RecordingQuery, FrameCount_ReturnsCorrectCount)
-// Create a recording DB with known number of frames, verify frameCount()
+```python
+def test_frame_count_returns_correct_count(sample_recording):
+    """Create a recording DB with known number of frames, verify frame_count()."""
 
-TEST(RecordingQuery, PositionHistory_ReturnsCorrectPositions)
-// Create recording with known positions, verify positionHistory() output
+def test_position_history_returns_correct_positions(sample_recording):
+    """Create recording with known positions, verify position_history() output."""
 
-TEST(RecordingQuery, MinZ_ReturnsLowestPosition)
-// Create recording where body moves through known z range, verify minZ()
+def test_min_z_returns_lowest_position(sample_recording):
+    """Create recording where body moves through known z range, verify min_z()."""
 
-TEST(RecordingQuery, MaxEnergyDrift_ComputesCorrectRelativeDrift)
-// Create recording with known energy values, verify drift calculation
+def test_max_energy_drift_computes_correct_relative_drift(sample_recording):
+    """Create recording with known energy values, verify drift calculation."""
 
-TEST(RecordingQuery, TotalContactFrames_CountsDistinctFrames)
-// Create recording with collision records, verify contact frame count
+def test_total_contact_frames_counts_distinct_frames(sample_recording):
+    """Create recording with collision records, verify contact frame count."""
+
+def test_empty_recording_returns_zero(empty_recording):
+    """Verify all queries handle empty recordings gracefully."""
 ```
 
-These tests can use the `DataRecorderTest` pattern (create temp DB, write known records, verify queries).
+These tests use pytest fixtures that create temporary recording databases with known data via the C++ test infrastructure or by running a short simulation.
 
 ---
 
 ## Acceptance Criteria
 
-1. [ ] **AC1**: `RecordingQuery` opens recording databases read-only
+1. [ ] **AC1**: `RecordingQuery` opens recording databases via `msd_reader` (read-only)
 2. [ ] **AC2**: Frame queries return correct counts and timestamps
 3. [ ] **AC3**: Position/velocity timeseries return per-frame data ordered by frame ID
-4. [ ] **AC4**: `minZ()`/`maxZ()`/`maxSpeed()` compute correct aggregates
-5. [ ] **AC5**: `maxEnergyDrift()` computes relative energy error correctly
+4. [ ] **AC4**: `min_z()`/`max_z()`/`max_speed()` compute correct aggregates
+5. [ ] **AC5**: `max_energy_drift()` computes relative energy error correctly
 6. [ ] **AC6**: Contact queries count distinct frames with collision records
 7. [ ] **AC7**: All queries handle empty recordings gracefully (zero frames, no contacts)
 

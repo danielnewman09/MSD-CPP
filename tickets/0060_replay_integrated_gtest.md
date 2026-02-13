@@ -19,42 +19,50 @@
 | Subtask | Description | Priority | Dependencies | Status |
 |---------|-------------|----------|--------------|--------|
 | 0060a | ReplayEnabledTest fixture | High | None | PENDING |
-| 0060b | RecordingQuery database query API | High | 0060a | PENDING |
-| 0060c | ReplayMatchers — GTest custom matchers | Medium | 0060b | PENDING |
+| 0060b | RecordingQuery Python query API | High | 0060a | PENDING |
+| 0060c | Python pytest recording assertions | Medium | 0060b | PENDING |
 | 0060d | Example replay-enabled tests | Medium | 0060a, 0060b, 0060c | PENDING |
 
 ---
 
 ## Summary
 
-Build a GTest infrastructure that unifies simulation unit tests with the browser-based replay viewer. Tests use real asset databases (replacing inline `createCubePoints()` helpers), record simulation state to SQLite via DataRecorder, and produce self-contained `.db` files viewable in the existing FastAPI replay viewer. A query API over the recording database enables recording-based assertions (energy conservation, floor penetration, settling behavior) alongside traditional in-memory assertions.
+Build a two-language test infrastructure that unifies simulation unit tests with the browser-based replay viewer. C++ GTest fixtures use real asset databases (replacing inline `createCubePoints()` helpers), record simulation state to SQLite via DataRecorder, and produce self-contained `.db` files viewable in the existing FastAPI replay viewer. A Python query layer over the recording database — using the existing `msd_reader` pybind11 module — enables recording-based assertions (energy conservation, floor penetration, settling behavior) via pytest, while C++ GTest handles traditional in-memory assertions.
 
-This supersedes [0056g](0056g_replay_enabled_tests.md) with a more complete design that includes post-simulation query infrastructure and GTest custom matchers.
+This supersedes [0056g](0056g_replay_enabled_tests.md) with a more complete design that includes post-simulation query infrastructure and Python-based physics invariant checks.
 
 ---
 
 ## Architecture
 
 ```
-ReplayEnabledTest (GTest fixture)
-    |
-    |-- SetUp: creates single .db with geometry (MeshRecord/ObjectRecord)
-    |           then creates Engine (reads geometry via AssetRegistry)
-    |           then enables recording (DataRecorder adds state tables to same .db)
-    |-- TearDown: destroys Engine (RAII flushes DataRecorder)
-    |
-    +-- RecordingQuery (post-simulation analysis, wraps cpp_sqlite)
-    |     |-- Timeseries: positionHistory(), velocityHistory(), systemEnergyHistory()
-    |     |-- Aggregates: minZ(), maxSpeed(), maxEnergyDrift()
-    |
-    +-- ReplayMatchers (GTest custom matchers using RecordingQuery)
-          |-- EnergyConservedWithin(tolerance)
-          |-- NeverPenetratesBelow(bodyId, zMin)
-          |-- BodyComesToRest(bodyId, speedThreshold)
+C++ Layer (GTest):
+  ReplayEnabledTest (GTest fixture)
+      |
+      |-- SetUp: creates single .db with geometry (MeshRecord/ObjectRecord)
+      |           then creates Engine (reads geometry via AssetRegistry)
+      |           then enables recording (DataRecorder adds state tables to same .db)
+      |-- TearDown: destroys Engine (RAII flushes DataRecorder)
+      |
+      |-- Traditional in-memory assertions (EXPECT_GT, EXPECT_NE, etc.)
+      |
+      Output: replay/recordings/{TestSuite}_{TestName}.db
+              (self-contained: geometry tables + simulation state tables)
 
-Output: replay/recordings/{TestSuite}_{TestName}.db
-        (self-contained: geometry tables + simulation state tables)
-        (immediately viewable via existing FastAPI viewer)
+Python Layer (pytest):
+  recording_query (Python module using msd_reader pybind11)
+      |
+      |-- RecordingQuery class (post-simulation analysis)
+      |     |-- Timeseries: position_history(), velocity_history(), system_energy_history()
+      |     |-- Aggregates: min_z(), max_speed(), max_energy_drift()
+      |
+      |-- pytest assertion helpers
+            |-- assert_energy_conserved(db_path, tolerance)
+            |-- assert_never_penetrates_below(db_path, body_id, z_min)
+            |-- assert_body_comes_to_rest(db_path, body_id, speed_threshold)
+
+Both layers read: replay/recordings/{TestSuite}_{TestName}.db
+                   (immediately viewable via existing FastAPI viewer)
 ```
 
 ### Single-Database Design
@@ -83,20 +91,21 @@ This is safe because SQLite supports concurrent read-only + read-write connectio
 1. **Single database**: Geometry + recording state in one `.db` — viewer needs no modification
 2. **Engine-based**: Fixture uses `Engine` (wraps AssetRegistry + WorldModel) rather than raw WorldModel — proven pattern from `EngineIntegrationTest`
 3. **Compile-time recording path**: `MSD_RECORDINGS_DIR` CMake define points to `${CMAKE_SOURCE_DIR}/replay/recordings` — works regardless of CWD
-4. **Lazy query creation**: `RecordingQuery` created on first `query()` call after simulation completes (recording must be flushed first)
-5. **Matchers take path string**: GTest matchers accept `std::string` path, create `RecordingQuery` internally — clean `EXPECT_THAT` syntax
+4. **Two-language split**: C++ GTest produces `.db` files with traditional in-memory assertions; Python pytest reads `.db` files for recording-based physics invariant checks. This leverages the existing `msd_reader` pybind11 module and avoids duplicating database reading logic in C++.
+5. **Python query layer**: `RecordingQuery` is a Python class using `msd_reader` — same module already powering the FastAPI replay viewer. This keeps all database reading in one language and benefits from Python's rapid iteration for analysis code.
 
 ---
 
 ## Acceptance Criteria
 
 1. [ ] **AC1**: `ReplayEnabledTest` fixture creates self-contained `.db` with geometry + recording
-2. [ ] **AC2**: `RecordingQuery` provides timeseries and aggregate queries over recording databases
-3. [ ] **AC3**: Custom GTest matchers assert physics invariants from recorded data
-4. [ ] **AC4**: At least 2 example tests produce recordings viewable in the FastAPI replay viewer
-5. [ ] **AC5**: Recordings written to `replay/recordings/` are immediately served by `uvicorn replay.app:app`
-6. [ ] **AC6**: Existing tests unaffected (`--gtest_filter="-Replay*"` all pass)
-7. [ ] **AC7**: `MSD_KEEP_RECORDINGS` env var controls recording cleanup (default: keep)
+2. [ ] **AC2**: Python `RecordingQuery` provides timeseries and aggregate queries over recording databases via `msd_reader`
+3. [ ] **AC3**: Python pytest assertion helpers validate physics invariants from recorded data
+4. [ ] **AC4**: At least 2 example C++ tests produce recordings viewable in the FastAPI replay viewer
+5. [ ] **AC5**: At least 2 example Python tests validate recording data with physics invariant assertions
+6. [ ] **AC6**: Recordings written to `replay/recordings/` are immediately served by `uvicorn replay.app:app`
+7. [ ] **AC7**: Existing C++ tests unaffected (`--gtest_filter="-Replay*"` all pass)
+8. [ ] **AC8**: `MSD_KEEP_RECORDINGS` env var controls recording cleanup (default: keep)
 
 ---
 
