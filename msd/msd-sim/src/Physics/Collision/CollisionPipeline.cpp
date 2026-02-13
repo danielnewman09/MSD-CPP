@@ -267,7 +267,9 @@ void CollisionPipeline::createConstraints(
 
     for (size_t ci = 0; ci < contactConstraints.size(); ++ci)
     {
-      const auto& cc = contactConstraints[ci];
+      // Capture lever arms BEFORE moving the constraint (avoid use-after-move)
+      const auto leverArmA = contactConstraints[ci]->getLeverArmA();
+      const auto leverArmB = contactConstraints[ci]->getLeverArmB();
 
       // Store ContactConstraint in allConstraints_
       allConstraints_.push_back(std::move(contactConstraints[ci]));
@@ -281,8 +283,8 @@ void CollisionPipeline::createConstraints(
           pair.bodyAIndex,
           pair.bodyBIndex,
           pair.result.normal,
-          comA + cc->getLeverArmA(),   // contactPointA = comA + leverArmA
-          comB + cc->getLeverArmB(),   // contactPointB = comB + leverArmB
+          comA + leverArmA,   // contactPointA = comA + leverArmA
+          comB + leverArmB,   // contactPointB = comB + leverArmB
           comA,
           comB,
           pair.frictionCoefficient);
@@ -385,6 +387,11 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     return points;
   };
 
+  // With interleaved storage [CC, FC, CC, FC, ...], each contact group occupies
+  // stride entries in allConstraints_ but only lambdasPerContact lambdas.
+  // range.startIdx is the allConstraints_ index; convert to contact group index.
+  const size_t stride = hasFriction ? 2 : 1;
+
   for (const auto& range : pairRanges_)
   {
     const auto& pair = collisions_[range.pairIdx];
@@ -402,8 +409,10 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     {
       for (size_t ci = 0; ci < range.count; ++ci)
       {
+        // Convert allConstraints_ index to contact group index for lambda mapping
+        auto const contactGroupIdx = range.startIdx / stride + ci;
         auto const flatBase = static_cast<Eigen::Index>(
-          (range.startIdx + ci) * lambdasPerContact);
+          contactGroupIdx * lambdasPerContact);
         for (size_t k = 0; k < lambdasPerContact; ++k)
         {
           initialLambda(flatBase + static_cast<Eigen::Index>(k)) =
@@ -433,8 +442,10 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     solvedLambdas.reserve(range.count * lambdasPerContact);
     for (size_t ci = 0; ci < range.count; ++ci)
     {
+      // Convert allConstraints_ index to contact group index for lambda mapping
+      auto const contactGroupIdx = range.startIdx / stride + ci;
       auto const flatBase = static_cast<Eigen::Index>(
-        (range.startIdx + ci) * lambdasPerContact);
+        contactGroupIdx * lambdasPerContact);
       for (size_t k = 0; k < lambdasPerContact; ++k)
       {
         solvedLambdas.push_back(
