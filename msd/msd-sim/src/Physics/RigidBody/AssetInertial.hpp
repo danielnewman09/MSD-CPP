@@ -106,16 +106,6 @@ public:
                 double coefficientOfRestitution,
                 double frictionCoefficient);
 
-  // Rule of Zero: Compiler-generated special members
-  // Note: Assignment operators deleted because base class AssetPhysical has
-  // reference member (ConvexHull&)
-  // Ticket: 0058_constraint_ownership_cleanup
-  ~AssetInertial() override = default;
-  AssetInertial(const AssetInertial&) = default;
-  AssetInertial& operator=(const AssetInertial&) = delete;
-  AssetInertial(AssetInertial&&) noexcept = default;
-  AssetInertial& operator=(AssetInertial&&) noexcept = delete;
-
   /**
    * @brief Get the full dynamic state (mutable version).
    *
