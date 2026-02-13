@@ -436,3 +436,73 @@ cpp_sqlite handles missing columns gracefully:
 - **Rendering overhead**: +2 ArrowHelper instances per collision (minimal GPU impact)
 
 Estimated total overhead: < 1% for typical scenarios (10-100 collisions per frame)
+
+---
+
+## Design Review -- Initial Assessment
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-12
+**Status**: REVISION_REQUESTED
+**Iteration**: 0 of 1
+
+### Issues Requiring Revision
+
+| ID | Issue | Category | Required Change |
+|----|-------|----------|-----------------|
+| I1 | `extractTangentsFromConstraints()` incorrectly assumes 1 friction constraint per collision | Feasibility | Fix matching logic to account for per-contact-point friction constraints |
+| I2 | Python bindings use `def_readwrite` but existing record bindings use `def_readonly` | Architectural Fit | Use `def_readonly` to match existing pattern |
+| I3 | Python model references `Vector3D` type but actual model class is `Vec3` | Architectural Fit | Use `Vec3` to match existing models.py |
+| I4 | SimulationService design introduces a new `_build_collision_from_record()` method that does not exist | Architectural Fit | Show changes inline in the existing `get_frame_data()` method |
+| I5 | `CollisionResult::fromRecord()` not updated to deserialize tangent fields | C++ Quality | Add tangent deserialization in `fromRecord()` |
+
+### Revision Instructions for Architect
+
+The following changes must be made before final review:
+
+1. **Issue I1 -- Friction constraint per-contact-point matching logic is incorrect**: The design's `extractTangentsFromConstraints()` assumes one friction constraint per collision pair. However, examining `CollisionPipeline::createConstraints()` (lines 233-292 of `CollisionPipeline.cpp`), the code creates one `FrictionConstraint` per **contact point** in the manifold -- not per collision. The `constraints_` and `frictionConstraints_` vectors have a 1:1 correspondence (one friction constraint for each contact constraint). Since all friction constraints for a given collision share the same normal and thus the same tangent basis, the implementation should use `pairRanges_` (which tracks the constraint index range per collision pair) to extract tangents from the first friction constraint of each pair. The loop structure should be:
+
+   ```cpp
+   void CollisionPipeline::extractTangentsFromConstraints() {
+     if (frictionConstraints_.empty()) return;
+     for (const auto& range : pairRanges_) {
+       auto& collision = collisions_[range.pairIdx];
+       // All friction constraints for this pair share the same tangent basis
+       // (same normal), so take from the first one in the range
+       const auto& fc = frictionConstraints_[range.startIdx];
+       collision.result.tangent1 = fc->getTangent1();
+       collision.result.tangent2 = fc->getTangent2();
+     }
+   }
+   ```
+
+   Update the design document to reflect this corrected logic, including the prose description that says "Each collision produces one friction constraint" -- it should say "Each contact point produces one friction constraint; all share the same tangent basis per collision."
+
+2. **Issue I2 -- Python binding access mode**: The existing `CollisionResultRecord` bindings in `record_bindings.cpp` (line 180-196) use `def_readonly` for all fields. The design proposes `def_readwrite` for tangent1/tangent2. Use `def_readonly` to be consistent with the existing pattern. Also, `py::return_value_policy::reference_internal` is not needed with `def_readonly` for value-type members (Vector3DRecord is a value type, not a pointer/reference). Remove the return_value_policy parameter.
+
+3. **Issue I3 -- Python model type name mismatch**: The design references `Vector3D` and `Collision` in the Python model code, but the actual model classes in `replay/replay/models.py` are named `Vec3` and `CollisionInfo`. Update the design to use the correct class names: `tangent1: Vec3 | None = None` and `tangent2: Vec3 | None = None` on the `CollisionInfo` model.
+
+4. **Issue I4 -- SimulationService integration approach**: The design shows a new `_build_collision_from_record()` method that does not exist in the current `SimulationService`. The actual collision building happens inline in `get_frame_data()` (lines 109-138 of `simulation_service.py`). Revise to show the tangent extraction within the existing inline list comprehension or as a minimal modification to the existing code block, not as a new helper method.
+
+5. **Issue I5 -- `fromRecord()` tangent deserialization missing**: The design mentions updating `fromRecord()` but does not show the implementation. Add the deserialization code in `CollisionResult::fromRecord()` to read tangent1 and tangent2 from the record, with graceful fallback to zero if the fields contain NaN (indicating an older recording):
+
+   ```cpp
+   // In fromRecord():
+   result.tangent1 = Coordinate{record.tangent1.x, record.tangent1.y, record.tangent1.z};
+   result.tangent2 = Coordinate{record.tangent2.x, record.tangent2.y, record.tangent2.z};
+   ```
+
+### Items Passing Review (No Changes Needed)
+
+The following aspects of the design are well-done and should not be modified:
+
+- **CollisionResultRecord extension**: Adding `Vector3DRecord tangent1` and `tangent2` fields with BOOST_DESCRIBE_STRUCT is the correct approach, follows `ContactPointRecord` precedent, and maintains backward compatibility through cpp_sqlite's missing column handling.
+- **CollisionResult tangent member placement**: Adding tangent fields to `CollisionResult` (geometry-level) rather than `CollisionPair` (pipeline-level) is architecturally sound -- it keeps serialization self-contained via `toRecord()`.
+- **Placement in `execute()` flow**: Extracting tangents after `createConstraints()` but before `clearEphemeralState()` is correct timing, as friction constraints are destroyed during `clearEphemeralState()`.
+- **DataRecorder zero-change approach**: The design correctly identifies that `DataRecorder::recordCollisions()` automatically picks up the new fields via `pair.result.toRecord()` with no code changes required.
+- **Three.js ContactOverlay design**: Color scheme (red/green/blue for normal/t1/t2), fixed 1.0 unit length, single toggle approach, and conditional rendering are all appropriate.
+- **Backward compatibility strategy**: Zero-vector defaults for missing tangents, optional Python fields, and conditional frontend rendering form a sound backward compatibility chain.
+- **Test plan**: Coverage of serialization round-trip, pipeline extraction, determinism, and orthogonality is thorough.
+- **Decision to persist rather than recompute**: Recording actual solver state is the right trade-off for debuggability and forward compatibility.
+
+---
