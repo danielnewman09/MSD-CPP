@@ -1,5 +1,7 @@
 // Ticket: 0039c_rotational_coupling_test_suite
+// Ticket: 0062c_replay_rotational_collision_tests
 // Test: Scenario F4 -- Energy transfer with rotation
+// Converted to ReplayEnabledTest fixture for automatic replay recording
 //
 // DIAGNOSTIC TEST SUITE: This test specifically investigates the known
 // energy injection bug in rotational collisions. Failure is EXPECTED and
@@ -17,12 +19,9 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
-#include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/PotentialEnergy.hpp"
-#include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
-#include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
+#include "msd-sim/test/Replay/ReplayEnabledTest.hpp"
 
 using namespace msd_sim;
 
@@ -32,19 +31,6 @@ using namespace msd_sim;
 
 namespace
 {
-
-std::vector<Coordinate> createCubePoints(double size)
-{
-  double half = size / 2.0;
-  return {Coordinate{-half, -half, -half},
-          Coordinate{half, -half, -half},
-          Coordinate{half, half, -half},
-          Coordinate{-half, half, -half},
-          Coordinate{-half, -half, half},
-          Coordinate{half, -half, half},
-          Coordinate{half, half, half},
-          Coordinate{-half, half, half}};
-}
 
 /// Compute system energy breakdown using EnergyTracker with gravity potential
 EnergyTracker::SystemEnergy computeSystemEnergyBreakdown(
@@ -79,34 +65,32 @@ double computeSystemEnergy(const WorldModel& world)
 // looks for energy growth, not just inequality.
 // ============================================================================
 
-TEST(RotationalEnergyTest, F4_RotationEnergyTransfer_EnergyConserved)
+TEST_F(ReplayEnabledTest, RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyConserved)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
-  WorldModel world;
+  // Ticket: 0062c_replay_rotational_collision_tests
 
   // Floor
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   // Cube: 1m x 1m x 1m, dropped at 45 degrees with e=1.0 (elastic)
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
-
   Eigen::Quaterniond q =
     Eigen::AngleAxisd{M_PI / 4.0, Eigen::Vector3d::UnitX()} *
     Eigen::AngleAxisd{M_PI / 4.0, Eigen::Vector3d::UnitY()};
 
   double const halfDiag = std::sqrt(3.0) / 2.0;
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, 2.0 + halfDiag}, q};
-  world.spawnObject(1, cubeHull, 1.0, cubeFrame);
 
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(1.0);
-  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  const auto& cube = spawnInertial("unit_cube",
+                                   Coordinate{0.0, 0.0, 2.0 + halfDiag},
+                                   1.0,  // mass (kg)
+                                   1.0,  // restitution (elastic)
+                                   0.5); // friction
+  uint32_t cubeId = cube.getInstanceId();
 
-  double const initialTotalEnergy = computeSystemEnergy(world);
+  // Manually set orientation
+  world().getObject(cubeId).getInertialState().orientation = q;
+
+  double const initialTotalEnergy = computeSystemEnergy(world());
 
   // Track energy over 100 frames post-impact
   bool impactOccurred = false;
@@ -123,9 +107,9 @@ TEST(RotationalEnergyTest, F4_RotationEnergyTransfer_EnergyConserved)
 
   for (int i = 1; i <= 300; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    auto const& state = world.getObject(cubeId).getInertialState();
+    auto const& state = world().getObject(cubeId).getInertialState();
 
     if (std::isnan(state.position.z()) || std::isnan(state.velocity.norm()))
     {
@@ -133,7 +117,7 @@ TEST(RotationalEnergyTest, F4_RotationEnergyTransfer_EnergyConserved)
       break;
     }
 
-    auto sysEnergy = computeSystemEnergyBreakdown(world);
+    auto sysEnergy = computeSystemEnergyBreakdown(world());
     double totalEnergy = sysEnergy.total();
 
     maxTotalEnergy = std::max(maxTotalEnergy, totalEnergy);
@@ -228,40 +212,37 @@ TEST(RotationalEnergyTest, F4_RotationEnergyTransfer_EnergyConserved)
 // A simpler variant that removes gravity to isolate rotational energy transfer
 // ============================================================================
 
-TEST(RotationalEnergyTest,
-     F4b_ZeroGravity_RotationalEnergyTransfer_Conserved)
+TEST_F(ReplayEnabledTest,
+     RotationalEnergyTest_F4b_ZeroGravity_RotationalEnergyTransfer_Conserved)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
-  WorldModel world;
-  world.clearPotentialEnergies();  // No gravity
+  // Ticket: 0062c_replay_rotational_collision_tests
+
+  disableGravity();
 
   // Two cubes colliding with offset to induce rotation
-  auto cubePointsA = createCubePoints(1.0);
-  auto cubePointsB = createCubePoints(1.0);
-  ConvexHull hullA{cubePointsA};
-  ConvexHull hullB{cubePointsB};
-
   // Place cubes with slight vertical offset so contact is off-center
-  ReferenceFrame frameA{Coordinate{-0.05, 0.0, 0.0}};
-  ReferenceFrame frameB{Coordinate{1.0, 0.0, 0.3}};  // Offset in z for torque
+  const auto& cubeA = spawnInertialWithVelocity(
+    "unit_cube",
+    Coordinate{-0.05, 0.0, 0.0},
+    Coordinate{2.0, 0.0, 0.0},  // velocity
+    1.0,  // mass (kg)
+    1.0,  // restitution (elastic)
+    0.5); // friction
+  uint32_t idA = cubeA.getInstanceId();
 
-  world.spawnObject(1, hullA, 1.0, frameA);
-  world.spawnObject(2, hullB, 1.0, frameB);
-
-  uint32_t idA = 1;
-  uint32_t idB = 2;
-
-  world.getObject(idA).setCoefficientOfRestitution(1.0);
-  world.getObject(idB).setCoefficientOfRestitution(1.0);
-
-  // Object A moving toward B
-  world.getObject(idA).getInertialState().velocity = Velocity{2.0, 0.0, 0.0};
-  world.getObject(idB).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  const auto& cubeB = spawnInertial(
+    "unit_cube",
+    Coordinate{1.0, 0.0, 0.3},  // Offset in z for torque
+    1.0,  // mass (kg)
+    1.0,  // restitution (elastic)
+    0.5); // friction
+  uint32_t idB = cubeB.getInstanceId();
 
   // Compute initial KE (no gravity, so no PE)
   std::vector<std::unique_ptr<PotentialEnergy>> noPotentials;
   auto initialSysEnergy = EnergyTracker::computeSystemEnergy(
-    world.getInertialAssets(), noPotentials);
+    world().getInertialAssets(), noPotentials);
   double const initialKE = initialSysEnergy.total();
 
   ASSERT_GT(initialKE, 0.0)
@@ -273,10 +254,10 @@ TEST(RotationalEnergyTest,
 
   for (int i = 1; i <= 50; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    auto const& stateA = world.getObject(idA).getInertialState();
-    auto const& stateB = world.getObject(idB).getInertialState();
+    auto const& stateA = world().getObject(idA).getInertialState();
+    auto const& stateB = world().getObject(idB).getInertialState();
 
     if (std::isnan(stateA.position.x()) || std::isnan(stateB.position.x()))
     {
@@ -285,7 +266,7 @@ TEST(RotationalEnergyTest,
     }
 
     auto sysEnergy = EnergyTracker::computeSystemEnergy(
-      world.getInertialAssets(), noPotentials);
+      world().getInertialAssets(), noPotentials);
 
     if (sysEnergy.totalRotationalKE > 0.001)
     {
@@ -306,7 +287,7 @@ TEST(RotationalEnergyTest,
   if (!nanDetected)
   {
     auto finalSysEnergy = EnergyTracker::computeSystemEnergy(
-      world.getInertialAssets(), noPotentials);
+      world().getInertialAssets(), noPotentials);
     double const finalKE = finalSysEnergy.total();
 
     double const drift = std::abs(finalKE - initialKE) / initialKE;
