@@ -211,6 +211,8 @@ if(Python3_FOUND)
   )
 
   add_custom_target(trace-record-mappings
+    COMMAND ${TRACE_VENV} ${CMAKE_SOURCE_DIR}/scripts/generate_record_layers.py
+            --update-traceability ${TRACEABILITY_DB}
     COMMAND ${TRACE_VENV} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_record_mappings.py
             ${TRACEABILITY_DB}
             --repo ${CMAKE_SOURCE_DIR}

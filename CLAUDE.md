@@ -33,6 +33,7 @@ MSD-CPP/
 ├── prototypes/               # Prototype code for design validation
 │
 ├── scripts/                  # Tooling and automation
+│   ├── generate_record_layers.py  # Auto-generates pybind11 bindings and Pydantic models from C++ records
 │   └── traceability/         # Design decision traceability (see scripts/traceability/README.md)
 │
 ├── analysis/                 # Performance analysis infrastructure (see analysis/CLAUDE.md)
@@ -267,6 +268,12 @@ cmake --build build/Debug --target trace-decisions     # Design decision extract
 Database is generated at `build/{build_type}/docs/traceability.db` (gitignored, rebuilt from repo contents). Requires `tree-sitter` and `tree-sitter-cpp` in `scripts/.venv`.
 
 **Full documentation**: [`scripts/traceability/README.md`](scripts/traceability/README.md)
+
+### Record Layer Code Generation
+
+Automates generation of pybind11 bindings and Pydantic leaf models from msd-transfer C++ record headers. Use the `/sync-records` skill after modifying transfer records, or run `python scripts/generate_record_layers.py` directly.
+
+**Full documentation**: [`msd/msd-pybind/CLAUDE.md`](msd/msd-pybind/CLAUDE.md)
 
 ---
 
