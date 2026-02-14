@@ -21,6 +21,7 @@ source "$VENV_DIR/bin/activate"
 
 # --- 2. Install replay package ---
 echo "Installing replay package..."
+pip install -q --upgrade pip
 pip install -q -e "$SCRIPT_DIR"
 
 # --- 3. Check msd_reader is available ---
@@ -28,7 +29,7 @@ export PYTHONPATH="$BUILD_DIR:$PYTHONPATH"
 if ! python3 -c "import msd_reader" 2>/dev/null; then
     echo "ERROR: msd_reader not found in $BUILD_DIR"
     echo "Build with pybind enabled first:"
-    echo "  conan install . --build=missing -s build_type=Debug -o \"&:enable_pybind=True\""
+    echo "  conan install . --build=missing -s build_type=Debug"
     echo "  cmake --preset conan-debug"
     echo "  cmake --build --preset conan-debug"
     exit 1

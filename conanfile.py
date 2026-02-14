@@ -23,16 +23,14 @@ class msd(ConanFile):
         "warnings_as_errors": [True, False],
         "enable_clang_tidy": [True, False],
         "enable_benchmarks": [True, False],
-        "enable_profiling": [True, False],
-        "enable_pybind": [True, False]
+        "enable_profiling": [True, False]
     }
     default_options = {
         "enable_coverage": False,
         "warnings_as_errors": False,
         "enable_clang_tidy": False,
         "enable_benchmarks": False,
-        "enable_profiling": False,
-        "enable_pybind": False
+        "enable_profiling": False
     }
 
     def configure(self):
@@ -52,7 +50,6 @@ class msd(ConanFile):
         tc.variables["ENABLE_CLANG_TIDY"] = self.options.enable_clang_tidy
         tc.variables["ENABLE_BENCHMARKS"] = self.options.enable_benchmarks
         tc.variables["ENABLE_PROFILING"] = self.options.enable_profiling
-        tc.variables["ENABLE_PYBIND"] = self.options.enable_pybind
 
         tc.cache_variables["CMAKE_CXX_FLAGS"] = "-DFMT_USE_CONSTEVAL=0 -DFMT_CONSTEVAL="
 
@@ -108,9 +105,7 @@ class msd(ConanFile):
         if self.options.enable_benchmarks:
             self.requires("benchmark/1.9.1")
 
-        # Optional pybind11 dependency
-        if self.options.enable_pybind:
-            self.requires("pybind11/2.13.6")
+        self.requires("pybind11/2.13.6")
 
     def build_requirements(self):
         self.tool_requires("cmake/3.22.6")

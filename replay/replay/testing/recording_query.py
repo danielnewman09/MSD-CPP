@@ -39,7 +39,6 @@ class RecordingQuery:
         if msd_reader is None:
             raise RuntimeError(
                 "msd_reader module not available. "
-                "Build with -o '&:enable_pybind=True' to enable Python bindings."
             )
 
         self._db = msd_reader.Database(str(db_path))

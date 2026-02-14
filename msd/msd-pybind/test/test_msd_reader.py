@@ -25,7 +25,7 @@ class TestModuleImport:
     """Test that the msd_reader module imports correctly."""
 
     def test_import_msd_reader(self):
-        """AC1: import msd_reader succeeds after building with ENABLE_PYBIND=ON"""
+        """AC1: import msd_reader succeeds after building"""
         assert msd_reader is not None
 
     def test_database_class_exists(self):
@@ -195,13 +195,6 @@ class TestBuildConfiguration:
         """AC6: Build preset debug-pybind-only works (checked by successful build)"""
         # This test passes if the module was built and imported successfully
         assert msd_reader is not None
-
-    def test_no_impact_when_disabled(self):
-        """AC7: Existing C++ build unaffected when ENABLE_PYBIND=OFF"""
-        # This is verified by CI/CD - if C++ tests pass with pybind disabled, we're good
-        # This test is a placeholder to document the requirement
-        pass
-
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

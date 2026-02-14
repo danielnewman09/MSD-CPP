@@ -5,8 +5,6 @@ Validates recording databases produced by ReplayCollisionTest C++ tests.
 Demonstrates contact event queries and collision analysis.
 
 **IMPORTANT**: Tests requiring RecordingQuery need msd_reader pybind11 module.
-Build with `conan install . -o '&:enable_pybind=True'` to enable.
-The geometry/state validation test uses raw SQLite and works without msd_reader.
 
 Ticket: 0060d_example_replay_tests
 """
@@ -33,11 +31,6 @@ try:
 except (ImportError, RuntimeError):
     pass
 
-
-@pytest.mark.skipif(
-    not MSD_READER_AVAILABLE,
-    reason="Requires msd_reader. Build with -o '&:enable_pybind=True'."
-)
 def test_collision_has_contact_events():
     """Verify collision was detected and contact frames were recorded."""
     db_path = recording_for("ReplayCollisionTest", "TwoCubesCollide")
@@ -46,11 +39,6 @@ def test_collision_has_contact_events():
     # Should have contact events during the collision
     assert q.total_contact_frames() > 0, "Expected contact frames from collision"
 
-
-@pytest.mark.skipif(
-    not MSD_READER_AVAILABLE,
-    reason="Requires msd_reader. Build with -o '&:enable_pybind=True'."
-)
 def test_collision_between_specific_bodies():
     """Verify contact events occurred between the two specific cubes."""
     db_path = recording_for("ReplayCollisionTest", "TwoCubesCollide")
@@ -90,11 +78,6 @@ def test_recording_contains_geometry_and_state():
         "frame" in t.lower() for t in tables
     ), f"Expected frame-related table in {tables}"
 
-
-@pytest.mark.skipif(
-    not MSD_READER_AVAILABLE,
-    reason="Requires msd_reader. Build with -o '&:enable_pybind=True'."
-)
 def test_recording_has_frames():
     """Verify recording contains simulation frame data with timestamps."""
     db_path = recording_for("ReplayCollisionTest", "TwoCubesCollide")

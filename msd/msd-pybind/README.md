@@ -42,7 +42,7 @@ The pybind module is **opt-in** — it does not build by default and has no impa
 ### 1. Install dependencies with pybind enabled
 
 ```bash
-conan install . --build=missing -s build_type=Debug -o "&:enable_pybind=True"
+conan install . --build=missing -s build_type=Debug
 ```
 
 ### 2. Configure CMake

@@ -5,7 +5,6 @@ Validates recording databases produced by ReplayDropTest C++ tests.
 Demonstrates recording_for() helper and RecordingQuery API usage.
 
 **IMPORTANT**: These tests require msd_reader pybind11 module.
-Build with `conan install . -o '&:enable_pybind=True'` to enable.
 
 Ticket: 0060d_example_replay_tests
 """
@@ -39,7 +38,7 @@ except (ImportError, RuntimeError):
 # Skip all tests in this module if msd_reader not available
 pytestmark = pytest.mark.skipif(
     not MSD_READER_AVAILABLE,
-    reason="msd_reader pybind11 module not available. Build with -o '&:enable_pybind=True'."
+    reason="msd_reader pybind11 module not available."
 )
 
 

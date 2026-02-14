@@ -37,7 +37,6 @@ class SimulationService:
         if msd_reader is None:
             raise RuntimeError(
                 "msd_reader module not available. "
-                "Build with -o '&:enable_pybind=True' to enable Python bindings."
             )
 
         self.db_path = db_path

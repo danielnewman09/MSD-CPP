@@ -37,6 +37,11 @@
             "label": "Conan Build",
             "type": "shell",
             "command": "conan build . --build=missing -s build_type=${input:buildType} -o \"&:enable_coverage=${input:enableCoverage}\"",
+            "options": {
+                "env": {
+                    "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"
+                }
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -82,6 +87,11 @@
             "label": "CMake Build",
             "type": "shell",
             "command": "cmake --build ${command:cmake.buildDirectory} && cmake --build --preset doxygen-db",
+            "options": {
+                "env": {
+                    "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"
+                }
+            },
             "group": "build",
             "presentation": {
                 "echo": true,
@@ -211,41 +221,6 @@
             "problemMatcher": []
         },
         {
-            "label": "Conan Install (pybind)",
-            "type": "shell",
-            "command": "conan install . --build=missing -s build_type=${input:buildType} -o \"&:enable_pybind=True\"",
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Build Python Bindings",
-            "type": "shell",
-            "command": "cmake --preset conan-debug && cmake --build --preset debug-pybind-only",
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "dependsOn": [
-                "Conan Install (pybind)"
-            ],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": [
-                "$gcc"
-            ]
-        },
-        {
             "label": "Run Python Tests",
             "type": "shell",
             "command": "source .venv/bin/activate && python3 -m pytest msd/msd-pybind/test/ -v",
@@ -254,8 +229,7 @@
             },
             "group": "test",
             "dependsOn": [
-                "Setup Python Venv",
-                "Build Python Bindings"
+                "Setup Python Venv"
             ],
             "presentation": {
                 "echo": true,

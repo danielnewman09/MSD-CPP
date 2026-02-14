@@ -9,7 +9,7 @@ FastAPI backend for serving MSD simulation data to the Three.js frontend.
 ```bash
 # 1. Build C++ simulation + recording generator
 cd /path/to/MSD-CPP
-conan install . --build=missing -s build_type=Debug -o "&:enable_pybind=True"
+conan install . --build=missing -s build_type=Debug
 cmake --preset conan-debug
 cmake --build --preset conan-debug --target generate_test_recording
 
@@ -35,7 +35,7 @@ uvicorn replay.app:app --reload
 - Python 3.10+
 - MSD-CPP project built with Python bindings enabled:
   ```bash
-  conan install . --build=missing -s build_type=Debug -o "&:enable_pybind=True"
+  conan install . --build=missing -s build_type=Debug
   cmake --preset conan-debug
   cmake --build --preset conan-debug
   ```
