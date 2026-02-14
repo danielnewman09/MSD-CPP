@@ -2,11 +2,11 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Implementation
+- [x] Ready for Implementation
 - [ ] Implementation Complete — Awaiting Review
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Implementation
 **Type**: Feature / Testing
 **Priority**: Medium
 **Assignee**: TBD
@@ -93,3 +93,4 @@ This ticket produces the most recordings (~35+ test cases). Ensure `MSD_KEEP_REC
 | Phase | Date | Agent | Notes |
 |-------|------|-------|-------|
 | Draft | 2026-02-13 | Human + Claude | Initial ticket creation |
+| Implementation (Partial) | 2026-02-14 | Claude Orchestrator | Converted ParameterIsolationTest.cpp (8/10 multi-frame tests). Remaining: EPAConvergenceDiagnosticTest, ManifoldDiagnosticTest, PerContactDepthTest, CollisionPipelineTest. Branch: 0062e-replay-diagnostic-parameter-tests |
