@@ -6,7 +6,7 @@ description: Regenerate pybind11 bindings and Pydantic leaf models from C++ msd-
 Context: User added a new field to EnergyRecord and wants to regenerate downstream layers.
 user: "/sync-records"
 assistant: "I'll regenerate the pybind11 bindings and Pydantic models from the updated C++ records."
-<Runs scripts/generate_record_layers.py, then scripts/traceability/index_record_mappings.py>
+<Runs scripts/generate_record_layers.py --update-traceability, then index_record_mappings.py for composites>
 </example>
 
 <example>
@@ -23,7 +23,7 @@ model: sonnet
 
 ## What This Does
 
-Regenerates pybind11 bindings and Pydantic leaf models from C++ transfer records (the source of truth), then runs the 0061 cross-layer mapping indexer to refresh traceability and check for drift in hand-written composite models.
+Regenerates pybind11 bindings and Pydantic leaf models from C++ transfer records (the source of truth), writes all four generator-managed layers (cpp, sql, pybind, leaf-pydantic) directly to the traceability database, then indexes hand-written composite Pydantic models.
 
 This skill ensures downstream representation layers stay synchronized with C++ record schema changes.
 
@@ -31,22 +31,23 @@ This skill ensures downstream representation layers stay synchronized with C++ r
 
 - `scripts/.venv` with tree-sitter and tree-sitter-cpp installed
 - msd-transfer headers at `msd/msd-transfer/src/*.hpp`
-- 0061 mapping indexer at `scripts/traceability/index_record_mappings.py` (optional)
+- Traceability database at `build/Debug/docs/traceability.db` (optional)
 
 ## Steps
 
-### 1. Parse C++ Transfer Records
+### 1. Generate Bindings and Update Traceability
 
-Run the generator script:
+Run the generator script with the traceability flag:
 ```bash
 source scripts/.venv/bin/activate
-python scripts/generate_record_layers.py
+python scripts/generate_record_layers.py --update-traceability build/Debug/docs/traceability.db
 ```
 
-This:
+This single command:
 - Parses all `BOOST_DESCRIBE_STRUCT` macros from `msd-transfer/src/*.hpp`
-- Extracts record names, field names, and field types
-- Classifies fields into primitives, nested sub-records, ForeignKeys, RepeatedFields
+- Generates `msd/msd-pybind/src/record_bindings.cpp` (pybind11 bindings)
+- Generates `replay/replay/generated_models.py` (Pydantic leaf models)
+- Writes cpp, sql, pybind, and leaf-pydantic layer data to the traceability database
 
 ### 2. Review Generated Files
 
@@ -55,30 +56,16 @@ Check what was regenerated:
 git status msd/msd-pybind/src/record_bindings.cpp replay/replay/generated_models.py
 ```
 
-Expected output:
-- `msd/msd-pybind/src/record_bindings.cpp` — pybind11 bindings (if changed)
-- `replay/replay/generated_models.py` — Pydantic leaf models (if changed)
-
 If files are unchanged, generation is idempotent and records are current.
 
-### 3. Run 0061 Mapping Indexer (Optional)
+### 3. Index Composite Pydantic Models
 
-If the indexer exists, refresh traceability mappings:
+Run the indexer for hand-written composite models (FrameData, BodyState, etc.):
 ```bash
-# Check if indexer exists
-if [ -f scripts/traceability/index_record_mappings.py ]; then
-  source scripts/.venv/bin/activate
-  python scripts/traceability/index_record_mappings.py
-  echo "✓ Traceability database refreshed"
-else
-  echo "⚠ Mapping indexer not found (ticket 0061 may not be implemented)"
-fi
+python scripts/traceability/index_record_mappings.py build/Debug/docs/traceability.db --repo .
 ```
 
-The indexer:
-- Parses `Maps-to:` docstring annotations from generated Pydantic models
-- Links Python classes → C++ records deterministically (no heuristics)
-- Validates that generated models have non-NULL linkage
+The indexer handles only composite models — the generator already populated the four authoritative layers.
 
 ### 4. Check for Drift in Hand-Written Composites
 
@@ -175,13 +162,17 @@ Record Layer Generator
 ✓ Generated 28 record bindings
 ✓ Generated 6 Pydantic leaf models
 
+[4/4] Updating traceability database: build/Debug/docs/traceability.db...
+  ✓ Wrote 28 records across 4 layers (cpp, sql, pybind, pydantic)
+
 ============================================================
 Generation complete
 ============================================================
 
-[Optional: 0061 Indexer]
-✓ Traceability database refreshed
-✓ All generated models have deterministic C++ linkage
+[Composite Indexer]
+  Pydantic composites: 14 models parsed
+  Generated leaf models: 6 (handled by generator)
+✓ Indexed 14 composite Pydantic models
 
 [Drift Check]
 No drift detected — all hand-written composites are current

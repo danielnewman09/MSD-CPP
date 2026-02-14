@@ -11,14 +11,16 @@ Ticket: 0062_pybind_codegen_from_boost_describe
 Design: docs/designs/0062_pybind_codegen_from_boost_describe/design.md
 
 Usage:
-    python scripts/generate_record_layers.py [--check-only]
+    python scripts/generate_record_layers.py [--check-only] [--update-traceability DB_PATH]
 
 Options:
-    --check-only    Check if generated files match committed versions (for CI)
+    --check-only                Check if generated files match committed versions (for CI)
+    --update-traceability PATH  Write cpp/sql/pybind/pydantic layer data to traceability.db
 """
 
 import argparse
 import re
+import sqlite3
 import sys
 from dataclasses import dataclass
 from enum import Enum
@@ -646,6 +648,224 @@ this module rather than redefining leaf models.
 
 
 # ==============================================================================
+# TraceabilityWriter: Populate traceability DB from in-memory RecordInfo
+# ==============================================================================
+
+class TraceabilityWriter:
+    """Write record layer data directly to the traceability database.
+
+    Replaces redundant re-parsing by the 0061 indexer for layers that the
+    generator already has authoritative data for: cpp, sql, pybind, and
+    leaf-pydantic. The indexer retains responsibility for hand-written
+    composite Pydantic models only.
+    """
+
+    # C++ type → SQL type (deterministic mapping)
+    SQL_TYPE_MAP = {
+        "double": "REAL",
+        "float": "REAL",
+        "uint32_t": "INTEGER",
+        "int": "INTEGER",
+        "int32_t": "INTEGER",
+        "int64_t": "INTEGER",
+        "uint64_t": "INTEGER",
+        "uint8_t": "INTEGER",
+        "bool": "INTEGER",
+        "std::string": "TEXT",
+    }
+
+    # C++ type → Python type (for pydantic layer field_type column)
+    PYTHON_TYPE_MAP = {
+        "double": "float",
+        "float": "float",
+        "uint32_t": "int",
+        "int": "int",
+        "int32_t": "int",
+        "int64_t": "int",
+        "uint64_t": "int",
+        "uint8_t": "int",
+        "bool": "bool",
+        "std::string": "str",
+    }
+
+    def __init__(self, db_path: Path, name_mapping: dict[str, str]):
+        """Open the traceability database and ensure schema exists."""
+        # Import traceability schema from sibling directory
+        trace_dir = Path(__file__).parent / "traceability"
+        sys.path.insert(0, str(trace_dir))
+        from traceability_schema import create_schema, rebuild_fts
+
+        self.conn = create_schema(db_path)
+        self.rebuild_fts = rebuild_fts
+        self.name_mapping = name_mapping
+
+    def populate(self, records: list["RecordInfo"]) -> None:
+        """Write all four generator-authoritative layers to the database."""
+        # Clear existing generator-managed layers (preserve hand-written pydantic composites)
+        self.conn.execute(
+            "DELETE FROM record_layer_fields WHERE layer IN ('cpp', 'sql', 'pybind', 'pydantic')"
+        )
+        self.conn.execute("DELETE FROM record_layer_mapping")
+
+        for record in records:
+            self._write_mapping_row(record)
+            self._write_cpp_layer(record)
+            self._write_sql_layer(record)
+            self._write_pybind_layer(record)
+            self._write_pydantic_layer(record)
+
+        self.conn.commit()
+        self.rebuild_fts(self.conn)
+
+    def close(self):
+        """Close database connection."""
+        self.conn.close()
+
+    def _write_mapping_row(self, record: "RecordInfo") -> None:
+        """Insert record_layer_mapping row."""
+        pydantic_model = self.name_mapping.get(record.record_name)
+        self.conn.execute(
+            """
+            INSERT INTO record_layer_mapping
+                (record_name, sql_table, pybind_class, pydantic_model)
+            VALUES (?, ?, ?, ?)
+            """,
+            (record.record_name, record.record_name, record.record_name, pydantic_model),
+        )
+
+    def _write_cpp_layer(self, record: "RecordInfo") -> None:
+        """Write C++ layer fields from RecordInfo."""
+        for field in record.fields:
+            self.conn.execute(
+                """
+                INSERT INTO record_layer_fields
+                    (record_name, layer, field_name, field_type, source_field, notes)
+                VALUES (?, 'cpp', ?, ?, NULL, ?)
+                """,
+                (
+                    record.record_name,
+                    field.name,
+                    field.type,
+                    f"tier {record.tier}" if record.tier else None,
+                ),
+            )
+
+    def _write_sql_layer(self, record: "RecordInfo") -> None:
+        """Write SQL layer fields (deterministic from C++ types)."""
+        for field in record.fields:
+            if field.field_type == FieldType.FOREIGN_KEY:
+                sql_name = f"{field.name}_id"
+                sql_type = "INTEGER"
+                notes = "ForeignKey → _id suffix"
+            elif field.field_type == FieldType.REPEATED_FIELD:
+                sql_name = f"{field.name}_junction"
+                sql_type = "junction table"
+                notes = "RepeatedField → junction table"
+            else:
+                sql_name = field.name
+                sql_type = self.SQL_TYPE_MAP.get(field.type, "BLOB")
+                if field.field_type == FieldType.NESTED_SUB_RECORD:
+                    sql_type = "BLOB"  # Sub-records serialized as BLOB
+                notes = None
+
+            self.conn.execute(
+                """
+                INSERT INTO record_layer_fields
+                    (record_name, layer, field_name, field_type, source_field, notes)
+                VALUES (?, 'sql', ?, ?, ?, ?)
+                """,
+                (record.record_name, sql_name, sql_type, field.name, notes),
+            )
+
+    def _write_pybind_layer(self, record: "RecordInfo") -> None:
+        """Write pybind layer fields (deterministic from codegen patterns)."""
+        # The 'id' field is always bound as def_readonly
+        self.conn.execute(
+            """
+            INSERT INTO record_layer_fields
+                (record_name, layer, field_name, field_type, source_field, notes)
+            VALUES (?, 'pybind', 'id', NULL, 'id', 'def_readonly')
+            """,
+            (record.record_name,),
+        )
+
+        for field in record.fields:
+            if field.field_type == FieldType.FOREIGN_KEY:
+                python_name = f"{field.name}_id"
+                source_field = f"{field.name}.id"
+                notes = "def_property_readonly"
+            elif field.field_type == FieldType.REPEATED_FIELD:
+                python_name = field.name
+                source_field = f"{field.name}.data"
+                notes = "def_property_readonly"
+            else:
+                python_name = field.name
+                source_field = field.name
+                notes = "def_readonly"
+
+            self.conn.execute(
+                """
+                INSERT INTO record_layer_fields
+                    (record_name, layer, field_name, field_type, source_field, notes)
+                VALUES (?, 'pybind', ?, NULL, ?, ?)
+                """,
+                (record.record_name, python_name, source_field, notes),
+            )
+
+    def _write_pydantic_layer(self, record: "RecordInfo") -> None:
+        """Write leaf-pydantic layer fields for records in NAME_MAPPING."""
+        pydantic_name = self.name_mapping.get(record.record_name)
+        if not pydantic_name:
+            return  # No Pydantic model for this record
+
+        for field in record.fields:
+            # Mirror the PydanticCodegen camel_to_snake transformation
+            if field.field_type == FieldType.FOREIGN_KEY:
+                py_field_name = self._camel_to_snake(field.name) + "_id"
+                py_type = "int"
+            elif field.field_type == FieldType.PRIMITIVE:
+                py_field_name = self._camel_to_snake(field.name)
+                py_type = self.PYTHON_TYPE_MAP.get(field.type, "Any")
+            elif field.field_type == FieldType.NESTED_SUB_RECORD:
+                py_field_name = self._camel_to_snake(field.name)
+                py_type = self.name_mapping.get(field.type, f"{field.type.replace('Record', '')}Model")
+            elif field.field_type == FieldType.REPEATED_FIELD:
+                py_field_name = self._camel_to_snake(field.name)
+                element_type = re.search(r"<([^>]+)>", field.type)
+                if element_type:
+                    et = element_type.group(1).strip()
+                    py_element = self.name_mapping.get(et, f"{et.replace('Record', '')}Model")
+                else:
+                    py_element = "Any"
+                py_type = f"list[{py_element}]"
+            else:
+                py_field_name = self._camel_to_snake(field.name)
+                py_type = "Any"
+
+            self.conn.execute(
+                """
+                INSERT INTO record_layer_fields
+                    (record_name, layer, field_name, field_type, source_field, notes)
+                VALUES (?, 'pydantic', ?, ?, ?, ?)
+                """,
+                (
+                    record.record_name,
+                    py_field_name,
+                    py_type,
+                    field.name,
+                    f"Maps-to: {pydantic_name}",
+                ),
+            )
+
+    @staticmethod
+    def _camel_to_snake(name: str) -> str:
+        """Transform camelCase to snake_case (mirrors PydanticCodegen)."""
+        s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+        s2 = re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1)
+        return s2.lower()
+
+
+# ==============================================================================
 # Main Generator Orchestration
 # ==============================================================================
 
@@ -691,6 +911,11 @@ def main():
         action="store_true",
         help="Check if generated files match committed versions (for CI)",
     )
+    parser.add_argument(
+        "--update-traceability",
+        metavar="DB_PATH",
+        help="Write record layer data to the traceability database",
+    )
     args = parser.parse_args()
 
     # Determine project root
@@ -725,6 +950,7 @@ def main():
     generated_model_count = len(set(NAME_MAPPING.values()))
     print(f"  Generating {generated_model_count} unique models from {len(NAME_MAPPING)} records")
 
+    check_failed = False
     if args.check_only:
         # Check mode: compare against committed files
         errors = []
@@ -743,9 +969,9 @@ def main():
             for error in errors:
                 print(f"  ERROR: {error}", file=sys.stderr)
             print("  Run: python scripts/generate_record_layers.py", file=sys.stderr)
-            sys.exit(1)
-
-        print(f"  OK: All generated files match committed versions")
+            check_failed = True
+        else:
+            print(f"  OK: All generated files match committed versions")
     else:
         # Write mode: overwrite files
         write_file(pybind_output, pybind_code)
@@ -753,9 +979,23 @@ def main():
         print(f"\n✓ Generated {len(records)} record bindings")
         print(f"✓ Generated {generated_model_count} Pydantic leaf models")
 
+    # Phase 4 (optional): Update traceability database
+    # Runs even when --check-only fails — traceability data depends on parsed
+    # records (always correct), not on whether committed files are stale.
+    if args.update_traceability:
+        db_path = Path(args.update_traceability)
+        print(f"\n[4/4] Updating traceability database: {db_path}...")
+        writer = TraceabilityWriter(db_path, NAME_MAPPING)
+        writer.populate(records)
+        writer.close()
+        print(f"  ✓ Wrote {len(records)} records across 4 layers (cpp, sql, pybind, pydantic)")
+
     print("\n" + "=" * 60)
     print("Generation complete")
     print("=" * 60)
+
+    if check_failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
