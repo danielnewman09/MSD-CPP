@@ -1,6 +1,10 @@
 // Ticket: 0040a_per_contact_penetration_depth
+// Ticket: 0062e_replay_diagnostic_parameter_tests
 // Design: docs/designs/0040a-per-contact-penetration-depth/design.md
 // Test: Per-contact penetration depth computation
+//
+// NOTE: All tests in this file are single-step collision detection tests
+// (no multi-frame simulation), so they remain as TEST() rather than TEST_F.
 
 #include <gtest/gtest.h>
 

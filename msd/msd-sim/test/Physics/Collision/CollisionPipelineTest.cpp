@@ -1,5 +1,9 @@
 // Ticket: 0036_collision_pipeline_extraction
+// Ticket: 0062e_replay_diagnostic_parameter_tests
 // Design: docs/designs/0036_collision_pipeline_extraction/design.md
+//
+// NOTE: All tests in this file are single-step collision pipeline tests
+// (no multi-frame simulation), so they remain as TEST() rather than TEST_F.
 
 #include <gtest/gtest.h>
 
