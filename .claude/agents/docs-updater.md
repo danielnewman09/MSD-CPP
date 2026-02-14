@@ -160,16 +160,55 @@ Create a documentation sync summary at `docs/designs/{feature-name}/doc-sync-sum
 ### Diagrams Index
 - {new entries added}
 
+## Record Layer Sync
+{If msd-transfer was touched, otherwise omit this section}
+- Generator: {regenerated N records, files changed/unchanged}
+- Composite indexer: {N composite models indexed}
+- Drift: {None detected / list of drifted fields}
+
 ## Verification
 
 - [ ] All diagram links verified
 - [ ] CLAUDE.md formatting consistent
 - [ ] No broken references
 - [ ] Library documentation structure complete
+- [ ] Record layers synchronized (if msd-transfer touched)
 
 ## Notes
 {Any observations, conflicts resolved, or recommendations}
 ```
+
+### Step 6.5: Record Layer Sync (Conditional)
+
+**Trigger**: Run this step ONLY if the ticket's implementation touched any file in `msd/msd-transfer/src/*.hpp`.
+
+Check whether transfer records were modified by examining the ticket's file changes (from the implementation notes or git diff). If any `.hpp` file in `msd/msd-transfer/src/` was added or modified:
+
+1. **Run the generator with traceability update**:
+```bash
+source scripts/.venv/bin/activate
+python scripts/generate_record_layers.py --update-traceability build/Debug/docs/traceability.db
+```
+
+This regenerates:
+- `msd/msd-pybind/src/record_bindings.cpp` (pybind11 bindings)
+- `replay/replay/generated_models.py` (Pydantic leaf models)
+- Four layers in the traceability database (cpp, sql, pybind, pydantic)
+
+2. **Run the composite model indexer**:
+```bash
+python scripts/traceability/index_record_mappings.py build/Debug/docs/traceability.db --repo .
+```
+
+3. **Check for drift** in hand-written composite Pydantic models (`replay/replay/models.py`):
+   - If new fields were added to a C++ record that maps to a Pydantic leaf model, check whether any composite models (FrameData, BodyState, etc.) that reference that leaf model need updating
+   - Report drift findings in the doc-sync summary under a "Record Layer Sync" section
+
+4. **Stage regenerated files** if they changed:
+   - `msd/msd-pybind/src/record_bindings.cpp`
+   - `replay/replay/generated_models.py`
+
+If no `msd-transfer/src/*.hpp` files were touched, skip this step entirely.
 
 ## Required Section Templates
 
@@ -249,6 +288,12 @@ Before completing any documentation update, verify:
 - [ ] "New/modified" highlighting removed from copied diagrams
 - [ ] Library core diagram updated with new components
 - [ ] doc-sync-summary.md created in design folder
+
+### Record Layer Sync (if msd-transfer touched)
+- [ ] `generate_record_layers.py --update-traceability` ran successfully
+- [ ] `index_record_mappings.py` ran for composite models
+- [ ] Regenerated files staged if changed
+- [ ] Drift in hand-written composites reported (if any)
 
 ### CLAUDE.md Updates
 - [ ] All new diagrams are indexed in Diagrams Index table
