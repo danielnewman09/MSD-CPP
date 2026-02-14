@@ -78,6 +78,37 @@ const AssetInertial& WorldModel::spawnObject(uint32_t assetId,
   return asset;
 }
 
+const AssetInertial& WorldModel::spawnObject(
+  uint32_t assetId,
+  ConvexHull& hull,
+  double mass,
+  const ReferenceFrame& origin,
+  double coefficientOfRestitution,
+  double frictionCoefficient)
+{
+  auto instanceId = getInertialAssetId();
+  // Ticket: 0062a_extend_test_asset_generator
+  // Use AssetInertial constructor with mass, restitution, and friction
+  inertialAssets_.emplace_back(assetId,
+                               instanceId,
+                               hull,
+                               mass,
+                               origin,
+                               coefficientOfRestitution,
+                               frictionCoefficient);
+
+  const AssetInertial& asset = inertialAssets_.back();
+
+  // Ticket: 0056j_domain_aware_data_recorder
+  // Record static data if recording is enabled
+  if (dataRecorder_)
+  {
+    dataRecorder_->recordStaticAsset(asset);
+  }
+
+  return asset;
+}
+
 const AssetEnvironment& WorldModel::spawnEnvironmentObject(
   uint32_t assetId,
   ConvexHull& hull,

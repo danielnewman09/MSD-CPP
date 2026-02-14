@@ -95,6 +95,29 @@ public:
                                    const ReferenceFrame& origin);
 
   /**
+   * @brief Spawn a new object with specified mass, restitution, and friction.
+   * @ticket 0062a_extend_test_asset_generator
+   *
+   * @param assetId Asset type identifier
+   * @param hull Collision hull for the object
+   * @param mass Mass in kilograms [kg]
+   * @param origin Initial reference frame
+   * @param coefficientOfRestitution Elasticity [0, 1] (0=inelastic, 1=elastic)
+   * @param frictionCoefficient Friction coefficient [0, inf)
+   * @return Reference to the spawned object
+   *
+   * @throws std::invalid_argument if mass <= 0
+   * @throws std::invalid_argument if coefficientOfRestitution not in [0, 1]
+   * @throws std::invalid_argument if frictionCoefficient < 0
+   */
+  const AssetInertial& spawnObject(uint32_t assetId,
+                                   ConvexHull& hull,
+                                   double mass,
+                                   const ReferenceFrame& origin,
+                                   double coefficientOfRestitution,
+                                   double frictionCoefficient);
+
+  /**
    * @brief Spawn a new static environment object in the world
    *
    * Environment objects are static (immovable) and participate in collision

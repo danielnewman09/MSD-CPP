@@ -74,6 +74,46 @@ const AssetInertial& Engine::spawnInertialObject(
   return worldModel_.spawnObject(assetRef.getId(), hullIt->second, objectFrame);
 }
 
+const AssetInertial& Engine::spawnInertialObject(
+  const std::string& assetName,
+  const Coordinate& position,
+  const AngularCoordinate& orientation,
+  double mass,
+  double coefficientOfRestitution,
+  double frictionCoefficient)
+{
+  // Ticket: 0062a_extend_test_asset_generator
+  const ReferenceFrame objectFrame{position, orientation};
+
+  const auto& asset = assetRegistry_.getAsset(assetName);
+
+  if (!asset.has_value())
+  {
+    throw std::runtime_error("Could not spawn object with name: " + assetName +
+                             ". It was not found in the asset registry");
+  }
+
+  // Cache asset reference to avoid repeated accessor calls
+  const auto& assetRef = asset->get();
+
+  if (!assetRef.getCollisionGeometry().has_value())
+  {
+    throw std::runtime_error("Asset does not have collision geometry");
+  }
+
+  // try_emplace only constructs the ConvexHull if key doesn't exist
+  // Returns iterator to existing or newly inserted element
+  auto [hullIt, inserted] = registryHullMap_.emplace(
+    assetRef.getId(), assetRef.getCollisionGeometry()->get().getVertices());
+
+  return worldModel_.spawnObject(assetRef.getId(),
+                                 hullIt->second,
+                                 mass,
+                                 objectFrame,
+                                 coefficientOfRestitution,
+                                 frictionCoefficient);
+}
+
 const AssetEnvironment& Engine::spawnEnvironmentObject(
   const std::string& assetName,
   const Coordinate& position,
