@@ -96,4 +96,4 @@ The test threshold (1e-10) is already relaxed, but actual behavior produces even
 | Phase | Date | Agent | Notes |
 |-------|------|-------|-------|
 | Draft | 2026-02-13 | Human + Claude | Initial ticket creation |
-| Implementation | 2026-02-14 | Claude (Orchestrator) | **Conversions completed**: ContactManifoldStabilityTest.cpp (2 tests), EdgeContactTest.cpp (1 test). **Ticket scope corrected**: EdgeContactTest.cpp contains 1 multi-frame test, not 7 (remaining 10 are single-shot static tests). **Artifacts**: `ContactManifoldStabilityTest.cpp`, `EdgeContactTest.cpp` |
+| Implementation | 2026-02-14 | Claude (Orchestrator) | **Conversions completed**: ContactManifoldStabilityTest.cpp (2 tests), EdgeContactTest.cpp (1 test). **Ticket scope corrected**: EdgeContactTest.cpp contains 1 multi-frame test, not 7 (remaining 10 are single-shot static tests). **Branch**: `0062d-replay-stability-edge-contact-tests`. **PR**: #63 (draft). **Artifacts**: `ContactManifoldStabilityTest.cpp`, `EdgeContactTest.cpp` |
