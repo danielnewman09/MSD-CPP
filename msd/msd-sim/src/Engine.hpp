@@ -27,6 +27,30 @@ public:
     const AngularCoordinate& orientation);
 
   /**
+   * @brief Spawn an inertial object with custom mass, restitution, and friction
+   * @ticket 0062a_extend_test_asset_generator
+   *
+   * @param assetName Name of asset in registry
+   * @param position World position
+   * @param orientation World orientation
+   * @param mass Mass in kilograms [kg]
+   * @param coefficientOfRestitution Elasticity [0, 1] (0=inelastic, 1=elastic)
+   * @param frictionCoefficient Friction coefficient [0, inf)
+   * @return Reference to spawned inertial object
+   *
+   * @throws std::runtime_error if asset not found or has no collision geometry
+   * @throws std::invalid_argument if mass <= 0
+   * @throws std::invalid_argument if coefficientOfRestitution not in [0, 1]
+   * @throws std::invalid_argument if frictionCoefficient < 0
+   */
+  const AssetInertial& spawnInertialObject(const std::string& assetName,
+                                           const Coordinate& position,
+                                           const AngularCoordinate& orientation,
+                                           double mass,
+                                           double coefficientOfRestitution,
+                                           double frictionCoefficient);
+
+  /**
    * @brief Spawn a static environment object from an asset
    * @param assetName Name of asset in registry
    * @param position World position

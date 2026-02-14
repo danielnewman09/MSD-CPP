@@ -1,5 +1,6 @@
 // Ticket: 0060a_replay_enabled_test_fixture
-// Design: Direct specification in ticket (no separate design doc)
+// Ticket: 0062a_extend_test_asset_generator
+// Design: Direct specification in tickets (no separate design doc)
 
 #ifndef MSD_SIM_TEST_REPLAY_ENABLED_TEST_HPP
 #define MSD_SIM_TEST_REPLAY_ENABLED_TEST_HPP
@@ -70,6 +71,67 @@ protected:
    */
   const AssetEnvironment& spawnEnvironment(const std::string& assetName,
                                            const Coordinate& position);
+
+  /**
+   * @brief Spawn inertial object with custom physics parameters
+   * @ticket 0062a_extend_test_asset_generator
+   *
+   * @param assetName Name of asset in test database
+   * @param position World position for spawned object
+   * @param mass Mass in kilograms (default: 1.0)
+   * @param restitution Coefficient of restitution [0, 1] (default: 0.5)
+   * @param friction Friction coefficient [0, inf) (default: 0.5)
+   * @return Reference to spawned inertial asset
+   *
+   * Spawns an inertial object with configurable mass, restitution, and
+   * friction. Delegates to engine().spawnInertialObject() then configures
+   * physics parameters.
+   *
+   * Uses default orientation (identity quaternion).
+   */
+  const AssetInertial& spawnInertial(const std::string& assetName,
+                                     const Coordinate& position,
+                                     double mass = 1.0,
+                                     double restitution = 0.5,
+                                     double friction = 0.5);
+
+  /**
+   * @brief Spawn inertial object with initial velocity
+   * @ticket 0062a_extend_test_asset_generator
+   *
+   * @param assetName Name of asset in test database
+   * @param position World position for spawned object
+   * @param velocity Initial velocity vector
+   * @param mass Mass in kilograms (default: 1.0)
+   * @param restitution Coefficient of restitution [0, 1] (default: 0.5)
+   * @param friction Friction coefficient [0, inf) (default: 0.5)
+   * @return Reference to spawned inertial asset
+   *
+   * Spawns an inertial object with configurable physics parameters and sets
+   * initial velocity. Useful for collision tests that require specific impact
+   * velocities.
+   *
+   * Uses default orientation (identity quaternion).
+   */
+  const AssetInertial& spawnInertialWithVelocity(const std::string& assetName,
+                                                 const Coordinate& position,
+                                                 const Coordinate& velocity,
+                                                 double mass = 1.0,
+                                                 double restitution = 0.5,
+                                                 double friction = 0.5);
+
+  /**
+   * @brief Disable gravity for isolated collision tests
+   * @ticket 0062a_extend_test_asset_generator
+   *
+   * Removes all potential energies from WorldModel, effectively disabling
+   * gravity. Useful for tests that need to isolate collision response from
+   * gravitational effects (e.g., momentum conservation tests, energy
+   * accounting).
+   *
+   * Call this in test setup before spawning objects.
+   */
+  void disableGravity();
 
   /**
    * @brief Advance simulation by specified number of frames

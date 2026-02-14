@@ -1,5 +1,6 @@
 // Ticket: 0060a_replay_enabled_test_fixture
-// Design: Direct specification in ticket (no separate design doc)
+// Ticket: 0062a_extend_test_asset_generator
+// Design: Direct specification in tickets (no separate design doc)
 
 #include "ReplayEnabledTest.hpp"
 
@@ -77,6 +78,48 @@ const AssetEnvironment&
   // Default orientation (identity quaternion)
   return engine_->spawnEnvironmentObject(
     assetName, position, AngularCoordinate{});
+}
+
+const AssetInertial& ReplayEnabledTest::spawnInertial(
+  const std::string& assetName,
+  const Coordinate& position,
+  double mass,
+  double restitution,
+  double friction)
+{
+  // Ticket: 0062a_extend_test_asset_generator
+  // Delegate to Engine with custom physics parameters
+  return engine_->spawnInertialObject(
+    assetName, position, AngularCoordinate{}, mass, restitution, friction);
+}
+
+const AssetInertial& ReplayEnabledTest::spawnInertialWithVelocity(
+  const std::string& assetName,
+  const Coordinate& position,
+  const Coordinate& velocity,
+  double mass,
+  double restitution,
+  double friction)
+{
+  // Ticket: 0062a_extend_test_asset_generator
+  // Spawn with custom physics parameters
+  const AssetInertial& asset =
+    engine_->spawnInertialObject(
+      assetName, position, AngularCoordinate{}, mass, restitution, friction);
+
+  // Set initial velocity on the spawned object
+  // Get mutable access to the spawned object
+  AssetInertial& mutableAsset = engine_->getWorldModel().getObject(asset.getInstanceId());
+  mutableAsset.getInertialState().velocity = velocity;
+
+  return asset;
+}
+
+void ReplayEnabledTest::disableGravity()
+{
+  // Ticket: 0062a_extend_test_asset_generator
+  // Clear all potential energies (including gravity)
+  engine_->getWorldModel().clearPotentialEnergies();
 }
 
 void ReplayEnabledTest::step(int frames, std::chrono::milliseconds dt)
