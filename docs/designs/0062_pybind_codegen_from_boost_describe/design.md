@@ -679,3 +679,131 @@ Potential follow-up tickets:
 3. **FastAPI Endpoint Generation**: Auto-generate REST endpoints for new record types
 4. **GraphQL Schema Generation**: Emit GraphQL schema from record definitions
 5. **TypeScript Type Generation**: Generate TypeScript interfaces for frontend consumption
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-13
+**Status**: APPROVED WITH NOTES
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | Python script follows snake_case (RecordParser, PybindCodegen). Generated C++ uses project conventions (PascalCase for classes, camelCase for methods). |
+| Namespace organization | ✓ | Generated bindings preserve existing `msd_transfer::` namespace. Python modules follow `replay.generated_models` pattern. |
+| File structure | ✓ | Generator placed in `scripts/` alongside existing traceability tools. Skill in `.claude/skills/sync-records/` follows convention. |
+| Dependency direction | ✓ | Generator reads from msd-transfer (source of truth), writes to msd-pybind and replay. No cycles. Respects layering: msd-transfer → msd-pybind → replay. |
+
+**Overall**: ✓ PASS — Design follows project conventions and integrates cleanly with existing structure.
+
+#### Python Tooling Quality
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Parsing robustness | ✓ | Uses tree-sitter (proven in traceability indexer) rather than fragile regex. Handles formatting variations. |
+| Error handling | ✓ | Explicit ParseError on malformed headers. Non-zero exit on failures. Generator validates inputs before codegen. |
+| Idempotency | ✓ | Designed for deterministic output. Acceptance criteria include idempotency test (AC4). |
+| Type safety | ✓ | Uses dataclasses (RecordInfo, FieldInfo) and Enum (FieldType). Type hints throughout. Python 3.10+ union syntax (`RecordInfo \| None`). |
+| Configuration management | ✓ | NAME_MAPPING dictionary is explicit, centralized, and reviewable. Escape hatch via skip list (Open Question #2, Option A recommended). |
+
+**Overall**: ✓ PASS — Follows Python best practices, leverages proven parsing infrastructure, and includes proper error handling.
+
+#### Feasibility Assessment
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Parsing complexity | ✓ | BOOST_DESCRIBE macros are well-formed. tree-sitter handles C++ syntax robustly. Reference implementation exists (`index_symbols.py`). |
+| Code generation patterns | ✓ | Pybind patterns are mechanical and deterministic from field types. Four field types map to four binding patterns (Table in ticket R1). |
+| Build integration | ✓ | Option B (manual generation + CI check) defers Python dependency to development time. CMake target optional for convenience. |
+| Backward compatibility | ✓ | Generated bindings designed to be semantically equivalent to current hand-written code. Regression tests verify existing test suite passes (AC3, AC11). |
+| Dependencies available | ✓ | tree-sitter and tree-sitter-cpp already in `scripts/.venv` from ticket 0061 infrastructure. No new external dependencies. |
+
+**Overall**: ✓ PASS — Implementation is feasible with existing infrastructure. Incremental phasing reduces risk.
+
+#### Testability Assessment
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Parser unit testable | ✓ | RecordParser can be tested in isolation with mock header files. Individual methods (`_classify_field_type`, `_parse_macro_args`) testable separately. |
+| Codegen unit testable | ✓ | PybindCodegen and PydanticCodegen consume RecordInfo objects. Can test with hand-crafted RecordInfo fixtures without parsing. |
+| Integration testable | ✓ | Generated C++ compiles (build test). Generated Python imports (import test). Existing test suites validate runtime behavior (AC3, AC11). |
+| Validation against baseline | ✓ | Diff comparison against current `record_bindings.cpp` (regression test). Field-by-field equivalence check. |
+| Skill testable | ✓ | `/sync-records` skill orchestrates components end-to-end. Can test drift reporting with mocked composite models. |
+
+**Overall**: ✓ PASS — All components are testable in isolation and integration. Comprehensive test plan provided.
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | tree-sitter fails to parse edge-case C++ syntax (e.g., multi-line macros, unusual formatting) | Technical | Low | High | Regression tests on all 28 existing records. Parser error messages reference specific header/line for debugging. | No |
+| R2 | Generated pybind bindings have subtle semantic differences (e.g., lifetime, reference semantics) | Technical | Medium | High | Diff validation against current bindings. Full test suite (AC3) must pass. Manual review of first generated output. | No |
+| R3 | Developers forget to run `/sync-records` after msd-transfer changes | Maintenance | Medium | Medium | docs-updater agent auto-invokes (Phase 6.5). CI drift check fails if bindings out-of-date (Option B, Open Question #1). | No |
+| R4 | NAME_MAPPING conflicts: multiple records map to same Pydantic class, but fields diverge over time | Maintenance | Low | Medium | Configuration reviewed in PR. Follow-up ticket for structural equivalence validation (Future Enhancement #2). | No |
+| R5 | Performance regression from build-time tree-sitter parsing | Performance | Low (Option B) | Low | Option B (manual generation) eliminates build-time cost. Generator runs only when invoked by developer. | No |
+| R6 | 0061 indexer fails to parse `Maps-to:` annotations correctly | Integration | Low | Medium | Integration test (AC12) validates parsing. `Maps-to:` format is simple, deterministic, and matches existing patterns. | No |
+
+### Notes for Implementation
+
+1. **Start with Phase 1 (Pybind Only)**: Validate tree-sitter parsing and codegen correctness before adding Pydantic layer. This isolates risks R1 and R2.
+
+2. **Diff Validation First**: Before replacing `record_bindings.cpp`, generate it and run a line-by-line diff against the current manual version. Investigate any discrepancies (expected: whitespace, comment style). This addresses R2.
+
+3. **Regression Test Baseline**: Capture current test suite output as baseline. After generator integration, assert identical results. This addresses R2.
+
+4. **CI Drift Check**: Add a CI step that runs generator with `--check-only` flag and fails if generated files differ from committed versions. This addresses R3. Example:
+   ```yaml
+   - name: Check record layer drift
+     run: |
+       python scripts/generate_record_layers.py --check-only
+       git diff --exit-code msd/msd-pybind/src/record_bindings.cpp replay/replay/generated_models.py
+   ```
+
+5. **NAME_MAPPING Documentation**: Add comments in the mapping dict explaining why certain records share Pydantic classes. This helps future maintainers and addresses R4.
+
+6. **Error Messages**: Parser errors should include:
+   - Header file path and line number
+   - Snippet of problematic code
+   - Expected vs. actual structure
+   This addresses R1 by making debugging easier.
+
+7. **Open Question Decisions**: The design defers three decisions to human input (Build Integration, Escape Hatch, Generated File Header). These are well-analyzed with clear recommendations. **Recommendation**: Accept Option B for Build Integration, Option A for Escape Hatch, Option B for Generated File Header.
+
+8. **Database Binding Generation (R3)**: Deferring to follow-up ticket is correct. Focus on core pybind and Pydantic generation first. Database bindings are trivial patterns and can be added incrementally.
+
+### Integration with Existing Workflow
+
+| Integration Point | Status | Notes |
+|-------------------|--------|-------|
+| `.claude/agents/docs-updater.md` | Requires modification | Phase 6.5 conditional step is well-specified. Non-blocking advisory reporting is appropriate. |
+| `/sync-records` skill | New component | Workflow steps are clear. Skill invokes both generator and 0061 indexer in sequence. |
+| Ticket 0061 indexer | Dependency | `Maps-to:` annotations solve the heuristic matching problem. Integration test (AC12) validates end-to-end. |
+| CI pipeline | Enhancement | Drift check required (not blocking if Option B chosen, but strongly recommended for preventing stale bindings). |
+
+### Summary
+
+This design is **APPROVED WITH NOTES**. The architecture is sound, leverages existing infrastructure (tree-sitter, traceability tools), and follows project conventions. The phased implementation plan reduces risk by validating each layer incrementally.
+
+**Key Strengths**:
+- Eliminates manual boilerplate for 28 records (~200 lines of pybind + 12 Pydantic models)
+- Provides deterministic C++ → Python linkage (`Maps-to:` annotations)
+- Integrates cleanly with docs-updater agent and workflow
+- Comprehensive test plan with regression, unit, and integration coverage
+
+**Notes for Implementation**:
+1. Start with Phase 1 (pybind only) and validate diff against current bindings
+2. Add CI drift check to prevent stale generated files
+3. Document NAME_MAPPING rationale for maintainability
+4. Accept recommended Open Question resolutions (Option B for build integration, Option A for escape hatch)
+
+**Next Steps**:
+1. Human review and approval of design
+2. Proceed to implementation (no prototype needed — risks are low-to-medium and mitigated)
+3. Phase 1: Core generator (pybind bindings)
+4. Phase 2: Pydantic generation
+5. Phase 3: Skill and docs-updater integration
+6. Phase 4: CI drift check
+
+No blocking issues identified. Design is ready for implementation.
