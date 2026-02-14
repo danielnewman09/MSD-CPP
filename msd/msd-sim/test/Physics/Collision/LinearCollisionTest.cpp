@@ -27,7 +27,7 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A1_SphereDrop_SettlesToRest)
   // Ticket: 0039b_linear_collision_test_suite
 
   // Floor: large cube centered at z=-50 (surface at z=0)
-  const auto& floor = spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   // Sphere: radius 0.5m (small_sphere), dropped from z=5
   const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 5.0},
@@ -57,7 +57,7 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A1_SphereDrop_SettlesToRest)
 
 TEST_F(ReplayEnabledTest, LinearCollisionTest_A2_PerfectlyInelastic_QuickStop)
 {
-  const auto& floor = spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 2.0},
                                      1.0,  // mass (kg)
@@ -86,7 +86,7 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A2_PerfectlyInelastic_QuickStop)
 
 TEST_F(ReplayEnabledTest, LinearCollisionTest_A3_PerfectlyElastic_EnergyConserved)
 {
-  const auto& floor = spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 2.0},
                                      1.0,  // mass (kg)

@@ -49,8 +49,7 @@ TEST_F(ReplayEnabledTest, EnergyAccountingTest_F1_FreeFall_TotalEnergyConstant)
   // Ticket: 0039b_linear_collision_test_suite
 
   // No floor — sphere falls freely
-  const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 10.0});
-  uint32_t sphereId = sphere.getInstanceId();
+  spawnInertial("small_sphere", Coordinate{0.0, 0.0, 10.0});
 
   double const initialEnergy = computeSystemEnergy(world());
 
@@ -82,7 +81,7 @@ TEST_F(ReplayEnabledTest, EnergyAccountingTest_F1_FreeFall_TotalEnergyConstant)
 
 TEST_F(ReplayEnabledTest, EnergyAccountingTest_F2_ElasticBounce_KEConserved)
 {
-  const auto& floor = spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 2.0},
                                      1.0,  // mass (kg)
@@ -158,7 +157,7 @@ TEST_F(ReplayEnabledTest, EnergyAccountingTest_F2_ElasticBounce_KEConserved)
 
 TEST_F(ReplayEnabledTest, EnergyAccountingTest_F3_InelasticBounce_KEReducedByESquared)
 {
-  const auto& floor = spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 2.0},
                                      1.0,  // mass (kg)
@@ -223,13 +222,12 @@ TEST_F(ReplayEnabledTest, EnergyAccountingTest_F3_InelasticBounce_KEReducedByESq
 
 TEST_F(ReplayEnabledTest, EnergyAccountingTest_F5_MultiBounce_EnergyDecreases)
 {
-  const auto& floor = spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 5.0},
-                                     1.0,  // mass (kg)
-                                     0.8,  // restitution
-                                     0.5); // friction
-  uint32_t sphereId = sphere.getInstanceId();
+  spawnInertial("small_sphere", Coordinate{0.0, 0.0, 5.0},
+                1.0,  // mass (kg)
+                0.8,  // restitution
+                0.5); // friction
 
   double const initialEnergy = computeSystemEnergy(world());
   double prevEnergy = initialEnergy;
