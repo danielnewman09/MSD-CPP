@@ -294,3 +294,15 @@ Add tool(s) to the traceability MCP server:
   - No PlantUML diagrams copied (design diagram remains in design folder)
   - Tutorial generation: Skipped (Generate Tutorial flag set to No)
   - Ready for human merge of PR #55
+
+### Post-Review Fix
+- **Date**: 2026-02-13 17:29
+- **Branch**: 0061-cross-layer-record-mapping
+- **PR**: #55 (ready for merge)
+- **Commit**: 5ff9cdd
+- **Issue**: pybind parser regex failed to match namespaced C++ class references (e.g., `msd_transfer::RecordName`)
+- **Root Cause**: Regex pattern `\w+` does not match `::` (not a word character)
+- **Fix**: Changed regex to `[\w:]+` to handle namespace-qualified references, added `\s*` after opening paren, added `re.DOTALL` for multiline calls
+- **Verification**: Re-ran indexer, all fields now correctly extracted (e.g., EnergyRecord: 5 readonly + 2 property fields)
+- **Impact**: Parser now correctly extracts all pybind field bindings; no changes to database schema or MCP tools required
+- **Status**: Fix committed and pushed, PR #55 ready for human merge
