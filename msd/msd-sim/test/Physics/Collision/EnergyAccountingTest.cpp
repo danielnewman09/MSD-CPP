@@ -1,22 +1,20 @@
 // Ticket: 0039b_linear_collision_test_suite
+// Ticket: 0062b_replay_linear_collision_tests
 // Test: Scenario F — Energy accounting tests for linear collisions
+// Converted to ReplayEnabledTest fixture for automatic replay recording
 
 #include <gtest/gtest.h>
 
 #include <chrono>
 #include <cmath>
 #include <memory>
-#include <vector>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
-#include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/PotentialEnergy.hpp"
-#include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
-#include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
+#include "msd-sim/test/Replay/ReplayEnabledTest.hpp"
 
 using namespace msd_sim;
 
@@ -26,77 +24,6 @@ using namespace msd_sim;
 
 namespace
 {
-
-/// Create an icosphere point cloud (same helper as LinearCollisionTest)
-std::vector<Coordinate> createSpherePoints(double radius)
-{
-  double const phi = (1.0 + std::sqrt(5.0)) / 2.0;
-
-  std::vector<Eigen::Vector3d> vertices = {
-    {-1,  phi, 0}, { 1,  phi, 0}, {-1, -phi, 0}, { 1, -phi, 0},
-    { 0, -1,  phi}, { 0,  1,  phi}, { 0, -1, -phi}, { 0,  1, -phi},
-    { phi, 0, -1}, { phi, 0,  1}, {-phi, 0, -1}, {-phi, 0,  1}
-  };
-
-  for (auto& v : vertices)
-  {
-    v.normalize();
-  }
-
-  std::vector<std::array<size_t, 3>> faces = {
-    {0, 11, 5}, {0, 5, 1}, {0, 1, 7}, {0, 7, 10}, {0, 10, 11},
-    {1, 5, 9}, {5, 11, 4}, {11, 10, 2}, {10, 7, 6}, {7, 1, 8},
-    {3, 9, 4}, {3, 4, 2}, {3, 2, 6}, {3, 6, 8}, {3, 8, 9},
-    {4, 9, 5}, {2, 4, 11}, {6, 2, 10}, {8, 6, 7}, {9, 8, 1}
-  };
-
-  auto getMidpoint = [&](size_t i1, size_t i2) -> size_t
-  {
-    Eigen::Vector3d mid = (vertices[i1] + vertices[i2]) * 0.5;
-    mid.normalize();
-    vertices.push_back(mid);
-    return vertices.size() - 1;
-  };
-
-  for (int sub = 0; sub < 2; ++sub)
-  {
-    std::vector<std::array<size_t, 3>> newFaces;
-    for (const auto& face : faces)
-    {
-      size_t a = getMidpoint(face[0], face[1]);
-      size_t b = getMidpoint(face[1], face[2]);
-      size_t c = getMidpoint(face[2], face[0]);
-
-      newFaces.push_back({face[0], a, c});
-      newFaces.push_back({face[1], b, a});
-      newFaces.push_back({face[2], c, b});
-      newFaces.push_back({a, b, c});
-    }
-    faces = newFaces;
-  }
-
-  std::vector<Coordinate> points;
-  points.reserve(vertices.size());
-  for (const auto& v : vertices)
-  {
-    points.emplace_back(v.x() * radius, v.y() * radius, v.z() * radius);
-  }
-
-  return points;
-}
-
-std::vector<Coordinate> createCubePoints(double size)
-{
-  double half = size / 2.0;
-  return {Coordinate{-half, -half, -half},
-          Coordinate{half, -half, -half},
-          Coordinate{half, half, -half},
-          Coordinate{-half, half, -half},
-          Coordinate{-half, -half, half},
-          Coordinate{half, -half, half},
-          Coordinate{half, half, half},
-          Coordinate{-half, half, half}};
-}
 
 /// Compute total system energy using EnergyTracker with gravity potential
 double computeSystemEnergy(const WorldModel& world)
@@ -117,29 +44,23 @@ double computeSystemEnergy(const WorldModel& world)
 // F1: Free-falling sphere — total energy constant (no collision)
 // ============================================================================
 
-TEST(EnergyAccountingTest, F1_FreeFall_TotalEnergyConstant)
+TEST_F(ReplayEnabledTest, EnergyAccountingTest_F1_FreeFall_TotalEnergyConstant)
 {
   // Ticket: 0039b_linear_collision_test_suite
-  WorldModel world;
 
   // No floor — sphere falls freely
-  auto spherePoints = createSpherePoints(0.5);
-  ConvexHull sphereHull{spherePoints};
-  ReferenceFrame sphereFrame{Coordinate{0.0, 0.0, 10.0}};
-  world.spawnObject(1, sphereHull, sphereFrame);
+  const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 10.0});
+  uint32_t sphereId = sphere.getInstanceId();
 
-  uint32_t sphereId = 1;
-  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
-
-  double const initialEnergy = computeSystemEnergy(world);
+  double const initialEnergy = computeSystemEnergy(world());
 
   // Simulate 100 frames of free fall
   double maxDeviation = 0.0;
   for (int i = 1; i <= 100; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    double const currentEnergy = computeSystemEnergy(world);
+    double const currentEnergy = computeSystemEnergy(world());
     double const deviation = std::abs(currentEnergy - initialEnergy);
     maxDeviation = std::max(maxDeviation, deviation);
   }
@@ -159,23 +80,15 @@ TEST(EnergyAccountingTest, F1_FreeFall_TotalEnergyConstant)
 // F2: Elastic bounce (e=1) — post-bounce KE equals pre-bounce KE
 // ============================================================================
 
-TEST(EnergyAccountingTest, F2_ElasticBounce_KEConserved)
+TEST_F(ReplayEnabledTest, EnergyAccountingTest_F2_ElasticBounce_KEConserved)
 {
-  WorldModel world;
+  const auto& floor = spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
-
-  auto spherePoints = createSpherePoints(0.5);
-  ConvexHull sphereHull{spherePoints};
-  ReferenceFrame sphereFrame{Coordinate{0.0, 0.0, 2.0}};
-  world.spawnObject(1, sphereHull, sphereFrame);
-
-  uint32_t sphereId = 1;
-  world.getObject(sphereId).setCoefficientOfRestitution(1.0);
-  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 2.0},
+                                     1.0,  // mass (kg)
+                                     1.0,  // restitution (elastic)
+                                     0.5); // friction
+  uint32_t sphereId = sphere.getInstanceId();
 
   // Simulate enough frames for ball to hit floor and bounce
   // Track total KE (linear + rotational) before and after impact zone.
@@ -185,11 +98,11 @@ TEST(EnergyAccountingTest, F2_ElasticBounce_KEConserved)
   double maxKEAfterBounce = 0.0;
   bool impactOccurred = false;
 
-  double const mass = world.getObject(sphereId).getMass();
-  Eigen::Matrix3d const inertia = world.getObject(sphereId).getInertiaTensor();
+  double const mass = world().getObject(sphereId).getMass();
+  Eigen::Matrix3d const inertia = world().getObject(sphereId).getInertiaTensor();
 
   auto computeTotalKE = [&]() -> double {
-    const auto& state = world.getObject(sphereId).getInertialState();
+    const auto& state = world().getObject(sphereId).getInertialState();
     double const linearKE = 0.5 * mass * state.velocity.squaredNorm();
     Eigen::Vector3d omega{state.getAngularVelocity().x(),
                           state.getAngularVelocity().y(),
@@ -200,10 +113,10 @@ TEST(EnergyAccountingTest, F2_ElasticBounce_KEConserved)
 
   for (int i = 1; i <= 200; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    double const z = world.getObject(sphereId).getInertialState().position.z();
-    double const vz = world.getObject(sphereId).getInertialState().velocity.z();
+    double const z = world().getObject(sphereId).getInertialState().position.z();
+    double const vz = world().getObject(sphereId).getInertialState().velocity.z();
     double const ke = computeTotalKE();
 
     // Before impact: sphere is falling (vz < 0) and still above floor
@@ -243,26 +156,17 @@ TEST(EnergyAccountingTest, F2_ElasticBounce_KEConserved)
 // F3: Inelastic bounce (e=0.5) — post-bounce KE = e^2 * pre-bounce KE
 // ============================================================================
 
-TEST(EnergyAccountingTest, F3_InelasticBounce_KEReducedByESquared)
+TEST_F(ReplayEnabledTest, EnergyAccountingTest_F3_InelasticBounce_KEReducedByESquared)
 {
-  WorldModel world;
+  const auto& floor = spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 2.0},
+                                     1.0,  // mass (kg)
+                                     0.5,  // restitution (inelastic)
+                                     0.5); // friction
+  uint32_t sphereId = sphere.getInstanceId();
 
-  auto spherePoints = createSpherePoints(0.5);
-  ConvexHull sphereHull{spherePoints};
-  ReferenceFrame sphereFrame{Coordinate{0.0, 0.0, 2.0}};
-  world.spawnObject(1, sphereHull, sphereFrame);
-
-  uint32_t sphereId = 1;
-  double const e = 0.5;
-  world.getObject(sphereId).setCoefficientOfRestitution(e);
-  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
-
-  double const mass = world.getObject(sphereId).getMass();
+  double const mass = world().getObject(sphereId).getMass();
 
   // Track KE before and after impact
   double maxKEBeforeImpact = 0.0;
@@ -271,12 +175,11 @@ TEST(EnergyAccountingTest, F3_InelasticBounce_KEReducedByESquared)
 
   for (int i = 1; i <= 200; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    double const z = world.getObject(sphereId).getInertialState().position.z();
-    double const vz = world.getObject(sphereId).getInertialState().velocity.z();
-    double const ke = 0.5 * mass *
-      world.getObject(sphereId).getInertialState().velocity.squaredNorm();
+    double const z = world().getObject(sphereId).getInertialState().position.z();
+    double const vz = world().getObject(sphereId).getInertialState().velocity.z();
+    double const ke = 0.5 * mass * world().getObject(sphereId).getInertialState().velocity.squaredNorm();
 
     if (!impactOccurred && vz < 0.0 && z > 0.6)
     {
@@ -298,6 +201,7 @@ TEST(EnergyAccountingTest, F3_InelasticBounce_KEReducedByESquared)
   ASSERT_GT(maxKEBeforeImpact, 0.0) << "Should have measured KE before impact";
 
   // For inelastic bounce, KE_post / KE_pre should be approximately e^2 = 0.25
+  double const e = 0.5;
   double const ratio = maxKEAfterBounce / maxKEBeforeImpact;
   double const expectedRatio = e * e;  // 0.25
 
@@ -317,25 +221,17 @@ TEST(EnergyAccountingTest, F3_InelasticBounce_KEReducedByESquared)
 // F5: Multi-bounce monotonic energy decrease (e=0.8)
 // ============================================================================
 
-TEST(EnergyAccountingTest, F5_MultiBounce_EnergyDecreases)
+TEST_F(ReplayEnabledTest, EnergyAccountingTest_F5_MultiBounce_EnergyDecreases)
 {
-  WorldModel world;
+  const auto& floor = spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  const auto& sphere = spawnInertial("small_sphere", Coordinate{0.0, 0.0, 5.0},
+                                     1.0,  // mass (kg)
+                                     0.8,  // restitution
+                                     0.5); // friction
+  uint32_t sphereId = sphere.getInstanceId();
 
-  auto spherePoints = createSpherePoints(0.5);
-  ConvexHull sphereHull{spherePoints};
-  ReferenceFrame sphereFrame{Coordinate{0.0, 0.0, 5.0}};
-  world.spawnObject(1, sphereHull, sphereFrame);
-
-  uint32_t sphereId = 1;
-  world.getObject(sphereId).setCoefficientOfRestitution(0.8);
-  world.getObject(sphereId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
-
-  double const initialEnergy = computeSystemEnergy(world);
+  double const initialEnergy = computeSystemEnergy(world());
   double prevEnergy = initialEnergy;
   int energyIncreaseCount = 0;
   double maxEnergyIncrease = 0.0;
@@ -343,9 +239,9 @@ TEST(EnergyAccountingTest, F5_MultiBounce_EnergyDecreases)
   // Simulate 500 frames (plenty for multiple bounces)
   for (int i = 1; i <= 500; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    double const currentEnergy = computeSystemEnergy(world);
+    double const currentEnergy = computeSystemEnergy(world());
     double const delta = currentEnergy - prevEnergy;
 
     if (delta > 1e-6)  // Small tolerance for numerical noise
@@ -357,7 +253,7 @@ TEST(EnergyAccountingTest, F5_MultiBounce_EnergyDecreases)
     prevEnergy = currentEnergy;
   }
 
-  double const finalEnergy = computeSystemEnergy(world);
+  double const finalEnergy = computeSystemEnergy(world());
 
   // Final energy should be significantly less than initial (dissipation from e<1)
   EXPECT_LT(finalEnergy, initialEnergy * 0.9)
