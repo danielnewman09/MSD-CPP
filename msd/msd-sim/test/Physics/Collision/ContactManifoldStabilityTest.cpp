@@ -1,5 +1,7 @@
 // Ticket: 0039c_rotational_coupling_test_suite
+// Ticket: 0062d_replay_stability_edge_contact_tests
 // Test: Scenario D -- Contact manifold stability
+// Converted to ReplayEnabledTest fixture for automatic replay recording
 //
 // DIAGNOSTIC TEST SUITE: Some tests are EXPECTED to fail because they
 // investigate a known energy injection bug in rotational collisions.
@@ -16,34 +18,18 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
-#include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/PotentialEnergy.hpp"
-#include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
-#include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
+#include "msd-sim/test/Replay/ReplayEnabledTest.hpp"
 
 using namespace msd_sim;
 
 // ============================================================================
-// Helper Functions
+// Helper Functions (local to tests, not duplicating fixture functionality)
 // ============================================================================
 
 namespace
 {
-
-std::vector<Coordinate> createCubePoints(double size)
-{
-  double half = size / 2.0;
-  return {Coordinate{-half, -half, -half},
-          Coordinate{half, -half, -half},
-          Coordinate{half, half, -half},
-          Coordinate{-half, half, -half},
-          Coordinate{-half, -half, half},
-          Coordinate{half, -half, half},
-          Coordinate{half, half, half},
-          Coordinate{-half, half, half}};
-}
 
 /// Compute total system energy using EnergyTracker with gravity potential
 double computeSystemEnergy(const WorldModel& world)
@@ -64,30 +50,28 @@ double computeSystemEnergy(const WorldModel& world)
 // Validates: Resting contact stability, no drift/jitter/sinking
 // ============================================================================
 
-TEST(ContactManifoldStabilityTest, D1_RestingCube_StableFor1000Frames)
+TEST_F(ReplayEnabledTest, ContactManifoldStabilityTest_D1_RestingCube_StableFor1000Frames)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
-  WorldModel world;
+  // Ticket: 0062d_replay_stability_edge_contact_tests
 
-  // Floor
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  // Floor: large cube centered at z=-50 (surface at z=0)
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   // Cube: 1m x 1m x 1m, flat on floor (bottom face at z=0, center at z=0.5)
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, 0.5}};
-  world.spawnObject(1, cubeHull, 1.0, cubeFrame);
+  const auto& cube = spawnInertial("unit_cube",
+                                   Coordinate{0.0, 0.0, 0.5},
+                                   1.0,  // mass (kg)
+                                   0.5,  // restitution
+                                   0.5); // friction
+  uint32_t cubeId = cube.getInstanceId();
 
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(0.5);
-  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  // Set initial velocity to zero
+  world().getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   Coordinate const initialPosition =
-    world.getObject(cubeId).getInertialState().position;
-  double const initialEnergy = computeSystemEnergy(world);
+    world().getObject(cubeId).getInertialState().position;
+  double const initialEnergy = computeSystemEnergy(world());
 
   double maxPositionDrift = 0.0;
   double maxVelocity = 0.0;
@@ -100,9 +84,9 @@ TEST(ContactManifoldStabilityTest, D1_RestingCube_StableFor1000Frames)
   // Run for 1000 frames (~16.7 seconds at 60 FPS)
   for (int i = 1; i <= 1000; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    auto const& state = world.getObject(cubeId).getInertialState();
+    auto const& state = world().getObject(cubeId).getInertialState();
 
     if (std::isnan(state.position.z()))
     {
@@ -124,7 +108,7 @@ TEST(ContactManifoldStabilityTest, D1_RestingCube_StableFor1000Frames)
     maxOmega = std::max(maxOmega, omega.norm());
 
     // Track energy growth
-    double currentEnergy = computeSystemEnergy(world);
+    double currentEnergy = computeSystemEnergy(world());
     double energyDelta = currentEnergy - prevEnergy;
     if (energyDelta > 1e-6)
     {
@@ -153,7 +137,7 @@ TEST(ContactManifoldStabilityTest, D1_RestingCube_StableFor1000Frames)
     << "Got maxOmega=" << maxOmega << " rad/s";
 
   // DIAGNOSTIC: No energy increase
-  double const finalEnergy = computeSystemEnergy(world);
+  double const finalEnergy = computeSystemEnergy(world());
   if (!nanDetected)
   {
     EXPECT_LE(finalEnergy, initialEnergy * 1.01)
@@ -182,38 +166,31 @@ TEST(ContactManifoldStabilityTest, D1_RestingCube_StableFor1000Frames)
 // a specific implementation (gravity pre-apply) rather than physics correctness.
 // ============================================================================
 
-TEST(ContactManifoldStabilityTest, D4_MicroJitter_DampsOut)
+TEST_F(ReplayEnabledTest, ContactManifoldStabilityTest_D4_MicroJitter_DampsOut)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
-  WorldModel world;
+  // Ticket: 0062d_replay_stability_edge_contact_tests
 
-  // Floor
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  // Floor: large cube centered at z=-50 (surface at z=0)
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   // Cube: resting on floor, will receive small perturbation
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, 0.5}};
-  world.spawnObject(1, cubeHull, 1.0, cubeFrame);
-
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(0.3);
+  const auto& cube = spawnInertial("unit_cube",
+                                   Coordinate{0.0, 0.0, 0.5},
+                                   1.0,  // mass (kg)
+                                   0.3,  // restitution
+                                   0.5); // friction
+  uint32_t cubeId = cube.getInstanceId();
 
   // Let the cube settle first (10 frames)
-  for (int i = 1; i <= 10; ++i)
-  {
-    world.update(std::chrono::milliseconds{i * 16});
-  }
+  step(10);
 
   // Apply small perturbation velocity
-  world.getObject(cubeId).getInertialState().velocity =
+  world().getObject(cubeId).getInertialState().velocity =
     Velocity{0.01, 0.01, 0.01};
 
   double const perturbationVel =
-    world.getObject(cubeId).getInertialState().velocity.norm();
+    world().getObject(cubeId).getInertialState().velocity.norm();
 
   // Track velocity evolution after perturbation
   double maxVelAfterSettling = 0.0;
@@ -223,11 +200,11 @@ TEST(ContactManifoldStabilityTest, D4_MicroJitter_DampsOut)
   // Record velocity at different time windows
   double velAt50Frames = 0.0;
 
-  for (int i = 11; i <= 200; ++i)
+  for (int i = 1; i <= 190; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    auto const& state = world.getObject(cubeId).getInertialState();
+    auto const& state = world().getObject(cubeId).getInertialState();
 
     if (std::isnan(state.position.z()))
     {
@@ -238,18 +215,18 @@ TEST(ContactManifoldStabilityTest, D4_MicroJitter_DampsOut)
     double vel = state.velocity.norm();
 
     // After initial settling phase (20 frames after perturbation)
-    if (i > 30)
+    if (i > 20)
     {
       maxVelAfterSettling = std::max(maxVelAfterSettling, vel);
     }
 
-    if (i == 60)
+    if (i == 50)
     {
       velAt50Frames = vel;
     }
 
     // Check for amplification: velocity growing beyond perturbation
-    if (i > 30 && vel > perturbationVel * 10.0)
+    if (i > 20 && vel > perturbationVel * 10.0)
     {
       velocityAmplified = true;
     }
@@ -272,7 +249,7 @@ TEST(ContactManifoldStabilityTest, D4_MicroJitter_DampsOut)
     << "Got vel=" << velAt50Frames << " perturbation=" << perturbationVel;
 
   // DIAGNOSTIC: Cube should not fly away or sink
-  auto const& finalState = world.getObject(cubeId).getInertialState();
+  auto const& finalState = world().getObject(cubeId).getInertialState();
   if (!nanDetected)
   {
     EXPECT_GT(finalState.position.z(), -1.0)

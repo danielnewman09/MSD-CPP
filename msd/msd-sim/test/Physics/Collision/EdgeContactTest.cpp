@@ -1,7 +1,10 @@
 // Ticket: 0040c_edge_contact_manifold
+// Ticket: 0062d_replay_stability_edge_contact_tests
 // Test: Edge contact manifold generation
 // Validates that edge-edge contacts produce 2 contact points with geometric
 // extent, enabling torque generation from edge impacts.
+//
+// Multi-frame tests converted to ReplayEnabledTest fixture for automatic replay recording.
 
 #include <gtest/gtest.h>
 
@@ -20,6 +23,7 @@
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
+#include "msd-sim/test/Replay/ReplayEnabledTest.hpp"
 
 using namespace msd_sim;
 
@@ -295,45 +299,45 @@ TEST(EdgeContact, ContactPoints_HavePositiveDepth)
 // Integration Test: Edge Impact Initiates Rotation
 // ============================================================================
 
-TEST(EdgeContact, CubeEdgeImpact_InitiatesRotation)
+TEST_F(ReplayEnabledTest, EdgeContact_CubeEdgeImpact_InitiatesRotation)
 {
   // Ticket: 0040c_edge_contact_manifold
+  // Ticket: 0062d_replay_stability_edge_contact_tests
   // B2 scenario: cube with edge pointing down, dropped onto floor.
   // After collision, rotation should be initiated due to off-center contact.
 
-  WorldModel world;
-
-  // Floor
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  // Floor: large cube centered at z=-50 (surface at z=0)
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   // Cube: rotated 45 degrees about y-axis (edge down, edge parallel to x-axis)
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
   Eigen::Quaterniond q{
     Eigen::AngleAxisd{std::numbers::pi / 4.0, Eigen::Vector3d::UnitY()}};
 
   double const halfDiag2D = std::sqrt(2.0) / 2.0;
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, 1.0 + halfDiag2D}, q};
-  world.spawnObject(1, cubeHull, 1.0, cubeFrame);
 
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(0.7);
-  world.getObject(cubeId).getInertialState().velocity =
+  const auto& cube = spawnInertial("unit_cube",
+                                   Coordinate{0.0, 0.0, 1.0 + halfDiag2D},
+                                   1.0,  // mass (kg)
+                                   0.7,  // restitution
+                                   0.5); // friction
+  uint32_t cubeId = cube.getInstanceId();
+
+  // Manually set orientation (fixture limitation workaround)
+  world().getObject(cubeId).getInertialState().orientation = q;
+
+  // Set initial velocity to zero
+  world().getObject(cubeId).getInertialState().velocity =
     Vector3D{0.0, 0.0, 0.0};
 
   // Simulate until collision occurs
   bool collisionOccurred = false;
 
-  for (int step = 0; step < 200; ++step)
+  for (int i = 0; i < 200; ++i)
   {
-    auto simTime = std::chrono::milliseconds{step * 16};
-    world.update(simTime);
+    step(1);
 
     // Check if cube has hit the floor (z position decreased significantly)
-    auto const& state = world.getObject(cubeId).getInertialState();
+    auto const& state = world().getObject(cubeId).getInertialState();
     if (state.position.z() < halfDiag2D + 0.5)
     {
       collisionOccurred = true;
@@ -359,7 +363,7 @@ TEST(EdgeContact, CubeEdgeImpact_InitiatesRotation)
   // (Baumgarte stabilization, ERP clamping). The key validation is that
   // the static collision detection tests above verify 2 contact points
   // with non-zero r x n. This integration test uses a relaxed threshold.
-  auto const& finalState = world.getObject(cubeId).getInertialState();
+  auto const& finalState = world().getObject(cubeId).getInertialState();
   double const finalQDotMag = finalState.quaternionRate.norm();
 
   EXPECT_GT(finalQDotMag, 1e-10)
