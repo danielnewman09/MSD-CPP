@@ -210,12 +210,22 @@ if(Python3_FOUND)
     VERBATIM
   )
 
+  add_custom_target(trace-record-mappings
+    COMMAND ${TRACE_VENV} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_record_mappings.py
+            ${TRACEABILITY_DB}
+            --repo ${CMAKE_SOURCE_DIR}
+    DEPENDS trace-git
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Indexing record layer mappings into traceability database"
+    VERBATIM
+  )
+
   add_custom_target(traceability
-    DEPENDS trace-git trace-symbols trace-decisions
+    DEPENDS trace-git trace-symbols trace-decisions trace-record-mappings
     COMMENT "Building complete traceability database"
   )
 
-  message(STATUS "Traceability targets available: trace-git, trace-symbols, trace-decisions, traceability")
+  message(STATUS "Traceability targets available: trace-git, trace-symbols, trace-decisions, trace-record-mappings, traceability")
 endif()
 
 # Always include the test directory first to define testing functions
