@@ -1,5 +1,7 @@
 // Ticket: 0039c_rotational_coupling_test_suite
+// Ticket: 0062c_replay_rotational_collision_tests
 // Test: Scenario C -- Rotation damping (energy dissipation)
+// Converted to ReplayEnabledTest fixture for automatic replay recording
 //
 // DIAGNOSTIC TEST SUITE: Some tests are EXPECTED to fail because they
 // investigate a known energy injection bug in rotational collisions.
@@ -22,12 +24,9 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
-#include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/PotentialEnergy.hpp"
-#include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
-#include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
+#include "msd-sim/test/Replay/ReplayEnabledTest.hpp"
 
 using namespace msd_sim;
 
@@ -37,19 +36,6 @@ using namespace msd_sim;
 
 namespace
 {
-
-std::vector<Coordinate> createCubePoints(double size)
-{
-  double half = size / 2.0;
-  return {Coordinate{-half, -half, -half},
-          Coordinate{half, -half, -half},
-          Coordinate{half, half, -half},
-          Coordinate{-half, half, -half},
-          Coordinate{-half, -half, half},
-          Coordinate{half, -half, half},
-          Coordinate{half, half, half},
-          Coordinate{-half, half, half}};
-}
 
 /// Compute total system energy using EnergyTracker with gravity potential
 double computeSystemEnergy(const WorldModel& world)
@@ -70,21 +56,15 @@ double computeSystemEnergy(const WorldModel& world)
 // Validates: Rotational restitution -- rocking amplitude decreases
 // ============================================================================
 
-TEST(RotationDampingTest, C2_RockingCube_AmplitudeDecreases)
+TEST_F(ReplayEnabledTest, RotationDampingTest_C2_RockingCube_AmplitudeDecreases)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
-  WorldModel world;
+  // Ticket: 0062c_replay_rotational_collision_tests
 
   // Floor
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   // Cube: 1m x 1m x 1m, tilted 15 degrees about x-axis (rocking on an edge)
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
-
   double const tiltAngle = 15.0 * M_PI / 180.0;  // 15 degrees
   Eigen::Quaterniond q{
     Eigen::AngleAxisd{tiltAngle, Eigen::Vector3d::UnitX()}};
@@ -95,14 +75,18 @@ TEST(RotationDampingTest, C2_RockingCube_AmplitudeDecreases)
   // We want the lowest point at z=0, so center is at:
   double const centerZ =
     0.5 * std::cos(tiltAngle) + 0.5 * std::sin(tiltAngle);
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, centerZ}, q};
-  world.spawnObject(1, cubeHull, 1.0, cubeFrame);
 
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(0.5);
-  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  const auto& cube = spawnInertial("unit_cube",
+                                   Coordinate{0.0, 0.0, centerZ},
+                                   1.0,  // mass (kg)
+                                   0.5,  // restitution
+                                   0.5); // friction
+  uint32_t cubeId = cube.getInstanceId();
 
-  double const initialEnergy = computeSystemEnergy(world);
+  // Manually set orientation
+  world().getObject(cubeId).getInertialState().orientation = q;
+
+  double const initialEnergy = computeSystemEnergy(world());
 
   // Track the tilt angle magnitude over time to see if rocking amplitude
   // decreases. We measure the deviation of the cube's up-vector from vertical.
@@ -116,9 +100,9 @@ TEST(RotationDampingTest, C2_RockingCube_AmplitudeDecreases)
 
   for (int i = 1; i <= 500; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    auto const& state = world.getObject(cubeId).getInertialState();
+    auto const& state = world().getObject(cubeId).getInertialState();
 
     if (std::isnan(state.position.z()))
     {
@@ -164,7 +148,7 @@ TEST(RotationDampingTest, C2_RockingCube_AmplitudeDecreases)
     << "Rock count=" << rockCount;
 
   // DIAGNOSTIC: Energy should not grow over the simulation
-  double const finalEnergy = computeSystemEnergy(world);
+  double const finalEnergy = computeSystemEnergy(world());
   if (!nanDetected)
   {
     EXPECT_LE(finalEnergy, initialEnergy * 1.1)
@@ -179,21 +163,15 @@ TEST(RotationDampingTest, C2_RockingCube_AmplitudeDecreases)
 // Validates: Multi-contact stability
 // ============================================================================
 
-TEST(RotationDampingTest, C3_TiltedCubeSettles_ToFlatFace)
+TEST_F(ReplayEnabledTest, RotationDampingTest_C3_TiltedCubeSettles_ToFlatFace)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
-  WorldModel world;
+  // Ticket: 0062c_replay_rotational_collision_tests
 
   // Floor
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   // Cube: 1m x 1m x 1m, tilted 30 degrees about x-axis
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
-
   double const tiltAngle = 30.0 * M_PI / 180.0;  // 30 degrees
   Eigen::Quaterniond q{
     Eigen::AngleAxisd{tiltAngle, Eigen::Vector3d::UnitX()}};
@@ -201,22 +179,26 @@ TEST(RotationDampingTest, C3_TiltedCubeSettles_ToFlatFace)
   // Position so corner is touching the floor
   double const centerZ =
     0.5 * std::cos(tiltAngle) + 0.5 * std::sin(tiltAngle);
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, centerZ}, q};
-  world.spawnObject(1, cubeHull, 1.0, cubeFrame);
 
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(0.3);
-  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  const auto& cube = spawnInertial("unit_cube",
+                                   Coordinate{0.0, 0.0, centerZ},
+                                   1.0,  // mass (kg)
+                                   0.3,  // restitution
+                                   0.5); // friction
+  uint32_t cubeId = cube.getInstanceId();
 
-  double const initialEnergy = computeSystemEnergy(world);
+  // Manually set orientation
+  world().getObject(cubeId).getInertialState().orientation = q;
+
+  double const initialEnergy = computeSystemEnergy(world());
   bool nanDetected = false;
 
   // Simulate for 500 frames (~8.3 seconds) for the cube to settle
   for (int i = 1; i <= 500; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    if (std::isnan(world.getObject(cubeId).getInertialState().position.z()))
+    if (std::isnan(world().getObject(cubeId).getInertialState().position.z()))
     {
       nanDetected = true;
       break;
@@ -228,7 +210,7 @@ TEST(RotationDampingTest, C3_TiltedCubeSettles_ToFlatFace)
 
   if (!nanDetected)
   {
-    auto const& finalState = world.getObject(cubeId).getInertialState();
+    auto const& finalState = world().getObject(cubeId).getInertialState();
 
     // Check if cube settled to a flat face (one face parallel to floor)
     // The body-frame z-axis should be close to world z-axis (or negative z)
@@ -266,7 +248,7 @@ TEST(RotationDampingTest, C3_TiltedCubeSettles_ToFlatFace)
       << "DIAGNOSTIC: Cube should have settled. Got z=" << posZ;
 
     // DIAGNOSTIC: Energy should have decreased from initial
-    double const finalEnergy = computeSystemEnergy(world);
+    double const finalEnergy = computeSystemEnergy(world());
     EXPECT_LT(finalEnergy, initialEnergy)
       << "DIAGNOSTIC: Total energy should decrease from initial to final. "
       << "Initial=" << initialEnergy << " Final=" << finalEnergy;
