@@ -1,0 +1,202 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "msd-transfer (source of truth)" {
+    class Records.hpp {
+        + #includes all Record headers
+    }
+
+    class "Record Headers" as RecordHeaders <<collection>> {
+        CoordinateRecord.hpp
+        EnergyRecord.hpp
+        ContactPointRecord.hpp
+        ... (28 total)
+        ---
+        BOOST_DESCRIBE_STRUCT macro
+        Field types (primitives, FKs, nested)
+    }
+
+    Records.hpp --> RecordHeaders : includes
+}
+
+package "scripts/" <<new>> {
+    class RecordLayerGenerator <<new>> {
+        + main()
+        --
+        - parseRecordHeaders(): RecordInfo[]
+        - generatePybindBindings(records): str
+        - generatePydanticModels(records): str
+        - writeGeneratedFiles()
+    }
+
+    class RecordParser <<new>> {
+        + parseHeader(path): RecordInfo
+        --
+        - extractBoostDescribe(): FieldList
+        - classifyFieldType(field): FieldType
+        - buildRecordInfo(): RecordInfo
+    }
+
+    class PybindCodegen <<new>> {
+        + generateBindings(records): str
+        --
+        - emitClassBinding(record): str
+        - emitFieldBinding(field): str
+        - selectBindingPattern(field): str
+    }
+
+    class PydanticCodegen <<new>> {
+        + generateModels(records): str
+        --
+        - emitModel(record): str
+        - emitField(field): str
+        - transformCamelToSnake(name): str
+        - applyNameMapping(record): str
+    }
+
+    class RecordInfo <<new>> {
+        + record_name: str
+        + base_class: str
+        + fields: FieldInfo[]
+        + tier: int
+    }
+
+    class FieldInfo <<new>> {
+        + name: str
+        + type: str
+        + field_type: FieldType
+    }
+
+    enum FieldType <<new>> {
+        PRIMITIVE
+        NESTED_SUB_RECORD
+        FOREIGN_KEY
+        REPEATED_FIELD
+    }
+
+    RecordLayerGenerator --> RecordParser : uses
+    RecordLayerGenerator --> PybindCodegen : uses
+    RecordLayerGenerator --> PydanticCodegen : uses
+
+    RecordParser --> RecordInfo : produces
+    RecordInfo --> FieldInfo : contains
+    FieldInfo --> FieldType : classifies
+
+    PybindCodegen --> RecordInfo : consumes
+    PydanticCodegen --> RecordInfo : consumes
+}
+
+package "msd-pybind (generated)" {
+    class record_bindings.cpp <<new>> {
+        // AUTO-GENERATED
+        void bind_records(py::module_& m)
+        --
+        py::class_<CoordinateRecord>
+        py::class_<EnergyRecord>
+        ... (28 records)
+    }
+}
+
+package "replay/replay (generated)" {
+    class generated_models.py <<new>> {
+        # AUTO-GENERATED
+        class Vec3(BaseModel)
+        class Quaternion(BaseModel)
+        class ContactPoint(BaseModel)
+        class SolverDiagnostics(BaseModel)
+        class EnergyPoint(BaseModel)
+        class SystemEnergyPoint(BaseModel)
+        ... (12 leaf models)
+    }
+
+    class models.py <<modified>> {
+        from .generated_models import Vec3, Quaternion, ...
+        --
+        class FrameData(BaseModel)
+        class BodyState(BaseModel)
+        class SimulationMetadata(BaseModel)
+        ... (composite hand-written)
+    }
+}
+
+package ".claude/skills/sync-records" <<new>> {
+    class SKILL.md <<new>> {
+        # Skill Definition
+        --
+        Step 1: Run generator
+        Step 2: Run 0061 indexer
+        Step 3: Drift check
+        Step 4: Report summary
+    }
+
+    class references/record-mapping.md <<new>> {
+        # C++ → Pydantic name mapping
+        CoordinateRecord → Vec3
+        QuaternionDRecord → Quaternion
+        ... (mapping table)
+    }
+}
+
+package ".claude/agents/docs-updater.md" <<modified>> {
+    class DocsUpdaterAgent <<modified>> {
+        + updateDocumentation()
+        --
+        + checkRecordLayerSync() [NEW]
+    }
+}
+
+RecordLayerGenerator ..> RecordHeaders : reads
+RecordLayerGenerator ..> record_bindings.cpp : generates
+RecordLayerGenerator ..> generated_models.py : generates
+
+SKILL.md ..> RecordLayerGenerator : invokes
+models.py ..> generated_models.py : imports
+
+DocsUpdaterAgent ..> SKILL.md : invokes (if msd-transfer touched)
+
+package "Build System" {
+    class CMakeLists.txt <<modified>> {
+        add_custom_target(generate-record-layers)
+        --
+        Runs RecordLayerGenerator
+        (Option A: build-time)
+        (Option B: manual with CI check)
+    }
+}
+
+RecordLayerGenerator ..> CMakeLists.txt : integrated via
+
+note right of RecordLayerGenerator
+  **Tree-sitter Parsing**
+  Leverages existing infrastructure
+  from scripts/traceability/
+
+  **Idempotent**
+  Running twice produces identical output
+
+  **Escape Hatch**
+  Skip list for custom bindings
+end note
+
+note right of generated_models.py
+  **Deterministic Linkage**
+  Each model includes docstring:
+  \"\"\"Generated from {RecordName}.
+  Maps-to: {RecordName}\"\"\"
+
+  Solves 0061's heuristic matching problem
+end note
+
+note right of SKILL.md
+  **Developer Workflow**
+  /sync-records
+
+  Single command to regenerate
+  all downstream layers and
+  validate with 0061 indexer
+end note
+
+@enduml
