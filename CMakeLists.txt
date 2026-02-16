@@ -166,6 +166,18 @@ if(DOXYGEN_FOUND)
       VERBATIM
     )
     message(STATUS "  Run 'cmake --build <build-dir> --target doxygen-db' to generate SQLite database")
+
+    # Add Python code to the same database (Ticket: 0064_python_codebase_documentation_index)
+    add_custom_target(python-db
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/python_to_sqlite.py
+              ${CMAKE_SOURCE_DIR}/replay/replay ${DOXYGEN_DB}
+              --project-root ${CMAKE_SOURCE_DIR}
+      DEPENDS doxygen-db
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      COMMENT "Adding Python symbols to codebase SQLite database"
+      VERBATIM
+    )
+    message(STATUS "  Run 'cmake --build <build-dir> --target python-db' to add Python symbols to database")
   endif()
 
   message(STATUS "Doxygen found: ${DOXYGEN_EXECUTABLE}")

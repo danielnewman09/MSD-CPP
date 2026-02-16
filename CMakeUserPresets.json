@@ -4,8 +4,8 @@
         "conan": {}
     },
     "include": [
-        "build/Debug/generators/CMakePresets.json",
-        "build/Release/generators/CMakePresets.json"
+        "build/Release/generators/CMakePresets.json",
+        "build/Debug/generators/CMakePresets.json"
     ],
     "configurePresets": [
         {
@@ -204,6 +204,24 @@
             "configurePreset": "conan-debug",
             "targets": [
                 "doxygen-db"
+            ]
+        },
+        {
+            "name": "debug-python-db",
+            "displayName": "Add Python Symbols to Codebase Database (Debug)",
+            "description": "Add Python code symbols to existing codebase.db (requires doxygen-db first)",
+            "configurePreset": "conan-debug",
+            "targets": [
+                "python-db"
+            ]
+        },
+        {
+            "name": "release-python-db",
+            "displayName": "Add Python Symbols to Codebase Database (Release)",
+            "description": "Add Python code symbols to existing codebase.db (requires doxygen-db first)",
+            "configurePreset": "conan-release",
+            "targets": [
+                "python-db"
             ]
         },
         {
