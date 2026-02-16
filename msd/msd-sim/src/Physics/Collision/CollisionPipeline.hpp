@@ -331,6 +331,17 @@ private:
   void clearEphemeralState();
 
   /**
+   * @brief Propagate solved normal lambdas to FrictionConstraints.
+   *
+   * After the solver runs, each FrictionConstraint needs the corresponding
+   * ContactConstraint's solved lambda so that recordState() can write the
+   * actual normal force value (in Newtons) for visualization.
+   *
+   * Ticket: 0057_contact_tangent_recording
+   */
+  void propagateSolvedLambdas(const ConstraintSolver::SolveResult& solveResult);
+
+  /**
    * @brief Build solver view (all constraints as Constraint*)
    *
    * Generates a vector of raw pointers for ConstraintSolver::solve().

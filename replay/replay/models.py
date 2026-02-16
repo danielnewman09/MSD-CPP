@@ -31,6 +31,7 @@ class BodyState(BaseModel):
     position: Vec3
     velocity: Vec3
     orientation: Quaternion
+    angular_velocity: Vec3 | None = None
 
 
 class ContactPoint(BaseModel):
@@ -70,6 +71,22 @@ class SolverDiagnostics(BaseModel):
     num_contacts: int
 
 
+class FrictionConstraintInfo(BaseModel):
+    """From FrictionConstraintRecord — per-contact friction constraint data."""
+
+    body_a_id: int
+    body_b_id: int
+    normal: Vec3
+    tangent1: Vec3
+    tangent2: Vec3
+    lever_arm_a: Vec3
+    lever_arm_b: Vec3
+    friction_coefficient: float
+    normal_lambda: float  # Actual normal force magnitude from solver (Newtons)
+    tangent1_lambda: float = 0.0  # Solved tangent1 force (Newtons)
+    tangent2_lambda: float = 0.0  # Solved tangent2 force (Newtons)
+
+
 class FrameData(BaseModel):
     """Complete frame data including states, collisions, and solver diagnostics."""
 
@@ -77,6 +94,7 @@ class FrameData(BaseModel):
     simulation_time: float
     states: list[BodyState]
     collisions: list[CollisionInfo]
+    friction_constraints: list[FrictionConstraintInfo] = []
     solver: SolverDiagnostics | None  # None if no collisions this frame
 
 

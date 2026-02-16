@@ -48,6 +48,12 @@ struct FrictionConstraintRecord : public cpp_sqlite::BaseTransferObject {
   /// Normal force magnitude (lambda from constraint solver)
   double normal_lambda{std::numeric_limits<double>::quiet_NaN()};
 
+  /// Tangent1 force magnitude (lambda from constraint solver, Newtons)
+  double tangent1_lambda{std::numeric_limits<double>::quiet_NaN()};
+
+  /// Tangent2 force magnitude (lambda from constraint solver, Newtons)
+  double tangent2_lambda{std::numeric_limits<double>::quiet_NaN()};
+
   /// Foreign key to simulation frame
   cpp_sqlite::ForeignKey<SimulationFrameRecord> frame;
 };
@@ -64,6 +70,8 @@ BOOST_DESCRIBE_STRUCT(FrictionConstraintRecord,
                        lever_arm_b,
                        friction_coefficient,
                        normal_lambda,
+                       tangent1_lambda,
+                       tangent2_lambda,
                        frame));
 
 }  // namespace msd_transfer

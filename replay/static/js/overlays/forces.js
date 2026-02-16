@@ -1,5 +1,5 @@
 // Ticket: 0056f_threejs_overlays
-// Constraint force and gravity arrow visualization
+// Constraint force, friction force, and gravity arrow visualization
 
 import * as THREE from 'three';
 
@@ -9,14 +9,16 @@ export class ForceOverlay {
         this.metadata = metadata;
         this.constraintEnabled = false;
         this.gravityEnabled = false;
+        this.frictionEnabled = false;
 
         // Overlay objects
-        this.constraintArrows = [];  // GREEN arrows for constraint forces
+        this.constraintArrows = [];  // GREEN arrows for normal constraint forces
+        this.frictionArrows = [];    // ORANGE arrows for friction forces
         this.gravityArrows = new Map();  // BLUE arrows for gravity (per body, constant)
 
         // Configuration
-        this.constraintScale = 0.5;  // Logarithmic scale factor
-        this.minForce = 0.01;  // Threshold for displaying constraint forces
+        this.constraintScale = 0.02;  // Scale: Newtons -> visual length
+        this.minForce = 0.1;  // Threshold for displaying forces (Newtons)
         this.gravityMagnitude = 9.81;  // m/s^2 (from MSD-CPP gravity constant)
         this.gravityScale = 0.1;  // Visual scale for gravity arrows
     }
@@ -46,42 +48,126 @@ export class ForceOverlay {
     }
 
     /**
-     * Update constraint force arrows from frame data
-     * @param {Object} frameData - Frame data with states and forces
+     * Enable/disable friction force visualization
+     * @param {boolean} enabled
+     */
+    setFrictionEnabled(enabled) {
+        this.frictionEnabled = enabled;
+        if (!enabled) {
+            this.clearFrictionArrows();
+        }
+    }
+
+    /**
+     * Update constraint and friction force arrows from frame data.
+     * Uses normal_lambda (actual solver force in Newtons) for arrow scaling
+     * when friction_constraints are available, falls back to penetration depth.
+     * @param {Object} frameData - Frame data with states, collisions, and friction_constraints
      */
     update(frameData) {
-        // Clear previous constraint forces
+        // Clear previous arrows
         this.clearConstraintArrows();
+        this.clearFrictionArrows();
 
-        if (!this.constraintEnabled || !frameData) return;
+        if (!frameData) return;
 
-        // Visualize constraint forces from collision data.
-        // Each collision has a normal — show the normal as a force arrow at each
-        // contact midpoint, with length proportional to penetration depth.
-        if (!frameData.collisions) return;
+        // Build a lookup from (body_a_id, body_b_id) -> normal_lambda from friction constraints
+        const lambdaMap = new Map();
+        if (frameData.friction_constraints) {
+            frameData.friction_constraints.forEach(fc => {
+                const key = `${fc.body_a_id}_${fc.body_b_id}`;
+                // Sum lambdas for the same pair (multiple contact points)
+                lambdaMap.set(key, (lambdaMap.get(key) || 0) + fc.normal_lambda);
+            });
+        }
 
-        frameData.collisions.forEach(collision => {
-            const normal = new THREE.Vector3(
-                collision.normal.x,
-                collision.normal.y,
-                collision.normal.z
-            );
+        // Normal constraint arrows (GREEN)
+        if (this.constraintEnabled && frameData.collisions) {
+            // Build body position lookup for computing contact points from lever arms
+            const bodyPositions = new Map();
+            if (frameData.states) {
+                frameData.states.forEach(s => {
+                    bodyPositions.set(s.body_id, s.position);
+                });
+            }
 
-            collision.contacts.forEach(contact => {
-                const midpoint = new THREE.Vector3(
-                    (contact.point_a.x + contact.point_b.x) / 2,
-                    (contact.point_a.y + contact.point_b.y) / 2,
-                    (contact.point_a.z + contact.point_b.z) / 2
+            frameData.collisions.forEach(collision => {
+                const normal = new THREE.Vector3(
+                    collision.normal.x,
+                    collision.normal.y,
+                    collision.normal.z
                 );
 
-                // Scale arrow by penetration depth (proxy for constraint force magnitude)
-                const magnitude = Math.abs(contact.depth);
-                if (magnitude < this.minForce) return;
+                // Try to get actual force from friction constraint data
+                const key = `${collision.body_a_id}_${collision.body_b_id}`;
+                const normalLambda = lambdaMap.get(key);
 
-                const arrowLength = Math.log1p(magnitude * 100) * this.constraintScale;
-                this.addConstraintArrow(midpoint, normal.clone(), arrowLength);
+                collision.contacts.forEach(contact => {
+                    const midpoint = new THREE.Vector3(
+                        (contact.point_a.x + contact.point_b.x) / 2,
+                        (contact.point_a.y + contact.point_b.y) / 2,
+                        (contact.point_a.z + contact.point_b.z) / 2
+                    );
+
+                    let arrowLength;
+                    if (normalLambda !== undefined) {
+                        // Use actual force (Newtons) with linear scale
+                        const perContactLambda = normalLambda / collision.contacts.length;
+                        if (perContactLambda < this.minForce) return;
+                        arrowLength = perContactLambda * this.constraintScale;
+                    } else {
+                        // Fallback: use penetration depth as proxy
+                        const magnitude = Math.abs(contact.depth);
+                        if (magnitude < 0.01) return;
+                        arrowLength = Math.log1p(magnitude * 100) * 0.5;
+                    }
+
+                    this.addArrow(midpoint, normal.clone(), arrowLength, 0x00ff00, this.constraintArrows);
+                });
             });
-        });
+        }
+
+        // Friction force arrows (ORANGE)
+        if (this.frictionEnabled && frameData.friction_constraints) {
+            // Build body position lookup
+            const bodyPositions = new Map();
+            if (frameData.states) {
+                frameData.states.forEach(s => {
+                    bodyPositions.set(s.body_id, s.position);
+                });
+            }
+
+            frameData.friction_constraints.forEach(fc => {
+                // Compute contact point from body A position + lever_arm_a
+                const posA = bodyPositions.get(fc.body_a_id);
+                if (!posA) return;
+
+                const contactPoint = new THREE.Vector3(
+                    posA.x + fc.lever_arm_a.x,
+                    posA.y + fc.lever_arm_a.y,
+                    posA.z + fc.lever_arm_a.z
+                );
+
+                // Use actual solved tangent lambdas for arrow magnitude
+                const t1Lambda = Math.abs(fc.tangent1_lambda || 0);
+                const t2Lambda = Math.abs(fc.tangent2_lambda || 0);
+
+                const t1 = new THREE.Vector3(fc.tangent1.x, fc.tangent1.y, fc.tangent1.z);
+                const t2 = new THREE.Vector3(fc.tangent2.x, fc.tangent2.y, fc.tangent2.z);
+
+                // Tangent1 arrow (show direction of actual friction force)
+                if (t1Lambda >= this.minForce) {
+                    const dir1 = fc.tangent1_lambda >= 0 ? t1.clone() : t1.clone().negate();
+                    this.addArrow(contactPoint.clone(), dir1, t1Lambda * this.constraintScale, 0xff8c00, this.frictionArrows);
+                }
+
+                // Tangent2 arrow
+                if (t2Lambda >= this.minForce) {
+                    const dir2 = fc.tangent2_lambda >= 0 ? t2.clone() : t2.clone().negate();
+                    this.addArrow(contactPoint.clone(), dir2, t2Lambda * this.constraintScale, 0xff8c00, this.frictionArrows);
+                }
+            });
+        }
     }
 
     /**
@@ -130,23 +216,28 @@ export class ForceOverlay {
     }
 
     /**
-     * Add a constraint force arrow
+     * Add an arrow helper to the scene
      * @param {THREE.Vector3} origin
-     * @param {THREE.Vector3} force
+     * @param {THREE.Vector3} direction
      * @param {number} length
+     * @param {number} color - Hex color
+     * @param {Array} targetArray - Array to store the arrow for cleanup
      */
-    addConstraintArrow(origin, force, length) {
+    addArrow(origin, direction, length, color, targetArray) {
+        const minLength = 0.05;
+        const clampedLength = Math.max(length, minLength);
+
         const arrow = new THREE.ArrowHelper(
-            force.normalize(),
+            direction.normalize(),
             origin,
-            length,
-            0x00ff00,  // Green
-            length * 0.2,
-            length * 0.1
+            clampedLength,
+            color,
+            clampedLength * 0.2,
+            clampedLength * 0.1
         );
 
         this.scene.add(arrow);
-        this.constraintArrows.push(arrow);
+        targetArray.push(arrow);
     }
 
     /**
@@ -158,6 +249,17 @@ export class ForceOverlay {
             arrow.dispose();
         });
         this.constraintArrows = [];
+    }
+
+    /**
+     * Clear all friction force arrows
+     */
+    clearFrictionArrows() {
+        this.frictionArrows.forEach(arrow => {
+            this.scene.remove(arrow);
+            arrow.dispose();
+        });
+        this.frictionArrows = [];
     }
 
     /**
@@ -176,6 +278,7 @@ export class ForceOverlay {
      */
     dispose() {
         this.clearConstraintArrows();
+        this.clearFrictionArrows();
         this.clearGravityArrows();
     }
 }

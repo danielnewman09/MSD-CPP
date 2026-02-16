@@ -183,6 +183,17 @@ public:
   void setNormalLambda(double normalLambda);
 
   /**
+   * @brief Set solved tangent force magnitudes for recording.
+   *
+   * Called after solver completes to store the actual tangent friction
+   * forces (in Newtons) for database recording and visualization.
+   *
+   * @param t1Lambda Solved tangent1 force [N]
+   * @param t2Lambda Solved tangent2 force [N]
+   */
+  void setTangentLambdas(double t1Lambda, double t2Lambda);
+
+  /**
    * @brief Get friction force bounds for box-constrained LCP
    *
    * Returns bounds for friction forces in both tangent directions:
@@ -241,6 +252,8 @@ private:
   double friction_coefficient_;  // Combined friction coefficient μ [0, ∞)
   double normal_lambda_{
     0.0};  // Normal contact force λn [N] (updated each iteration)
+  double tangent1_lambda_{0.0};  // Solved tangent1 force [N]
+  double tangent2_lambda_{0.0};  // Solved tangent2 force [N]
 };
 
 }  // namespace msd_sim
