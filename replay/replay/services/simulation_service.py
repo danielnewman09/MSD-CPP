@@ -21,6 +21,7 @@ from ..models import (
     EnergyPoint,
     FrameData,
     FrameInfo,
+    FrictionConstraintInfo,
     Quaternion,
     SimulationMetadata,
     SolverDiagnostics,
@@ -91,6 +92,24 @@ class SimulationService:
 
         return SimulationMetadata(bodies=bodies, total_frames=total_frames)
 
+    @staticmethod
+    def _qdot_to_omega(
+        qw: float, qx: float, qy: float, qz: float,
+        qdx: float, qdy: float, qdz: float, qdw: float,
+    ) -> Vec3:
+        """Convert quaternion + quaternion rate to angular velocity.
+
+        Formula: omega = 2 * conj(Q) * Qdot (vector part)
+        where conj(Q) = (w, -x, -y, -z).
+        """
+        # conj(Q) components
+        cw, cx, cy, cz = qw, -qx, -qy, -qz
+        # Quaternion product conj(Q) * Qdot — extract vector part and scale by 2
+        ox = 2.0 * (cw * qdx + cx * qdw + cy * qdz - cz * qdy)
+        oy = 2.0 * (cw * qdy - cx * qdz + cy * qdw + cz * qdx)
+        oz = 2.0 * (cw * qdz + cx * qdy - cy * qdx + cz * qdw)
+        return Vec3(x=ox, y=oy, z=oz)
+
     def _get_states_by_frame(self, frame_id: int) -> list[BodyState]:
         """Get body states for a frame via SQL join through AssetDynamicStateRecord.
 
@@ -104,12 +123,14 @@ class SimulationService:
                     adr.body_id,
                     pos.x, pos.y, pos.z,
                     vel.x, vel.y, vel.z,
-                    quat.w, quat.x, quat.y, quat.z
+                    quat.w, quat.x, quat.y, quat.z,
+                    qdot.x, qdot.y, qdot.z, qdot.w
                 FROM AssetDynamicStateRecord adr
                 JOIN InertialStateRecord isr ON adr.kinematicState_id = isr.id
                 JOIN CoordinateRecord pos ON isr.position_id = pos.id
                 JOIN VelocityRecord vel ON isr.velocity_id = vel.id
                 JOIN QuaternionDRecord quat ON isr.orientation_id = quat.id
+                JOIN Vector4DRecord qdot ON isr.quaternionRate_id = qdot.id
                 WHERE adr.frame_id = ?
             """, (frame_id,)).fetchall()
         finally:
@@ -121,6 +142,10 @@ class SimulationService:
                 position=Vec3(x=row[1], y=row[2], z=row[3]),
                 velocity=Vec3(x=row[4], y=row[5], z=row[6]),
                 orientation=Quaternion(w=row[7], x=row[8], y=row[9], z=row[10]),
+                angular_velocity=self._qdot_to_omega(
+                    row[7], row[8], row[9], row[10],  # q: w, x, y, z
+                    row[11], row[12], row[13], row[14],  # qdot: x, y, z, w
+                ),
             )
             for row in rows
         ]
@@ -181,11 +206,39 @@ class SimulationService:
                 num_contacts=solver_rec.num_contacts,
             )
 
+        # Friction constraints (optional, older DBs may lack the table)
+        friction_constraints: list[FrictionConstraintInfo] = []
+        try:
+            friction_records = self.db.select_friction_constraints_by_frame(frame_id)
+            friction_constraints = [
+                FrictionConstraintInfo(
+                    body_a_id=fc.body_a_id,
+                    body_b_id=fc.body_b_id,
+                    normal=Vec3(x=fc.normal.x, y=fc.normal.y, z=fc.normal.z),
+                    tangent1=Vec3(x=fc.tangent1.x, y=fc.tangent1.y, z=fc.tangent1.z),
+                    tangent2=Vec3(x=fc.tangent2.x, y=fc.tangent2.y, z=fc.tangent2.z),
+                    lever_arm_a=Vec3(
+                        x=fc.lever_arm_a.x, y=fc.lever_arm_a.y, z=fc.lever_arm_a.z
+                    ),
+                    lever_arm_b=Vec3(
+                        x=fc.lever_arm_b.x, y=fc.lever_arm_b.y, z=fc.lever_arm_b.z
+                    ),
+                    friction_coefficient=fc.friction_coefficient,
+                    normal_lambda=fc.normal_lambda,
+                    tangent1_lambda=fc.tangent1_lambda,
+                    tangent2_lambda=fc.tangent2_lambda,
+                )
+                for fc in friction_records
+            ]
+        except Exception:
+            pass  # Table may not exist in older recordings
+
         return FrameData(
             frame_id=frame_id,
             simulation_time=frame.simulation_time,
             states=states,
             collisions=collisions,
+            friction_constraints=friction_constraints,
             solver=solver,
         )
 

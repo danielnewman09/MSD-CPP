@@ -16,6 +16,7 @@ export class InspectorOverlay {
 
         this.selectedBody = null;
         this.selectionHighlight = null;
+        this.selectionParentMesh = null;
 
         this.panelElement = null;
 
@@ -100,16 +101,15 @@ export class InspectorOverlay {
 
         if (!mesh) return;
 
-        // Add wireframe highlight
+        // Add wireframe highlight as a CHILD of the mesh so it automatically
+        // follows the body's position/rotation without manual syncing
         const wireframe = new THREE.WireframeGeometry(mesh.geometry);
         const line = new THREE.LineSegments(wireframe);
         line.material = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 2 });
-        line.position.copy(mesh.position);
-        line.quaternion.copy(mesh.quaternion);
-        line.scale.copy(mesh.scale);
 
-        this.scene.add(line);
+        mesh.add(line);
         this.selectionHighlight = line;
+        this.selectionParentMesh = mesh;
 
         this.updatePanel(bodyId);
     }
@@ -119,10 +119,13 @@ export class InspectorOverlay {
      */
     clearSelection() {
         if (this.selectionHighlight) {
-            this.scene.remove(this.selectionHighlight);
+            if (this.selectionParentMesh) {
+                this.selectionParentMesh.remove(this.selectionHighlight);
+            }
             this.selectionHighlight.geometry.dispose();
             this.selectionHighlight.material.dispose();
             this.selectionHighlight = null;
+            this.selectionParentMesh = null;
         }
 
         this.selectedBody = null;
@@ -189,7 +192,7 @@ export class InspectorOverlay {
         const vel = state.velocity;
         const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z);
 
-        const html = `
+        let html = `
             <div class="inspector-row">
                 <span class="label">Position:</span>
                 <span class="value">(${state.position.x.toFixed(3)}, ${state.position.y.toFixed(3)}, ${state.position.z.toFixed(3)})</span>
@@ -203,21 +206,68 @@ export class InspectorOverlay {
                 <span class="value">${speed.toFixed(3)} m/s</span>
             </div>
             <div class="inspector-row">
-                <span class="label">Orientation:</span>
-                <span class="value">q(${state.orientation.w.toFixed(3)}, ${state.orientation.x.toFixed(3)}, ${state.orientation.y.toFixed(3)}, ${state.orientation.z.toFixed(3)})</span>
+                <span class="label">Rotation:</span>
+                <span class="value">${(() => {
+                    const q = new THREE.Quaternion(state.orientation.x, state.orientation.y, state.orientation.z, state.orientation.w);
+                    const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+                    const deg = (r) => (r * 180 / Math.PI).toFixed(1);
+                    return `(${deg(e.x)}, ${deg(e.y)}, ${deg(e.z)})°`;
+                })()}</span>
             </div>
+            ${state.angular_velocity ? `
+            <div class="inspector-row">
+                <span class="label">Angular Vel:</span>
+                <span class="value">(${state.angular_velocity.x.toFixed(3)}, ${state.angular_velocity.y.toFixed(3)}, ${state.angular_velocity.z.toFixed(3)}) rad/s</span>
+            </div>
+            <div class="inspector-row">
+                <span class="label">Spin Rate:</span>
+                <span class="value">${Math.sqrt(
+                    state.angular_velocity.x ** 2 +
+                    state.angular_velocity.y ** 2 +
+                    state.angular_velocity.z ** 2
+                ).toFixed(3)} rad/s</span>
+            </div>
+            ` : ''}
         `;
 
-        dynamicDiv.innerHTML = html;
+        // Forces section from friction constraint data
+        if (frameData.friction_constraints && frameData.friction_constraints.length > 0) {
+            const bodyId = this.selectedBody;
+            const relevantConstraints = frameData.friction_constraints.filter(
+                fc => fc.body_a_id === bodyId || fc.body_b_id === bodyId
+            );
 
-        // Update highlight position
-        if (this.selectionHighlight) {
-            const mesh = this.sceneManager.bodies.get(this.selectedBody);
-            if (mesh) {
-                this.selectionHighlight.position.copy(mesh.position);
-                this.selectionHighlight.quaternion.copy(mesh.quaternion);
+            if (relevantConstraints.length > 0) {
+                html += `<div class="inspector-section">Forces</div>`;
+                relevantConstraints.forEach(fc => {
+                    const otherBody = fc.body_a_id === bodyId ? fc.body_b_id : fc.body_a_id;
+                    const frictionLimit = fc.friction_coefficient * fc.normal_lambda;
+                    const t1 = fc.tangent1_lambda || 0;
+                    const t2 = fc.tangent2_lambda || 0;
+                    const tangentMag = Math.sqrt(t1 * t1 + t2 * t2);
+                    html += `
+                        <div class="inspector-row">
+                            <span class="label">Contact w/ Body ${otherBody}:</span>
+                            <span class="value"></span>
+                        </div>
+                        <div class="inspector-row">
+                            <span class="label">&nbsp;&nbsp;Normal Force:</span>
+                            <span class="value">${fc.normal_lambda.toFixed(2)} N</span>
+                        </div>
+                        <div class="inspector-row">
+                            <span class="label">&nbsp;&nbsp;Friction Force:</span>
+                            <span class="value">${tangentMag.toFixed(2)} N (t1=${t1.toFixed(2)}, t2=${t2.toFixed(2)})</span>
+                        </div>
+                        <div class="inspector-row">
+                            <span class="label">&nbsp;&nbsp;Friction Limit:</span>
+                            <span class="value">${frictionLimit.toFixed(2)} N (mu=${fc.friction_coefficient.toFixed(3)})</span>
+                        </div>
+                    `;
+                });
             }
         }
+
+        dynamicDiv.innerHTML = html;
     }
 
     /**

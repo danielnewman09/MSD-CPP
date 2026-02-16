@@ -34,6 +34,7 @@ export class UIController {
             toggleEnergy: document.getElementById('toggle-energy'),
             toggleInspector: document.getElementById('toggle-inspector'),
             toggleSolver: document.getElementById('toggle-solver'),
+            toggleFrictionForces: document.getElementById('toggle-friction-forces'),
             energyChartCanvas: document.getElementById('energy-chart'),
             inspectorPanel: document.getElementById('inspector-panel').querySelector('.inspector-content'),
             solverStatus: document.getElementById('solver-status'),
@@ -170,6 +171,14 @@ export class UIController {
                 }
             });
         }
+
+        if (this.elements.toggleFrictionForces) {
+            this.elements.toggleFrictionForces.addEventListener('change', (e) => {
+                if (this.overlaysRef.forces) {
+                    this.overlaysRef.forces.setFrictionEnabled(e.target.checked);
+                }
+            });
+        }
     }
 
     /**
@@ -206,6 +215,9 @@ export class UIController {
 
         this.showLoading();
 
+        // Dispose existing overlays before loading new simulation
+        this.disposeOverlays();
+
         try {
             await this.dataLoader.loadSimulation(simId);
             const metadata = this.dataLoader.getMetadata();
@@ -219,8 +231,9 @@ export class UIController {
             this.elements.timelineSlider.value = 0;
 
             // Ticket: 0056f_threejs_overlays
-            // Initialize overlays with metadata
+            // Initialize overlays with metadata, then re-apply retained toggle states
             this.initializeOverlays(metadata);
+            this.applyToggleStates();
 
             // Load first frame
             await this.playbackController.setFrame(0);
@@ -317,6 +330,35 @@ export class UIController {
     }
 
     /**
+     * Dispose existing overlays before loading a new simulation.
+     * Prevents stale scene objects, energy charts, and inspector state from leaking.
+     * Retains toggle checkbox selections so user preferences persist across sim switches.
+     */
+    disposeOverlays() {
+        if (this.overlaysRef.contacts) {
+            this.overlaysRef.contacts.dispose();
+            this.overlaysRef.contacts = null;
+        }
+        if (this.overlaysRef.forces) {
+            this.overlaysRef.forces.dispose();
+            this.overlaysRef.forces = null;
+        }
+        if (this.overlaysRef.energy) {
+            this.overlaysRef.energy.dispose();
+            this.overlaysRef.energy = null;
+        }
+        if (this.overlaysRef.inspector) {
+            this.overlaysRef.inspector.dispose();
+            this.overlaysRef.inspector = null;
+        }
+        if (this.overlaysRef.solver) {
+            this.overlaysRef.solver.dispose();
+            this.overlaysRef.solver = null;
+        }
+        // Toggle checkboxes are NOT reset — user selections are retained
+    }
+
+    /**
      * Ticket: 0056f_threejs_overlays
      * Initialize overlay modules after metadata is loaded
      * @param {Object} metadata
@@ -349,9 +391,36 @@ export class UIController {
         this.overlaysRef.solver = new SolverOverlay();
         this.overlaysRef.solver.setStatusElement(this.elements.solverStatus);
 
-        // Apply default states from checkboxes
-        if (this.elements.toggleEnergy.checked) {
+    }
+
+    /**
+     * Re-apply current toggle checkbox states to freshly created overlays.
+     * Called after initializeOverlays() so user selections persist across sim switches.
+     */
+    applyToggleStates() {
+        if (this.elements.toggleContactPoints?.checked && this.overlaysRef.contacts) {
+            this.overlaysRef.contacts.setPointsEnabled(true);
+        }
+        if (this.elements.toggleContactNormals?.checked && this.overlaysRef.contacts) {
+            this.overlaysRef.contacts.setNormalsEnabled(true);
+        }
+        if (this.elements.toggleConstraintForces?.checked && this.overlaysRef.forces) {
+            this.overlaysRef.forces.setConstraintEnabled(true);
+        }
+        if (this.elements.toggleFrictionForces?.checked && this.overlaysRef.forces) {
+            this.overlaysRef.forces.setFrictionEnabled(true);
+        }
+        if (this.elements.toggleGravity?.checked && this.overlaysRef.forces) {
+            this.overlaysRef.forces.setGravityEnabled(true);
+        }
+        if (this.elements.toggleEnergy?.checked && this.overlaysRef.energy) {
             this.overlaysRef.energy.setEnabled(true);
+        }
+        if (this.elements.toggleInspector?.checked && this.overlaysRef.inspector) {
+            this.overlaysRef.inspector.setEnabled(true);
+        }
+        if (this.elements.toggleSolver?.checked && this.overlaysRef.solver) {
+            this.overlaysRef.solver.setEnabled(true);
         }
     }
 }

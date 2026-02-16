@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.22)
 
-# Find Python and pybind11
+# Find Python and pybind11 (Python3 hints set in root CMakeLists.txt)
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(pybind11 REQUIRED)
 

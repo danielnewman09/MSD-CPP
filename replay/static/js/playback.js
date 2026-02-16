@@ -14,6 +14,7 @@ export class PlaybackController {
         this.frameInterval = 16.67;  // ~60 FPS (in ms)
 
         this.animationFrameId = null;
+        this.frameRequestId = 0;  // Monotonic counter to discard stale async responses
     }
 
     /**
@@ -90,7 +91,9 @@ export class PlaybackController {
         if (frameNumber < 0 || frameNumber >= this.frameCount) return;
 
         this.currentFrame = frameNumber;
+        const requestId = ++this.frameRequestId;
         const frameData = await this.dataLoader.getFrame(frameNumber);
+        if (requestId !== this.frameRequestId) return;  // Stale response, discard
         this.sceneManager.updateFrame(frameData);
     }
 
@@ -113,7 +116,9 @@ export class PlaybackController {
                 // this.pause();  // Uncomment to pause at end instead of looping
             }
 
+            const requestId = ++this.frameRequestId;
             const frameData = await this.dataLoader.getFrame(this.currentFrame);
+            if (requestId !== this.frameRequestId) return;  // Stale response, discard
             this.sceneManager.updateFrame(frameData);
 
             this.lastFrameTime = now;

@@ -109,6 +109,13 @@ void CollisionPipeline::execute(
   // ===== Phase 4: Solve Contact Constraint System with Warm-Starting =====
   auto solveResult = solveConstraintsWithWarmStart(dt);
 
+  // ===== Phase 4.7: Propagate solved normal lambdas to FrictionConstraints =====
+  // The solver returns all lambdas in a flat vector (3 per contact when friction
+  // is active: normal, tangent1, tangent2). FrictionConstraint::recordState()
+  // needs the normal lambda to record actual force values for visualization.
+  // Ticket: 0057_contact_tangent_recording
+  propagateSolvedLambdas(solveResult);
+
   // ===== Phase 5: Apply Constraint Forces to Inertial Bodies =====
   applyForces(inertialAssets, solveResult);
 
@@ -123,9 +130,11 @@ void CollisionPipeline::execute(
   solverData_.numConstraints = allConstraints_.size();
   solverData_.numContacts = collisions_.size();
 
-  // Clear ephemeral state (references/pointers) but keep collisions_ and
-  // solverData_ alive for WorldModel to read between frames
-  clearEphemeralState();
+  // Ephemeral state (allConstraints_, states_, etc.) is NOT cleared here.
+  // It persists until the next execute() call (line 69) so that
+  // WorldModel::recordCurrentFrame() can iterate allConstraints_ for
+  // constraint recording (FrictionConstraintRecord, ContactConstraintRecord).
+  // Ticket: 0057_contact_tangent_recording
 }
 
 void CollisionPipeline::detectCollisions(
@@ -525,6 +534,51 @@ void CollisionPipeline::correctPositions(
                                       /* dt = */ 0.016);  // Placeholder, not used in position correction
 }
 
+void CollisionPipeline::propagateSolvedLambdas(
+  const ConstraintSolver::SolveResult& solveResult)
+{
+  // Detect friction presence and stride
+  bool hasFriction = false;
+  for (const auto& c : allConstraints_)
+  {
+    if (dynamic_cast<FrictionConstraint*>(c.get()))
+    {
+      hasFriction = true;
+      break;
+    }
+  }
+
+  if (!hasFriction)
+  {
+    return;  // Nothing to propagate
+  }
+
+  // With friction, lambdas are grouped as 3 per contact: [n, t1, t2].
+  // allConstraints_ is interleaved: [CC_0, FC_0, CC_1, FC_1, ...].
+  // For contact group g (at allConstraints_[g*2] and allConstraints_[g*2+1]),
+  // the normal lambda is at solveResult.lambdas[g * 3].
+  const size_t stride = 2;  // CC + FC per contact
+
+  for (size_t i = 1; i < allConstraints_.size(); i += stride)
+  {
+    auto* fc = dynamic_cast<FrictionConstraint*>(allConstraints_[i].get());
+    if (!fc)
+    {
+      continue;
+    }
+
+    const size_t contactGroupIdx = i / stride;
+    const auto lambdaIdx = static_cast<Eigen::Index>(contactGroupIdx * 3);
+
+    if (lambdaIdx + 2 < solveResult.lambdas.size())
+    {
+      fc->setNormalLambda(solveResult.lambdas(lambdaIdx));
+      fc->setTangentLambdas(solveResult.lambdas(lambdaIdx + 1),
+                            solveResult.lambdas(lambdaIdx + 2));
+    }
+  }
+}
+
 void CollisionPipeline::clearEphemeralState()
 {
   // Clear vectors holding references/pointers to external objects to prevent
@@ -605,10 +659,25 @@ void CollisionPipeline::recordConstraints(DataRecorder& recorder, uint32_t frame
 
 size_t CollisionPipeline::findPairIndexForConstraint(size_t constraintIdx) const
 {
-  // Iterate pairRanges_ to find which pair owns this constraint index
+  // Detect interleaved layout: [CC, FC, CC, FC, ...] when friction is active.
+  // Stride is 2 (CC+FC per contact) with friction, 1 (CC only) without.
+  bool hasFriction = false;
+  for (const auto& c : allConstraints_)
+  {
+    if (dynamic_cast<FrictionConstraint*>(c.get()))
+    {
+      hasFriction = true;
+      break;
+    }
+  }
+  const size_t stride = hasFriction ? 2 : 1;
+
+  // range.count is the number of ContactConstraints; actual allConstraints_
+  // span is count * stride entries starting at startIdx.
   for (const auto& range : pairRanges_)
   {
-    if (constraintIdx >= range.startIdx && constraintIdx < range.startIdx + range.count)
+    const size_t rangeEnd = range.startIdx + range.count * stride;
+    if (constraintIdx >= range.startIdx && constraintIdx < rangeEnd)
     {
       return range.pairIdx;
     }

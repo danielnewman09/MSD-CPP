@@ -156,6 +156,12 @@ void FrictionConstraint::setNormalLambda(double normalLambda)
   normal_lambda_ = normalLambda;
 }
 
+void FrictionConstraint::setTangentLambdas(double t1Lambda, double t2Lambda)
+{
+  tangent1_lambda_ = t1Lambda;
+  tangent2_lambda_ = t2Lambda;
+}
+
 std::pair<double, double> FrictionConstraint::getFrictionBounds() const
 {
   // Coulomb friction cone: ||λ_t|| ≤ μ · λn
@@ -186,6 +192,8 @@ void FrictionConstraint::recordState(msd_transfer::ConstraintRecordVisitor& visi
   // Serialize parameters
   record.friction_coefficient = friction_coefficient_;
   record.normal_lambda = normal_lambda_;
+  record.tangent1_lambda = tangent1_lambda_;
+  record.tangent2_lambda = tangent2_lambda_;
 
   // Dispatch to visitor via overload resolution
   visitor.visit(record);

@@ -9,6 +9,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV_DIR="$PROJECT_ROOT/python/.venv"
+VENV_PY="$VENV_DIR/bin/python3"
 BUILD_DIR="$PROJECT_ROOT/build/Debug/debug"
 ASSETS_DB="$SCRIPT_DIR/recordings/assets.db"
 RECORDING_DB="$SCRIPT_DIR/recordings/test_cube_drop.db"
@@ -19,18 +20,15 @@ if [ ! -d "$VENV_DIR" ]; then
     echo "Run the setup script first: python/setup.sh"
     exit 1
 fi
-source "$VENV_DIR/bin/activate"
 
-# --- 2. Verify replay package is installed ---
-if ! python3 -c "import replay" 2>/dev/null; then
-    echo "ERROR: replay package not found in $VENV_DIR"
-    echo "Run the setup script to install: python/setup.sh"
-    exit 1
-fi
+# --- 2. Install replay package ---
+echo "Installing replay package..."
+"$VENV_PY" -m pip install -q --upgrade pip
+"$VENV_PY" -m pip install -q -e "$SCRIPT_DIR"
 
 # --- 3. Check msd_reader is available ---
 export PYTHONPATH="$BUILD_DIR:$PYTHONPATH"
-if ! python3 -c "import msd_reader" 2>/dev/null; then
+if ! "$VENV_PY" -c "import msd_reader" 2>/dev/null; then
     echo "ERROR: msd_reader not found in $BUILD_DIR"
     echo "Build with pybind enabled first:"
     echo "  conan install . --build=missing -s build_type=Debug"
@@ -56,7 +54,7 @@ fi
 if [ ! -f "$RECORDING_DB" ]; then
     GENERATOR="$BUILD_DIR/generate_test_recording"
     if [ ! -f "$GENERATOR" ]; then
-        echo "ERROR: generate_test_recording not found at $GENERATOR"
+        echo "ERROR: generate_test_recording not found at $ASSET_GEN"
         echo "Build it first: cmake --build --preset conan-debug --target generate_test_recording"
         exit 1
     fi
@@ -76,4 +74,4 @@ echo "  Recording: $RECORDING_DB"
 echo "  API:  http://localhost:8000/api/v1"
 echo "  Docs: http://localhost:8000/docs"
 echo ""
-exec uvicorn replay.app:app --reload --app-dir "$SCRIPT_DIR"
+exec "$VENV_PY" -m uvicorn replay.app:app --reload --app-dir "$SCRIPT_DIR"

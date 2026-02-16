@@ -169,6 +169,12 @@ void bind_database(py::module_& m)
     .def("select_solver_diagnostic_by_frame",
          &DatabaseWrapper::selectByFrame<msd_transfer::SolverDiagnosticRecord>,
          py::arg("frame_id"))
+    .def("select_contact_constraints_by_frame",
+         &DatabaseWrapper::selectByFrame<msd_transfer::ContactConstraintRecord>,
+         py::arg("frame_id"))
+    .def("select_friction_constraints_by_frame",
+         &DatabaseWrapper::selectByFrame<msd_transfer::FrictionConstraintRecord>,
+         py::arg("frame_id"))
 
     // ========================================
     // select_by_body() for per-body records
