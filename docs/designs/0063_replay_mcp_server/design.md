@@ -422,3 +422,100 @@ Custom application errors use code `-32000` with descriptive messages:
 2. **Comparative analysis**: Compare two recordings side-by-side (e.g., before/after a physics fix)
 3. **Automated fix suggestions**: Use LLM to propose code changes based on diagnostics (separate ticket)
 4. **Visualization tools**: Generate plots/charts from MCP server data (can be handled in Claude Code with matplotlib)
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-16
+**Status**: APPROVED
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | Python PEP 8 style — snake_case for functions/variables, PascalCase for classes. Consistent with existing `replay/` codebase. |
+| Namespace organization | ✓ | `replay/mcp_server/` structure mirrors the existing `replay/replay/services/` organization. Clean separation of MCP protocol layer from business logic. |
+| File structure | ✓ | Follows established pattern from `scripts/mcp_server.py`. Entry point via `__main__.py` for `-m` invocation is appropriate. |
+| Dependency direction | ✓ | Correct layering — MCP server depends on SimulationService, which depends on msd_reader. No circular dependencies introduced. |
+
+**Summary**: The design integrates cleanly into the existing replay subsystem without introducing new architectural patterns. The MCP server is a thin protocol adapter over the existing query layer, which is the correct approach.
+
+#### Python Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Type hints | ✓ | All methods specify return types (`-> dict`, `-> list[dict]`). Parameters use union types (`int \| None`) per PEP 604. |
+| Error handling | ✓ | JSON-RPC error codes follow the spec (-32000 to -32603). Application errors use -32000 with descriptive messages. Database errors are wrapped with context. |
+| Pydantic model usage | ✓ | `.model_dump_json()` used for structured responses. Leverages existing models from `replay.models`. |
+| Session state | ✓ | Session-based design (`self.service: SimulationService \| None`) is simple and appropriate for single-recording debugging workflows. |
+| Code organization | ✓ | Separation of concerns — server.py handles protocol, tools.py (optional) handles business logic. Clear separation from existing SimulationService. |
+| Return values | ✓ | All tools return `dict` (JSON-RPC response format). Diagnostic tools include both structured data and human-readable summaries. |
+
+**Summary**: Python design quality is strong. Type hints are comprehensive, error handling follows JSON-RPC standards, and the code leverages existing Pydantic models without duplication.
+
+#### Feasibility Assessment
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Dependency availability | ✓ | `mcp` SDK available via pip. SimulationService already exists. `numpy` for vector math is standard. |
+| Runtime performance | ✓ | Human-in-the-loop tooling — query latency <100ms is acceptable. No hot paths. SimulationService queries are sub-millisecond for single frames. |
+| Integration complexity | ✓ | Stdio transport follows established pattern. No build system changes needed (pure Python). Configuration is additive (`.claude/settings.json`). |
+| State management | ✓ | Single session model is simple and sufficient. No concurrency issues (stdio is single-threaded). |
+| Testing strategy | ✓ | Unit tests use existing test recordings as fixtures. Integration tests validate stdio round-trip. Manual test validates Claude Code integration. |
+
+**Summary**: Implementation is straightforward. All dependencies are available, integration points are well-defined, and the design reuses existing query infrastructure without modification.
+
+#### Testability Assessment
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | Tool handlers can be tested independently by mocking SimulationService. Server can be tested with synthetic JSON-RPC messages. |
+| Mockable dependencies | ✓ | SimulationService is the only external dependency and can be mocked for unit tests. |
+| Observable state | ✓ | Session state (`self.service`) is directly inspectable. Tool return values are JSON-serializable and easy to assert against. |
+| Test coverage | ✓ | Design specifies >80% coverage target with clear unit test matrix. Fixture data available from existing test recordings. |
+
+**Summary**: Excellent testability. The design's separation of protocol (server.py) and business logic (tools.py) enables isolated testing of each layer.
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | MCP SDK API changes between versions | Technical | Low | Medium | Pin `mcp>=1.0,<2.0` in pyproject.toml. MCP spec is stable. | No |
+| R2 | Recording databases with missing tables (older schema) | Integration | Medium | Low | SimulationService already handles missing tables gracefully (try/except with pass). Validation tools should do the same. | No |
+| R3 | Large recordings (1000+ frames) causing slow bulk queries | Performance | Low | Low | Tool design already avoids bulk queries — most tools are frame-specific or support start/end ranges. `find_energy_anomalies` scans all frames but is acceptable for human-in-the-loop workflow. | No |
+| R4 | Friction cone check false positives due to floating-point epsilon | Technical | Low | Low | Use appropriate epsilon (e.g., `margin = friction_limit * 1.01 - total_tangent_force`) when checking violations. Document epsilon choice. | No |
+
+**Summary**: All risks are low-likelihood or low-impact. No high-risk items requiring prototypes. Existing code already handles schema variations and the performance profile is appropriate for the use case.
+
+### Prototype Guidance
+
+**No prototypes required.** The design follows established patterns (stdio MCP server, SimulationService query layer) and all integration points are well-understood. Implementation can proceed directly to unit/integration testing.
+
+### Required Revisions
+
+None. Design is approved as-is.
+
+### Summary
+
+This is a well-architected design that cleanly extends the replay subsystem with AI debugging capabilities. The MCP server is a thin protocol adapter over the existing SimulationService query layer, which is the correct approach — no duplication of business logic, no modification of existing code.
+
+**Strengths**:
+- Reuses SimulationService without modification (zero impact on existing code)
+- Follows established stdio MCP pattern from codebase server
+- Session-based design matches user mental model for debugging workflows
+- Comprehensive tool set covers core queries, energy analysis, diagnostics, and validation
+- Diagnostic tools include human-readable summaries alongside structured data
+- Testability is excellent due to clear separation of protocol and business logic
+
+**Next Steps**:
+1. Proceed directly to implementation (no prototype phase needed)
+2. Follow implementation plan from design document
+3. Ensure >80% test coverage with unit tests using existing test recording fixtures
+4. Manual end-to-end test with Claude Code to verify tool integration
+
+**Design approved for implementation.**
