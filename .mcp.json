@@ -15,6 +15,14 @@
         "--codebase-db",
         "build/Debug/docs/codebase.db"
       ]
+    },
+    "replay": {
+      "command": "/Users/danielnewman/Documents/GitHub/MSD-CPP/scripts/.venv/bin/python3",
+      "args": [
+        "-m",
+        "replay.mcp_server"
+      ],
+      "cwd": "/Users/danielnewman/Documents/GitHub/MSD-CPP/replay"
     }
   }
 }
