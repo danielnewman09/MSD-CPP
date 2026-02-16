@@ -17,12 +17,13 @@
       ]
     },
     "replay": {
-      "command": "/Users/danielnewman/Documents/GitHub/MSD-CPP/scripts/.venv/bin/python3",
+      "command": "python/.venv/bin/python3",
       "args": [
-        "-m",
-        "replay.mcp_server"
+        "replay/mcp_server/server.py"
       ],
-      "cwd": "/Users/danielnewman/Documents/GitHub/MSD-CPP/replay"
+      "env": {
+        "PYTHONPATH": "build/Debug/debug"
+      }
     }
   }
 }

@@ -741,8 +741,8 @@ class ReplayMCPServer:
                 "z": state_b.velocity.z - state_a.velocity.z,
             }
 
-            pos_mag = np.linalg.norm([pos_delta["x"], pos_delta["y"], pos_delta["z"]])
-            vel_mag = np.linalg.norm([vel_delta["x"], vel_delta["y"], vel_delta["z"]])
+            pos_mag = float(np.linalg.norm([pos_delta["x"], pos_delta["y"], pos_delta["z"]]))
+            vel_mag = float(np.linalg.norm([vel_delta["x"], vel_delta["y"], vel_delta["z"]]))
 
             return {
                 "body_id": body_id,
@@ -857,15 +857,15 @@ class ReplayMCPServer:
 
             violations = []
             for contact in contacts:
-                normal_force = abs(contact.normal_lambda)
-                friction_limit = contact.friction_coefficient * normal_force
-                tangent_force = np.sqrt(
+                normal_force = float(abs(contact.normal_lambda))
+                friction_limit = float(contact.friction_coefficient * normal_force)
+                tangent_force = float(np.sqrt(
                     contact.tangent1_lambda**2 + contact.tangent2_lambda**2
-                )
+                ))
 
                 # Use 1% margin to account for floating-point epsilon
-                margin = friction_limit * 1.01 - tangent_force
-                exceeds = tangent_force > friction_limit * 1.01
+                margin = float(friction_limit * 1.01 - tangent_force)
+                exceeds = bool(tangent_force > friction_limit * 1.01)
 
                 violations.append({
                     "body_a_id": contact.body_a_id,
@@ -951,12 +951,12 @@ class ReplayMCPServer:
             for body_id in body_ids_in_contact:
                 state = next((s for s in frame.states if s.body_id == body_id), None)
                 if state:
-                    vel_mag = np.linalg.norm([state.velocity.x, state.velocity.y, state.velocity.z])
-                    ang_vel_mag = np.linalg.norm([
+                    vel_mag = float(np.linalg.norm([state.velocity.x, state.velocity.y, state.velocity.z]))
+                    ang_vel_mag = float(np.linalg.norm([
                         state.angular_velocity.x,
                         state.angular_velocity.y,
                         state.angular_velocity.z
-                    ])
+                    ]))
                     if vel_mag > velocity_threshold or ang_vel_mag > velocity_threshold:
                         moving_bodies.append({
                             "body_id": body_id,
