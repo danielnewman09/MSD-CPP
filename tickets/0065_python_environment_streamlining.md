@@ -1,0 +1,207 @@
+# Ticket 0065: Python Environment Streamlining
+
+## Status
+- [x] Draft
+- [x] Ready for Implementation
+- [x] Implementation Complete — Awaiting Review
+- [x] Approved — Ready to Merge
+- [ ] Merged / Complete
+
+**Current Phase**: Approved — Ready to Merge
+**Type**: Tooling / Infrastructure
+**Priority**: High
+**Assignee**: TBD
+**Created**: 2026-02-16
+**Generate Tutorial**: No
+**Parent Ticket**: None
+**Depends On**: None
+
+---
+
+## Overview
+
+The project has fragmented Python environment management that causes failures on clean clones and across git worktrees. Currently there are multiple implicit Python environments with undocumented dependencies:
+
+1. **`scripts/.venv`** — Used by traceability targets (`trace-git`, `trace-symbols`, `trace-decisions`, `trace-record-mappings`) and MCP servers. Requires `tree-sitter`, `tree-sitter-cpp`, `fastmcp`.
+2. **`replay/.venv`** (or system Python) — Used by the replay FastAPI server. Requires `fastapi`, `uvicorn`, `pydantic`, `msd_reader`.
+3. **CMake `${Python3_EXECUTABLE}`** — Used by `doxygen-db` and `python-db` targets. Whatever `find_package(Python3)` discovers (could be system Python, Xcode Python, or a venv).
+
+This inconsistency means:
+- `cmake --build --preset debug-all` fails if `scripts/.venv` doesn't exist
+- New worktrees require manual, undocumented venv setup
+- Different targets may use different Python interpreters with different packages available
+- `.mcp.json` assumes `scripts/.venv` exists
+
+---
+
+## Requirements
+
+### R1: Single Unified Python Environment
+
+Consolidate all Python tooling into one venv at `python/.venv`. This single environment contains all dependencies for every Python context: traceability indexing, MCP servers, code generation, documentation indexing, replay server, and testing. No separate venvs.
+
+### R2: Python Directory Structure
+
+Create a `python/` directory at the project root as the home for all Python environment configuration:
+
+```
+python/
+├── README.md              # Developer setup guide (the authoritative doc)
+├── requirements.txt       # All pinned dependencies for the single venv
+├── setup.sh               # Bootstrap script (idempotent)
+└── .venv/                 # The single venv (gitignored)
+```
+
+`setup.sh` must:
+- Create `python/.venv` from a clean state
+- Install all packages from `python/requirements.txt`
+- Install the `replay` package in editable mode (`pip install -e replay/`)
+- Validate the environment is functional (import checks)
+- Be idempotent (safe to re-run on an existing venv)
+
+### R3: Requirements File
+
+A single `python/requirements.txt` covering all contexts:
+
+| Context | Dependencies |
+|---------|-------------|
+| Traceability indexing | `tree-sitter`, `tree-sitter-cpp` |
+| MCP servers (codebase + traceability) | `fastmcp` |
+| Code generation (`generate_record_layers.py`) | stdlib only |
+| Documentation indexing (`doxygen_to_sqlite.py`, `python_to_sqlite.py`) | stdlib only |
+| Replay server | `fastapi`, `uvicorn`, `pydantic` |
+| Replay testing | `httpx`, `pytest` |
+| Replay server runtime | `msd_reader` (C++ pybind11 module — added to `PYTHONPATH` from build dir, not pip-installed) |
+
+### R4: CMake Uses the Documented Venv
+
+All CMake Python targets use `python/.venv/bin/python3` — no `find_package(Python3)`, no `${Python3_EXECUTABLE}`, no `${TRACE_VENV}`. One interpreter, one venv, everywhere:
+
+```cmake
+set(PROJECT_PYTHON ${CMAKE_SOURCE_DIR}/python/.venv/bin/python3)
+```
+
+Remove the split between `${Python3_EXECUTABLE}` and `${TRACE_VENV}`. All targets (`doxygen-db`, `python-db`, `trace-git`, `trace-symbols`, `trace-decisions`, `trace-record-mappings`) use `${PROJECT_PYTHON}`.
+
+### R5: Documentation in `python/`
+
+`python/README.md` is the single authoritative document for Python environment setup. It must cover:
+- Prerequisites (Python 3.x version requirement)
+- How to set up from a clean clone (`python/setup.sh`)
+- How to set up in a new git worktree
+- How to add new Python dependencies (edit `requirements.txt`, re-run `setup.sh`)
+- How `msd_reader` works (requires C++ build first, added via `PYTHONPATH`)
+- How the replay server uses the venv
+- How MCP servers use the venv
+
+The root `CLAUDE.md` should add a brief section pointing to `python/README.md`.
+
+### R6: Clean Clone Validation
+
+The setup must work for:
+- Fresh `git clone` with no existing venvs
+- New `git worktree add` from an existing repo
+- CI environment with only system Python available
+
+---
+
+## Acceptance Criteria
+
+- [x] **AC1**: A single command sets up all Python environments from a clean clone
+- [x] **AC2**: `cmake --build --preset debug-all` succeeds after running the setup command
+- [x] **AC3**: MCP servers in `.mcp.json` start successfully after setup
+- [x] **AC4**: All CMake Python targets use a consistent interpreter
+- [x] **AC5**: Requirements are pinned in version-controlled files
+- [x] **AC6**: Setup documentation exists and covers clean clone, worktree, and CI scenarios
+- [x] **AC7**: `replay/start_server.sh` works after setup (with msd_reader from C++ build)
+
+---
+
+## Technical Notes
+
+### Current Pain Points
+
+- `CMakeLists.txt:194` hardcodes `scripts/.venv/bin/python3` for traceability
+- `CMakeLists.txt:160,172` uses `${Python3_EXECUTABLE}` for doxygen/python-db
+- The deleted Python venv discovery block (lines 30-37 of the original CMakeLists.txt) was removed in the 0064 branch — this needs to be addressed
+- `replay/pyproject.toml` defines replay package deps but doesn't cover scripts/ deps
+- `replay/start_server.sh` creates its own venv independently
+- `.mcp.json` references `scripts/.venv` which may not exist in a worktree
+
+### Migration from `scripts/.venv`
+
+- Move venv location from `scripts/.venv` to `python/.venv`
+- Update `.mcp.json` to reference `python/.venv/bin/python3`
+- Update `CMakeLists.txt` to use `${PROJECT_PYTHON}` everywhere
+- Update `replay/start_server.sh` to use the shared venv instead of creating its own
+- Update `.gitignore` to ignore `python/.venv/` (remove old `scripts/.venv/` entry if present)
+
+### Scope
+
+This ticket is infrastructure/tooling only. No changes to Python source code, only to:
+- Build system (`CMakeLists.txt`, `CMakeUserPresets.json`)
+- MCP config (`.mcp.json`)
+- Setup scripts (`python/setup.sh` — new)
+- Requirements files (`python/requirements.txt` — new)
+- Documentation (`python/README.md` — new, `CLAUDE.md` — brief pointer)
+- Replay startup (`replay/start_server.sh` — use shared venv)
+
+---
+
+## Workflow Log
+
+| Date | Phase | Notes |
+|------|-------|-------|
+| 2026-02-16 | Draft | Ticket created to address fragmented Python environment management |
+| 2026-02-16 | Workflow Orchestrator | Skipped design/prototype phases (infrastructure ticket) — advanced to Ready for Implementation |
+| 2026-02-16 | Implementation | Implementation complete — all infrastructure changes made, tested successfully |
+
+### Implementation Phase
+- **Started**: 2026-02-16 15:30
+- **Completed**: 2026-02-16 16:00
+- **Branch**: 0064-python-codebase-documentation-index
+- **PR**: Not yet created (will be created during next phase)
+- **Artifacts**:
+  - `python/README.md` — Comprehensive setup guide
+  - `python/requirements.txt` — Unified pinned dependencies
+  - `python/setup.sh` — Idempotent bootstrap script
+  - `python/.gitkeep` — Directory marker
+  - `.gitignore` — Added `python/.venv/` entry
+  - `CMakeLists.txt` — Replaced `${Python3_EXECUTABLE}` and `${TRACE_VENV}` with `${PROJECT_PYTHON}`
+  - `.mcp.json` — Updated to use `python/.venv/bin/python3`
+  - `replay/start_server.sh` — Updated to use unified venv
+  - `CLAUDE.md` — Added Python Environment section
+- **Notes**:
+  - All CMake Python targets (doxygen-db, python-db, trace-git, trace-symbols, trace-decisions, trace-record-mappings) now use `${PROJECT_PYTHON}`
+  - Setup script successfully creates venv, installs all dependencies, validates imports
+  - MCP servers updated to use unified venv path
+  - Replay server startup script checks for venv and reports helpful error if missing
+  - Documentation complete for clean clone, worktree, and CI scenarios
+  - All acceptance criteria validated
+
+### Quality Gate Phase
+- **Started**: 2026-02-16 17:00
+- **Completed**: 2026-02-16 17:05
+- **Branch**: 0064-python-codebase-documentation-index
+- **PR**: #66 (draft, will be updated to ready after this phase)
+- **Artifacts**:
+  - `docs/designs/0065_python_environment_streamlining/quality-gate-report.md` — Infrastructure quality gate report
+- **Notes**:
+  - All 9 infrastructure gates passed (Python venv, CMake config, MCP config, replay server, git config, documentation, setup script, requirements file, acceptance criteria)
+  - Quality gate adapted for infrastructure ticket (no C++ build/test/clang-tidy checks)
+  - Overall status: PASSED
+
+### Implementation Review Phase
+- **Started**: 2026-02-16 17:10
+- **Completed**: 2026-02-16 17:15
+- **Branch**: 0064-python-codebase-documentation-index
+- **PR**: #66 (will be marked ready for review)
+- **Artifacts**:
+  - `docs/designs/0065_python_environment_streamlining/implementation-review.md` — Implementation review report
+- **Notes**:
+  - Requirements conformance: PASS (all 6 requirements R1-R6 met)
+  - Acceptance criteria: PASS (all 7 ACs validated)
+  - Infrastructure quality: EXCELLENT (setup script, CMake, MCP, replay integration all robust)
+  - Documentation: EXCELLENT (comprehensive coverage of all scenarios)
+  - Overall status: APPROVED
+  - Ticket 0065 shares branch with ticket 0064 (both infrastructure tickets)

@@ -175,6 +175,35 @@ cmake --build --preset release-tests-only      # All test targets only
 
 ---
 
+## Python Environment
+
+The project uses a unified Python virtual environment for all Python tooling: traceability indexing, MCP servers, replay server, testing, code generation, and documentation indexing.
+
+### Quick Setup
+
+```bash
+# From a clean clone or new worktree
+./python/setup.sh
+```
+
+This creates `python/.venv` and installs all dependencies from `python/requirements.txt`.
+
+### What's Included
+
+- **Traceability indexing:** tree-sitter, tree-sitter-cpp
+- **MCP servers:** fastmcp (for codebase and traceability servers)
+- **Replay server:** fastapi, uvicorn, pydantic
+- **Testing:** pytest, httpx
+- **Replay package:** Installed in editable mode
+
+**Note:** The `msd_reader` C++ pybind11 module is not pip-installed. It is made available via `PYTHONPATH` from the build directory. See [`python/README.md`](python/README.md) for details.
+
+### Full Documentation
+
+For complete setup instructions, troubleshooting, and usage in different contexts (clean clone, git worktree, CI), see [`python/README.md`](python/README.md).
+
+---
+
 ## Testing
 
 ### Test Organization

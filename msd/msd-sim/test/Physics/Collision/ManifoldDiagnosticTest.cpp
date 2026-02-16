@@ -1,4 +1,5 @@
 // Ticket: 0047_face_contact_manifold_generation
+// Ticket: 0062e_replay_diagnostic_parameter_tests
 // Diagnostic test to identify why EPA produces single contact point
 // for face-on-face contacts. This test is temporary and will be
 // removed after the root cause is identified and fixed.
@@ -13,12 +14,12 @@
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
+#include "msd-sim/test/Replay/ReplayEnabledTest.hpp"
 
 using namespace msd_sim;
 
@@ -207,24 +208,18 @@ TEST(ManifoldDiagnostic, PenetrationDepthSweep)
 // Run a D1-like simulation for 100 frames and log per-frame manifold data.
 // This captures the exact frame-by-frame contact behavior during resting
 // contact.
-TEST(ManifoldDiagnostic, PerFrameManifoldDuringRestingContact)
+TEST_F(ReplayEnabledTest,
+       ManifoldDiagnostic_PerFrameManifoldDuringRestingContact)
 {
-  WorldModel world;
-
-  // Floor
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  // Floor: large cube at z=-50 (surface at z=0)
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   // Cube: 1m, resting on floor
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, 0.5}};
-  world.spawnObject(1, cubeHull, 1.0, cubeFrame);
-
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(0.5);
+  const auto& cube = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.5},
+                                   1.0,  // mass
+                                   0.5,  // restitution
+                                   0.5); // friction
+  uint32_t cubeId = cube.getInstanceId();
 
   // Also create standalone collision handler to probe manifold each frame
   CollisionHandler handler{1e-6};
@@ -239,9 +234,9 @@ TEST(ManifoldDiagnostic, PerFrameManifoldDuringRestingContact)
 
   for (int i = 1; i <= 50; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    const auto& cubeAsset = world.getObject(cubeId);
+    const auto& cubeAsset = world().getObject(cubeId);
     const auto& state = cubeAsset.getInertialState();
     const auto& frame = cubeAsset.getReferenceFrame();
     double omega = state.getAngularVelocity().norm();
@@ -252,7 +247,7 @@ TEST(ManifoldDiagnostic, PerFrameManifoldDuringRestingContact)
       (framePos - state.position).norm();
 
     // Probe collision with current cube position
-    const auto& floorAsset = world.getEnvironmentalObjects()[0];
+    const auto& floorAsset = world().getEnvironmentalObjects()[0];
     auto result = handler.checkCollision(cubeAsset, floorAsset);
 
     if (result.has_value())
@@ -384,28 +379,21 @@ TEST(ManifoldDiagnostic, ZeroPenetrationEPA)
 // Trace the FIRST frame of collision pipeline step by step.
 // Uses two consecutive updates: frame 0 (no time, just init) and frame 1.
 // Logs cube state BEFORE and AFTER each update to isolate displacement source.
-TEST(ManifoldDiagnostic, FirstFrameDisplacementSource)
+TEST_F(ReplayEnabledTest, ManifoldDiagnostic_FirstFrameDisplacementSource)
 {
-  WorldModel world;
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
-
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, 0.5}};
-  world.spawnObject(1, cubeHull, 1.0, cubeFrame);
-
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(0.5);
+  const auto& cube = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.5},
+                                   1.0,  // mass
+                                   0.5,  // restitution
+                                   0.5); // friction
+  uint32_t cubeId = cube.getInstanceId();
 
   std::cout << "\n=== FIRST FRAME DISPLACEMENT SOURCE ===\n";
 
   // Log initial state
   {
-    const auto& state = world.getObject(cubeId).getInertialState();
+    const auto& state = world().getObject(cubeId).getInertialState();
     std::cout << "INITIAL: pos=(" << std::fixed << std::setprecision(6)
               << state.position.x() << "," << state.position.y() << ","
               << state.position.z() << ") vel=(" << state.velocity.x() << ","
@@ -413,11 +401,11 @@ TEST(ManifoldDiagnostic, FirstFrameDisplacementSource)
   }
 
   // Run first update (16ms)
-  world.update(std::chrono::milliseconds{16});
+  step(1);
 
   // Log state after first frame
   {
-    const auto& state = world.getObject(cubeId).getInertialState();
+    const auto& state = world().getObject(cubeId).getInertialState();
     double omega = state.getAngularVelocity().norm();
     std::cout << "AFTER FRAME 1: pos=(" << std::fixed << std::setprecision(6)
               << state.position.x() << "," << state.position.y() << ","
@@ -439,8 +427,8 @@ TEST(ManifoldDiagnostic, FirstFrameDisplacementSource)
   // Run 4 more frames to see evolution
   for (int i = 2; i <= 5; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
-    const auto& state = world.getObject(cubeId).getInertialState();
+    step(1);
+    const auto& state = world().getObject(cubeId).getInertialState();
     double omega = state.getAngularVelocity().norm();
     std::cout << "AFTER FRAME " << i << ": pos=(" << std::fixed
               << std::setprecision(6) << state.position.x() << ","

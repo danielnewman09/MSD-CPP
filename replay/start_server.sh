@@ -2,21 +2,23 @@
 # Start the MSD Replay FastAPI server
 # Ticket: 0056k_example_workflow_test_recording
 # Ticket: 0056e_threejs_core_visualization (R0e - Two-database architecture)
+# Ticket: 0065_python_environment_streamlining (Unified Python environment)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VENV_DIR="$PROJECT_ROOT/.venv"
+VENV_DIR="$PROJECT_ROOT/python/.venv"
 VENV_PY="$VENV_DIR/bin/python3"
 BUILD_DIR="$PROJECT_ROOT/build/Debug/debug"
 ASSETS_DB="$SCRIPT_DIR/recordings/assets.db"
 RECORDING_DB="$SCRIPT_DIR/recordings/test_cube_drop.db"
 
-# --- 1. Ensure venv exists ---
+# --- 1. Check unified venv exists ---
 if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating Python venv at $VENV_DIR..."
-    python3 -m venv "$VENV_DIR"
+    echo "ERROR: Unified Python venv not found at $VENV_DIR"
+    echo "Run the setup script first: python/setup.sh"
+    exit 1
 fi
 
 # --- 2. Install replay package ---

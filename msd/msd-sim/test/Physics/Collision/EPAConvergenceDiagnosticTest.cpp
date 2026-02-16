@@ -1,4 +1,5 @@
 // Ticket: 0048_epa_convergence_robustness
+// Ticket: 0062e_replay_diagnostic_parameter_tests
 // Diagnostic test to identify EPA convergence failure mode for shallow
 // penetrations. Tests both the H6 scenario directly and sweeps penetration
 // depths to find the threshold where EPA degrades.
@@ -18,6 +19,7 @@
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
+#include "msd-sim/test/Replay/ReplayEnabledTest.hpp"
 
 using namespace msd_sim;
 
@@ -221,26 +223,33 @@ TEST(EPAConvergenceDiagnostic, PenetrationDepthSweep_TwoCubes)
 // Phase 3: Simulate H6 frame-by-frame to find the exact failure frame
 // ============================================================================
 
-TEST(EPAConvergenceDiagnostic, H6_SimulationFrameByFrame)
+TEST_F(ReplayEnabledTest,
+       EPAConvergenceDiagnostic_H6_SimulationFrameByFrame)
 {
-  WorldModel world;
-  world.clearPotentialEnergies();  // No gravity
+  disableGravity();
 
   auto cubePointsA = createCubePoints(1.0);
   auto cubePointsB = createCubePoints(1.0);
   ConvexHull hullA{cubePointsA};
   ConvexHull hullB{cubePointsB};
 
-  ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
-  ReferenceFrame frameB{Coordinate{0.99, 0.0, 0.0}};
+  // Use Engine's registry to spawn cubes (for replay compatibility)
+  // Spawn cubes at H6 positions
+  const auto& cubeA =
+    spawnInertialWithVelocity("unit_cube", Coordinate{0.0, 0.0, 0.0},
+                              Coordinate{0.0, 0.0, 0.0},  // stationary
+                              10.0,                        // mass
+                              0.0,                         // restitution
+                              0.0);                        // friction
+  uint32_t idA = cubeA.getInstanceId();
 
-  world.spawnObject(1, hullA, 10.0, frameA);
-  world.spawnObject(2, hullB, 10.0, frameB);
-
-  world.getObject(1).setCoefficientOfRestitution(0.0);
-  world.getObject(2).setCoefficientOfRestitution(0.0);
-  world.getObject(1).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
-  world.getObject(2).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  const auto& cubeB =
+    spawnInertialWithVelocity("unit_cube", Coordinate{0.99, 0.0, 0.0},
+                              Coordinate{0.0, 0.0, 0.0},  // stationary
+                              10.0,                        // mass
+                              0.0,                         // restitution
+                              0.0);                        // friction
+  uint32_t idB = cubeB.getInstanceId();
 
   std::cout << "\n=== H6 SIMULATION FRAME-BY-FRAME ===\n";
   std::cout << "Frame | posA.x     | posB.x     | gap(m)       | velA.x     "
@@ -255,8 +264,8 @@ TEST(EPAConvergenceDiagnostic, H6_SimulationFrameByFrame)
 
   for (int i = 1; i <= 20; ++i)
   {
-    auto const& stateA = world.getObject(1).getInertialState();
-    auto const& stateB = world.getObject(2).getInertialState();
+    auto const& stateA = world().getObject(idA).getInertialState();
+    auto const& stateB = world().getObject(idB).getInertialState();
     double posAx = stateA.position.x();
     double posBx = stateB.position.x();
     double gap = (posBx - 0.5) - (posAx + 0.5);
@@ -264,8 +273,8 @@ TEST(EPAConvergenceDiagnostic, H6_SimulationFrameByFrame)
     double velBx = stateB.velocity.x();
 
     // Check ReferenceFrame vs InertialState consistency
-    auto const& frameRefA = world.getObject(1).getReferenceFrame();
-    auto const& frameRefB = world.getObject(2).getReferenceFrame();
+    auto const& frameRefA = world().getObject(idA).getReferenceFrame();
+    auto const& frameRefB = world().getObject(idB).getReferenceFrame();
     double originAx = frameRefA.getOrigin().x();
     double originBx = frameRefB.getOrigin().x();
     if (std::abs(originAx - posAx) > 1e-12 ||
@@ -280,8 +289,8 @@ TEST(EPAConvergenceDiagnostic, H6_SimulationFrameByFrame)
     std::string status = "OK";
     try
     {
-      auto const& objA = world.getObject(1);
-      auto const& objB = world.getObject(2);
+      auto const& objA = world().getObject(idA);
+      auto const& objB = world().getObject(idB);
       auto probeResult = handler.checkCollision(objA, objB);
       if (probeResult.has_value())
       {
@@ -374,7 +383,7 @@ TEST(EPAConvergenceDiagnostic, H6_SimulationFrameByFrame)
 
     try
     {
-      world.update(std::chrono::milliseconds{i * 16});
+      step(1);
     }
     catch (const std::runtime_error& e)
     {
@@ -389,8 +398,8 @@ TEST(EPAConvergenceDiagnostic, H6_SimulationFrameByFrame)
   {
     std::cout << "\nEPA failed at frame " << failFrame << ": " << failReason
               << "\n";
-    auto const& stateA = world.getObject(1).getInertialState();
-    auto const& stateB = world.getObject(2).getInertialState();
+    auto const& stateA = world().getObject(idA).getInertialState();
+    auto const& stateB = world().getObject(idB).getInertialState();
     std::cout << "Final posA: (" << stateA.position.x() << ", "
               << stateA.position.y() << ", " << stateA.position.z() << ")\n";
     std::cout << "Final posB: (" << stateB.position.x() << ", "

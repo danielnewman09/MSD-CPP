@@ -4,8 +4,8 @@
         "conan": {}
     },
     "include": [
-        "build/Debug/generators/CMakePresets.json",
-        "build/Release/generators/CMakePresets.json"
+        "build/Release/generators/CMakePresets.json",
+        "build/Debug/generators/CMakePresets.json"
     ],
     "configurePresets": [
         {
@@ -37,6 +37,7 @@
             "name": "debug-utils-only",
             "displayName": "Build msd-utils (Debug)",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "msd_utils",
                 "msd_utils_test"
@@ -46,6 +47,7 @@
             "name": "debug-transfer-only",
             "displayName": "Build msd-transfer (Debug)",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "msd_transfer"
             ]
@@ -54,6 +56,7 @@
             "name": "debug-sim-only",
             "displayName": "Build msd-sim (Debug)",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "msd_sim",
                 "msd_sim_test"
@@ -63,6 +66,7 @@
             "name": "debug-assets-only",
             "displayName": "Build msd-assets (Debug)",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "msd_assets",
                 "msd_assets_test"
@@ -72,6 +76,7 @@
             "name": "debug-gui-only",
             "displayName": "Build msd-gui (Debug)",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "msd_gui"
             ]
@@ -80,6 +85,7 @@
             "name": "debug-exe-only",
             "displayName": "Build msd-exe (Debug)",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "msd_exe"
             ]
@@ -88,6 +94,7 @@
             "name": "debug-asset-gen-only",
             "displayName": "Build msd-asset-gen (Debug)",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "generate_assets"
             ]
@@ -96,6 +103,7 @@
             "name": "debug-pybind-only",
             "displayName": "Build msd-pybind (Debug)",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "msd_reader"
             ]
@@ -104,6 +112,7 @@
             "name": "release-utils-only",
             "displayName": "Build msd-utils (Release)",
             "configurePreset": "conan-release",
+            "jobs": 11,
             "targets": [
                 "msd_utils",
                 "msd_utils_test"
@@ -113,6 +122,7 @@
             "name": "release-transfer-only",
             "displayName": "Build msd-transfer (Release)",
             "configurePreset": "conan-release",
+            "jobs": 11,
             "targets": [
                 "msd_transfer"
             ]
@@ -121,6 +131,7 @@
             "name": "release-sim-only",
             "displayName": "Build msd-sim (Release)",
             "configurePreset": "conan-release",
+            "jobs": 11,
             "targets": [
                 "msd_sim",
                 "msd_sim_test"
@@ -130,6 +141,7 @@
             "name": "release-assets-only",
             "displayName": "Build msd-assets (Release)",
             "configurePreset": "conan-release",
+            "jobs": 11,
             "targets": [
                 "msd_assets",
                 "msd_assets_test"
@@ -139,6 +151,7 @@
             "name": "release-gui-only",
             "displayName": "Build msd-gui (Release)",
             "configurePreset": "conan-release",
+            "jobs": 11,
             "targets": [
                 "msd_gui"
             ]
@@ -147,6 +160,7 @@
             "name": "release-exe-only",
             "displayName": "Build msd-exe (Release)",
             "configurePreset": "conan-release",
+            "jobs": 11,
             "targets": [
                 "msd_exe"
             ]
@@ -155,6 +169,7 @@
             "name": "release-asset-gen-only",
             "displayName": "Build msd-asset-gen (Release)",
             "configurePreset": "conan-release",
+            "jobs": 11,
             "targets": [
                 "generate_assets"
             ]
@@ -163,6 +178,7 @@
             "name": "debug-tests-only",
             "displayName": "Build all tests (Debug)",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "msd_utils_test",
                 "msd_sim_test",
@@ -173,6 +189,7 @@
             "name": "release-tests-only",
             "displayName": "Build all tests (Release)",
             "configurePreset": "conan-release",
+            "jobs": 11,
             "targets": [
                 "msd_utils_test",
                 "msd_sim_test",
@@ -184,6 +201,7 @@
             "displayName": "Generate Coverage Report",
             "description": "Run all tests and generate combined HTML coverage report",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "coverage"
             ]
@@ -193,17 +211,19 @@
             "displayName": "Generate Doxygen Documentation",
             "description": "Generate API documentation with Doxygen",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
                 "doxygen"
             ]
         },
         {
-            "name": "doxygen-db",
-            "displayName": "Generate Codebase SQLite Database",
-            "description": "Generate Doxygen docs and convert to SQLite for MCP server",
+            "name": "codebase-db",
+            "displayName": "Generate Codebase SQLite Database (C++ + Python)",
+            "description": "Generate complete codebase.db with Doxygen C++ symbols and Python AST symbols",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
-                "doxygen-db"
+                "codebase-db"
             ]
         },
         {
@@ -211,7 +231,32 @@
             "displayName": "Build Traceability Database (Debug)",
             "description": "Index git history, symbols, and design decisions into traceability.db",
             "configurePreset": "conan-debug",
+            "jobs": 11,
             "targets": [
+                "traceability"
+            ]
+        },
+        {
+            "name": "debug-all",
+            "displayName": "Build Everything (Debug)",
+            "description": "Build all libraries, tests, documentation databases, and traceability",
+            "configurePreset": "conan-debug",
+            "jobs": 11,
+            "targets": [
+                "msd_utils",
+                "msd_utils_test",
+                "msd_assets",
+                "msd_assets_test",
+                "msd_sim",
+                "msd_sim_test",
+                "msd_gui",
+                "msd_gui_test",
+                "msd_exe",
+                "generate_assets",
+                "generate_test_assets",
+                "generate_test_recording",
+                "msd_reader",
+                "codebase-db",
                 "traceability"
             ]
         }

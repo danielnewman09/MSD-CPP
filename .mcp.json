@@ -1,19 +1,19 @@
 {
   "mcpServers": {
     "codebase": {
-      "command": "/Users/danielnewman/Documents/GitHub/MSD-CPP/scripts/.venv/bin/python3",
+      "command": "python/.venv/bin/python3",
       "args": [
-        "/Users/danielnewman/Documents/GitHub/MSD-CPP/scripts/mcp_codebase_server.py",
-        "/Users/danielnewman/Documents/GitHub/MSD-CPP/build/Debug/docs/codebase.db"
+        "scripts/mcp_codebase_server.py",
+        "build/Debug/docs/codebase.db"
       ]
     },
     "traceability": {
-      "command": "/Users/danielnewman/Documents/GitHub/MSD-CPP/scripts/.venv/bin/python3",
+      "command": "python/.venv/bin/python3",
       "args": [
-        "/Users/danielnewman/Documents/GitHub/MSD-CPP/scripts/traceability/traceability_server.py",
-        "/Users/danielnewman/Documents/GitHub/MSD-CPP/build/Debug/docs/traceability.db",
+        "scripts/traceability/traceability_server.py",
+        "build/Debug/docs/traceability.db",
         "--codebase-db",
-        "/Users/danielnewman/Documents/GitHub/MSD-CPP/build/Debug/docs/codebase.db"
+        "build/Debug/docs/codebase.db"
       ]
     }
   }

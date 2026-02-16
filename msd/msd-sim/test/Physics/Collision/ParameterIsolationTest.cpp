@@ -1,4 +1,5 @@
 // Ticket: 0039d_parameter_isolation_root_cause
+// Ticket: 0062e_replay_diagnostic_parameter_tests
 // Test: Systematic parameter isolation to identify root cause of energy
 // injection
 //
@@ -31,17 +32,14 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Velocity.hpp"
 #include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
-#include "msd-sim/src/Environment/ReferenceFrame.hpp"
-#include "msd-sim/src/Environment/WorldModel.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
 #include "msd-sim/src/Physics/Collision/CollisionResult.hpp"
-#include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
 #include "msd-sim/src/Physics/PotentialEnergy/PotentialEnergy.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/ConvexHull.hpp"
+#include "msd-sim/test/Replay/ReplayEnabledTest.hpp"
 
 using namespace msd_sim;
 
@@ -92,116 +90,6 @@ EnergyTracker::SystemEnergy computeSystemEnergyNoGravity(
                                             noPotentials);
 }
 
-/// Run a resting-cube-on-floor simulation for a given number of frames
-/// and track energy. Returns max energy growth ratio relative to initial.
-struct SimulationResult
-{
-  double initialEnergy;
-  double maxEnergy;
-  double finalEnergy;
-  double maxGrowthRatio;  // maxEnergy / initialEnergy
-  int energyGrowthFrameCount;
-  double maxFrameGrowth;
-  double maxRotationalKE;
-  double maxLinearKE;
-  bool nanDetected;
-};
-
-SimulationResult runRestingCubeSimulation(double cubeStartZ,
-                                          double restitution,
-                                          int numFrames,
-                                          int frameStepMs,
-                                          bool useGravity = true)
-{
-  WorldModel world;
-
-  if (!useGravity)
-  {
-    world.clearPotentialEnergies();
-  }
-
-  // Floor: large cube at z = -50 (top surface at z = 0)
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
-
-  // Cube: 1m x 1m x 1m (top face at cubeStartZ + 0.5)
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, cubeStartZ}};
-  world.spawnObject(1, cubeHull, 10.0, cubeFrame);
-
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(restitution);
-  // Start at rest
-  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
-
-  double const initialEnergy = useGravity
-                                 ? computeSystemEnergy(world)
-                                 : computeSystemEnergyNoGravity(world).total();
-
-  SimulationResult result{};
-  result.initialEnergy = initialEnergy;
-  result.maxEnergy = initialEnergy;
-  result.finalEnergy = initialEnergy;
-  result.maxGrowthRatio = 1.0;
-  result.energyGrowthFrameCount = 0;
-  result.maxFrameGrowth = 0.0;
-  result.maxRotationalKE = 0.0;
-  result.maxLinearKE = 0.0;
-  result.nanDetected = false;
-
-  double prevEnergy = initialEnergy;
-
-  for (int i = 1; i <= numFrames; ++i)
-  {
-    world.update(std::chrono::milliseconds{i * frameStepMs});
-
-    auto const& state = world.getObject(cubeId).getInertialState();
-
-    if (std::isnan(state.position.z()) || std::isnan(state.velocity.norm()))
-    {
-      result.nanDetected = true;
-      break;
-    }
-
-    EnergyTracker::SystemEnergy sysEnergy =
-      useGravity ? computeSystemEnergyBreakdown(world)
-                 : computeSystemEnergyNoGravity(world);
-
-    double totalEnergy = sysEnergy.total();
-
-    result.maxEnergy = std::max(result.maxEnergy, totalEnergy);
-    result.finalEnergy = totalEnergy;
-
-    double delta = totalEnergy - prevEnergy;
-    if (delta > 1e-6)
-    {
-      result.energyGrowthFrameCount++;
-      result.maxFrameGrowth = std::max(result.maxFrameGrowth, delta);
-    }
-
-    result.maxRotationalKE =
-      std::max(result.maxRotationalKE, sysEnergy.totalRotationalKE);
-    result.maxLinearKE = std::max(result.maxLinearKE, sysEnergy.totalLinearKE);
-
-    prevEnergy = totalEnergy;
-  }
-
-  if (std::abs(result.initialEnergy) > 1e-12)
-  {
-    result.maxGrowthRatio = result.maxEnergy / result.initialEnergy;
-  }
-  else
-  {
-    result.maxGrowthRatio =
-      (result.maxEnergy > 1e-6) ? std::numeric_limits<double>::infinity() : 1.0;
-  }
-
-  return result;
-}
-
 }  // anonymous namespace
 
 // ============================================================================
@@ -211,9 +99,10 @@ SimulationResult runRestingCubeSimulation(double cubeStartZ,
 // Baumgarte term (ERP/dt * penetration) is independent of restitution.
 // ============================================================================
 
-TEST(ParameterIsolation, H1_DisableRestitution_RestingCube)
+TEST_F(ReplayEnabledTest, ParameterIsolation_H1_DisableRestitution_RestingCube)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
+  // Ticket: 0062e_replay_diagnostic_parameter_tests
   //
   // Place cube at rest on floor with e=0 (fully inelastic).
   // With restitution disabled, the constraint RHS becomes:
@@ -222,34 +111,83 @@ TEST(ParameterIsolation, H1_DisableRestitution_RestingCube)
   // If energy grows, the Baumgarte term is injecting energy.
   // If energy is stable, restitution was the problem.
 
-  auto result = runRestingCubeSimulation(
-    0.5,  // z position: cube center at 0.5, bottom at 0.0 (touching floor)
-    0.0,  // e = 0 (fully inelastic)
-    200,  // frames
-    16);  // 16ms per frame
+  // Floor at z=-50 (surface at z=0)
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  ASSERT_FALSE(result.nanDetected)
+  // Cube: 1m cube at z=0.5 (bottom touching floor at z=0)
+  const auto& cube = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.5},
+                                   10.0,  // mass
+                                   0.0,   // e=0 (fully inelastic)
+                                   0.5);  // friction
+  uint32_t cubeId = cube.getInstanceId();
+
+  // Start at rest
+  world().getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+
+  double const initialEnergy = computeSystemEnergy(world());
+  double maxEnergy = initialEnergy;
+  double maxRotationalKE = 0.0;
+  double maxLinearKE = 0.0;
+  int energyGrowthFrameCount = 0;
+  double maxFrameGrowth = 0.0;
+  double prevEnergy = initialEnergy;
+  bool nanDetected = false;
+
+  // Simulate for 200 frames
+  for (int i = 1; i <= 200; ++i)
+  {
+    step(1);
+
+    auto const& state = world().getObject(cubeId).getInertialState();
+
+    if (std::isnan(state.position.z()) || std::isnan(state.velocity.norm()))
+    {
+      nanDetected = true;
+      break;
+    }
+
+    EnergyTracker::SystemEnergy sysEnergy = computeSystemEnergyBreakdown(world());
+    double totalEnergy = sysEnergy.total();
+
+    maxEnergy = std::max(maxEnergy, totalEnergy);
+
+    double delta = totalEnergy - prevEnergy;
+    if (delta > 1e-6)
+    {
+      energyGrowthFrameCount++;
+      maxFrameGrowth = std::max(maxFrameGrowth, delta);
+    }
+
+    maxRotationalKE = std::max(maxRotationalKE, sysEnergy.totalRotationalKE);
+    maxLinearKE = std::max(maxLinearKE, sysEnergy.totalLinearKE);
+
+    prevEnergy = totalEnergy;
+  }
+
+  ASSERT_FALSE(nanDetected)
     << "DIAGNOSTIC [H1]: NaN detected in zero-restitution resting cube test";
 
   // The KEY question: does energy grow even without restitution?
-  double const energyGrowthPercent = (result.maxGrowthRatio - 1.0) * 100.0;
-
-  bool const energyGrew = result.maxEnergy > result.initialEnergy * 1.01;
+  double const maxGrowthRatio = (std::abs(initialEnergy) > 1e-12)
+                                  ? (maxEnergy / initialEnergy)
+                                  : ((maxEnergy > 1e-6) ? std::numeric_limits<double>::infinity() : 1.0);
+  double const energyGrowthPercent = (maxGrowthRatio - 1.0) * 100.0;
+  bool const energyGrew = maxEnergy > initialEnergy * 1.01;
 
   EXPECT_FALSE(energyGrew)
     << "DIAGNOSTIC [H1]: ENERGY GROWS EVEN WITH e=0. "
     << "This proves Baumgarte/ERP is the primary energy source. "
-    << "Initial=" << result.initialEnergy << " Max=" << result.maxEnergy
+    << "Initial=" << initialEnergy << " Max=" << maxEnergy
     << " Growth=" << energyGrowthPercent << "% "
-    << "MaxRotKE=" << result.maxRotationalKE
-    << " GrowthFrames=" << result.energyGrowthFrameCount
-    << " MaxFrameGrowth=" << result.maxFrameGrowth;
+    << "MaxRotKE=" << maxRotationalKE
+    << " GrowthFrames=" << energyGrowthFrameCount
+    << " MaxFrameGrowth=" << maxFrameGrowth;
 
   // Also check if rotational energy appears (single-contact torque issue)
-  if (result.maxRotationalKE > 0.01)
+  if (maxRotationalKE > 0.01)
   {
-    EXPECT_LT(result.maxRotationalKE, 0.01)
-      << "DIAGNOSTIC [H1]: Rotational KE=" << result.maxRotationalKE
+    EXPECT_LT(maxRotationalKE, 0.01)
+      << "DIAGNOSTIC [H1]: Rotational KE=" << maxRotationalKE
       << " appeared in axis-aligned resting cube with e=0. "
       << "A single contact point with non-zero angular Jacobian "
       << "converts Baumgarte's linear correction into rotation.";
@@ -265,35 +203,70 @@ TEST(ParameterIsolation, H1_DisableRestitution_RestingCube)
 // as the energy source.
 // ============================================================================
 
-TEST(ParameterIsolation, H2_MinimalPenetration_NoEnergyGrowth)
+TEST_F(ReplayEnabledTest, ParameterIsolation_H2_MinimalPenetration_NoEnergyGrowth)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
+  // Ticket: 0062e_replay_diagnostic_parameter_tests
   //
   // Cube at z=0.501 (bottom face at z=0.001, just above floor at z=0).
   // No initial penetration means Baumgarte term starts at zero.
   // Gravity will push cube into floor, but initial frames should be clean.
 
-  auto result = runRestingCubeSimulation(
-    0.501,  // Just above floor
-    0.0,    // e=0
-    50,     // fewer frames (before deep penetration develops)
-    16);
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  ASSERT_FALSE(result.nanDetected)
-    << "DIAGNOSTIC [H2]: NaN detected in minimal penetration test";
+  // Hover case: cube just above floor
+  const auto& cubeHover = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.501},
+                                        10.0, 0.0, 0.5);
+  uint32_t hoverId = cubeHover.getInstanceId();
+  world().getObject(hoverId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
-  // Compare with cube sitting exactly at floor level
-  auto contactResult =
-    runRestingCubeSimulation(0.5,  // Exactly at floor (touching)
-                             0.0,  // e=0
-                             50,   // same frame count
-                             16);
+  double const initialEnergyHover = computeSystemEnergy(world());
+  double maxEnergyHover = initialEnergyHover;
 
-  ASSERT_FALSE(contactResult.nanDetected)
-    << "DIAGNOSTIC [H2]: NaN detected in contact case";
+  // Run for 50 frames
+  for (int i = 1; i <= 50; ++i)
+  {
+    step(1);
+    double currentEnergy = computeSystemEnergy(world());
+    maxEnergyHover = std::max(maxEnergyHover, currentEnergy);
+  }
 
-  double const hoverGrowth = (result.maxGrowthRatio - 1.0) * 100.0;
-  double const contactGrowth = (contactResult.maxGrowthRatio - 1.0) * 100.0;
+  bool const nanHover = std::isnan(world().getObject(hoverId).getInertialState().position.z());
+  ASSERT_FALSE(nanHover) << "DIAGNOSTIC [H2]: NaN detected in minimal penetration test";
+
+  double const hoverGrowthRatio = (std::abs(initialEnergyHover) > 1e-12)
+                                    ? (maxEnergyHover / initialEnergyHover)
+                                    : ((maxEnergyHover > 1e-6) ? std::numeric_limits<double>::infinity() : 1.0);
+  double const hoverGrowth = (hoverGrowthRatio - 1.0) * 100.0;
+
+  // Now run contact case (cube touching floor)
+  // Reset the test
+  TearDown();
+  SetUp();
+
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  const auto& cubeContact = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.5},
+                                          10.0, 0.0, 0.5);
+  uint32_t contactId = cubeContact.getInstanceId();
+  world().getObject(contactId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+
+  double const initialEnergyContact = computeSystemEnergy(world());
+  double maxEnergyContact = initialEnergyContact;
+
+  for (int i = 1; i <= 50; ++i)
+  {
+    step(1);
+    double currentEnergy = computeSystemEnergy(world());
+    maxEnergyContact = std::max(maxEnergyContact, currentEnergy);
+  }
+
+  bool const nanContact = std::isnan(world().getObject(contactId).getInertialState().position.z());
+  ASSERT_FALSE(nanContact) << "DIAGNOSTIC [H2]: NaN detected in contact case";
+
+  double const contactGrowthRatio = (std::abs(initialEnergyContact) > 1e-12)
+                                       ? (maxEnergyContact / initialEnergyContact)
+                                       : ((maxEnergyContact > 1e-6) ? std::numeric_limits<double>::infinity() : 1.0);
+  double const contactGrowth = (contactGrowthRatio - 1.0) * 100.0;
 
   // The hover case should have less energy growth than contact case
   // because hover has less time in penetration
@@ -307,8 +280,8 @@ TEST(ParameterIsolation, H2_MinimalPenetration_NoEnergyGrowth)
   EXPECT_LT(hoverGrowth, 5.0)
     << "DIAGNOSTIC [H2]: Even with minimal initial penetration, "
     << "energy grew " << hoverGrowth << "%. "
-    << "Hover maxE=" << result.maxEnergy
-    << " Contact maxE=" << contactResult.maxEnergy;
+    << "Hover maxE=" << maxEnergyHover
+    << " Contact maxE=" << maxEnergyContact;
 }
 
 // ============================================================================
@@ -323,45 +296,116 @@ TEST(ParameterIsolation, H2_MinimalPenetration_NoEnergyGrowth)
 // If energy growth is worse with smaller dt, the ERP/dt term is confirmed.
 // ============================================================================
 
-TEST(ParameterIsolation, H3_TimestepSensitivity_ERPAmplification)
+TEST_F(ReplayEnabledTest, ParameterIsolation_H3_TimestepSensitivity_ERPAmplification)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
+  // Ticket: 0062e_replay_diagnostic_parameter_tests
 
   // Run same scenario at different timesteps
   // Use same total simulation time (~3.2 seconds)
-  auto result8ms = runRestingCubeSimulation(
-    0.5, 0.0, 400, 8);  // 400 frames * 8ms = 3.2s, ERP/dt = 25.0
 
-  auto result16ms = runRestingCubeSimulation(
-    0.5, 0.0, 200, 16);  // 200 frames * 16ms = 3.2s, ERP/dt = 12.5
+  // === 8ms timestep (400 frames) ===
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  const auto& cube8 = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.5},
+                                    10.0, 0.0, 0.5);
+  uint32_t id8 = cube8.getInstanceId();
+  world().getObject(id8).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
-  auto result32ms = runRestingCubeSimulation(
-    0.5, 0.0, 100, 32);  // 100 frames * 32ms = 3.2s, ERP/dt = 6.25
+  double const initialEnergy8 = computeSystemEnergy(world());
+  double maxEnergy8 = initialEnergy8;
+  bool nan8 = false;
 
-  ASSERT_FALSE(result8ms.nanDetected) << "DIAGNOSTIC [H3]: NaN at 8ms timestep";
-  ASSERT_FALSE(result16ms.nanDetected)
-    << "DIAGNOSTIC [H3]: NaN at 16ms timestep";
-  ASSERT_FALSE(result32ms.nanDetected)
-    << "DIAGNOSTIC [H3]: NaN at 32ms timestep";
+  for (int i = 1; i <= 400; ++i)
+  {
+    step(1, std::chrono::milliseconds{8});
+    if (std::isnan(world().getObject(id8).getInertialState().position.z()))
+    {
+      nan8 = true;
+      break;
+    }
+    double e = computeSystemEnergy(world());
+    maxEnergy8 = std::max(maxEnergy8, e);
+  }
+  ASSERT_FALSE(nan8) << "DIAGNOSTIC [H3]: NaN at 8ms timestep";
 
-  double const growth8ms = (result8ms.maxGrowthRatio - 1.0) * 100.0;
-  double const growth16ms = (result16ms.maxGrowthRatio - 1.0) * 100.0;
-  double const growth32ms = (result32ms.maxGrowthRatio - 1.0) * 100.0;
+  double const growth8ms = ((std::abs(initialEnergy8) > 1e-12)
+                              ? (maxEnergy8 / initialEnergy8)
+                              : ((maxEnergy8 > 1e-6) ? std::numeric_limits<double>::infinity() : 1.0) - 1.0) * 100.0;
+
+  // === 16ms timestep (200 frames) ===
+  TearDown();
+  SetUp();
+
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  const auto& cube16 = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.5},
+                                     10.0, 0.0, 0.5);
+  uint32_t id16 = cube16.getInstanceId();
+  world().getObject(id16).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+
+  double const initialEnergy16 = computeSystemEnergy(world());
+  double maxEnergy16 = initialEnergy16;
+  bool nan16 = false;
+
+  for (int i = 1; i <= 200; ++i)
+  {
+    step(1, std::chrono::milliseconds{16});
+    if (std::isnan(world().getObject(id16).getInertialState().position.z()))
+    {
+      nan16 = true;
+      break;
+    }
+    double e = computeSystemEnergy(world());
+    maxEnergy16 = std::max(maxEnergy16, e);
+  }
+  ASSERT_FALSE(nan16) << "DIAGNOSTIC [H3]: NaN at 16ms timestep";
+
+  double const growth16ms = ((std::abs(initialEnergy16) > 1e-12)
+                               ? (maxEnergy16 / initialEnergy16)
+                               : ((maxEnergy16 > 1e-6) ? std::numeric_limits<double>::infinity() : 1.0) - 1.0) * 100.0;
+
+  // === 32ms timestep (100 frames) ===
+  TearDown();
+  SetUp();
+
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  const auto& cube32 = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.5},
+                                     10.0, 0.0, 0.5);
+  uint32_t id32 = cube32.getInstanceId();
+  world().getObject(id32).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+
+  double const initialEnergy32 = computeSystemEnergy(world());
+  double maxEnergy32 = initialEnergy32;
+  bool nan32 = false;
+
+  for (int i = 1; i <= 100; ++i)
+  {
+    step(1, std::chrono::milliseconds{32});
+    if (std::isnan(world().getObject(id32).getInertialState().position.z()))
+    {
+      nan32 = true;
+      break;
+    }
+    double e = computeSystemEnergy(world());
+    maxEnergy32 = std::max(maxEnergy32, e);
+  }
+  ASSERT_FALSE(nan32) << "DIAGNOSTIC [H3]: NaN at 32ms timestep";
+
+  double const growth32ms = ((std::abs(initialEnergy32) > 1e-12)
+                               ? (maxEnergy32 / initialEnergy32)
+                               : ((maxEnergy32 > 1e-6) ? std::numeric_limits<double>::infinity() : 1.0) - 1.0) * 100.0;
 
   // If ERP/dt is the culprit: growth8ms > growth16ms > growth32ms
-  // If NOT ERP/dt: no clear ordering
-
   bool const erpPattern = (growth8ms > growth16ms) && (growth16ms > growth32ms);
 
   // Report the pattern regardless of pass/fail
   EXPECT_TRUE(erpPattern)
     << "DIAGNOSTIC [H3]: Timestep sensitivity analysis:\n"
     << "  dt=8ms  (ERP/dt=25.0): " << growth8ms << "% energy growth, "
-    << "maxE=" << result8ms.maxEnergy << "\n"
+    << "maxE=" << maxEnergy8 << "\n"
     << "  dt=16ms (ERP/dt=12.5): " << growth16ms << "% energy growth, "
-    << "maxE=" << result16ms.maxEnergy << "\n"
+    << "maxE=" << maxEnergy16 << "\n"
     << "  dt=32ms (ERP/dt=6.25): " << growth32ms << "% energy growth, "
-    << "maxE=" << result32ms.maxEnergy << "\n"
+    << "maxE=" << maxEnergy32 << "\n"
     << (erpPattern
           ? "CONFIRMED: Smaller dt = worse growth (ERP/dt is the cause)"
           : "NOT CONFIRMED: No clear ERP/dt correlation");
@@ -394,11 +438,14 @@ TEST(ParameterIsolation, H3_TimestepSensitivity_ERPAmplification)
 // With a single contact point offset from the COM, the torque
 // tau = r x F is non-zero, creating rotation from what should be a
 // purely linear correction.
+//
+// NOTE: This is a single-step geometric check - kept as TEST() not TEST_F()
 // ============================================================================
 
 TEST(ParameterIsolation, H4_SingleContactPoint_TorqueDiagnostic)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
+  // Ticket: 0062e_replay_diagnostic_parameter_tests (NOT converted - single-step)
   //
   // Use CollisionHandler directly to check the contact manifold
   // for a cube sitting on a flat floor.
@@ -495,29 +542,20 @@ TEST(ParameterIsolation, H4_SingleContactPoint_TorqueDiagnostic)
 // for a settling cube.
 // ============================================================================
 
-TEST(ParameterIsolation, H5_ContactPointCount_EvolutionDiagnostic)
+TEST_F(ReplayEnabledTest, ParameterIsolation_H5_ContactPointCount_EvolutionDiagnostic)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
+  // Ticket: 0062e_replay_diagnostic_parameter_tests
   //
   // Track how many contact points are generated per frame as a cube
   // settles on a floor. If contact count stays at 1, the manifold
   // generator is not providing enough contacts for stability.
 
-  WorldModel world;
-
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
-
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, 0.5}};
-  world.spawnObject(1, cubeHull, 10.0, cubeFrame);
-
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(0.0);
-  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  const auto& cube = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.5},
+                                   10.0, 0.0, 0.5);
+  uint32_t cubeId = cube.getInstanceId();
+  world().getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
   // Use a separate CollisionHandler to inspect contacts each frame
   CollisionHandler handler{1e-6};
@@ -529,11 +567,11 @@ TEST(ParameterIsolation, H5_ContactPointCount_EvolutionDiagnostic)
 
   for (int i = 1; i <= 100; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
     // Check collision state AFTER the world update
-    auto const& assets = world.getInertialAssets();
-    auto const& envAssets = world.getEnvironmentalObjects();
+    auto const& assets = world().getInertialAssets();
+    auto const& envAssets = world().getEnvironmentalObjects();
 
     if (!assets.empty() && !envAssets.empty())
     {
@@ -583,37 +621,27 @@ TEST(ParameterIsolation, H5_ContactPointCount_EvolutionDiagnostic)
 // correction generates torque.
 // ============================================================================
 
-TEST(ParameterIsolation, H6_ZeroGravity_RestingContact_Stable)
+TEST_F(ReplayEnabledTest, ParameterIsolation_H6_ZeroGravity_RestingContact_Stable)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
+  // Ticket: 0062e_replay_diagnostic_parameter_tests
 
-  WorldModel world;
-  world.clearPotentialEnergies();  // No gravity
+  disableGravity();
 
-  // Two cubes touching at x=0.5
-  auto cubePointsA = createCubePoints(1.0);
-  auto cubePointsB = createCubePoints(1.0);
-  ConvexHull hullA{cubePointsA};
-  ConvexHull hullB{cubePointsB};
+  // Two cubes touching with tiny overlap (0.01m penetration)
+  const auto& cubeA = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.0},
+                                    10.0, 0.0, 0.5);
+  const auto& cubeB = spawnInertial("unit_cube", Coordinate{0.99, 0.0, 0.0},
+                                    10.0, 0.0, 0.5);
 
-  // Place them with a tiny overlap (0.01m penetration)
-  ReferenceFrame frameA{Coordinate{0.0, 0.0, 0.0}};
-  ReferenceFrame frameB{Coordinate{0.49, 0.0, 0.0}};
-
-  world.spawnObject(1, hullA, 10.0, frameA);
-  world.spawnObject(2, hullB, 10.0, frameB);
-
-  uint32_t idA = 1;
-  uint32_t idB = 2;
-
-  world.getObject(idA).setCoefficientOfRestitution(0.0);
-  world.getObject(idB).setCoefficientOfRestitution(0.0);
+  uint32_t idA = cubeA.getInstanceId();
+  uint32_t idB = cubeB.getInstanceId();
 
   // Both at rest
-  world.getObject(idA).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
-  world.getObject(idB).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  world().getObject(idA).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  world().getObject(idB).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
-  auto initialSysEnergy = computeSystemEnergyNoGravity(world);
+  auto initialSysEnergy = computeSystemEnergyNoGravity(world());
   double const initialKE = initialSysEnergy.total();
 
   // Track energy for 100 frames
@@ -623,10 +651,10 @@ TEST(ParameterIsolation, H6_ZeroGravity_RestingContact_Stable)
 
   for (int i = 1; i <= 100; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    auto const& stateA = world.getObject(idA).getInertialState();
-    auto const& stateB = world.getObject(idB).getInertialState();
+    auto const& stateA = world().getObject(idA).getInertialState();
+    auto const& stateB = world().getObject(idB).getInertialState();
 
     if (std::isnan(stateA.position.x()) || std::isnan(stateB.position.x()))
     {
@@ -634,7 +662,7 @@ TEST(ParameterIsolation, H6_ZeroGravity_RestingContact_Stable)
       break;
     }
 
-    auto sysEnergy = computeSystemEnergyNoGravity(world);
+    auto sysEnergy = computeSystemEnergyNoGravity(world());
     double totalKE = sysEnergy.total();
 
     maxKE = std::max(maxKE, totalKE);
@@ -671,36 +699,71 @@ TEST(ParameterIsolation, H6_ZeroGravity_RestingContact_Stable)
 // should show dramatically more energy growth.
 // ============================================================================
 
-TEST(ParameterIsolation, H7_GravityComparison_BaumgarteAmplification)
+TEST_F(ReplayEnabledTest, ParameterIsolation_H7_GravityComparison_BaumgarteAmplification)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
+  // Ticket: 0062e_replay_diagnostic_parameter_tests
 
-  // With gravity: cube pushed into floor continuously
-  auto withGravity = runRestingCubeSimulation(0.5,    // resting on floor
-                                              0.0,    // e=0
-                                              200,    // frames
-                                              16,     // 16ms
-                                              true);  // gravity ON
+  // === WITH gravity ===
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  const auto& cubeGrav = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.5},
+                                       10.0, 0.0, 0.5);
+  uint32_t gravId = cubeGrav.getInstanceId();
+  world().getObject(gravId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
-  // Without gravity: cube just resting (initial penetration only)
-  // Slightly overlapping at z=0.499 to create initial contact
-  auto noGravity = runRestingCubeSimulation(0.499,   // slight penetration
-                                            0.0,     // e=0
-                                            200,     // frames
-                                            16,      // 16ms
-                                            false);  // gravity OFF
+  double const initialEnergyGrav = computeSystemEnergy(world());
+  double maxEnergyGrav = initialEnergyGrav;
+  double maxRotKEGrav = 0.0;
+  bool nanGrav = false;
 
-  ASSERT_FALSE(withGravity.nanDetected)
-    << "DIAGNOSTIC [H7]: NaN in gravity case";
-  ASSERT_FALSE(noGravity.nanDetected)
-    << "DIAGNOSTIC [H7]: NaN in no-gravity case";
+  for (int i = 1; i <= 200; ++i)
+  {
+    step(1);
+    if (std::isnan(world().getObject(gravId).getInertialState().position.z()))
+    {
+      nanGrav = true;
+      break;
+    }
+    auto sysE = computeSystemEnergyBreakdown(world());
+    maxEnergyGrav = std::max(maxEnergyGrav, sysE.total());
+    maxRotKEGrav = std::max(maxRotKEGrav, sysE.totalRotationalKE);
+  }
+  ASSERT_FALSE(nanGrav) << "DIAGNOSTIC [H7]: NaN in gravity case";
 
-  // Compare absolute energy injected (not ratios, since no-gravity starts at
-  // ~0)
-  double const gravityInjected =
-    withGravity.maxEnergy - withGravity.initialEnergy;
-  double const noGravityInjected =
-    noGravity.maxEnergy - noGravity.initialEnergy;
+  double const gravityInjected = maxEnergyGrav - initialEnergyGrav;
+
+  // === WITHOUT gravity ===
+  TearDown();
+  SetUp();
+  disableGravity();
+
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  const auto& cubeNoGrav = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 0.499},
+                                         10.0, 0.0, 0.5);
+  uint32_t noGravId = cubeNoGrav.getInstanceId();
+  world().getObject(noGravId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+
+  auto initialENoGrav = computeSystemEnergyNoGravity(world());
+  double const initialEnergyNoGrav = initialENoGrav.total();
+  double maxEnergyNoGrav = initialEnergyNoGrav;
+  double maxRotKENoGrav = 0.0;
+  bool nanNoGrav = false;
+
+  for (int i = 1; i <= 200; ++i)
+  {
+    step(1);
+    if (std::isnan(world().getObject(noGravId).getInertialState().position.z()))
+    {
+      nanNoGrav = true;
+      break;
+    }
+    auto sysE = computeSystemEnergyNoGravity(world());
+    maxEnergyNoGrav = std::max(maxEnergyNoGrav, sysE.total());
+    maxRotKENoGrav = std::max(maxRotKENoGrav, sysE.totalRotationalKE);
+  }
+  ASSERT_FALSE(nanNoGrav) << "DIAGNOSTIC [H7]: NaN in no-gravity case";
+
+  double const noGravityInjected = maxEnergyNoGrav - initialEnergyNoGrav;
 
   // If gravity amplifies the problem, gravity case should inject much more
   bool const gravityAmplifies =
@@ -710,12 +773,12 @@ TEST(ParameterIsolation, H7_GravityComparison_BaumgarteAmplification)
               (gravityInjected < 1.0 && noGravityInjected < 1.0))
     << "DIAGNOSTIC [H7]: Gravity amplification analysis:\n"
     << "  WITH gravity: injected=" << gravityInjected << " J, "
-    << "maxE=" << withGravity.maxEnergy
-    << " initialE=" << withGravity.initialEnergy
-    << " rotKE=" << withGravity.maxRotationalKE << "\n"
+    << "maxE=" << maxEnergyGrav
+    << " initialE=" << initialEnergyGrav
+    << " rotKE=" << maxRotKEGrav << "\n"
     << "  WITHOUT gravity: injected=" << noGravityInjected << " J, "
-    << "maxE=" << noGravity.maxEnergy << " initialE=" << noGravity.initialEnergy
-    << " rotKE=" << noGravity.maxRotationalKE << "\n"
+    << "maxE=" << maxEnergyNoGrav << " initialE=" << initialEnergyNoGrav
+    << " rotKE=" << maxRotKENoGrav << "\n"
     << (gravityAmplifies
           ? "CONFIRMED: Gravity continuously drives penetration, "
             "amplifying Baumgarte energy injection"
@@ -730,19 +793,16 @@ TEST(ParameterIsolation, H7_GravityComparison_BaumgarteAmplification)
 // more tilt), this confirms the single-contact feedback hypothesis.
 // ============================================================================
 
-TEST(ParameterIsolation, H8_TiltedCube_FeedbackLoop)
+TEST_F(ReplayEnabledTest, ParameterIsolation_H8_TiltedCube_FeedbackLoop)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
+  // Ticket: 0062e_replay_diagnostic_parameter_tests
 
-  WorldModel world;
-
-  // Floor
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   // Cube with 2-degree initial tilt
+  // NOTE: ReplayEnabledTest doesn't support orientation in spawn methods yet,
+  // so we need to manually create the cube with tilted orientation
   auto cubePoints = createCubePoints(1.0);
   ConvexHull cubeHull{cubePoints};
 
@@ -752,13 +812,13 @@ TEST(ParameterIsolation, H8_TiltedCube_FeedbackLoop)
     Eigen::Quaterniond::Identity();
 
   ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, 0.6}, tiltQ};
-  world.spawnObject(1, cubeHull, 10.0, cubeFrame);
+  world().spawnObject(1, cubeHull, 10.0, cubeFrame);
 
   uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(0.0);
-  world.getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
+  world().getObject(cubeId).setCoefficientOfRestitution(0.0);
+  world().getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 
-  double const initialEnergy = computeSystemEnergy(world);
+  double const initialEnergy = computeSystemEnergy(world());
 
   // Track angular velocity magnitude over time
   double maxAngVel = 0.0;
@@ -769,9 +829,9 @@ TEST(ParameterIsolation, H8_TiltedCube_FeedbackLoop)
 
   for (int i = 1; i <= 300; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    auto const& state = world.getObject(cubeId).getInertialState();
+    auto const& state = world().getObject(cubeId).getInertialState();
 
     if (std::isnan(state.position.z()))
     {
@@ -783,7 +843,7 @@ TEST(ParameterIsolation, H8_TiltedCube_FeedbackLoop)
 
     maxAngVel = std::max(maxAngVel, angVelMag);
 
-    double currentEnergy = computeSystemEnergy(world);
+    double currentEnergy = computeSystemEnergy(world());
     maxEnergy = std::max(maxEnergy, currentEnergy);
 
     // Check for monotonic angular velocity growth (feedback loop signature)
@@ -840,11 +900,14 @@ TEST(ParameterIsolation, H8_TiltedCube_FeedbackLoop)
 //   lambda = m_eff * (ERP/dt) * penetration
 //   Energy_injected = lambda^2 / (2 * m_eff)
 //                   = 0.5 * m_eff * [(ERP/dt) * penetration]^2
+//
+// NOTE: This is a purely analytical calculation - kept as TEST() not TEST_F()
 // ============================================================================
 
 TEST(ParameterIsolation, H9_BaumgarteEnergyInjectionAnalysis)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
+  // Ticket: 0062e_replay_diagnostic_parameter_tests (NOT converted - analytical)
   //
   // Analytical computation: How much energy does Baumgarte inject per frame?
 
@@ -928,35 +991,26 @@ TEST(ParameterIsolation, H9_BaumgarteEnergyInjectionAnalysis)
 // has reasonable behavior (doesn't fall through floor or explode).
 // ============================================================================
 
-TEST(ParameterIsolation, H10_IntegrationOrder_ConsistencyCheck)
+TEST_F(ReplayEnabledTest, ParameterIsolation_H10_IntegrationOrder_ConsistencyCheck)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
+  // Ticket: 0062e_replay_diagnostic_parameter_tests
 
-  WorldModel world;
-
-  // Floor
-  auto floorPoints = createCubePoints(100.0);
-  ConvexHull floorHull{floorPoints};
-  ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -50.0}};
-  world.spawnEnvironmentObject(1, floorHull, floorFrame);
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
   // Drop cube from height
-  auto cubePoints = createCubePoints(1.0);
-  ConvexHull cubeHull{cubePoints};
-  ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, 2.0}};
-  world.spawnObject(1, cubeHull, 10.0, cubeFrame);
-
-  uint32_t cubeId = 1;
-  world.getObject(cubeId).setCoefficientOfRestitution(0.0);
+  const auto& cube = spawnInertial("unit_cube", Coordinate{0.0, 0.0, 2.0},
+                                   10.0, 0.0, 0.5);
+  uint32_t cubeId = cube.getInstanceId();
 
   double minZ = 2.0;
   double maxSpeed = 0.0;
 
   for (int i = 1; i <= 300; ++i)
   {
-    world.update(std::chrono::milliseconds{i * 16});
+    step(1);
 
-    auto const& state = world.getObject(cubeId).getInertialState();
+    auto const& state = world().getObject(cubeId).getInertialState();
 
     if (std::isnan(state.position.z()))
     {
@@ -980,7 +1034,7 @@ TEST(ParameterIsolation, H10_IntegrationOrder_ConsistencyCheck)
     << "~6 m/s impact velocity. Speed > 100 indicates energy injection.";
 
   // After 300 frames (4.8s) with e=0, cube should be roughly settled
-  auto const& finalState = world.getObject(cubeId).getInertialState();
+  auto const& finalState = world().getObject(cubeId).getInertialState();
   double const finalSpeed = finalState.velocity.norm();
 
   EXPECT_LT(finalSpeed, 1.0)
