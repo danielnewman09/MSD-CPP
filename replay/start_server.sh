@@ -21,10 +21,12 @@ if [ ! -d "$VENV_DIR" ]; then
     exit 1
 fi
 
-# --- 2. Install replay package ---
-echo "Installing replay package..."
-"$VENV_PY" -m pip install -q --upgrade pip
-"$VENV_PY" -m pip install -q -e "$SCRIPT_DIR"
+# --- 2. Verify replay package is installed ---
+if ! "$VENV_PY" -c "import replay" 2>/dev/null; then
+    echo "ERROR: replay package not found in $VENV_DIR"
+    echo "Run the setup script to install: python/setup.sh"
+    exit 1
+fi
 
 # --- 3. Check msd_reader is available ---
 export PYTHONPATH="$BUILD_DIR:$PYTHONPATH"
