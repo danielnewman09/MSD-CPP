@@ -160,6 +160,8 @@ if(DOXYGEN_FOUND)
   # Check if unified Python venv exists
   if(EXISTS ${PROJECT_PYTHON})
     set(DOXYGEN_DB ${CMAKE_BINARY_DIR}/docs/codebase.db)
+
+    # Internal: C++ symbols from Doxygen XML
     add_custom_target(doxygen-db
       COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/doxygen_to_sqlite.py
               ${CMAKE_BINARY_DIR}/docs/xml ${DOXYGEN_DB}
@@ -169,9 +171,8 @@ if(DOXYGEN_FOUND)
       COMMENT "Generating codebase SQLite database from Doxygen XML"
       VERBATIM
     )
-    message(STATUS "  Run 'cmake --build <build-dir> --target doxygen-db' to generate SQLite database")
 
-    # Add Python code to the same database (Ticket: 0064_python_codebase_documentation_index)
+    # Internal: Python symbols from AST (Ticket: 0064_python_codebase_documentation_index)
     add_custom_target(python-db
       COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/python_to_sqlite.py
               ${CMAKE_SOURCE_DIR}/replay/replay ${DOXYGEN_DB}
@@ -181,7 +182,10 @@ if(DOXYGEN_FOUND)
       COMMENT "Adding Python symbols to codebase SQLite database"
       VERBATIM
     )
-    message(STATUS "  Run 'cmake --build <build-dir> --target python-db' to add Python symbols to database")
+
+    # Public target: complete codebase database (C++ + Python)
+    add_custom_target(codebase-db DEPENDS python-db)
+    message(STATUS "  Run 'cmake --build <build-dir> --target codebase-db' to generate codebase SQLite database")
   else()
     message(STATUS "  Python venv not found at ${PROJECT_PYTHON}")
     message(STATUS "  Run 'python/setup.sh' to create the unified Python environment")
