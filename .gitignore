@@ -22,6 +22,7 @@ analysis/clang_tidy_reports/
 *.egg-info/
 **/.venv/**
 **/venv*/**
+python/.venv/
 prototypes/**/p1_cone_projection
 prototypes/**/p2_newton_solver
 
@@ -31,3 +32,4 @@ prototypes/**/p2_newton_solver
 **/profile_*.xml
 **/profile_*.json
 **/baseline-profile*.json
+CMakeUserPresets.json

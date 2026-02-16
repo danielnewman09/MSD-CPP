@@ -1,0 +1,34 @@
+# Python Environment for MSD-CPP Project
+# Ticket: 0065_python_environment_streamlining
+#
+# This single requirements file consolidates all Python dependencies
+# for the entire project:
+#   - Traceability indexing (tree-sitter)
+#   - MCP servers (fastmcp)
+#   - Replay server (fastapi, uvicorn, pydantic)
+#   - Testing (pytest, httpx)
+#   - Code generation (stdlib only, no deps)
+#   - Documentation indexing (stdlib only, no deps)
+#
+# Install with: python/setup.sh
+# Or manually: python3 -m venv python/.venv && python/.venv/bin/pip install -r python/requirements.txt
+
+# --- Traceability Indexing ---
+tree-sitter==0.21.3
+tree-sitter-cpp==0.22.0
+
+# --- MCP Servers ---
+fastmcp==3.0.0rc2
+
+# --- Replay Server ---
+fastapi==0.129.0
+uvicorn==0.40.0
+pydantic==2.12.5
+
+# --- Testing ---
+pytest==8.3.4
+httpx==0.28.1
+
+# Note: msd_reader (C++ pybind11 module) is NOT pip-installed.
+# It is added to PYTHONPATH from the build directory.
+# See python/README.md for details.
