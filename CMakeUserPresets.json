@@ -232,6 +232,29 @@
             "targets": [
                 "traceability"
             ]
+        },
+        {
+            "name": "debug-all",
+            "displayName": "Build Everything (Debug)",
+            "description": "Build all libraries, tests, documentation databases, and traceability",
+            "configurePreset": "conan-debug",
+            "targets": [
+                "msd_utils",
+                "msd_utils_test",
+                "msd_assets",
+                "msd_assets_test",
+                "msd_sim",
+                "msd_sim_test",
+                "msd_gui",
+                "msd_gui_test",
+                "msd_exe",
+                "generate_assets",
+                "generate_test_assets",
+                "generate_test_recording",
+                "msd_reader",
+                "python-db",
+                "traceability"
+            ]
         }
     ]
 }
