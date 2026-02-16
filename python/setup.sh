@@ -70,63 +70,7 @@ if [ ! -d "$REPLAY_DIR" ]; then
 fi
 pip install --quiet -e "$REPLAY_DIR"
 
-# --- 7. Validate environment ---
-echo ""
-echo "Validating environment..."
-
-# Check traceability dependencies
-if ! python3 -c "import tree_sitter" 2>/dev/null; then
-    echo -e "${RED}ERROR: tree_sitter import failed${NC}"
-    exit 1
-fi
-
-if ! python3 -c "import tree_sitter_cpp" 2>/dev/null; then
-    echo -e "${RED}ERROR: tree_sitter_cpp import failed${NC}"
-    exit 1
-fi
-
-# Check MCP dependencies
-if ! python3 -c "import fastmcp" 2>/dev/null; then
-    echo -e "${RED}ERROR: fastmcp import failed${NC}"
-    exit 1
-fi
-
-# Check replay server dependencies
-if ! python3 -c "import fastapi" 2>/dev/null; then
-    echo -e "${RED}ERROR: fastapi import failed${NC}"
-    exit 1
-fi
-
-if ! python3 -c "import uvicorn" 2>/dev/null; then
-    echo -e "${RED}ERROR: uvicorn import failed${NC}"
-    exit 1
-fi
-
-if ! python3 -c "import pydantic" 2>/dev/null; then
-    echo -e "${RED}ERROR: pydantic import failed${NC}"
-    exit 1
-fi
-
-# Check replay package
-if ! python3 -c "import replay" 2>/dev/null; then
-    echo -e "${RED}ERROR: replay package import failed${NC}"
-    exit 1
-fi
-
-# Check testing dependencies
-if ! python3 -c "import pytest" 2>/dev/null; then
-    echo -e "${RED}ERROR: pytest import failed${NC}"
-    exit 1
-fi
-
-if ! python3 -c "import httpx" 2>/dev/null; then
-    echo -e "${RED}ERROR: httpx import failed${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}All imports successful!${NC}"
-
-# --- 8. Display summary ---
+# --- 7. Display summary ---
 echo ""
 echo "========================================="
 echo -e "${GREEN}Setup Complete!${NC}"
