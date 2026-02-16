@@ -1,0 +1,108 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<existing>> White
+}
+
+package "replay/mcp_server" <<new>> {
+    class ReplayMCPServer <<new>> {
+        -service: SimulationService | None
+        -tools: list[dict]
+        +__init__()
+        +handle_message(message: dict): dict
+        -_define_tools(): list[dict]
+        -_load_recording(path: str): dict
+        -_list_recordings(directory: str | None): dict
+        -_get_metadata(): dict
+        -_get_frame(frame_id: int): dict
+        -_get_body_state(body_id: int, frame_id: int): dict
+        -_get_contacts_for_body(body_id: int, frame_id: int): dict
+        -_get_body_energy(body_id: int, start_frame: int | None, end_frame: int | None): dict
+        -_get_system_energy(start_frame: int | None, end_frame: int | None): dict
+        -_find_energy_anomalies(threshold: float): dict
+        -_compare_body_across_frames(body_id: int, frame_a: int, frame_b: int): dict
+        -_get_contact_history(body_a_id: int, body_b_id: int, start_frame: int, end_frame: int): dict
+        -_get_solver_diagnostics(start_frame: int | None, end_frame: int | None): dict
+        -_check_friction_cone(frame_id: int, body_id: int | None): dict
+        -_check_penetration(frame_id: int, threshold: float): dict
+        -_check_resting_contact(frame_id: int, velocity_threshold: float): dict
+    }
+
+    note right of ReplayMCPServer
+        Stdio-based MCP server
+        exposing simulation recording
+        queries to Claude Code
+    end note
+}
+
+package "replay/replay/services" <<existing>> {
+    class SimulationService <<existing>> {
+        +db_path: Path
+        +db: msd_reader.Database
+        +__init__(db_path: Path)
+        +get_frames(): list[FrameInfo]
+        +get_metadata(): SimulationMetadata
+        +get_frame_data(frame_id: int): FrameData
+        +get_energy_by_body(body_id: int): list[EnergyPoint]
+        +get_system_energy(): list[SystemEnergyPoint]
+    }
+
+    note bottom of SimulationService
+        Existing query service
+        wraps msd_reader pybind11
+        module for DB access
+    end note
+}
+
+package "replay/replay/models" <<existing>> {
+    class BodyState <<existing>> {
+        +body_id: int
+        +position: Vec3
+        +velocity: Vec3
+        +orientation: Quaternion
+        +angular_velocity: Vec3 | None
+    }
+
+    class FrameData <<existing>> {
+        +frame_id: int
+        +simulation_time: float
+        +states: list[BodyState]
+        +collisions: list[CollisionInfo]
+        +friction_constraints: list[FrictionConstraintInfo]
+        +solver: SolverDiagnostics | None
+    }
+
+    class SimulationMetadata <<existing>> {
+        +bodies: list[BodyMetadata]
+        +total_frames: int
+    }
+}
+
+package "msd_reader (pybind11)" <<existing>> {
+    class Database <<existing>> {
+        +select_all_frames(): list
+        +select_collisions_by_frame(frame_id: int): list
+        +select_energy_by_body(body_id: int): list
+        +select_all_system_energy(): list
+    }
+}
+
+package "mcp Python SDK" <<external>> {
+    interface StdioServer <<external>> {
+        +handle_message(message: dict): dict
+        +register_tool(name: str, handler: callable)
+    }
+}
+
+' Relationships
+ReplayMCPServer --> SimulationService : uses
+ReplayMCPServer ..|> StdioServer : implements protocol
+SimulationService --> Database : wraps
+SimulationService --> FrameData : returns
+SimulationService --> SimulationMetadata : returns
+SimulationService --> BodyState : contains
+
+' State management
+ReplayMCPServer --> "0..1" SimulationService : manages session
+
+@enduml
