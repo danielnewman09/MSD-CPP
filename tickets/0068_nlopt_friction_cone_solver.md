@@ -23,10 +23,10 @@
 
 | Ticket | Description | Status | Depends On |
 |--------|-------------|--------|------------|
-| [0068a](0068a_nlopt_conan_dependency.md) | Add NLopt Conan dependency + CMake wiring | Ready | — |
-| [0068b](0068b_nlopt_friction_solver_class.md) | Implement NLoptFrictionSolver class | Ready | 0068a |
-| [0068c](0068c_constraint_solver_integration.md) | Integrate with ConstraintSolver, remove old solver | Ready | 0068b |
-| [0068d](0068d_unit_and_integration_tests.md) | Unit + integration tests (P1/P3 validation) | Ready | 0068c |
+| [0068a](0068a_nlopt_conan_dependency.md) | Add NLopt Conan dependency + CMake wiring | ✅ Complete | — |
+| [0068b](0068b_nlopt_friction_solver_class.md) | Implement NLoptFrictionSolver class | ✅ Complete | 0068a |
+| [0068c](0068c_constraint_solver_integration.md) | Integrate with ConstraintSolver, remove old solver | ✅ Complete | 0068b |
+| [0068d](0068d_unit_and_integration_tests.md) | Unit + integration tests (P1/P3 validation) | ✅ Complete | 0068c |
 | [0068e](0068e_performance_benchmarks.md) | Performance benchmarks (P2 validation) | Ready | 0068c |
 
 ---
