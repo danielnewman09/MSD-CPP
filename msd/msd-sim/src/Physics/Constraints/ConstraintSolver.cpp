@@ -94,6 +94,12 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
     // Step 5: Solve with NLoptFrictionSolver
     auto asmResult = solveWithFriction(a, b, spec, initialLambda);
 
+    // Step 5b: Energy-conserving impulse clamp (Ticket: 0068)
+    // Compute ΔKE from impulse. If positive (energy injection), scale λ to
+    // make ΔKE = 0. This prevents Newton's restitution from injecting energy
+    // on rotating/tumbling contacts.
+    clampImpulseEnergy(asmResult.lambda, a, b, flat.restitutions);
+
     // Step 6: Extract per-body forces (no negative lambda skip)
     result.bodyForces =
       extractBodyForcesFlat(flat, asmResult.lambda, numBodies, dt);
@@ -682,6 +688,11 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithFriction(
   auto nloptResult = nloptSolver_.solve(
     A, b, spec.frictionCoefficients, lambda0);
 
+  // Post-solve: clamp friction that reverses velocity or does positive work
+  int const numContacts =
+    static_cast<int>(spec.frictionCoefficients.size());
+  clampPositiveWorkFriction(nloptResult.lambda, A, b, numContacts);
+
   // Map NLoptFrictionSolver::SolveResult to ActiveSetResult
   ActiveSetResult result;
   result.lambda = std::move(nloptResult.lambda);
@@ -690,6 +701,129 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithFriction(
   result.active_set_size = 0;  // Not applicable for NLopt
 
   return result;
+}
+
+void ConstraintSolver::clampPositiveWorkFriction(
+  Eigen::VectorXd& lambda,
+  const Eigen::MatrixXd& A,
+  const Eigen::VectorXd& b,
+  int numContacts)
+{
+  // Ticket: 0068_nlopt_friction_cone_solver
+  //
+  // Each contact contributes 3 rows: [normal, tangent1, tangent2].
+  //
+  // Check each active contact for friction doing positive work (accelerating
+  // instead of decelerating). If detected, zero the tangent lambdas.
+  //
+  // Also check for velocity reversal: if friction would push a tangent velocity
+  // past zero by a significant amount, cap it to arrest the motion instead.
+
+  Eigen::VectorXd const dv = A * lambda;
+
+  for (int i = 0; i < numContacts; ++i)
+  {
+    int const base = 3 * i;
+
+    // Skip inactive contacts
+    if (lambda[base] <= 0.0)
+    {
+      continue;
+    }
+
+    // Pre-solve tangent velocities: jv = -b (tangent rows store -jv)
+    double const preT1 = -b[base + 1];
+    double const preT2 = -b[base + 2];
+
+    // Check 1: Positive work (friction accelerating)
+    double const work =
+      lambda[base + 1] * preT1 + lambda[base + 2] * preT2;
+
+    if (work > 0.0)
+    {
+      lambda[base + 1] = 0.0;
+      lambda[base + 2] = 0.0;
+      continue;
+    }
+
+    // Check 2: Velocity reversal — cap tangent impulse per-row
+    // Only trigger when post-solve velocity has reversed AND the reversal
+    // is significant (> 10% of pre-solve magnitude). Small overshoot at
+    // arrest is acceptable; large reversal is not.
+    for (int t = 1; t <= 2; ++t)
+    {
+      int const row = base + t;
+      double const pre = -b[row];
+      double const post = pre + dv[row];
+
+      // Reversal: signs differ and reversal is > 10% of original speed
+      if (std::abs(pre) > 1e-6 && pre * post < 0.0 &&
+          std::abs(post) > 0.1 * std::abs(pre))
+      {
+        // Scale this tangent lambda to exactly arrest the velocity
+        // post = pre + dv[row] = pre + scale * dv[row] = 0
+        // scale = -pre / dv[row] = pre / (pre - post)
+        double const dvRow = dv[row];
+        if (std::abs(dvRow) > 1e-12)
+        {
+          double const scale = -pre / dvRow;
+          lambda[row] *= scale;
+        }
+      }
+    }
+  }
+}
+
+void ConstraintSolver::clampImpulseEnergy(
+  Eigen::VectorXd& lambda,
+  const Eigen::MatrixXd& A,
+  const Eigen::VectorXd& b,
+  const std::vector<double>& restitutions)
+{
+  // Ticket: 0068_nlopt_friction_cone_solver
+  //
+  // Reconstruct pre-solve velocity in constraint space from b:
+  //   Normal rows: b = -(1+e)*Jv  →  Jv = -b/(1+e)
+  //   Tangent rows: b = -Jv       →  Jv = -b
+  //
+  // Then ΔKE = λ·Jv + 0.5·λ·A·λ
+  // If ΔKE > 0, solve for α: α·λ·Jv + 0.5·α²·λ·A·λ = 0
+  //   → α = -2·(λ·Jv) / (λ·A·λ)
+
+  Eigen::Index const n = b.size();
+  Eigen::VectorXd jv(n);
+
+  for (Eigen::Index i = 0; i < n; ++i)
+  {
+    double const e = restitutions[static_cast<size_t>(i)];
+    if (e > 0.0)
+    {
+      // Normal row with restitution
+      jv[i] = -b[i] / (1.0 + e);
+    }
+    else
+    {
+      // Tangent row (e=0 stored for tangent rows)
+      jv[i] = -b[i];
+    }
+  }
+
+  double const c1 = lambda.dot(jv);       // λ·Jv
+  double const c2 = lambda.dot(A * lambda); // λ·A·λ (always ≥ 0)
+
+  // ΔKE = c1 + 0.5*c2
+  double const deltaKE = c1 + 0.5 * c2;
+
+  if (deltaKE > 0.0 && c2 > 1e-12)
+  {
+    double const alpha = -2.0 * c1 / c2;
+
+    // Only clamp if α is a valid scaling (0 < α < 1)
+    if (alpha > 0.0 && alpha < 1.0)
+    {
+      lambda *= alpha;
+    }
+  }
 }
 
 std::vector<ConstraintSolver::BodyForces>

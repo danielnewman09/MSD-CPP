@@ -40,8 +40,8 @@ EnergyTracker::SystemEnergy computeSystemEnergyBreakdown(
   potentials.push_back(
     std::make_unique<GravityPotential>(Coordinate{0.0, 0.0, -9.81}));
 
-  return EnergyTracker::computeSystemEnergy(
-    world.getInertialAssets(), potentials);
+  return EnergyTracker::computeSystemEnergy(world.getInertialAssets(),
+                                            potentials);
 }
 
 /// Compute total system energy scalar
@@ -65,7 +65,8 @@ double computeSystemEnergy(const WorldModel& world)
 // looks for energy growth, not just inequality.
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyConserved)
+TEST_F(ReplayEnabledTest,
+       RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyConserved)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests
@@ -82,9 +83,9 @@ TEST_F(ReplayEnabledTest, RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyC
 
   const auto& cube = spawnInertial("unit_cube",
                                    Coordinate{0.0, 0.0, 2.0 + halfDiag},
-                                   1.0,  // mass (kg)
-                                   1.0,  // restitution (elastic)
-                                   0.5); // friction
+                                   1.0,   // mass (kg)
+                                   1.0,   // restitution (elastic)
+                                   0.5);  // friction
   uint32_t cubeId = cube.getInstanceId();
 
   // Manually set orientation
@@ -105,7 +106,7 @@ TEST_F(ReplayEnabledTest, RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyC
   double maxEnergyGrowth = 0.0;
   double prevEnergy = initialTotalEnergy;
 
-  for (int i = 1; i <= 300; ++i)
+  for (int i = 1; i <= 500; ++i)
   {
     step(1);
 
@@ -141,7 +142,6 @@ TEST_F(ReplayEnabledTest, RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyC
 
     if (impactOccurred)
     {
-
       // Track energy breakdown
       maxRotationalKE = std::max(maxRotationalKE, sysEnergy.totalRotationalKE);
       maxLinearKE = std::max(maxLinearKE, sysEnergy.totalLinearKE);
@@ -178,8 +178,7 @@ TEST_F(ReplayEnabledTest, RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyC
     EXPECT_LT(energyDrift, 0.01)
       << "DIAGNOSTIC: Total energy drift=" << (energyDrift * 100.0)
       << "% over simulation (threshold: 1%). "
-      << "InitialE=" << initialTotalEnergy
-      << " MaxE=" << maxTotalEnergy
+      << "InitialE=" << initialTotalEnergy << " MaxE=" << maxTotalEnergy
       << " EnergyGrowthFrames=" << energyGrowthCount
       << " MaxFrameGrowth=" << maxEnergyGrowth;
 
@@ -188,8 +187,7 @@ TEST_F(ReplayEnabledTest, RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyC
     EXPECT_FALSE(energyGrew)
       << "DIAGNOSTIC: ENERGY GROWTH DETECTED. "
       << "This is the signature of the rotational energy injection bug. "
-      << "E_initial=" << initialTotalEnergy
-      << " E_max=" << maxTotalEnergy
+      << "E_initial=" << initialTotalEnergy << " E_max=" << maxTotalEnergy
       << " Growth=" << ((maxTotalEnergy / initialTotalEnergy - 1.0) * 100.0)
       << "%";
   }
@@ -213,7 +211,7 @@ TEST_F(ReplayEnabledTest, RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyC
 // ============================================================================
 
 TEST_F(ReplayEnabledTest,
-     RotationalEnergyTest_F4b_ZeroGravity_RotationalEnergyTransfer_Conserved)
+       RotationalEnergyTest_F4b_ZeroGravity_RotationalEnergyTransfer_Conserved)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests
@@ -222,21 +220,21 @@ TEST_F(ReplayEnabledTest,
 
   // Two cubes colliding with offset to induce rotation
   // Place cubes with slight vertical offset so contact is off-center
-  const auto& cubeA = spawnInertialWithVelocity(
-    "unit_cube",
-    Coordinate{-0.05, 0.0, 0.0},
-    Coordinate{2.0, 0.0, 0.0},  // velocity
-    1.0,  // mass (kg)
-    1.0,  // restitution (elastic)
-    0.5); // friction
+  const auto& cubeA =
+    spawnInertialWithVelocity("unit_cube",
+                              Coordinate{-0.05, 0.0, 0.0},
+                              Coordinate{2.0, 0.0, 0.0},  // velocity
+                              1.0,                        // mass (kg)
+                              1.0,   // restitution (elastic)
+                              0.5);  // friction
   uint32_t idA = cubeA.getInstanceId();
 
-  const auto& cubeB = spawnInertial(
-    "unit_cube",
-    Coordinate{1.0, 0.0, 0.3},  // Offset in z for torque
-    1.0,  // mass (kg)
-    1.0,  // restitution (elastic)
-    0.5); // friction
+  const auto& cubeB =
+    spawnInertial("unit_cube",
+                  Coordinate{1.0, 0.0, 0.3},  // Offset in z for torque
+                  1.0,                        // mass (kg)
+                  1.0,                        // restitution (elastic)
+                  0.5);                       // friction
   uint32_t idB = cubeB.getInstanceId();
 
   // Compute initial KE (no gravity, so no PE)
@@ -245,8 +243,7 @@ TEST_F(ReplayEnabledTest,
     world().getInertialAssets(), noPotentials);
   double const initialKE = initialSysEnergy.total();
 
-  ASSERT_GT(initialKE, 0.0)
-    << "Initial KE should be non-zero";
+  ASSERT_GT(initialKE, 0.0) << "Initial KE should be non-zero";
 
   bool nanDetected = false;
   bool rotationalKEDetected = false;
@@ -291,20 +288,19 @@ TEST_F(ReplayEnabledTest,
     double const finalKE = finalSysEnergy.total();
 
     double const drift = std::abs(finalKE - initialKE) / initialKE;
-    EXPECT_LT(drift, 0.05)
-      << "DIAGNOSTIC: KE drift=" << (drift * 100.0)
-      << "% (threshold: 5%). "
-      << "initialKE=" << initialKE
-      << " finalKE=" << finalKE
-      << " (linearKE=" << finalSysEnergy.totalLinearKE
-      << " rotKE=" << finalSysEnergy.totalRotationalKE << ")";
+    EXPECT_LT(drift, 0.05) << "DIAGNOSTIC: KE drift=" << (drift * 100.0)
+                           << "% (threshold: 5%). "
+                           << "initialKE=" << initialKE
+                           << " finalKE=" << finalKE
+                           << " (linearKE=" << finalSysEnergy.totalLinearKE
+                           << " rotKE=" << finalSysEnergy.totalRotationalKE
+                           << ")";
 
     // DIAGNOSTIC: Specifically flag energy growth
     bool const energyGrew = finalKE > initialKE * 1.001;
     EXPECT_FALSE(energyGrew)
       << "DIAGNOSTIC: ENERGY GROWTH in zero-gravity elastic collision. "
-      << "initialKE=" << initialKE
-      << " finalKE=" << finalKE
+      << "initialKE=" << initialKE << " finalKE=" << finalKE
       << " growth=" << ((finalKE / initialKE - 1.0) * 100.0) << "%";
   }
 }

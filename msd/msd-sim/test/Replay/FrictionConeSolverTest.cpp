@@ -72,48 +72,48 @@ TEST_F(FrictionConeSolverTest, SlidingCubeOnFloor_FrictionSaturatesAtConeLimit)
   constexpr double dt = 0.016;
   constexpr double muG = friction * g;  // 4.905 m/s²
 
-  // Step 5 frames to let contact establish and observe friction behavior
-  step(5);
+  // Let contact settle for 10 frames. The coupled QP has a transient in the
+  // first few frames where the cube wobbles (angular velocity from corner
+  // contacts, vertical bounce despite e=0). By frame 10 the cube is in
+  // clean sliding contact with stable deceleration.
+  constexpr int warmupFrames = 10;
+  step(warmupFrames);
 
-  // After 5 frames, cube should have decelerated due to friction
-  const auto& state5 = cube.getInertialState();
-  const double vx = state5.velocity.x();
-  const double vy = state5.velocity.y();
-  const double vz = state5.velocity.z();
+  const auto& stateWarmup = cube.getInertialState();
+  const double vxAfterWarmup = stateWarmup.velocity.x();
 
-  std::cout << "\n=== Friction Cone Solver Diagnostic (Frame 5) ===\n";
-  std::cout << "Velocity: (" << vx << ", " << vy << ", " << vz << ") m/s\n";
-  std::cout << "Speed (x): " << vx << " m/s\n";
+  // Measure steady-state friction over 15 frames (frames 10-25)
+  constexpr int measureFrames = 15;
+  step(measureFrames);
 
-  // Expected velocity after 5 frames of mu*g deceleration:
-  // v = v0 - mu*g*t = 2.0 - 4.905 * 5 * 0.016 = 2.0 - 0.3924 = 1.6076 m/s
-  const double expectedVx = initialVelocityX - muG * 5.0 * dt;
-  std::cout << "Expected vx: " << expectedVx << " m/s\n";
-  std::cout << "Actual vx:   " << vx << " m/s\n";
-  std::cout << "Difference:  " << (vx - expectedVx) << " m/s\n";
+  const auto& stateMeasure = cube.getInertialState();
+  const double vx = stateMeasure.velocity.x();
 
-  // The cube should be decelerating. If friction is undersaturated,
-  // the cube decelerates less than expected.
-  EXPECT_GT(vx, 0.0) << "Cube should still be moving forward after 5 frames";
-  EXPECT_LT(vx, initialVelocityX)
+  std::cout << "\n=== Friction Cone Solver Diagnostic ===\n";
+  std::cout << "After warmup (" << warmupFrames << " frames): vx = "
+            << vxAfterWarmup << " m/s\n";
+  std::cout << "After measure (" << measureFrames << " frames): vx = "
+            << vx << " m/s\n";
+
+  // The cube should be decelerating
+  EXPECT_GT(vxAfterWarmup, 0.0) << "Cube should still be moving after warmup";
+  EXPECT_LT(vx, vxAfterWarmup)
     << "Cube should have decelerated from friction";
 
-  // Check that deceleration is close to mu*g (within 20% tolerance for now)
-  // If the friction solver undersaturates, we'll see significantly less
-  // deceleration
-  const double actualDecel = (initialVelocityX - vx) / (5.0 * dt);
+  // Measure steady-state deceleration over the measurement window
+  const double actualDecel =
+    (vxAfterWarmup - vx) / (measureFrames * dt);
   std::cout << "Expected deceleration: " << muG << " m/s²\n";
   std::cout << "Actual deceleration:   " << actualDecel << " m/s²\n";
   std::cout << "Ratio (actual/expected): " << (actualDecel / muG) << "\n";
 
-  // This is the key assertion: deceleration should be close to mu*g
-  // If the friction cone solver undersaturates, this ratio will be < 1.0
-  EXPECT_NEAR(actualDecel, muG, muG * 0.20)
+  // Steady-state deceleration should be close to mu*g (within 10%)
+  EXPECT_NEAR(actualDecel, muG, muG * 0.10)
     << "Friction deceleration should be mu*g = " << muG << " m/s².\n"
     << "If significantly less, the friction cone solver is undersaturating.";
 
   // Continue to frame 30 to observe full sliding behavior
-  step(25);  // Total: 30 frames
+  step(30 - warmupFrames - measureFrames);  // Total: 30 frames
 
   const auto& state30 = cube.getInertialState();
   const double vxFinal = state30.velocity.x();

@@ -70,13 +70,17 @@ public:
    * @param b  RHS vector (3C x 1) with restitution/velocity terms
    * @param mu Per-contact friction coefficients (C entries). Invalid values (< 0) clamped to 0.
    * @param lambda0  Warm-start vector (3C x 1). If empty or wrong size, cold start from zero.
+   * @param normalUpperBounds  Per-contact upper bounds on normal impulses (C entries).
+   *        If non-empty, constrains lambda_n_i <= normalUpperBounds[i]. Used to prevent
+   *        the coupled QP from inflating normal impulses beyond non-penetration needs.
    * @return SolveResult with optimal lambda and diagnostics
    */
   [[nodiscard]] SolveResult solve(
     const Eigen::MatrixXd& A,
     const Eigen::VectorXd& b,
     const std::vector<double>& mu,
-    const Eigen::VectorXd& lambda0 = Eigen::VectorXd{});
+    const Eigen::VectorXd& lambda0 = Eigen::VectorXd{},
+    const std::vector<double>& normalUpperBounds = {});
 
   /// Set convergence tolerance (default: 1e-6)
   void setTolerance(double tol) { tolerance_ = tol; }

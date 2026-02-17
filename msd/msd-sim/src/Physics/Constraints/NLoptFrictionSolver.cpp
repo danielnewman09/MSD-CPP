@@ -25,7 +25,8 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
   const Eigen::MatrixXd& A,
   const Eigen::VectorXd& b,
   const std::vector<double>& mu,
-  const Eigen::VectorXd& lambda0)
+  const Eigen::VectorXd& lambda0,
+  const std::vector<double>& normalUpperBounds)
 {
   const int num_contacts = static_cast<int>(mu.size());
   const int num_vars = 3 * num_contacts;
@@ -110,6 +111,18 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
   opt.set_ftol_rel(tolerance_);
   opt.set_maxeval(max_iterations_);
 
+  // Set upper bounds on normal impulses if provided
+  std::vector<double> upper_bounds(num_vars, HUGE_VAL);
+  if (!normalUpperBounds.empty() &&
+      static_cast<int>(normalUpperBounds.size()) == num_contacts)
+  {
+    for (int i = 0; i < num_contacts; ++i)
+    {
+      upper_bounds[3 * i] = std::max(0.0, normalUpperBounds[i]);
+    }
+    opt.set_upper_bounds(upper_bounds);
+  }
+
   // Initialize solution vector (warm-start or cold start)
   std::vector<double> x(num_vars, 0.0);
   if (lambda0.size() == num_vars)
@@ -117,6 +130,12 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
     for (int i = 0; i < num_vars; ++i)
     {
       x[i] = lambda0[i];
+    }
+    // Clamp warm-start to bounds
+    for (int i = 0; i < num_vars; ++i)
+    {
+      x[i] = std::max(lower_bounds[i] == -HUGE_VAL ? x[i] : lower_bounds[i], x[i]);
+      x[i] = std::min(upper_bounds[i] == HUGE_VAL ? x[i] : upper_bounds[i], x[i]);
     }
   }
 

@@ -206,13 +206,45 @@ private:
     const std::vector<std::reference_wrapper<const InertialState>>& states);
 
   /**
-   * @brief Solve with friction cone constraints via FrictionConeSolver
+   * @brief Solve with friction cone constraints via NLoptFrictionSolver
    */
   [[nodiscard]] ActiveSetResult solveWithFriction(
     const Eigen::MatrixXd& A,
     const Eigen::VectorXd& b,
     const FrictionSpec& spec,
     const std::optional<Eigen::VectorXd>& initialLambda);
+
+  /**
+   * @brief Post-solve friction clamp: prevent positive work and velocity reversal
+   *
+   * For each active contact, checks if friction does positive work (accelerates
+   * instead of decelerates). If so, projects the tangent impulse to oppose
+   * the sliding velocity direction. Also prevents velocity reversal by capping
+   * tangent impulses that would overshoot past zero.
+   *
+   * @ticket 0068_nlopt_friction_cone_solver
+   */
+  static void clampPositiveWorkFriction(
+    Eigen::VectorXd& lambda,
+    const Eigen::MatrixXd& A,
+    const Eigen::VectorXd& b,
+    int numContacts);
+
+  /**
+   * @brief Post-solve energy clamp: scale impulse if it injects system KE
+   *
+   * Computes delta-KE = lambda*Jv + 0.5*lambda*A*lambda using pre-solve
+   * velocity reconstructed from b and restitution coefficients. If delta-KE > 0,
+   * finds scaling factor alpha such that alpha*lambda produces exactly
+   * delta-KE = 0.
+   *
+   * @ticket 0068_nlopt_friction_cone_solver
+   */
+  static void clampImpulseEnergy(
+    Eigen::VectorXd& lambda,
+    const Eigen::MatrixXd& A,
+    const Eigen::VectorXd& b,
+    const std::vector<double>& restitutions);
 
   /**
    * @brief Extract per-body forces from flat lambda (no negative-lambda skip)
