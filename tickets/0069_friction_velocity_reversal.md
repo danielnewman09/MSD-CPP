@@ -3,10 +3,10 @@
 ## Status
 - [x] Draft
 - [x] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Review
+- [x] Implementation Complete — Awaiting Review
 - [ ] Merged / Complete
 
-**Current Phase**: Ready for Implementation
+**Current Phase**: Implementation Complete — Awaiting Review
 **Type**: Bug
 **Priority**: High
 **Created**: 2026-02-17
@@ -186,7 +186,20 @@ cmake --build --preset debug-sim-only
 - **Started**: 2026-02-17 (ticket creation)
 - **Completed**: 2026-02-17
 - **Branch**: 0069-friction-velocity-reversal
-- **PR**: N/A (not yet created)
+- **PR**: #72 (draft)
 - **Artifacts**:
   - `tickets/0069_friction_velocity_reversal.md`
 - **Notes**: Bug fix ticket with implementation approach already specified. Design phase skipped as this is an extension of existing friction constraint system with clear requirements and no architectural changes needed.
+
+### Implementation Phase
+- **Started**: 2026-02-17 11:25
+- **Completed**: 2026-02-17 11:55
+- **Branch**: 0069-friction-velocity-reversal
+- **PR**: #72 (ready for review)
+- **Commits**: ea52275, 76c8d4a, 44c2f6b, 426de2e, 21b1981
+- **Artifacts**:
+  - Modified 9 source files (~197 LOC added)
+  - `docs/designs/0069_friction_velocity_reversal/implementation-notes.md`
+  - `docs/designs/0069_friction_velocity_reversal/iteration-log.md`
+- **Test Results**: 691/697 passing (baseline maintained across all iterations)
+- **Notes**: Clean implementation with 4 iterations, no circles detected, no regressions. All components integrated: ContactCache sliding state tracking, FrictionConstraint tangent basis alignment, NLoptFrictionSolver unilateral bounds, CollisionPipeline orchestration.
