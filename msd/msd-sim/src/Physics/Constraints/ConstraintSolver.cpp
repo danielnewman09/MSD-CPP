@@ -2,10 +2,12 @@
 // Ticket: 0032_contact_constraint_refactor
 // Ticket: 0045_constraint_solver_unification
 // Ticket: 0052d_solver_integration_ecos_removal
+// Ticket: 0068c_constraint_solver_integration
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0045_constraint_solver_unification/design.md
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
+// Design: docs/designs/0068_nlopt_friction_cone_solver/design.md
 
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include <Eigen/src/Cholesky/LLT.h>
@@ -33,8 +35,9 @@ namespace msd_sim
 
 // ===== Multi-Body Contact Constraint Solver =====
 //
-// Dispatches between ASM (no friction) and FrictionConeSolver (with friction).
+// Dispatches between ASM (no friction) and NLoptFrictionSolver (with friction).
 // For friction path, constraints are flattened to per-row entries before assembly.
+// Ticket: 0068c
 
 ConstraintSolver::SolveResult ConstraintSolver::solve(
   const std::vector<Constraint*>& contactConstraints,
@@ -72,7 +75,8 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
 
   if (hasFriction)
   {
-    // ===== Friction path: flatten + FrictionConeSolver =====
+    // ===== Friction path: flatten + NLoptFrictionSolver =====
+    // Ticket: 0068c
 
     // Step 1: Flatten constraints into per-row entries
     auto flat = flattenConstraints(contactConstraints, states);
@@ -87,7 +91,7 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
     // Step 4: Build friction specification
     auto spec = buildFrictionSpec(contactConstraints);
 
-    // Step 5: Solve with FrictionConeSolver
+    // Step 5: Solve with NLoptFrictionSolver
     auto asmResult = solveWithFriction(a, b, spec, initialLambda);
 
     // Step 6: Extract per-body forces (no negative lambda skip)
@@ -674,15 +678,16 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithFriction(
     lambda0 = *initialLambda;
   }
 
-  // Delegate to FrictionConeSolver
-  auto solveResult = frictionConeSolver_.solve(
+  // Delegate to NLoptFrictionSolver (Ticket: 0068c)
+  auto nloptResult = nloptSolver_.solve(
     A, b, spec.frictionCoefficients, lambda0);
 
+  // Map NLoptFrictionSolver::SolveResult to ActiveSetResult
   ActiveSetResult result;
-  result.lambda = std::move(solveResult.lambda);
-  result.converged = solveResult.converged;
-  result.iterations = solveResult.iterations;
-  result.active_set_size = 0;
+  result.lambda = std::move(nloptResult.lambda);
+  result.converged = nloptResult.converged;
+  result.iterations = nloptResult.iterations;
+  result.active_set_size = 0;  // Not applicable for NLopt
 
   return result;
 }

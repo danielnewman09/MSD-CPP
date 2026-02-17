@@ -11,7 +11,7 @@
 >
 > If a circle is detected: STOP, document the pattern below, and escalate to the human.
 
-**Ticket**: 0068b_nlopt_friction_solver_class
+**Ticket**: 0068c_constraint_solver_integration
 **Branch**: 0068-nlopt-friction-cone-solver
 **Baseline**: 820/827 tests passing (7 known physics failures, not related to this ticket)
 
@@ -61,3 +61,19 @@ _None detected._
 5. Thread-safe for concurrent solve() calls ✓ (NLopt instance local to function)
 
 Implementation complete for 0068b. Ready for handoff to 0068c (integration with ConstraintSolver).
+
+### Iteration 3 — 2026-02-16 22:41
+**Commit**: (pending)
+**Hypothesis**: Replace FrictionConeSolver with NLoptFrictionSolver in ConstraintSolver and remove old solver files per ticket requirements R1-R4.
+**Changes**:
+- `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.hpp`: Replaced `#include "FrictionConeSolver.hpp"` with `#include "NLoptFrictionSolver.hpp"`, replaced member `FrictionConeSolver frictionConeSolver_` with `NLoptFrictionSolver nloptSolver_`, added ticket references
+- `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp`: Updated `solveWithFriction()` to call `nloptSolver_.solve()` instead of `frictionConeSolver_.solve()`, updated comments to reference NLoptFrictionSolver, added ticket references
+- `msd/msd-sim/src/Physics/Constraints/CMakeLists.txt`: Removed FrictionConeSolver.cpp and ConeProjection.cpp from build
+- Deleted files: FrictionConeSolver.hpp, FrictionConeSolver.cpp, ConeProjection.hpp, ConeProjection.cpp (git rm)
+- Deleted test files: ConeProjectionTest.cpp, FrictionConeSolverTest.cpp (unit tests for removed classes), FrictionDirectionTest.cpp (untracked, tested ConeProjection)
+- `msd/msd-sim/test/Physics/Constraints/CMakeLists.txt`: Removed ConeProjectionTest.cpp and FrictionConeSolverTest.cpp from test build, added ticket 0068c reference
+- `docs/designs/0068_nlopt_friction_cone_solver/iteration-log.md`: Updated ticket field to 0068c
+**Build Result**: PASS (3 warnings in Replay/FrictionConeSolverTest.cpp — unused variables, not blocking)
+**Test Result**: 687/693 passing
+**Impact vs Previous**: -133 tests (820→687), -1 failing test (7→6)
+**Assessment**: ⚠️ Major test count drop requires investigation. The test count went from 820/827 to 687/693, a reduction of 133 tests. This is because we removed ConeProjectionTest (9 tests) and FrictionConeSolverTest (unit test suite). The net pass count is 687 vs 820 baseline. However, we now have 1 NEW regression: FrictionConeSolverTest.SlidingCubeOnFloor_FrictionSaturatesAtConeLimit (integration test in Replay/) shows friction deceleration 6.065 m/s² vs expected 4.905 m/s² (23.7% higher). This is a physics correctness issue — NLopt is producing different friction forces than the old solver. Need to investigate why before proceeding.

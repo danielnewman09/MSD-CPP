@@ -7,17 +7,27 @@
 - [x] Design
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Prototype
-- [ ] Prototype Complete — Awaiting Review
+- [x] Prototype Complete — Awaiting Review
 - [ ] Implementation
 - [ ] Verified
 - [ ] Merged / Complete
 
-**Current Phase**: Prototype Complete — Awaiting Review
+**Current Phase**: Implementation
 **Type**: Feature
 **Priority**: High
 **Created**: 2026-02-16
 **Branch From**: main
 **Related Tickets**: [0067](0067_contact_phase_energy_injection.md) (energy injection root cause), [0066](0066_friction_cone_solver_saturation_bug.md) (saturation direction bug), [0052](0052_custom_friction_cone_solver.md) (original Newton solver)
+
+### Sub-Tickets
+
+| Ticket | Description | Status | Depends On |
+|--------|-------------|--------|------------|
+| [0068a](0068a_nlopt_conan_dependency.md) | Add NLopt Conan dependency + CMake wiring | Ready | — |
+| [0068b](0068b_nlopt_friction_solver_class.md) | Implement NLoptFrictionSolver class | Ready | 0068a |
+| [0068c](0068c_constraint_solver_integration.md) | Integrate with ConstraintSolver, remove old solver | Ready | 0068b |
+| [0068d](0068d_unit_and_integration_tests.md) | Unit + integration tests (P1/P3 validation) | Ready | 0068c |
+| [0068e](0068e_performance_benchmarks.md) | Performance benchmarks (P2 validation) | Ready | 0068c |
 
 ---
 

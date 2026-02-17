@@ -1,9 +1,11 @@
 // Ticket: 0031_generalized_lagrange_constraints
 // Ticket: 0032_contact_constraint_refactor
 // Ticket: 0052d_solver_integration_ecos_removal
+// Ticket: 0068c_constraint_solver_integration
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
+// Design: docs/designs/0068_nlopt_friction_cone_solver/design.md
 
 #ifndef MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
 #define MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
@@ -20,7 +22,7 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
-#include "msd-sim/src/Physics/Constraints/FrictionConeSolver.hpp"
+#include "msd-sim/src/Physics/Constraints/NLoptFrictionSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/FrictionSpec.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
@@ -238,8 +240,8 @@ private:
   Eigen::VectorXd asmBw_;
   Eigen::VectorXd asmW_;
 
-  // Friction cone solver instance
-  FrictionConeSolver frictionConeSolver_;
+  // Friction cone solver instance (Ticket: 0068c)
+  NLoptFrictionSolver nloptSolver_;
 };
 
 }  // namespace msd_sim
