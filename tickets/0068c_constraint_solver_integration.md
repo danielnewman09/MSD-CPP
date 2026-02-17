@@ -95,3 +95,25 @@ In `ConstraintSolver.cpp`:
 - The `ActiveSetResult` struct may need a minor update if field names differ — check at integration time
 - Warm-start lambda0 comes from `ContactCache` — the existing warm-start flow is unchanged
 - ECOS path in ConstraintSolver is NOT removed in this ticket (separate follow-up)
+
+---
+
+## Workflow Log
+
+### Implementation Phase
+- **Started**: 2026-02-16 22:36 (workflow orchestrator → cpp-implementer agent)
+- **Completed**: 2026-02-16 22:46 (implementation code complete, 1 regression to resolve)
+- **Branch**: 0068-nlopt-friction-cone-solver
+- **PR**: #71 (draft, in progress)
+- **Artifacts**:
+  - `docs/designs/0068_nlopt_friction_cone_solver/implementation-notes-0068c.md`
+  - `docs/designs/0068_nlopt_friction_cone_solver/iteration-log.md` (updated)
+- **Changes**:
+  - Modified: ConstraintSolver.{hpp,cpp}, 2× CMakeLists.txt, iteration-log.md
+  - Deleted: FrictionConeSolver.{hpp,cpp}, ConeProjection.{hpp,cpp}, 3× test files
+- **Build**: ✅ PASS (3 warnings — unused variables in Replay test, non-blocking)
+- **Tests**: ⚠️ 687/693 passing (6 failures)
+  - Baseline: 820/827 (7 failures)
+  - Impact: -133 tests (removed unit tests for old solver), -1 failure (net)
+  - NEW regression: FrictionConeSolverTest.SlidingCubeOnFloor_FrictionSaturatesAtConeLimit (friction deceleration 6.065 vs expected 4.905 m/s², +23.7% oversaturation)
+- **Notes**: All requirements (R1-R4) implemented per design. Integration successful but NLopt produces different friction forces than old solver in sliding contact test. Investigation required to determine if this is a correctness issue or acceptable solver variation. The oversaturation suggests NLopt may be converging to a suboptimal point or the cone constraint formulation needs adjustment. Recommend addressing regression before advancing to Quality Gate phase.
