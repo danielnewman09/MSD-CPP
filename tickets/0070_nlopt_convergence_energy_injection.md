@@ -1,153 +1,211 @@
-# Ticket 0070: NLopt Friction Solver Convergence Failure Injects Energy
+# Ticket 0070: Decouple Normal/Friction Solve to Eliminate Energy Injection
 
 ## Status
 - [x] Draft
-- [ ] Ready for Implementation
+- [x] Ready for Implementation
 - [ ] Implementation Complete — Awaiting Review
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
-**Type**: Bug
+**Current Phase**: Ready for Implementation
+**Type**: Bug / Architecture
 **Priority**: High
 **Created**: 2026-02-17
 **Generate Tutorial**: No
 **Parent Ticket**: None
-**Depends On**: [0068_nlopt_friction_cone_solver](0068_nlopt_friction_cone_solver.md), [0069_friction_velocity_reversal](0069_friction_velocity_reversal.md)
+**Depends On**: [0068_nlopt_friction_cone_solver](0068_nlopt_friction_cone_solver.md)
 
 ---
 
 ## Overview
 
-When the NLopt friction cone solver fails to converge (hits 100-iteration limit), the unconverged solution injects energy into the simulation. This produces sustained energy growth during corner contacts where the effective mass matrix has strong normal-tangent coupling through rotational lever arms.
+The coupled normal+friction QP solver injects energy because its objective function targets restitution bounce velocity, not energy conservation. When the friction cone constraint is active with rotational coupling (off-diagonal terms in the effective mass matrix from lever arms), the cone-constrained solution diverges from the energy-conserving one. This is a formulation-level problem — post-solve clamps cannot fix it.
 
-The existing post-solve `clampImpulseEnergy` safety net catches gross violations but cannot prevent the steady per-frame energy injection from unconverged solutions. The result is a sawtooth energy profile: gradual injection over 10-15 frames, then a large dissipation clamp, then injection resumes.
-
----
-
-## Observed Behavior
-
-In the `RotationalEnergyTest_F4` test (1m cube, tilted 45deg, e_cube=1.0, e_floor=0.5 (default), mu=0.5), during the corner-sliding phase (frames 210-240):
-
-### Solver diagnostics (frames 210-222):
-
-| Frame | Iterations | Converged | Residual | delta_E (J) |
-|-------|-----------|-----------|----------|-------------|
-| 210   | 16        | yes       | 2.58     | -0.009      |
-| 211   | 100       | no        | 4.28     | -0.00005    |
-| 212   | 100       | no        | 4.03     | +0.012      |
-| 213   | 100       | no        | 3.80     | +0.023      |
-| 214   | 100       | no        | 3.59     | +0.034      |
-| 215   | 100       | no        | 3.40     | +0.045      |
-| 216   | 100       | no        | 3.23     | +0.057      |
-| 217   | 100       | no        | 3.09     | +0.069      |
-| 218   | 100       | no        | 2.99     | +0.082      |
-| 219   | 100       | no        | 2.86     | +0.094      |
-| 220   | 100       | no        | 2.85     | +0.107      |
-| 221   | 100       | no        | 2.86     | +0.120      |
-| 222   | 31        | yes       | 2.54     | -0.833 (clamp) |
-
-### Energy profile pattern:
-
-1. NLopt hits 100-iteration limit without converging (residual stays 2-4)
-2. Unconverged solution injects energy — **accelerating** each frame (0.01 -> 0.12 J/frame)
-3. Post-solve `clampImpulseEnergy` eventually catches gross violation (-0.5 to -0.8 J clamp)
-4. Cycle repeats
-
-Total energy at frame 210: 7.30 J. By frame 221: 7.95 J (+0.65 J injected over 11 frames).
-
-### Contact geometry during failures:
-
-- Single off-center contact point (cube corner on floor)
-- Large lever arm from contact to CoM (~0.7m)
-- Strong rotational coupling in effective mass matrix (normal impulse changes tangent velocity through angular momentum)
-- The coupled QP has poor conditioning for this geometry
+The fix is to decouple normal and friction into sequential solves, which is the standard approach used by Box2D, Bullet, and most production physics engines.
 
 ---
 
-## Root Cause Analysis
+## Root Cause
 
-The NLopt coupled QP solves:
+### The QP objective ≠ energy conservation
+
+The coupled friction solver minimizes:
 
 ```
-min  0.5 * lambda^T * A * lambda - b^T * lambda
-s.t. lambda_n >= 0
-     ||lambda_t|| <= mu * lambda_n  (friction cone)
+min  0.5·λᵀAλ + bᵀλ
+s.t. λ_n ≥ 0, ||λ_t|| ≤ μ·λ_n
 ```
 
-For a single off-center contact, the 3x3 effective mass matrix `A = J * M_inv * J^T` has significant off-diagonal terms due to rotational coupling through the lever arm cross products. The condition number of A depends on the lever arm geometry.
+where the RHS encodes:
+- Normal rows: `b_n = -(1+e)·Jv` (targets restitution bounce velocity)
+- Tangent rows: `b_t = -Jv` (targets zero tangent velocity)
 
-When the cube is balanced on a corner with a large lever arm (~0.7m for a 1m cube), the off-diagonal coupling is strong enough that NLopt's COBYLA/SLSQP optimizer oscillates without converging within 100 iterations. The "best effort" solution at iteration 100 violates the KKT conditions (residual 2-4), and applying this solution injects energy.
+The energy change from applying impulse λ is:
 
-### Why the clamp is insufficient:
+```
+ΔKE = λᵀ·Jv + 0.5·λᵀAλ
+```
 
-The `clampImpulseEnergy` post-solve check compares total delta-KE against zero. But:
-- Each individual frame's injection is small (0.01-0.12 J)
-- The clamp threshold may not catch small injections
-- Energy accumulates over many frames before a large enough violation triggers the clamp
-- The clamp itself is a blunt instrument — it scales the entire impulse, which may not produce a physically correct result
+Note: the QP objective uses `b` (with the `(1+e)` factor on normals), but ΔKE uses `Jv` (without it). **The QP minimizes velocity error relative to a bounce target, not energy.**
+
+### Why unconstrained solve is energy-safe
+
+For the normal-only unconstrained case: `λ = -(1+e)·Jv / A_nn`
+
+```
+ΔKE = v²/A · (1+e) · (e-1)/2
+```
+
+- e=1: ΔKE = 0 (energy conserved) ✓
+- e<1: ΔKE < 0 (energy dissipated) ✓
+
+### Why coupled solve injects energy
+
+When the friction cone constraint `||λ_t|| ≤ μ·λ_n` is active AND A has off-diagonal normal-tangent coupling (from rotational lever arms), the cone pushes λ away from the unconstrained optimum. The shifted λ achieves a different velocity than the unconstrained one, and the mismatch between what the QP optimizes (velocity error with `(1+e)` factor) and what physics requires (energy conservation against `Jv`) means the cone-constrained solution can inject energy.
+
+This is observable in two scenarios:
+1. **F4 tumbling cube**: NLopt fails to converge during corner contact (frames 210-240), unconverged solution injects 0.01-0.12 J/frame
+2. **A6 glancing collision**: Even when converged, the coupled solution injects 0.286 J in a single frame because the cone constraint distorts the restitution impulse
+
+### Why clamps are insufficient
+
+- `clampImpulseEnergy`: Scales the entire λ vector, destroying both normal and friction components. Physically incorrect — produces neither correct bounce nor correct friction.
+- `clampPositiveWorkFriction`: Per-contact tangent check. Misses energy injection from normal-tangent coupling through the off-diagonal A terms.
+- Both are reactive (fix after the fact) rather than preventive (don't generate bad impulses).
 
 ---
 
-## Potential Solutions
+## Solution: Decoupled Normal-Then-Friction Solve
 
-### Option A: Zero friction on convergence failure
-When NLopt fails to converge, discard the friction solution and apply only the normal contact force (from the Active Set Method, which always converges). This is conservative but safe — the cube would slide without friction for those frames rather than gaining energy.
+Split the single coupled QP into two sequential solves:
 
-### Option B: Increase iteration limit
-Raise from 100 to 500 or 1000. May help if the solver is slowly converging, but the residual data suggests it's oscillating rather than converging (residual bounces between 2.8-4.3).
+### Step 1: Solve normals with ASM (existing code)
 
-### Option C: Better warm-starting
-Use previous frame's friction lambdas as the NLopt initial point. Currently the solver starts from zero each frame. Warm-starting from a nearby solution might help convergence.
+```
+min  0.5·λ_nᵀ·A_nn·λ_n + b_nᵀ·λ_n
+s.t. λ_n ≥ 0
+```
 
-### Option D: Fallback to box friction
-When NLopt fails, fall back to the box-constrained friction approximation (inscribed square in cone). The box approximation can be solved exactly via the Active Set Method, which always converges. Less accurate than the cone but energy-safe.
+- ASM always converges (finite iterations, exact LCP)
+- Energy-correct by construction: no friction cone to distort the restitution impulse
+- This is the existing no-friction code path
 
-### Option E: Energy-aware convergence check
-After NLopt returns, compute the energy change from the proposed solution. If energy would increase, scale or discard the friction component. More targeted than the current clamp.
+### Step 2: Update velocities with normal impulse
+
+```
+v_post_normal = v_pre + M⁻¹·Jᵀ·λ_n
+```
+
+Compute the post-normal velocity in constraint space for friction rows.
+
+### Step 3: Solve friction per-contact
+
+With λ_n known from step 1, the friction cone `||λ_t|| ≤ μ·λ_n` becomes a ball constraint with **known radius** `r = μ·λ_n`. The friction problem per-contact is:
+
+```
+min  0.5·λ_tᵀ·A_tt·λ_t + b_t_updatedᵀ·λ_t
+s.t. ||λ_t|| ≤ μ·λ_n
+```
+
+where `b_t_updated = -Jv_t_post_normal` (tangent velocity after normal impulse, no `(1+e)` anywhere).
+
+This is analytically solvable per-contact:
+1. Compute unconstrained optimum: `λ_t* = -A_tt⁻¹·b_t_updated`
+2. If `||λ_t*|| ≤ μ·λ_n`: use `λ_t*` (inside cone)
+3. Else: project onto ball boundary: `λ_t = λ_t* · (μ·λ_n / ||λ_t*||)`
+
+### Why this is energy-safe
+
+- Normal solve: energy-correct by the math shown above
+- Friction solve: `b_t = -Jv_t` with no restitution factor. The unconstrained friction optimum zeros the tangent velocity (maximum dissipation). The ball projection can only reduce the friction magnitude → less dissipation, never injection. Friction can only decelerate sliding.
+- No cross-coupling: the `(1+e)` restitution factor lives entirely in the normal solve, isolated from the friction cone constraint
+
+### What this removes
+
+- `clampImpulseEnergy` — unnecessary, formulation is energy-safe
+- `clampPositiveWorkFriction` — unnecessary, friction can only decelerate
+- NLopt dependency for friction — replaced by analytic per-contact projection
+- NLoptFrictionSolver class — no longer needed (NLopt still used if needed elsewhere)
 
 ---
 
 ## Requirements
 
-### R1: No energy injection from unconverged solver
-When the friction solver fails to converge, the applied impulse must not increase total system energy. Energy must be monotonically non-increasing during sustained contact.
+### R1: No energy injection from friction
+The friction impulse must not increase total system kinetic energy. Energy must be monotonically non-increasing from friction during sustained contact.
 
-### R2: Graceful degradation
-The solution should degrade gracefully (reduced friction accuracy) rather than catastrophically (energy injection or simulation instability).
+### R2: Correct restitution behavior
+Normal impulse must produce correct restitution bounce. Energy conserved for e=1, dissipated for e<1.
 
-### R3: No regression on converged cases
-All existing tests where the solver converges normally must maintain current behavior (691/697 baseline).
+### R3: Friction cone satisfied
+Per-contact: `||λ_t|| ≤ μ·λ_n`. The exact second-order cone, not a box approximation.
+
+### R4: No regression
+All existing tests maintain current behavior (690/697 baseline).
 
 ---
 
-## Reproduction
+## Implementation Plan
+
+### Step 1: Add velocity update helper
+
+In `ConstraintSolver`, add a method to compute post-impulse velocities in constraint space:
+
+```cpp
+Eigen::VectorXd computePostImpulseVelocity(
+  const Eigen::MatrixXd& A,
+  const Eigen::VectorXd& preVelocity,
+  const Eigen::VectorXd& lambda);
+```
+
+### Step 2: Split solve() friction path
+
+Replace the current `solveWithFriction()` call with:
+1. Extract normal-only subproblem (rows where `rowType == Normal`)
+2. Solve normal with ASM
+3. Compute post-normal tangent velocities via `A` and `λ_n`
+4. Per-contact: solve 2D friction with ball projection
+5. Assemble combined λ vector
+
+### Step 3: Remove clamp functions
+
+Remove `clampImpulseEnergy` and `clampPositiveWorkFriction` — they are no longer needed.
+
+### Step 4: Remove NLoptFrictionSolver dependency (optional, deferred)
+
+The NLoptFrictionSolver class is no longer called from the main solve path. It can be removed in a cleanup ticket if desired.
+
+---
+
+## Files Affected
+
+| File | Change |
+|------|--------|
+| `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp` | Decoupled solve, remove clamps |
+| `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.hpp` | Updated method signatures |
+
+---
+
+## Verification
 
 ```bash
 cmake --build --preset debug-sim-only
 ./build/Debug/debug/msd_sim_test --gtest_filter="*RotationalEnergyTest_F4*"
-
-# Load recording and check frames 210-230:
-# replay/recordings/ReplayEnabledTest_RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyConserved.db
+./build/Debug/debug/msd_sim_test --gtest_filter="*A6*"
+./build/Debug/debug/msd_sim_test  # Full suite: 690/697 baseline
 ```
 
----
-
-## Files Likely Affected
-
-| File | Change |
-|------|--------|
-| `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp` | Handle NLopt non-convergence |
-| `msd/msd-sim/src/Physics/Constraints/NLoptFrictionSolver.cpp` | Return convergence status |
-| `msd/msd-sim/src/Physics/Constraints/NLoptFrictionSolver.hpp` | Add convergence info to result |
+For F4 recording, check frames 206-240:
+- `delta_e` ≤ 0 at every frame (no energy injection)
+- No sawtooth pattern — smooth dissipation
 
 ---
 
 ## Notes
 
-- The sliding friction mode from ticket 0069 successfully brings the cube to rest by frame ~410, but the energy injection during the corner-sliding phase (frames 210-240) is non-physical
-- The NLopt solver uses COBYLA (derivative-free) for the cone constraint — SLSQP or other gradient-based methods may converge better for this problem
-- The Active Set Method for normal-only contacts always converges — the issue is specific to the coupled friction QP
-- Post-solve clamps from ticket 0068 (`clampPositiveWorkFriction`, `clampImpulseEnergy`) remain as safety nets but should not be the primary defense
+- The decoupled approach is standard in production physics engines (Box2D, Bullet, PhysX)
+- The per-contact analytic friction projection is O(1) per contact — faster than NLopt
+- Multi-contact friction coupling (contacts on the same body sharing the A matrix) is handled by iterating the per-contact projection a few times (Gauss-Seidel style), or simply solving independently per-contact as a first pass
+- The velocity update between normal and friction solves is the key insight: friction sees post-bounce velocities, so it can never interfere with restitution
 
 ---
 
@@ -159,4 +217,10 @@ cmake --build --preset debug-sim-only
 - **Branch**: 0070-nlopt-convergence-energy-injection
 - **Artifacts**:
   - `tickets/0070_nlopt_convergence_energy_injection.md`
-- **Notes**: Issue discovered during investigation of 0069 corner-lifting behavior. Root cause is NLopt convergence failure during off-center corner contacts with strong rotational coupling.
+- **Notes**: Originally diagnosed as NLopt convergence failure. Root cause analysis revealed a formulation-level problem: the coupled QP objective targets restitution velocity, not energy conservation, and the friction cone constraint distorts the solution when rotational coupling is present. Fix is to decouple normal and friction solves, which is the standard approach in production engines.
+
+### Ready for Implementation Phase
+- **Started**: 2026-02-17
+- **Branch**: 0070-nlopt-convergence-energy-injection
+- **PR**: N/A (will be created during implementation)
+- **Notes**: Ticket specifies no math design required. Requirements, root cause analysis, and implementation plan are complete. Ready for cpp-implementer agent to execute decoupled normal-then-friction solve.
