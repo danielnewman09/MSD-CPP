@@ -58,3 +58,15 @@ _None detected._
 **Test Result**: 691/697 (baseline)
 **Impact vs Previous**: No change (baseline maintained)
 **Assessment**: NLopt solver can now enforce unilateral friction bounds. Next: wire everything together in CollisionPipeline — query ContactCache for sliding state, call setSlidingMode() on FrictionConstraint, pass tangent1LowerBounds to solver.
+
+### Iteration 4 — 2026-02-17 11:52
+**Commit**: 426de2e
+**Hypothesis**: Complete integration by wiring sliding mode detection and enforcement through CollisionPipeline
+**Changes**:
+- `msd/msd-sim/src/Physics/Collision/CollisionPipeline.cpp`: Query `getSlidingState()` when creating FrictionConstraints, call `setSlidingMode()` if active, compute tangent velocity and call `updateSlidingState()` after solving
+- `msd/msd-sim/src/Physics/Constraints/FrictionSpec.hpp`: Added `tangent1LowerBounds` vector field
+- `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp`: Updated `buildFrictionSpec()` to populate tangent1LowerBounds (0.0 for sliding mode, -∞ for bilateral), pass to NLoptFrictionSolver
+**Build Result**: PASS
+**Test Result**: 691/697 (baseline)
+**Impact vs Previous**: No change (baseline maintained), F4 tests still passing
+**Assessment**: Full sliding friction mode implementation complete. All components integrated: ContactCache tracks sliding state, FrictionConstraint aligns tangent basis, NLoptFrictionSolver enforces unilateral bounds, CollisionPipeline orchestrates the workflow. Ready for final testing on F4 settling behavior.
