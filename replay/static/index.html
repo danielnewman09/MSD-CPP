@@ -20,13 +20,22 @@
         </div>
 
         <!-- Ticket: 0056f_threejs_overlays -->
-        <!-- Energy Chart Overlay -->
+        <!-- Tabbed Graph Overlay -->
         <div id="energy-chart-container" class="overlay-panel energy-chart hidden">
-            <div class="panel-header">
-                Energy vs Frame
-                <button id="btn-minimize-energy" class="btn-minimize">−</button>
+            <div class="graph-tabs">
+                <button class="graph-tab active" data-tab="energy">Energy</button>
+                <button class="graph-tab" data-tab="linear-vel">Linear Vel</button>
+                <button class="graph-tab" data-tab="angular-vel">Angular Vel</button>
             </div>
-            <canvas id="energy-chart"></canvas>
+            <div class="graph-tab-pane active" data-tab="energy">
+                <canvas id="energy-chart"></canvas>
+            </div>
+            <div class="graph-tab-pane" data-tab="linear-vel">
+                <canvas id="linear-vel-chart"></canvas>
+            </div>
+            <div class="graph-tab-pane" data-tab="angular-vel">
+                <canvas id="angular-vel-chart"></canvas>
+            </div>
         </div>
 
         <!-- Inspector Panel -->
@@ -111,7 +120,7 @@
                 </label>
                 <label class="toggle-label">
                     <input type="checkbox" id="toggle-energy" checked>
-                    Energy Graph
+                    Graphs
                 </label>
                 <label class="toggle-label">
                     <input type="checkbox" id="toggle-inspector">

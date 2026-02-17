@@ -152,6 +152,22 @@ class SimulationInfo(BaseModel):
     path: str
 
 
+class VelocityPoint(BaseModel):
+    """Per-body per-frame velocity timeseries point."""
+
+    body_id: int
+    frame_id: int
+    simulation_time: float
+    vx: float
+    vy: float
+    vz: float
+    speed: float
+    omega_x: float
+    omega_y: float
+    omega_z: float
+    omega_magnitude: float
+
+
 class AssetGeometry(BaseModel):
     """Three.js-compatible geometry data."""
 

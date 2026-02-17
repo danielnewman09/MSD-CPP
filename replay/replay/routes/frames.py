@@ -7,7 +7,7 @@ Ticket: 0056d_fastapi_backend
 from fastapi import APIRouter, HTTPException, Query
 
 from ..config import config
-from ..models import FrameData, FrameInfo, SystemEnergyPoint, EnergyPoint
+from ..models import FrameData, FrameInfo, SystemEnergyPoint, EnergyPoint, VelocityPoint
 from ..services import SimulationService
 
 router = APIRouter(prefix="/simulations/{sim_id}", tags=["frames"])
@@ -82,3 +82,16 @@ async def get_body_energy(sim_id: str, body_id: int):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading body energy: {e}")
+
+
+@router.get("/velocity/{body_id}", response_model=list[VelocityPoint])
+async def get_body_velocity(sim_id: str, body_id: int):
+    """Get per-body velocity timeseries (linear + angular)."""
+    try:
+        db_path = config.get_database_path(sim_id)
+        service = SimulationService(db_path)
+        return service.get_velocity_by_body(body_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading body velocity: {e}")
