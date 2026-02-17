@@ -169,10 +169,20 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
         att(1, 1) = a(tangent2Idx, tangent2Idx);
 
         // Current tangent velocity including effects from normal impulse
-        // and friction impulses from other contacts
+        // and friction impulses from OTHER contacts (exclude self to avoid
+        // Gauss-Seidel self-cancellation: including self causes iteration N+1
+        // to cancel iteration N's result, driving friction to zero)
+        double const savedT1 = lambdaFriction(tangent1Idx);
+        double const savedT2 = lambdaFriction(tangent2Idx);
+        lambdaFriction(tangent1Idx) = 0.0;
+        lambdaFriction(tangent2Idx) = 0.0;
+
         Eigen::Vector2d jvCurrent;
         jvCurrent(0) = jvPostNormal(tangent1Idx) + (a.row(tangent1Idx) * lambdaFriction)(0);
         jvCurrent(1) = jvPostNormal(tangent2Idx) + (a.row(tangent2Idx) * lambdaFriction)(0);
+
+        lambdaFriction(tangent1Idx) = savedT1;
+        lambdaFriction(tangent2Idx) = savedT2;
 
         // Friction QP RHS: drive tangent velocity to zero
         Eigen::Vector2d bt;
