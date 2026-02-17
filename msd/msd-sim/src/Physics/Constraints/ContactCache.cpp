@@ -97,13 +97,25 @@ void ContactCache::update(uint32_t bodyA,
                            const std::vector<Coordinate>& points)
 {
   auto key = makeKey(bodyA, bodyB);
-  cache_[key] = CachedContact{
-    .bodyA_id = std::min(bodyA, bodyB),
-    .bodyB_id = std::max(bodyA, bodyB),
-    .normal = normal,
-    .lambdas = lambdas,
-    .points = points,
-    .age = 0};
+  auto it = cache_.find(key);
+  if (it != cache_.end())
+  {
+    // Preserve sliding state across updates (ticket 0069)
+    it->second.normal = normal;
+    it->second.lambdas = lambdas;
+    it->second.points = points;
+    it->second.age = 0;
+  }
+  else
+  {
+    cache_[key] = CachedContact{
+      .bodyA_id = std::min(bodyA, bodyB),
+      .bodyB_id = std::max(bodyA, bodyB),
+      .normal = normal,
+      .lambdas = lambdas,
+      .points = points,
+      .age = 0};
+  }
 }
 
 void ContactCache::expireOldEntries(uint32_t maxAge)
