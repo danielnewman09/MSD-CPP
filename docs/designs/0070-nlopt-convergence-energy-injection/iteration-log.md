@@ -36,3 +36,13 @@ _None detected._
 **Test Result**: 685/697 — F4 fixed (+1), A4/A6/D4/H5/H6 regressed (-5), friction tests failing
 **Impact vs Previous**: +1 pass (F4 energy conservation), -5 regressions
 **Assessment**: Per-contact independent friction solve is too approximate. Multi-contact coupling through A matrix ignored. A6 worse (1.39J vs 0.286J ticket claim). Need Gauss-Seidel iteration or joint tangent solve.
+
+### Iteration 2 — 2026-02-17 13:10
+**Commit**: e3fd5bf
+**Hypothesis**: Gauss-Seidel iteration will handle multi-contact coupling and fix A6 energy conservation. Iterate per-contact solves with RHS updated from current friction impulses.
+**Changes**:
+- `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp`: Added Gauss-Seidel outer loop (max 10 iterations, convergence tolerance 1e-6), per-contact RHS updated with current friction from other contacts: `jvCurrent = jvPostNormal + A * lambdaFriction`
+**Build Result**: PASS
+**Test Result**: 688/697 — A6 fixed (+1), A4 still failing, D4/H3/H5/H6/B2/F4b/FrictionConeTest still failing
+**Impact vs Previous**: +3 passes (A6 glancing collision now conserves energy, 2 others), -2 regressions vs baseline (690)
+**Assessment**: Significant improvement! A6 litmus test passes (energy conserved < 0.1J). Only 2 failures away from baseline. Remaining failures may be pre-existing or edge cases. Check if baseline failures list is available.
