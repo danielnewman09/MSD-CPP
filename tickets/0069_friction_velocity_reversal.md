@@ -2,11 +2,11 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Implementation
+- [x] Ready for Implementation
 - [ ] Implementation Complete — Awaiting Review
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Ready for Implementation
 **Type**: Bug
 **Priority**: High
 **Created**: 2026-02-17
@@ -177,3 +177,16 @@ cmake --build --preset debug-sim-only
 - Static friction (sticking) is unaffected — sliding mode only activates after sustained sliding is detected
 - The 0068 post-solve clamps (`clampPositiveWorkFriction`, `clampImpulseEnergy`) remain as safety nets for transient contacts
 - If a sliding contact transitions to sticking (velocity drops below threshold), the mode reverts to bilateral friction
+
+---
+
+## Workflow Log
+
+### Draft Phase
+- **Started**: 2026-02-17 (ticket creation)
+- **Completed**: 2026-02-17
+- **Branch**: 0069-friction-velocity-reversal
+- **PR**: N/A (not yet created)
+- **Artifacts**:
+  - `tickets/0069_friction_velocity_reversal.md`
+- **Notes**: Bug fix ticket with implementation approach already specified. Design phase skipped as this is an extension of existing friction constraint system with clear requirements and no architectural changes needed.
