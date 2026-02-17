@@ -22,7 +22,8 @@ target_link_libraries(${MSD_SIM_TEST_NAME}
     PRIVATE
       msd_sim
       GTest::GTest
-      GTest::Main)
+      GTest::Main
+      NLopt::nlopt)  # Ticket: 0068a_nlopt_conan_dependency
 
 target_compile_features(${MSD_SIM_TEST_NAME} PRIVATE cxx_std_20)
 target_compile_options(${MSD_SIM_TEST_NAME} PRIVATE -Wno-unused-result)

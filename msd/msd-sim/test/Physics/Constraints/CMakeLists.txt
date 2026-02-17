@@ -6,6 +6,7 @@
 # Ticket: 0035a_tangent_basis_and_friction_constraint
 # Ticket: 0035b_box_constrained_asm_solver
 # Ticket: 0039b_linear_collision_test_suite
+# Ticket: 0068a_nlopt_conan_dependency
 
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintTest.cpp
@@ -20,4 +21,5 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/WarmStartTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ConeProjectionTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/FrictionConeSolverTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/NLoptDependencyTest.cpp
 )
