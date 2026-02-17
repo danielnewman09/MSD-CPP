@@ -47,3 +47,14 @@ _None detected._
 **Test Result**: 691/697 (baseline)
 **Impact vs Previous**: No change (baseline maintained)
 **Assessment**: FrictionConstraint can now override its tangent basis for sliding mode. Next: modify NLoptFrictionSolver to support unilateral tangent bounds (lambda_t1 >= 0).
+
+### Iteration 3 — 2026-02-17 11:42
+**Commit**: 44c2f6b
+**Hypothesis**: Add tangent1 lower bounds parameter to NLoptFrictionSolver to enforce unilateral friction in sliding mode
+**Changes**:
+- `msd/msd-sim/src/Physics/Constraints/NLoptFrictionSolver.hpp`: Added `tangent1LowerBounds` parameter to `solve()` signature
+- `msd/msd-sim/src/Physics/Constraints/NLoptFrictionSolver.cpp`: Updated lower bounds setup to apply per-contact tangent1 bounds when provided (lambda_t1_i >= tangent1LowerBounds[i])
+**Build Result**: PASS
+**Test Result**: 691/697 (baseline)
+**Impact vs Previous**: No change (baseline maintained)
+**Assessment**: NLopt solver can now enforce unilateral friction bounds. Next: wire everything together in CollisionPipeline — query ContactCache for sliding state, call setSlidingMode() on FrictionConstraint, pass tangent1LowerBounds to solver.

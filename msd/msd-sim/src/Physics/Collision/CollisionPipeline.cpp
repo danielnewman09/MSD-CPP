@@ -300,6 +300,14 @@ void CollisionPipeline::createConstraints(
           comB,
           pair.frictionCoefficient);
 
+        // Ticket 0069: Check if contact is in sliding mode
+        auto [slidingDir, isSliding] = contactCache_.getSlidingState(
+          pair.bodyAId, pair.bodyBId, /* minFrames = */ 3);
+        if (isSliding && slidingDir.has_value())
+        {
+          fc->setSlidingMode(*slidingDir);
+        }
+
         allConstraints_.push_back(std::move(fc));
       }
     }
@@ -471,6 +479,40 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
                              pair.result.normal.z()};
     contactCache_.update(
       pair.bodyAId, pair.bodyBId, normalVec, solvedLambdas, contactPoints);
+
+    // Ticket 0069: Update sliding state based on tangent velocity
+    // Compute relative velocity at first contact point to determine sliding
+    if (!contactPoints.empty() && hasFriction)
+    {
+      const size_t numInertial = states_.size() - (allConstraints_.size() > 0 ? 1 : 0); // Approximate
+      const InertialState& stateA =
+        (pair.bodyAIndex < numInertial)
+          ? states_[pair.bodyAIndex].get()
+          : states_[pair.bodyAIndex].get();
+      const InertialState& stateB =
+        (pair.bodyBIndex < numInertial)
+          ? states_[pair.bodyBIndex].get()
+          : states_[pair.bodyBIndex].get();
+
+      // Use first contact point for sliding detection
+      const Coordinate& contactPt = contactPoints[0];
+      const Coordinate& comA = stateA.position;
+      const Coordinate& comB = stateB.position;
+
+      Coordinate const leverArmA = contactPt - comA;
+      Coordinate const leverArmB = contactPt - comB;
+
+      Coordinate const vContactA = stateA.velocity + stateA.getAngularVelocity().cross(leverArmA);
+      Coordinate const vContactB = stateB.velocity + stateB.getAngularVelocity().cross(leverArmB);
+      Coordinate const vRel = vContactA - vContactB;
+
+      // Project onto tangent plane (perpendicular to normal)
+      Coordinate const vTangent = vRel - normalVec * vRel.dot(normalVec);
+      Vector3D const tangentVel{vTangent.x(), vTangent.y(), vTangent.z()};
+
+      contactCache_.updateSlidingState(
+        pair.bodyAId, pair.bodyBId, tangentVel, /* velocityThreshold = */ 0.01);
+    }
   }
 
   return solveResult;

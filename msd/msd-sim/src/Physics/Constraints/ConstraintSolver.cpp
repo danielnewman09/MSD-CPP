@@ -545,6 +545,17 @@ FrictionSpec ConstraintSolver::buildFrictionSpec(
     if (friction != nullptr)
     {
       spec.frictionCoefficients.push_back(friction->getFrictionCoefficient());
+
+      // Ticket 0069: Add tangent1 lower bound if in sliding mode
+      if (friction->isSlidingMode())
+      {
+        spec.tangent1LowerBounds.push_back(0.0);  // lambda_t1 >= 0 (unilateral)
+      }
+      else
+      {
+        spec.tangent1LowerBounds.push_back(-std::numeric_limits<double>::infinity());  // bilateral
+      }
+
       ++numContacts;
     }
   }
@@ -684,9 +695,14 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveWithFriction(
     lambda0 = *initialLambda;
   }
 
-  // Delegate to NLoptFrictionSolver (Ticket: 0068c)
+  // Delegate to NLoptFrictionSolver (Ticket: 0068c, Ticket: 0069)
   auto nloptResult = nloptSolver_.solve(
-    A, b, spec.frictionCoefficients, lambda0);
+    A,
+    b,
+    spec.frictionCoefficients,
+    lambda0,
+    /* normalUpperBounds = */ {},
+    spec.tangent1LowerBounds);
 
   // Post-solve: clamp friction that reverses velocity or does positive work
   int const numContacts =
