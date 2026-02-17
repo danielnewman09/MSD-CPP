@@ -25,9 +25,9 @@
 
 #include <gtest/gtest.h>
 
-#include <chrono>
-#include <cmath>
 #include <iostream>
+
+#include <Eigen/Core>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/test/Replay/ReplayEnabledTest.hpp"
@@ -146,9 +146,11 @@ TEST_F(FrictionDirectionTest, SlidingCube_EnergyInjectionBelowThreshold)
     // Get energy before step
     const auto& stateBefore = cube.getInertialState();
     const double vBefore = stateBefore.velocity.norm();
-    const double omegaBefore = stateBefore.getAngularVelocity().norm();
+    Eigen::Vector3d omegaVecBefore{stateBefore.getAngularVelocity().x(),
+                                   stateBefore.getAngularVelocity().y(),
+                                   stateBefore.getAngularVelocity().z()};
     const double keBefore = 0.5 * mass * vBefore * vBefore +
-                            0.5 * cube.getInertiaTensor().trace() * omegaBefore * omegaBefore;
+                            0.5 * omegaVecBefore.transpose() * cube.getInertiaTensor() * omegaVecBefore;
     const double peBefore = mass * 9.81 * stateBefore.position.z();
     const double eBefore = keBefore + peBefore;
 
@@ -158,9 +160,11 @@ TEST_F(FrictionDirectionTest, SlidingCube_EnergyInjectionBelowThreshold)
     // Get energy after step
     const auto& stateAfter = cube.getInertialState();
     const double vAfter = stateAfter.velocity.norm();
-    const double omegaAfter = stateAfter.getAngularVelocity().norm();
+    Eigen::Vector3d omegaVecAfter{stateAfter.getAngularVelocity().x(),
+                                  stateAfter.getAngularVelocity().y(),
+                                  stateAfter.getAngularVelocity().z()};
     const double keAfter = 0.5 * mass * vAfter * vAfter +
-                           0.5 * cube.getInertiaTensor().trace() * omegaAfter * omegaAfter;
+                           0.5 * omegaVecAfter.transpose() * cube.getInertiaTensor() * omegaVecAfter;
     const double peAfter = mass * 9.81 * stateAfter.position.z();
     const double eAfter = keAfter + peAfter;
 
