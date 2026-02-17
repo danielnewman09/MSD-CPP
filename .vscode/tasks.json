@@ -86,7 +86,7 @@
         {
             "label": "CMake Build",
             "type": "shell",
-            "command": "cmake --build ${command:cmake.buildDirectory} && cmake --build --preset doxygen-db",
+            "command": "cmake --build ${command:cmake.buildDirectory}",
             "options": {
                 "env": {
                     "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"

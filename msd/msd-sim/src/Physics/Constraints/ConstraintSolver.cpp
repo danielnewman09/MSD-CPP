@@ -138,51 +138,80 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
 
     Eigen::VectorXd const jvPostNormal = -b + a * lambdaNormal;
 
-    // Step 7: Solve friction per-contact with analytic ball projection
-    // Build friction specification to identify contact groups
+    // Step 7: Solve friction with Gauss-Seidel iteration
+    // Iterate per-contact friction solves to handle multi-contact coupling through A matrix
+    // Ticket: 0070_nlopt_convergence_energy_injection
     auto spec = buildFrictionSpec(contactConstraints);
     const int numContacts = spec.numContacts;
 
     Eigen::VectorXd lambdaFriction = Eigen::VectorXd::Zero(a.rows());
 
-    for (int c = 0; c < numContacts; ++c)
+    constexpr int maxGSIterations = 10;
+    constexpr double gsConvergenceTol = 1e-6;
+
+    for (int gsIter = 0; gsIter < maxGSIterations; ++gsIter)
     {
-      // Flattened structure: [n_0, t1_0, t2_0, n_1, t1_1, t2_1, ...]
-      // Contact c has rows at indices: 3*c (normal), 3*c+1 (tangent1), 3*c+2 (tangent2)
-      int const normalIdx = 3 * c;
-      int const tangent1Idx = 3 * c + 1;
-      int const tangent2Idx = 3 * c + 2;
+      Eigen::VectorXd lambdaFrictionOld = lambdaFriction;
 
-      // Extract 2x2 tangent block from A matrix
-      Eigen::Matrix2d att;
-      att(0, 0) = a(tangent1Idx, tangent1Idx);
-      att(0, 1) = a(tangent1Idx, tangent2Idx);
-      att(1, 0) = a(tangent2Idx, tangent1Idx);
-      att(1, 1) = a(tangent2Idx, tangent2Idx);
-
-      // Tangent RHS uses post-normal velocity (friction sees post-bounce state)
-      // Friction QP RHS is -Jv_t to drive tangent velocity to zero
-      Eigen::Vector2d bt;
-      bt(0) = -jvPostNormal(tangent1Idx);
-      bt(1) = -jvPostNormal(tangent2Idx);
-
-      // Unconstrained optimum: λ_t* = A_tt^{-1} * b_t
-      Eigen::Vector2d lambdaTangentStar = att.ldlt().solve(bt);
-
-      // Friction cone radius: μ * λ_n
-      double const mu = spec.frictionCoefficients[static_cast<size_t>(c)];
-      double const radiusSquared = mu * mu * normalResult.lambda(c) * normalResult.lambda(c);
-
-      // Ball projection: if ||λ_t*|| > μ*λ_n, project onto boundary
-      double const lambdaTangentNormSquared = lambdaTangentStar.squaredNorm();
-      if (lambdaTangentNormSquared > radiusSquared && radiusSquared > 1e-12)
+      // Gauss-Seidel sweep: solve each contact with updated RHS from other contacts
+      for (int c = 0; c < numContacts; ++c)
       {
-        double const scale = std::sqrt(radiusSquared / lambdaTangentNormSquared);
-        lambdaTangentStar *= scale;
+        // Flattened structure: [n_0, t1_0, t2_0, n_1, t1_1, t2_1, ...]
+        int const normalIdx = 3 * c;
+        int const tangent1Idx = 3 * c + 1;
+        int const tangent2Idx = 3 * c + 2;
+
+        // Extract 2x2 tangent block from A matrix
+        Eigen::Matrix2d att;
+        att(0, 0) = a(tangent1Idx, tangent1Idx);
+        att(0, 1) = a(tangent1Idx, tangent2Idx);
+        att(1, 0) = a(tangent2Idx, tangent1Idx);
+        att(1, 1) = a(tangent2Idx, tangent2Idx);
+
+        // Current tangent velocity including effects from normal impulse
+        // and friction impulses from other contacts
+        Eigen::Vector2d jvCurrent;
+        jvCurrent(0) = jvPostNormal(tangent1Idx) + (a.row(tangent1Idx) * lambdaFriction)(0);
+        jvCurrent(1) = jvPostNormal(tangent2Idx) + (a.row(tangent2Idx) * lambdaFriction)(0);
+
+        // Friction QP RHS: drive tangent velocity to zero
+        Eigen::Vector2d bt;
+        bt(0) = -jvCurrent(0);
+        bt(1) = -jvCurrent(1);
+
+        // Unconstrained optimum: λ_t* = A_tt^{-1} * b_t
+        Eigen::Vector2d lambdaTangentStar = att.ldlt().solve(bt);
+
+        // Friction cone radius: μ * λ_n
+        double const mu = spec.frictionCoefficients[static_cast<size_t>(c)];
+        double const radiusSquared = mu * mu * normalResult.lambda(c) * normalResult.lambda(c);
+
+        // Ball projection: if ||λ_t*|| > μ*λ_n, project onto boundary
+        double const lambdaTangentNormSquared = lambdaTangentStar.squaredNorm();
+        if (lambdaTangentNormSquared > radiusSquared && radiusSquared > 1e-12)
+        {
+          double const scale = std::sqrt(radiusSquared / lambdaTangentNormSquared);
+          lambdaTangentStar *= scale;
+        }
+
+        lambdaFriction(tangent1Idx) = lambdaTangentStar(0);
+        lambdaFriction(tangent2Idx) = lambdaTangentStar(1);
       }
 
-      lambdaFriction(tangent1Idx) = lambdaTangentStar(0);
-      lambdaFriction(tangent2Idx) = lambdaTangentStar(1);
+      // Check convergence: ||λ_new - λ_old|| / ||λ_old||
+      double const deltaLambda = (lambdaFriction - lambdaFrictionOld).norm();
+      double const lambdaNorm = lambdaFrictionOld.norm();
+
+      if (lambdaNorm > 1e-12 && deltaLambda / lambdaNorm < gsConvergenceTol)
+      {
+        // Converged
+        break;
+      }
+      else if (lambdaNorm < 1e-12 && deltaLambda < gsConvergenceTol)
+      {
+        // Converged (zero initial guess case)
+        break;
+      }
     }
 
     // Step 8: Assemble combined λ vector

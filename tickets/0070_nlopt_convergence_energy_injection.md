@@ -224,3 +224,23 @@ For F4 recording, check frames 206-240:
 - **Branch**: 0070-nlopt-convergence-energy-injection
 - **PR**: N/A (will be created during implementation)
 - **Notes**: Ticket specifies no math design required. Requirements, root cause analysis, and implementation plan are complete. Ready for cpp-implementer agent to execute decoupled normal-then-friction solve.
+
+### Implementation Phase (Partial - Escalation Required)
+- **Started**: 2026-02-17
+- **Completed**: 2026-02-17 (partial)
+- **Commit**: 3ad6a78
+- **Branch**: 0070-nlopt-convergence-energy-injection
+- **PR**: N/A
+- **Artifacts**:
+  - `docs/designs/0070-nlopt-convergence-energy-injection/implementation-notes.md`
+  - `docs/designs/0070-nlopt-convergence-energy-injection/iteration-log.md`
+- **Test Results**: 685/697 (baseline: 690/697)
+  - Fixed: F4 tumbling cube energy injection
+  - Regressions: A4, A6, D4, H5, H6 (5 new failures)
+- **Status**: PARTIAL IMPLEMENTATION - ESCALATION REQUIRED
+- **Issue**: Per-contact independent friction solve causes regressions due to ignoring multi-contact coupling through A matrix. A6 worse than baseline (1.39J vs 0.286J claimed).
+- **Next Steps**: Human decision needed on:
+  1. Gauss-Seidel iteration over contacts (simple, may converge slowly)
+  2. Joint tangent SOCP solve (exact, requires NLopt or similar)
+  3. Hybrid approach (G-S with SOCP fallback)
+- **Notes**: Normal solve works correctly and fixes F4. Friction formulation needs refinement to handle multi-contact coupling. See implementation-notes.md for detailed analysis and recommendations.

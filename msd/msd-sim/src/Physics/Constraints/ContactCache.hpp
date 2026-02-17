@@ -168,7 +168,7 @@ private:
   std::unordered_map<BodyPairKey, CachedContact, PairHash> cache_;
 
   static constexpr double kNormalThreshold{0.966};   // cos(15 degrees)
-  static constexpr double kPointMatchRadius{0.02};    // 2cm matching radius
+  static constexpr double kPointMatchRadius{0.10};    // 10cm matching radius
 };
 
 }  // namespace msd_sim
