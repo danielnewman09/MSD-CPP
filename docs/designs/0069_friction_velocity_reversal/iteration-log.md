@@ -36,3 +36,14 @@ _None detected._
 **Test Result**: 691/697 (baseline)
 **Impact vs Previous**: No change (baseline maintained)
 **Assessment**: Infrastructure for sliding state tracking in place. Next: add `setSlidingMode()` to `FrictionConstraint` to override tangent basis.
+
+### Iteration 2 — 2026-02-17 11:35
+**Commit**: 76c8d4a
+**Hypothesis**: Add `setSlidingMode()` to FrictionConstraint to override tangent basis when sliding detected
+**Changes**:
+- `msd/msd-sim/src/Physics/Constraints/FrictionConstraint.hpp`: Added `setSlidingMode(Vector3D)` method declaration, `is_sliding_mode_` flag, `isSlidingMode()` query, included Vector3D header
+- `msd/msd-sim/src/Physics/Constraints/FrictionConstraint.cpp`: Implemented `setSlidingMode()` to align t1 with -slidingDirection, compute t2 = normal × t1, set flag
+**Build Result**: PASS
+**Test Result**: 691/697 (baseline)
+**Impact vs Previous**: No change (baseline maintained)
+**Assessment**: FrictionConstraint can now override its tangent basis for sliding mode. Next: modify NLoptFrictionSolver to support unilateral tangent bounds (lambda_t1 >= 0).

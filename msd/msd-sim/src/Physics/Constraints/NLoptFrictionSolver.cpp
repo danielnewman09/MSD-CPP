@@ -1,4 +1,5 @@
 // Ticket: 0068b_nlopt_friction_solver_class
+// Ticket: 0069_friction_velocity_reversal
 // Design: docs/designs/0068_nlopt_friction_cone_solver/design.md
 
 #include "NLoptFrictionSolver.hpp"
@@ -26,7 +27,8 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
   const Eigen::VectorXd& b,
   const std::vector<double>& mu,
   const Eigen::VectorXd& lambda0,
-  const std::vector<double>& normalUpperBounds)
+  const std::vector<double>& normalUpperBounds,
+  const std::vector<double>& tangent1LowerBounds)
 {
   const int num_contacts = static_cast<int>(mu.size());
   const int num_vars = 3 * num_contacts;
@@ -89,11 +91,19 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
   ObjectiveData obj_data{&A, &b};
   opt.set_min_objective(objective, &obj_data);
 
-  // Set lower bounds: lambda_n >= 0, lambda_t unbounded
+  // Set lower bounds: lambda_n >= 0, lambda_t1 per-contact (if provided), lambda_t2 unbounded
   std::vector<double> lower_bounds(num_vars, -HUGE_VAL);
   for (int i = 0; i < num_contacts; ++i)
   {
-    lower_bounds[3 * i] = 0.0;  // lambda_n_i >= 0
+    lower_bounds[3 * i] = 0.0;  // lambda_n_i >= 0 (always)
+
+    // lambda_t1_i >= tangent1LowerBounds[i] (if provided, for sliding mode)
+    if (!tangent1LowerBounds.empty() &&
+        static_cast<int>(tangent1LowerBounds.size()) == num_contacts)
+    {
+      lower_bounds[3 * i + 1] = tangent1LowerBounds[i];
+    }
+    // lambda_t2_i unbounded (no change, remains -HUGE_VAL)
   }
   opt.set_lower_bounds(lower_bounds);
 

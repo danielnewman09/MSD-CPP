@@ -73,14 +73,20 @@ public:
    * @param normalUpperBounds  Per-contact upper bounds on normal impulses (C entries).
    *        If non-empty, constrains lambda_n_i <= normalUpperBounds[i]. Used to prevent
    *        the coupled QP from inflating normal impulses beyond non-penetration needs.
+   * @param tangent1LowerBounds  Per-contact lower bounds on tangent1 impulses (C entries).
+   *        If non-empty, constrains lambda_t1_i >= tangent1LowerBounds[i]. Used to prevent
+   *        friction from reversing sliding direction (typically 0.0 for sliding mode, omitted
+   *        for bilateral friction). Default: empty (bilateral).
    * @return SolveResult with optimal lambda and diagnostics
+   * @ticket 0069_friction_velocity_reversal
    */
   [[nodiscard]] SolveResult solve(
     const Eigen::MatrixXd& A,
     const Eigen::VectorXd& b,
     const std::vector<double>& mu,
     const Eigen::VectorXd& lambda0 = Eigen::VectorXd{},
-    const std::vector<double>& normalUpperBounds = {});
+    const std::vector<double>& normalUpperBounds = {},
+    const std::vector<double>& tangent1LowerBounds = {});
 
   /// Set convergence tolerance (default: 1e-6)
   void setTolerance(double tol) { tolerance_ = tol; }
