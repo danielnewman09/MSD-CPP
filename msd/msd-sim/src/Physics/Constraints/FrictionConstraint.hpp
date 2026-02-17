@@ -1,4 +1,5 @@
 // Ticket: 0035a_tangent_basis_and_friction_constraint
+// Ticket: 0069_friction_velocity_reversal
 // Design: docs/designs/0035a_tangent_basis_and_friction_constraint/design.md
 
 #ifndef MSD_SIM_PHYSICS_FRICTION_CONSTRAINT_HPP
@@ -7,6 +8,7 @@
 #include <Eigen/Dense>
 #include <utility>
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Collision/TangentBasis.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/LambdaBounds.hpp"
@@ -183,6 +185,25 @@ public:
   void setNormalLambda(double normalLambda);
 
   /**
+   * @brief Enable sliding friction mode with aligned tangent basis
+   *
+   * Overrides the tangent basis to align t1 with -slidingDirection (opposing
+   * motion), with t2 perpendicular to both t1 and the contact normal. This
+   * ensures lambda_t1 directly corresponds to deceleration along the sliding
+   * direction.
+   *
+   * When sliding mode is active, lambda_t1 bounds are made unilateral (>= 0)
+   * by the NLopt solver to prevent friction from accelerating in the sliding
+   * direction.
+   *
+   * @param slidingDirection Unit sliding direction (world frame)
+   *
+   * Thread safety: Not thread-safe (mutates tangent basis)
+   * @ticket 0069_friction_velocity_reversal
+   */
+  void setSlidingMode(const Vector3D& slidingDirection);
+
+  /**
    * @brief Set solved tangent force magnitudes for recording.
    *
    * Called after solver completes to store the actual tangent friction
@@ -237,6 +258,16 @@ public:
     return friction_coefficient_;
   }
 
+  /**
+   * @brief Check if constraint is in sliding mode
+   * @return true if sliding mode is active
+   * @ticket 0069_friction_velocity_reversal
+   */
+  [[nodiscard]] bool isSlidingMode() const
+  {
+    return is_sliding_mode_;
+  }
+
   // Rule of Five
   FrictionConstraint(const FrictionConstraint&) = default;
   FrictionConstraint& operator=(const FrictionConstraint&) = default;
@@ -254,6 +285,7 @@ private:
     0.0};  // Normal contact force λn [N] (updated each iteration)
   double tangent1_lambda_{0.0};  // Solved tangent1 force [N]
   double tangent2_lambda_{0.0};  // Solved tangent2 force [N]
+  bool is_sliding_mode_{false};  // Sliding mode active flag (ticket 0069)
 };
 
 }  // namespace msd_sim

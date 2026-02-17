@@ -25,4 +25,14 @@ _None detected._
 
 ## Iterations
 
-(Iterations will be recorded here as implementation progresses)
+### Iteration 1 — 2026-02-17 11:28
+**Commit**: ea52275
+**Hypothesis**: Add sliding state tracking to ContactCache to detect sustained sliding contacts
+**Changes**:
+- `msd/msd-sim/src/Physics/Constraints/ContactCache.hpp`: Added `slidingDirection` (optional Vector3D) and `slidingFrameCount` (int) to `CachedContact` struct
+- `msd/msd-sim/src/Physics/Constraints/ContactCache.hpp`: Added `updateSlidingState()` and `getSlidingState()` methods
+- `msd/msd-sim/src/Physics/Constraints/ContactCache.cpp`: Implemented sliding state tracking logic (velocity threshold check, direction normalization, frame count increment/reset)
+**Build Result**: PASS
+**Test Result**: 691/697 (baseline)
+**Impact vs Previous**: No change (baseline maintained)
+**Assessment**: Infrastructure for sliding state tracking in place. Next: add `setSlidingMode()` to `FrictionConstraint` to override tangent basis.

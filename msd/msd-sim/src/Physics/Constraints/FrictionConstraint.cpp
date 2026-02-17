@@ -174,6 +174,24 @@ std::pair<double, double> FrictionConstraint::getFrictionBounds() const
   return {-bound, bound};
 }
 
+void FrictionConstraint::setSlidingMode(const Vector3D& slidingDirection)
+{
+  // Align tangent basis with sliding direction:
+  // t1 = -slidingDirection (opposing motion, so positive lambda_t1 decelerates)
+  // t2 = normal × t1 (perpendicular to both normal and t1)
+
+  tangent1_ = Coordinate{-slidingDirection.x(), -slidingDirection.y(), -slidingDirection.z()};
+
+  // Compute t2 = normal × t1 (already unit since both inputs are unit)
+  Vector3D const normalVec{contact_normal_.x(), contact_normal_.y(), contact_normal_.z()};
+  Vector3D const t1Vec{tangent1_.x(), tangent1_.y(), tangent1_.z()};
+  Vector3D const t2Vec = normalVec.cross(t1Vec);
+
+  tangent2_ = Coordinate{t2Vec.x(), t2Vec.y(), t2Vec.z()};
+
+  is_sliding_mode_ = true;
+}
+
 void FrictionConstraint::recordState(msd_transfer::ConstraintRecordVisitor& visitor,
                                       uint32_t bodyAId,
                                       uint32_t bodyBId) const
