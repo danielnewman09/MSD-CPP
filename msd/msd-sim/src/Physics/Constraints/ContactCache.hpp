@@ -1,9 +1,11 @@
 // Ticket: 0040d_contact_persistence_warm_starting
+// Ticket: 0069_friction_velocity_reversal
 
 #ifndef MSD_SIM_PHYSICS_CONTACT_CACHE_HPP
 #define MSD_SIM_PHYSICS_CONTACT_CACHE_HPP
 
 #include <cstdint>
+#include <optional>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -21,7 +23,10 @@ namespace msd_sim
  * locations from the previous frame. Used for warm-starting the
  * Active Set Method solver.
  *
+ * Extended to track sliding contact state for friction direction alignment.
+ *
  * @ticket 0040d_contact_persistence_warm_starting
+ * @ticket 0069_friction_velocity_reversal
  */
 struct CachedContact
 {
@@ -31,6 +36,10 @@ struct CachedContact
   std::vector<double> lambdas;        // Previous frame solved lambda values
   std::vector<Coordinate> points;     // Previous frame contact midpoints
   uint32_t age{0};                    // Frames since last refresh
+
+  // Sliding friction state (ticket 0069)
+  std::optional<Vector3D> slidingDirection;  // Normalized sliding direction (world frame), nullopt if not sliding
+  int slidingFrameCount{0};                  // Consecutive frames with sustained sliding
 };
 
 /**
@@ -128,6 +137,40 @@ public:
    * @ticket 0053d_sat_fallback_cost_reduction
    */
   [[nodiscard]] bool hasEntry(uint32_t bodyA, uint32_t bodyB) const;
+
+  /**
+   * @brief Update sliding friction state for a contact pair
+   *
+   * Detects sustained sliding based on tangent velocity magnitude and updates
+   * the sliding direction. Increments sliding frame count if velocity above
+   * threshold, resets to zero otherwise.
+   *
+   * @param bodyA Body A identifier
+   * @param bodyB Body B identifier
+   * @param tangentVelocity Relative tangent velocity at contact [m/s]
+   * @param velocityThreshold Minimum velocity to qualify as sliding [m/s] (default: 0.01)
+   *
+   * @ticket 0069_friction_velocity_reversal
+   */
+  void updateSlidingState(uint32_t bodyA,
+                          uint32_t bodyB,
+                          const Vector3D& tangentVelocity,
+                          double velocityThreshold = 0.01);
+
+  /**
+   * @brief Query sliding friction state for a contact pair
+   *
+   * Returns sliding direction and whether sliding mode is active (age >= 3, velocity sustained).
+   *
+   * @param bodyA Body A identifier
+   * @param bodyB Body B identifier
+   * @param minFrames Minimum consecutive frames to activate sliding mode (default: 3)
+   * @return {slidingDirection, isActive} pair. slidingDirection is nullopt if not sliding.
+   *
+   * @ticket 0069_friction_velocity_reversal
+   */
+  [[nodiscard]] std::pair<std::optional<Vector3D>, bool>
+  getSlidingState(uint32_t bodyA, uint32_t bodyB, int minFrames = 3) const;
 
   /**
    * @brief Clear all cached data
