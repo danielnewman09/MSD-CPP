@@ -58,7 +58,7 @@ The MSD system provides a modular framework for spacecraft dynamics simulation a
 | [msd-utils](msd-utils/) | Static library | General-purpose utilities (path resolution) | [CLAUDE.md](msd-utils/CLAUDE.md) |
 | [msd-exe](msd-exe/) | Executable | Main application entry point | [CLAUDE.md](msd-exe/CLAUDE.md) |
 | [msd-asset-gen](msd-asset-gen/) | Executable | Asset database generation tool | [CLAUDE.md](msd-asset-gen/CLAUDE.md) |
-| [msd-pybind](msd-pybind/) | pybind11 module | Python bindings for transfer records, auto-generated from BOOST_DESCRIBE | [CLAUDE.md](msd-pybind/CLAUDE.md) |
+| [msd-pybind](msd-pybind/) | pybind11 module | Python bindings for transfer records (auto-generated) and Engine simulation control (manual) | [CLAUDE.md](msd-pybind/CLAUDE.md) |
 
 ---
 

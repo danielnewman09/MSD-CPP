@@ -143,13 +143,14 @@ class RecordParser:
         # Load C++ language from tree-sitter-cpp
         try:
             import tree_sitter_cpp
-            cpp_lang = Language(tree_sitter_cpp.language())
+            cpp_lang = Language(tree_sitter_cpp.language(), "cpp")
         except Exception as e:
             print(f"ERROR: Failed to load tree-sitter-cpp: {e}", file=sys.stderr)
             print("Install with: pip install tree-sitter-cpp", file=sys.stderr)
             sys.exit(1)
 
-        self.parser = Parser(cpp_lang)
+        self.parser = Parser()
+        self.parser.set_language(cpp_lang)
 
     def parse_header(self, header_path: Path) -> Optional[RecordInfo]:
         """Extract record metadata from a header file.
