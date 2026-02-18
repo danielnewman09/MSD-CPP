@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSD Live Simulation</title>
+    <link rel="stylesheet" href="/static/css/live.css">
+</head>
+<body>
+    <!-- Ticket: 0072c_live_simulation_frontend -->
+    <!-- Live simulation page: configuration panel + Three.js viewport + status bar -->
+
+    <div id="layout">
+
+        <!-- Configuration Sidebar -->
+        <aside id="sidebar">
+            <h2 class="sidebar-title">Live Simulation</h2>
+
+            <!-- Object Configuration -->
+            <section class="sidebar-section">
+                <h3 class="section-title">Add Object</h3>
+
+                <div class="form-group">
+                    <label for="asset-select">Asset Type</label>
+                    <select id="asset-select">
+                        <option value="">Loading assets...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Object Type</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="object-type" value="inertial" checked>
+                            Inertial
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="object-type" value="environment">
+                            Environment
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Position (m)</label>
+                    <div class="xyz-inputs">
+                        <div class="xyz-field">
+                            <span class="axis-label x-label">X</span>
+                            <input type="number" id="pos-x" value="0" step="0.5">
+                        </div>
+                        <div class="xyz-field">
+                            <span class="axis-label y-label">Y</span>
+                            <input type="number" id="pos-y" value="0" step="0.5">
+                        </div>
+                        <div class="xyz-field">
+                            <span class="axis-label z-label">Z</span>
+                            <input type="number" id="pos-z" value="5" step="0.5">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mass: only shown for inertial objects -->
+                <div class="form-group" id="mass-group">
+                    <label for="mass-input">Mass (kg)</label>
+                    <input type="number" id="mass-input" value="10.0" min="0.01" step="0.5">
+                </div>
+
+                <div class="form-group">
+                    <label for="restitution-input">Restitution</label>
+                    <input type="number" id="restitution-input" value="0.8" min="0" max="1" step="0.05">
+                </div>
+
+                <div class="form-group">
+                    <label for="friction-input">Friction</label>
+                    <input type="number" id="friction-input" value="0.5" min="0" step="0.05">
+                </div>
+
+                <button id="btn-add-object" class="btn-primary" disabled>Add Object</button>
+            </section>
+
+            <!-- Spawn List -->
+            <section class="sidebar-section">
+                <h3 class="section-title">Objects (<span id="spawn-count">0</span>)</h3>
+                <ul id="spawn-list">
+                    <li class="spawn-empty">No objects added yet.</li>
+                </ul>
+            </section>
+
+            <!-- Simulation Controls -->
+            <section class="sidebar-section">
+                <h3 class="section-title">Simulation</h3>
+
+                <div class="form-group">
+                    <label for="timestep-select">Timestep</label>
+                    <select id="timestep-select">
+                        <option value="10">10 ms</option>
+                        <option value="16" selected>16 ms (~60 fps)</option>
+                        <option value="33">33 ms (~30 fps)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="duration-input">Duration (s)</label>
+                    <input type="number" id="duration-input" value="30" min="1" max="300" step="1">
+                </div>
+
+                <div class="sim-button-group">
+                    <button id="btn-start" class="btn-primary" disabled>Start Simulation</button>
+                    <button id="btn-stop" class="btn-danger hidden">Stop</button>
+                </div>
+            </section>
+
+            <!-- Camera Controls -->
+            <section class="sidebar-section">
+                <button id="btn-reset-camera" class="btn-secondary">Reset Camera</button>
+            </section>
+        </aside>
+
+        <!-- Main Viewport -->
+        <main id="viewport-area">
+            <canvas id="viewport"></canvas>
+
+            <!-- Connecting / loading overlay -->
+            <div id="loading-overlay" class="loading-overlay hidden">
+                <div class="spinner"></div>
+                <div id="loading-message">Connecting...</div>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Status Bar -->
+    <footer id="status-bar">
+        <span class="status-item">
+            <span class="status-label">Status:</span>
+            <span id="status-state" class="status-value state-disconnected">Disconnected</span>
+        </span>
+        <span class="status-item">
+            <span class="status-label">Time:</span>
+            <span id="status-time" class="status-value">0.000 s</span>
+        </span>
+        <span class="status-item">
+            <span class="status-label">Frame:</span>
+            <span id="status-frame" class="status-value">0</span>
+        </span>
+        <span class="status-item">
+            <span class="status-label">Bodies:</span>
+            <span id="status-bodies" class="status-value">0</span>
+        </span>
+        <span class="status-item status-error hidden" id="status-error-msg"></span>
+    </footer>
+
+    <!-- Three.js from CDN (same version as index.html) -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <!-- Live simulation application module -->
+    <script type="module" src="/static/js/live-app.js"></script>
+</body>
+</html>

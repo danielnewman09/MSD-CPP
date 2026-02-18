@@ -131,7 +131,12 @@ replay/
       simulation_service.py   # Database query wrapper
       geometry_service.py     # Geometry conversion
   static/
-    index.html                # Placeholder (Three.js frontend in 0056e)
+    index.html                # Replay viewer (Three.js frontend in 0056e)
+    live.html                 # Live simulation viewer (0072c)
+    js/
+      live-app.js             # WebSocket client + UI controller (0072c)
+    css/
+      live.css                # Styles for live simulation page (0072c)
 ```
 
 ## MCP Server for AI-Assisted Physics Debugging
