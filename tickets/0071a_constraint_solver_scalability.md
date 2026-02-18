@@ -5,10 +5,10 @@
 - [x] Investigation Complete
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Implementation
-- [ ] Implementation Complete
+- [x] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Design Approved — Ready for Implementation
+**Current Phase**: Implementation Complete
 **Type**: Performance / Investigation
 **Priority**: High
 **Created**: 2026-02-17
@@ -148,3 +148,22 @@ Reduce the number of constraints entering the solver:
   - Open Question 1 resolved: PositionCorrector island decomposition (Option A) with clarification
     that island Constraint* list must be filtered to contact-only before passing to PositionCorrector
   - Open Question 2 resolved: Always run island detection (no threshold gate)
+
+### Implementation Phase
+- **Started**: 2026-02-17
+- **Completed**: 2026-02-17
+- **Branch**: `0071a-constraint-solver-scalability`
+- **PR**: #74 (ready for review)
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintIslandBuilder.hpp`
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintIslandBuilder.cpp`
+  - `msd/msd-sim/test/Physics/Constraints/ConstraintIslandBuilderTest.cpp`
+  - `docs/designs/0071a_constraint_solver_scalability/implementation-notes.md`
+  - `docs/designs/0071a_constraint_solver_scalability/iteration-log.md`
+- **Notes**:
+  - Implemented in single iteration; 708/708 tests pass (697 existing + 11 new)
+  - All design R1-R3 integration notes addressed
+  - Open Question 1 (PositionCorrector) implemented as Option A: same island partition reused
+  - Open Question 2 (threshold gate): always run, no gate
+  - numInertial recovered from inverseMasses_ (bodies with inverseMass > 0) — no new member needed
+  - SolverData now reflects aggregated diagnostics: sum of iterations, max residual, AND of converged
