@@ -10,6 +10,7 @@ void bind_records(py::module_& m);
 void bind_database(py::module_& m);
 void bind_geometry(py::module_& m);
 void bind_asset_registry(py::module_& m);
+void bind_engine(py::module_& m);
 
 /**
  * @brief Python module: msd_reader
@@ -42,6 +43,9 @@ PYBIND11_MODULE(msd_reader, m)
 
   // Bind AssetRegistry for geometry lookup by asset ID
   bind_asset_registry(m);
+
+  // Bind Engine for live simulation control
+  bind_engine(m);
 
   // Module metadata
   m.attr("__version__") = "1.0.0";
