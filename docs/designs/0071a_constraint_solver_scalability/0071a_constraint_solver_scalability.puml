@@ -1,0 +1,114 @@
+@startuml 0071a_constraint_solver_scalability
+
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<unchanged>> White
+}
+
+skinparam package {
+    BackgroundColor AliceBlue
+    BorderColor Navy
+}
+
+package "Physics/Constraints" {
+
+    class ConstraintIslandBuilder <<new>> {
+        +{static} buildIslands(constraints: vector<Constraint*>, numBodies: size_t) : vector<Island>
+        ..
+        ' Union-find on body indices
+        ' Groups constraints by connected component
+        ' O(n · α(n)) time
+    }
+
+    class "ConstraintIslandBuilder::Island" <<new>> {
+        +constraints: vector<Constraint*>
+        +bodyIndices: vector<size_t>
+    }
+
+    class ConstraintSolver <<unchanged>> {
+        +solve(constraints, states, inverseMasses, inverseInertias, numBodies, dt, initialLambda) : SolveResult
+        -solveActiveSet(A, b, numContacts, initialLambda) : ActiveSetResult
+        ' Called once per island (not once globally)
+    }
+
+    abstract class Constraint <<unchanged>> {
+        +bodyAIndex() : size_t
+        +bodyBIndex() : size_t
+        +dimension() : int
+        +jacobian(...) : MatrixXd
+    }
+
+    class ContactConstraint <<unchanged>>
+    class FrictionConstraint <<unchanged>>
+
+}
+
+package "Physics/Collision" {
+
+    class CollisionPipeline <<modified>> {
+        -solveConstraintsWithWarmStart(...)
+        ' CHANGED: partitions allConstraints_ by island
+        ' then invokes ConstraintSolver once per island
+        ' accumulates per-island forces into global result
+        ..
+        -allConstraints_: vector<unique_ptr<Constraint>>
+        -constraintSolver_: ConstraintSolver
+    }
+
+    class ContactCache <<unchanged>> {
+        +queryInitialLambda(constraints) : optional<VectorXd>
+        +update(constraints, lambdas)
+        ' Interface unchanged — filtering happens in CollisionPipeline
+    }
+
+    class PositionCorrector <<unchanged>> {
+        +correctPositions(constraints, states, ...)
+        ' Optional: can also receive per-island subsets
+        ' (see Open Questions in design.md)
+    }
+
+}
+
+' Relationships
+
+CollisionPipeline --> ConstraintIslandBuilder : "calls buildIslands()"
+CollisionPipeline --> ConstraintSolver : "calls solve() once per island"
+CollisionPipeline --> ContactCache : "queries / updates warm-start lambdas"
+CollisionPipeline --> PositionCorrector : "calls correctPositions()"
+
+ConstraintIslandBuilder --> Constraint : "reads bodyAIndex(), bodyBIndex()"
+ConstraintIslandBuilder ..> "ConstraintIslandBuilder::Island" : creates
+
+ConstraintSolver --> Constraint : "evaluates jacobian()"
+
+ContactConstraint --|> Constraint
+FrictionConstraint --|> Constraint
+
+note right of ConstraintIslandBuilder
+  <b>Island Detection Algorithm:</b>
+  1. Union-Find on numBodies elements
+  2. For each constraint: union(bodyA, bodyB)
+  3. Group constraints by find(bodyA) root
+  4. Collect unique body indices per group
+  5. Return Island structs
+
+  <b>Complexity:</b> O(n · α(n)) ≈ O(n)
+
+  <b>Example (32 bodies, 8 pairs):</b>
+  Before: one 150×150 Cholesky O(150³)
+  After: 8 × 20×20 Cholesky 8×O(20³) = ~170×
+end note
+
+note bottom of CollisionPipeline
+  <b>Change in solveConstraintsWithWarmStart():</b>
+  OLD:
+    auto result = solver.solve(allConstraints_, ...)
+  NEW:
+    auto islands = ConstraintIslandBuilder::buildIslands(...)
+    for each island:
+      auto result = solver.solve(island.constraints, ...)
+      accumulate forces
+end note
+
+@enduml

@@ -1,12 +1,17 @@
 // Ticket: 0044_collision_pipeline_integration
 // Ticket: 0052d_solver_integration_ecos_removal
+// Ticket: 0071a_constraint_solver_scalability
 // Design: docs/designs/0044_collision_pipeline_integration/design.md
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
+// Design: docs/designs/0071a_constraint_solver_scalability/design.md
 
 #include "msd-sim/src/Physics/Collision/CollisionPipeline.hpp"
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -351,7 +356,10 @@ ConstraintSolver::SolveResult
 CollisionPipeline::solveConstraintsWithWarmStart(double dt)
 {
   // Ticket: 0058_constraint_ownership_cleanup
-  // Determine friction mode based on constraint types in allConstraints_
+  // Ticket: 0071a_constraint_solver_scalability — island decomposition
+  //
+  // Determine friction mode based on constraint types in allConstraints_.
+  // This is a global flag: if any pair has friction, all pairs have FCs.
   bool hasFriction = false;
   for (const auto& c : allConstraints_)
   {
@@ -362,43 +370,30 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     }
   }
 
-  // Lambdas per contact: 3 with friction (n, t1, t2), 1 without
+  // Lambdas per contact: 3 with friction (n, t1, t2), 1 without.
   const size_t lambdasPerContact = hasFriction ? 3 : 1;
 
-  // ===== Phase 3.5: Warm-Start from Contact Cache =====
-  // Ticket: 0058_constraint_ownership_cleanup
-  // Count ContactConstraints (half of total if friction active, all otherwise)
-  size_t numContacts = 0;
-  for (const auto& c : allConstraints_)
-  {
-    if (dynamic_cast<ContactConstraint*>(c.get()))
-    {
-      ++numContacts;
-    }
-  }
-  const size_t totalRows = numContacts * lambdasPerContact;
-  Eigen::VectorXd initialLambda =
-    Eigen::VectorXd::Zero(static_cast<Eigen::Index>(totalRows));
+  // With interleaved storage [CC, FC, CC, FC, ...], each contact group
+  // occupies stride entries in allConstraints_ but only lambdasPerContact
+  // lambdas in the solver's flat lambda vector.
+  const size_t stride = hasFriction ? 2 : 1;
 
-  // Helper: extract contact world-space points for a collision pair's
-  // constraint range. Contact point = comA + leverArmA.
-  // Ticket: 0058_constraint_ownership_cleanup
-  // With interleaved pattern [CC, FC, CC, FC, ...], ContactConstraints are
-  // at even indices when friction is active, sequential otherwise.
+  // Helper: extract contact world-space points for a collision pair's range.
+  // Contact point = comA + leverArmA.
   auto extractContactPoints =
     [this, hasFriction](const PairConstraintRange& range,
                         const CollisionPair& pair) -> std::vector<Coordinate>
   {
     std::vector<Coordinate> points;
     points.reserve(range.count);
-    const size_t stride = hasFriction ? 2 : 1;
+    const size_t s = hasFriction ? 2 : 1;
     for (size_t ci = 0; ci < range.count; ++ci)
     {
-      const size_t idx = range.startIdx + ci * stride;
+      const size_t idx = range.startIdx + ci * s;
       auto* contact = dynamic_cast<ContactConstraint*>(allConstraints_[idx].get());
       if (!contact)
       {
-        continue;  // Skip non-contact constraints
+        continue;
       }
       const InertialState& stateA = states_[pair.bodyAIndex].get();
       points.push_back(Coordinate{stateA.position + contact->getLeverArmA()});
@@ -406,53 +401,208 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     return points;
   };
 
-  // With interleaved storage [CC, FC, CC, FC, ...], each contact group occupies
-  // stride entries in allConstraints_ but only lambdasPerContact lambdas.
-  // range.startIdx is the allConstraints_ index; convert to contact group index.
-  const size_t stride = hasFriction ? 2 : 1;
+  // ===== Phase 3.5 + 4 + 4.5: Island-Decomposed Solve =====
+  //
+  // Partition allConstraints_ into independent contact islands. Each island is
+  // solved independently with its own warm-start vector. This reduces the
+  // effective mass matrix from O((3C)³) global to O(Σᵢ (3Cᵢ)³) per-island.
+  //
+  // Design: docs/designs/0071a_constraint_solver_scalability/design.md
+  // Option A: pass global body arrays (states_, inverseMasses_, inverseInertias_)
+  // unchanged. ConstraintSolver naturally handles sparse body participation.
 
-  for (const auto& range : pairRanges_)
+  auto constraintPtrs = buildSolverView(hasFriction);
+
+  // Determine numInertial: inertial bodies have non-zero inverse mass,
+  // environment bodies have inverseMass == 0.0. Find the highest index
+  // with positive inverse mass + 1.
+  size_t numInertial = 0;
+  for (size_t i = 0; i < inverseMasses_.size(); ++i)
   {
-    const auto& pair = collisions_[range.pairIdx];
-
-    auto currentPoints = extractContactPoints(range, pair);
-
-    Vector3D const normalVec{pair.result.normal.x(),
-                             pair.result.normal.y(),
-                             pair.result.normal.z()};
-    auto cachedLambdas = contactCache_.getWarmStart(
-      pair.bodyAId, pair.bodyBId, normalVec, currentPoints);
-
-    if (!cachedLambdas.empty() &&
-        cachedLambdas.size() == range.count * lambdasPerContact)
+    if (inverseMasses_[i] > 0.0)
     {
-      for (size_t ci = 0; ci < range.count; ++ci)
-      {
-        // Convert allConstraints_ index to contact group index for lambda mapping
-        auto const contactGroupIdx = range.startIdx / stride + ci;
-        auto const flatBase = static_cast<Eigen::Index>(
-          contactGroupIdx * lambdasPerContact);
-        for (size_t k = 0; k < lambdasPerContact; ++k)
-        {
-          initialLambda(flatBase + static_cast<Eigen::Index>(k)) =
-            cachedLambdas[ci * lambdasPerContact + k];
-        }
-      }
+      numInertial = i + 1;  // Track highest inertial index + 1
+    }
+  }
+  // If no inertial bodies found (degenerate), fall back to full solve
+  if (numInertial == 0)
+  {
+    numInertial = states_.size();
+  }
+
+  // Build islands — O(n · α(n)), negligible overhead
+  auto islands = ConstraintIslandBuilder::buildIslands(constraintPtrs, numInertial);
+
+  // Build a reverse map: Constraint* → its contact group index in the global
+  // flat lambda vector. This enables per-island lambda assembly and cache update.
+  //
+  // Contact group index: the index of a ContactConstraint in the ordered sequence
+  // of ContactConstraints (ignoring FrictionConstraints). For the global lambda
+  // vector, contact group g has lambdas at [g*lambdasPerContact .. (g+1)*lambdasPerContact).
+  //
+  // We compute the global contact group index for each ContactConstraint by
+  // iterating allConstraints_ in order.
+  std::unordered_map<const Constraint*, size_t> constraintToGlobalGroup;
+  {
+    size_t globalGroup = 0;
+    for (size_t i = 0; i < allConstraints_.size(); i += stride)
+    {
+      constraintToGlobalGroup[allConstraints_[i].get()] = globalGroup;
+      ++globalGroup;
     }
   }
 
-  // ===== Phase 4: Solve with warm-starting =====
-  // Ticket: 0058_constraint_ownership_cleanup
-  auto constraintPtrs = buildSolverView(hasFriction);
-  auto solveResult = constraintSolver_.solve(constraintPtrs,
-                                              states_,
-                                              inverseMasses_,
-                                              inverseInertias_,
-                                              states_.size(),
-                                              dt,
-                                              initialLambda);
+  // Initialize global result accumulator.
+  // bodyForces is indexed by global body index. Each island solve returns
+  // a bodyForces vector of size numBodies (global), with non-zero entries only
+  // for the island's bodies. We accumulate by summation.
+  ConstraintSolver::SolveResult globalResult;
+  globalResult.bodyForces.resize(states_.size());
+  globalResult.converged = true;
+  globalResult.iterations = 0;
+  globalResult.residual = 0.0;
+
+  // globalLambdas: flattened lambda vector for all contacts (global ordering).
+  // After all islands are solved, this is used by propagateSolvedLambdas()
+  // and the cache update path.
+  size_t const totalContacts = constraintPtrs.size() / stride;
+  Eigen::VectorXd globalLambdas =
+    Eigen::VectorXd::Zero(static_cast<Eigen::Index>(totalContacts * lambdasPerContact));
+
+  for (const auto& island : islands)
+  {
+    // Per-island constraint list (already in global pointer order, so CC/FC
+    // interleaving is preserved — design R2 integration note).
+    const auto& islandConstraints = island.constraints;
+
+    // Count ContactConstraints in this island.
+    // With no friction (stride==1): all constraints are CCs.
+    // With friction (stride==2): interleaved [CC, FC, CC, FC, ...], so every
+    // other entry starting at index 0 is a CC.
+    size_t islandContactCount = 0;
+    if (stride == 1)
+    {
+      islandContactCount = islandConstraints.size();
+    }
+    else
+    {
+      // With friction, count CCs at even positions in the island list
+      for (size_t i = 0; i < islandConstraints.size(); i += stride)
+      {
+        if (dynamic_cast<const ContactConstraint*>(islandConstraints[i]))
+        {
+          ++islandContactCount;
+        }
+      }
+    }
+
+    const size_t islandRows = islandContactCount * lambdasPerContact;
+
+    // Assemble per-island warm-start vector by querying the cache for each
+    // pair whose constraints appear in this island (design R1 integration note).
+    // We identify pairs by checking pairRanges_ against this island's constraint set.
+    Eigen::VectorXd islandLambda =
+      Eigen::VectorXd::Zero(static_cast<Eigen::Index>(islandRows));
+
+    // Build a lookup set of constraint pointers in this island for O(1) membership test
+    std::unordered_set<const Constraint*> islandConstraintSet(
+      islandConstraints.begin(), islandConstraints.end());
+
+    // Island-local contact group index counter
+    size_t islandGroupOffset = 0;
+
+    for (const auto& range : pairRanges_)
+    {
+      // Check if this pair's first ContactConstraint is in this island
+      const Constraint* firstCC = allConstraints_[range.startIdx].get();
+      if (islandConstraintSet.find(firstCC) == islandConstraintSet.end())
+      {
+        continue;  // This pair belongs to a different island
+      }
+
+      const auto& pair = collisions_[range.pairIdx];
+      auto currentPoints = extractContactPoints(range, pair);
+
+      Vector3D const normalVec{pair.result.normal.x(),
+                               pair.result.normal.y(),
+                               pair.result.normal.z()};
+      auto cachedLambdas = contactCache_.getWarmStart(
+        pair.bodyAId, pair.bodyBId, normalVec, currentPoints);
+
+      if (!cachedLambdas.empty() &&
+          cachedLambdas.size() == range.count * lambdasPerContact)
+      {
+        for (size_t ci = 0; ci < range.count; ++ci)
+        {
+          auto const islandBase = static_cast<Eigen::Index>(
+            (islandGroupOffset + ci) * lambdasPerContact);
+          for (size_t k = 0; k < lambdasPerContact; ++k)
+          {
+            islandLambda(islandBase + static_cast<Eigen::Index>(k)) =
+              cachedLambdas[ci * lambdasPerContact + k];
+          }
+        }
+      }
+      islandGroupOffset += range.count;
+    }
+
+    // Solve this island — passing global body arrays (Option A from design)
+    auto islandResult = constraintSolver_.solve(islandConstraints,
+                                                states_,
+                                                inverseMasses_,
+                                                inverseInertias_,
+                                                states_.size(),
+                                                dt,
+                                                islandLambda);
+
+    // Accumulate per-island body forces into global result
+    for (size_t b = 0; b < islandResult.bodyForces.size() && b < globalResult.bodyForces.size(); ++b)
+    {
+      globalResult.bodyForces[b].linearForce = globalResult.bodyForces[b].linearForce +
+                                               islandResult.bodyForces[b].linearForce;
+      globalResult.bodyForces[b].angularTorque = globalResult.bodyForces[b].angularTorque +
+                                                 islandResult.bodyForces[b].angularTorque;
+    }
+    globalResult.iterations += islandResult.iterations;
+    globalResult.converged = globalResult.converged && islandResult.converged;
+    globalResult.residual = std::max(globalResult.residual, islandResult.residual);
+
+    // Map per-island lambdas back to global lambda vector using the
+    // constraintToGlobalGroup map (design R3 integration note).
+    // Iterate the island's CC list in order to determine island-local group offsets.
+    size_t islandLocalGroup = 0;
+    for (size_t i = 0; i < islandConstraints.size(); i += stride)
+    {
+      const Constraint* cc = islandConstraints[i];
+      auto it = constraintToGlobalGroup.find(cc);
+      if (it == constraintToGlobalGroup.end())
+      {
+        ++islandLocalGroup;
+        continue;
+      }
+      const size_t globalGroup = it->second;
+      const auto globalBase = static_cast<Eigen::Index>(globalGroup * lambdasPerContact);
+      const auto islandBase = static_cast<Eigen::Index>(islandLocalGroup * lambdasPerContact);
+
+      if (islandBase + static_cast<Eigen::Index>(lambdasPerContact) <= islandResult.lambdas.size() &&
+          globalBase + static_cast<Eigen::Index>(lambdasPerContact) <= globalLambdas.size())
+      {
+        for (size_t k = 0; k < lambdasPerContact; ++k)
+        {
+          globalLambdas(globalBase + static_cast<Eigen::Index>(k)) =
+            islandResult.lambdas(islandBase + static_cast<Eigen::Index>(k));
+        }
+      }
+      ++islandLocalGroup;
+    }
+  }
+
+  globalResult.lambdas = globalLambdas;
 
   // ===== Phase 4.5: Update Contact Cache =====
+  // Write solved lambdas back to cache for next frame's warm-start.
+  // Cache writes happen after all islands are solved (design: avoid intra-frame
+  // cross-island contamination).
   for (const auto& range : pairRanges_)
   {
     const auto& pair = collisions_[range.pairIdx];
@@ -461,14 +611,13 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     solvedLambdas.reserve(range.count * lambdasPerContact);
     for (size_t ci = 0; ci < range.count; ++ci)
     {
-      // Convert allConstraints_ index to contact group index for lambda mapping
       auto const contactGroupIdx = range.startIdx / stride + ci;
       auto const flatBase = static_cast<Eigen::Index>(
         contactGroupIdx * lambdasPerContact);
       for (size_t k = 0; k < lambdasPerContact; ++k)
       {
         solvedLambdas.push_back(
-          solveResult.lambdas(flatBase + static_cast<Eigen::Index>(k)));
+          globalResult.lambdas(flatBase + static_cast<Eigen::Index>(k)));
       }
     }
 
@@ -481,20 +630,11 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
       pair.bodyAId, pair.bodyBId, normalVec, solvedLambdas, contactPoints);
 
     // Ticket 0069: Update sliding state based on tangent velocity
-    // Compute relative velocity at first contact point to determine sliding
     if (!contactPoints.empty() && hasFriction)
     {
-      const size_t numInertial = states_.size() - (allConstraints_.size() > 0 ? 1 : 0); // Approximate
-      const InertialState& stateA =
-        (pair.bodyAIndex < numInertial)
-          ? states_[pair.bodyAIndex].get()
-          : states_[pair.bodyAIndex].get();
-      const InertialState& stateB =
-        (pair.bodyBIndex < numInertial)
-          ? states_[pair.bodyBIndex].get()
-          : states_[pair.bodyBIndex].get();
+      const InertialState& stateA = states_[pair.bodyAIndex].get();
+      const InertialState& stateB = states_[pair.bodyBIndex].get();
 
-      // Use first contact point for sliding detection
       const Coordinate& contactPt = contactPoints[0];
       const Coordinate& comA = stateA.position;
       const Coordinate& comB = stateB.position;
@@ -506,8 +646,10 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
       Coordinate const vContactB = stateB.velocity + stateB.getAngularVelocity().cross(leverArmB);
       Coordinate const vRel = vContactA - vContactB;
 
-      // Project onto tangent plane (perpendicular to normal)
-      Coordinate const vTangent = vRel - normalVec * vRel.dot(normalVec);
+      Vector3D const normalVecSliding{pair.result.normal.x(),
+                                      pair.result.normal.y(),
+                                      pair.result.normal.z()};
+      Coordinate const vTangent = vRel - normalVecSliding * vRel.dot(normalVecSliding);
       Vector3D const tangentVel{vTangent.x(), vTangent.y(), vTangent.z()};
 
       contactCache_.updateSlidingState(
@@ -515,7 +657,7 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     }
   }
 
-  return solveResult;
+  return globalResult;
 }
 
 void CollisionPipeline::applyForces(
@@ -566,14 +708,57 @@ void CollisionPipeline::correctPositions(
 
   // Ticket 0052d: Pass only normal constraints to position corrector
   // Ticket: 0058_constraint_ownership_cleanup
+  // Ticket: 0071a_constraint_solver_scalability — island decomposition
+  //
+  // Per design Open Question 1 (Option A): reuse the same island partition from
+  // the velocity solve. Each island's constraint subset is filtered to
+  // contact-only before passing to PositionCorrector.
+  // The PositionCorrector receives global state arrays (same as velocity solve
+  // Option A approach — no body index remapping needed).
+
   auto contactView = buildContactView();
-  positionCorrector_.correctPositions(contactView,
-                                      mutableStates,
-                                      inverseMasses_,
-                                      inverseInertias_,
-                                      numBodies,
-                                      numInertial,
-                                      /* dt = */ 0.016);  // Placeholder, not used in position correction
+
+  // Build islands from contact-only view (same partition, contact-only subset)
+  // Use numInertial derived from inverseMasses_ (bodies with non-zero inv mass)
+  size_t posNumInertial = 0;
+  for (size_t i = 0; i < inverseMasses_.size(); ++i)
+  {
+    if (inverseMasses_[i] > 0.0)
+    {
+      posNumInertial = i + 1;
+    }
+  }
+  if (posNumInertial == 0)
+  {
+    posNumInertial = numInertial;
+  }
+
+  auto posIslands = ConstraintIslandBuilder::buildIslands(contactView, posNumInertial);
+
+  if (posIslands.empty())
+  {
+    // Fall back to global solve if island detection found nothing
+    positionCorrector_.correctPositions(contactView,
+                                        mutableStates,
+                                        inverseMasses_,
+                                        inverseInertias_,
+                                        numBodies,
+                                        numInertial,
+                                        /* dt = */ 0.016);
+    return;
+  }
+
+  for (const auto& island : posIslands)
+  {
+    // island.constraints contains only ContactConstraints (built from contactView)
+    positionCorrector_.correctPositions(island.constraints,
+                                        mutableStates,
+                                        inverseMasses_,
+                                        inverseInertias_,
+                                        numBodies,
+                                        numInertial,
+                                        /* dt = */ 0.016);
+  }
 }
 
 void CollisionPipeline::propagateSolvedLambdas(
