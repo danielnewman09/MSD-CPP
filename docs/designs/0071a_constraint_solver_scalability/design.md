@@ -264,3 +264,79 @@ islands.
 ### Requirements Clarification
 
 None — root cause and success criteria are fully specified in the ticket.
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-17
+**Status**: APPROVED WITH NOTES
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | `ConstraintIslandBuilder` is correct PascalCase. `buildIslands()` follows camelCase. `Island` nested struct is appropriate. `bodyIndices` / `constraints` members follow snake_case without trailing underscore (correct for public struct fields). |
+| Namespace organization | ✓ | Placed in `msd_sim` namespace, same as all other constraint types. No namespace pollution. |
+| File structure | ✓ | `Physics/Constraints/ConstraintIslandBuilder.hpp` and `.cpp` mirrors existing pattern (e.g., `ContactConstraintFactory.hpp/.cpp`). Correctly co-located with `ConstraintSolver`, `ContactCache`, `Constraint`. |
+| Dependency direction | ✓ | `ConstraintIslandBuilder` depends only on `Constraint` (base class, within same module). No upward or cross-library dependency. `CollisionPipeline` calling it follows existing direction (pipeline → solver). No Eigen dependency on the new class — clean. |
+
+#### C++ Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | ✓ | `ConstraintIslandBuilder` is a static utility with `= delete` constructor — no resource ownership. Correct for a pure function equivalent. |
+| Smart pointer appropriateness | ✓ | `Island::constraints` holds `Constraint*` (non-owning, correct since `CollisionPipeline` owns via `unique_ptr` in `allConstraints_`). The design correctly avoids `shared_ptr`. |
+| Value/reference semantics | ✓ | `buildIslands()` returns `std::vector<Island>` by value. Island is a simple aggregate — value return is correct and moves efficiently. |
+| Rule of 0/3/5 | ✓ | `ConstraintIslandBuilder() = delete` is explicit and correct (Rule of Zero with deleted constructor). `Island` struct has no special members needed — compiler generates defaults correctly. |
+| Const correctness | ✓ | `buildIslands()` takes `const std::vector<Constraint*>&` for the constraint list. `numInertialBodies` is taken by value. Return is by value. All correct. |
+| Exception safety | ✓ | Design specifies "No exceptions." Returns empty vector for empty input. Union-find and grouping operations are exception-safe (standard containers). |
+| Initialization | ✓ | No floating-point members in `ConstraintIslandBuilder` or `Island`. `Island` struct fields are containers — default-initialized correctly. No NaN concern. |
+| Return values | ✓ | Returns `std::vector<Island>` (value, not output parameter). Follows CLAUDE.md preference. |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | `ConstraintIslandBuilder.hpp` needs only `Constraint.hpp` and `<vector>`. No Eigen headers. Minimal include footprint. |
+| Template complexity | ✓ | No templates used. Pure runtime polymorphism via existing `Constraint*` hierarchy. |
+| Memory strategy | ✓ | Union-find array can be `std::vector<size_t>` allocated once in `buildIslands()`. For `numBodies` up to ~100 this is negligible. No persistent heap state needed. |
+| Thread safety | ✓ | Design explicitly states "Stateless static method, safe to call from any thread." Consistent with single-threaded simulation assumption. |
+| Build integration | ✓ | One new `.cpp` file added to `msd-sim` CMakeLists.txt via `target_sources()`. Pattern matches all existing constraint files. |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | `ConstraintIslandBuilder::buildIslands()` takes only `Constraint*` pointers and a size. Unit tests can create minimal stub constraints with only `bodyAIndex()` / `bodyBIndex()` wired up — no full physics stack needed. |
+| Mockable dependencies | ✓ | Dependency on `Constraint` abstract interface means test stubs can be trivial minimal subclasses (implement only `bodyAIndex()`, `bodyBIndex()`, and the required pure virtuals). |
+| Observable state | ✓ | `Island::constraints` and `Island::bodyIndices` are public fields. Test can directly inspect grouping without any accessor methods. |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | Warm-start vector assembly mismatch after island decomposition — per-island `initialLambda` must align with the island's flattened constraint ordering (normal/tangent1/tangent2 interleaving). Current `solveConstraintsWithWarmStart()` assembles a single `initialLambda` for all constraints. Splitting by island requires preserving per-constraint lambda positions. | Integration | Medium | Medium | Design specifies filtering cache by island constraints. However, the current `ContactCache::getWarmStart()` interface is keyed by `(bodyA_id, bodyB_id)` pair, not by constraint index. Per-island lambda assembly is straightforward: iterate island's constraints, query cache per pair, concatenate. Design should make this explicit. | No |
+| R2 | `buildSolverView()` with `interleaved=true` interleaves `[CC_0, FC_0, CC_1, FC_1, ...]` for the friction path. Island decomposition must preserve this interleaving within each island. If `allConstraints_` stores CC/FC in interleaved order already, filtering to an island's constraints by index preserves interleaving naturally. But if the island's `Constraint*` pointers are assembled naively, interleaving could break. | Integration | Low | High | The design correctly proposes passing island constraint subsets to `ConstraintSolver::solve()` — which already handles the interleaving detection internally via `flattenConstraints()`. As long as the island subset preserves the CC-before-paired-FC ordering, the solver handles the rest. The implementer must preserve pair ordering when building island subsets. | No |
+| R3 | `propagateSolvedLambdas()` in `CollisionPipeline` maps flat lambda indices back to `FrictionConstraint` instances using absolute constraint index offsets. With island decomposition producing per-island lambda vectors, the absolute-to-relative mapping changes. `propagateSolvedLambdas()` must be adapted to handle per-island offset accounting. | Integration | Medium | Low | Each island solve produces its own `SolveResult::lambdas`. Accumulating them while tracking per-island constraint offsets is straightforward. The design does not call this out explicitly — worth noting in the implementation. |  No |
+| R4 | Performance goal risk: If ClusterDrop/32 results in one large island (all bodies in contact with each other, not just the floor), no speedup is achieved. The design correctly notes that environment bodies are excluded from connectivity, but inertial-inertial contacts could still create a fully connected graph. | Performance | Low | High | Root cause analysis (ticket 0071 profiling) shows bodies form transient clusters of 2-6, not a fully connected graph. Environment exclusion handles the floor. This risk is accepted with monitoring: if benchmarks show < 2× improvement, prototype a connectivity diagnostic. | No |
+
+### Notes on Open Questions
+
+**Open Question 1 (PositionCorrector island decomposition)**: The design recommends Option A (decompose alongside velocity solve). This is technically correct and the same island partition can be reused. However, `PositionCorrector::correctPositions()` takes only contact constraints (via `buildContactView()`), not all constraints. The island partition from `ConstraintIslandBuilder` includes both `ContactConstraint` and `FrictionConstraint` pointers. The implementer must filter the island's `Constraint*` list to contact-only when passing to `PositionCorrector`. This is a minor but non-trivial implementation detail that the design does not fully specify. Recommend Option A with this clarification noted in the implementation.
+
+**Open Question 2 (threshold gate)**: Recommendation to always run island detection is correct. Union-find is O(n) with trivial constants. Agreed.
+
+**Notes on `SolverData` diagnostics**: After island decomposition, `CollisionPipeline::solverData_` tracks `iterations`, `residual`, and `converged` for a single solve call. With per-island solving, these fields will reflect only the last island's diagnostics. Consider whether aggregate diagnostics (sum of iterations, max residual, AND of converged) are needed for ticket 0071's monitoring goals. This is not a blocking issue — the existing `SolverData` can be left unchanged for now and extended in ticket 0071b if needed.
+
+### Summary
+
+The design is architecturally sound and well-reasoned. The core insight — that environment bodies must be excluded from union-find connectivity to prevent all bodies merging into a single island via the shared floor — is correctly captured and is the critical correctness condition. The selected approach (pure orchestration change in `CollisionPipeline`, no changes to `ConstraintSolver`) is the lowest-risk path and preserves all existing solver correctness guarantees.
+
+Three integration-level risks are identified (R1-R3) around warm-start vector assembly, CC/FC interleaving within island subsets, and `propagateSolvedLambdas` offset accounting. None of these are design flaws; they are implementation details that the design document should acknowledge. They do not warrant a revision cycle — the implementer should resolve them during the implementation phase using the `CollisionPipeline.cpp` context already in scope.
+
+The design is approved to proceed to implementation.
