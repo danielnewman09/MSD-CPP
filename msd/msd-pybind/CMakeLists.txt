@@ -14,11 +14,14 @@ pybind11_add_module(msd_reader
     src/database_bindings.cpp
     src/geometry_bindings.cpp
     src/asset_registry_bindings.cpp
+    src/engine_bindings.cpp
 )
 
 # Link to msd_assets (provides AssetRegistry, transitively provides msd_transfer)
+# Link to msd_sim (provides Engine for live simulation — ticket 0072a)
 target_link_libraries(msd_reader PRIVATE
     msd_assets
+    msd_sim
 )
 
 # Set output directory to build/{build_type}
