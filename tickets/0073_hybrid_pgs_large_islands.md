@@ -4,11 +4,11 @@
 - [x] Draft
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Implementation
+- [x] Design Approved — Ready for Implementation
 - [ ] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Design Complete — Awaiting Review
+**Current Phase**: Design Approved — Ready for Implementation
 **Type**: Performance
 **Priority**: High
 **Created**: 2026-02-17
@@ -83,7 +83,7 @@ Key details:
 - Normal constraints: lambda >= 0 (unilateral)
 - Friction constraints: -mu*lambda_n <= lambda_t <= mu*lambda_n (box-constrained, coupled to normal)
 - Warm-start: Initialize lambda from ContactCache (existing infrastructure from ticket 0040b/0044)
-- Friction cone: Box approximation (not SOCP) — acceptable for PGS since PGS is already approximate
+- Friction cone: Ball projection onto friction disk `||λ_t|| ≤ μ·λ_n` (same approach as current decoupled solver from ticket 0070)
 
 ### Warm-Starting
 
@@ -132,7 +132,7 @@ This ticket does NOT implement ML — it establishes the PGS infrastructure that
 - `msd/msd-sim/bench/CMakeLists.txt` — If new benchmarks needed
 
 ### Key Design Decisions
-- PGS uses box friction approximation (not SOCP) — acceptable given PGS is already approximate
+- PGS uses ball-projection friction (same as current solver from ticket 0070) — maintains accuracy parity
 - Threshold is compile-time constant initially; can be made configurable later
 - PGS reuses the same Jacobian/mass-matrix assembly as ASM (shared infrastructure in ConstraintSolver)
 - Position correction (PositionCorrector) still runs after PGS — no change to split-impulse pipeline
@@ -150,6 +150,15 @@ This ticket does NOT implement ML — it establishes the PGS infrastructure that
   - `docs/designs/0073_hybrid_pgs_large_islands/design.md`
   - `docs/designs/0073_hybrid_pgs_large_islands/0073_hybrid_pgs_large_islands.puml`
 - **Notes**: No math design required (standard PGS algorithm per Catto 2005). Design introduces `ProjectedGaussSeidel` class with threshold dispatch at n=20 constraints in `ConstraintSolver::solve()`. Key open questions: threshold as constexpr vs runtime config (recommendation: constexpr); box friction approximation on large islands accepted. Confirm whether ticket 0071a island decomposition is a prerequisite.
+
+### Design Review Phase
+- **Started**: 2026-02-17 00:00
+- **Completed**: 2026-02-17 00:00
+- **Branch**: `0073-hybrid-pgs-large-islands`
+- **PR**: #76
+- **Artifacts**:
+  - `docs/designs/0073_hybrid_pgs_large_islands/design.md` (review appended)
+- **Notes**: APPROVED WITH NOTES. All resolved design decisions (kASMThreshold=20 constexpr, ball-projection friction, pre-allocated workspace, 0071a available) confirmed in design. Four risks identified: R1 (medium — ball-projection vs FrictionConstraint::lambdaBounds() box bounds; PGS must apply ball-projection explicitly, not rely on lambdaBounds()); R2 (low — first-frame cold-start penalty); R3 (low — flattenConstraints() reuse recommended); R4 (low — SolverDispatch diagram cleanup). No revision required. PR comment posted.
 
 ---
 
