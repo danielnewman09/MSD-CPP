@@ -4,10 +4,11 @@
 - [x] Draft
 - [x] Investigation Complete
 - [x] Design Complete — Awaiting Review
+- [x] Design Approved — Ready for Implementation
 - [ ] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Design Complete — Awaiting Review
+**Current Phase**: Design Approved — Ready for Implementation
 **Type**: Performance / Investigation
 **Priority**: High
 **Created**: 2026-02-17
@@ -129,3 +130,21 @@ Reduce the number of constraints entering the solver:
   - Open question: need to validate that islands actually form in ClusterDrop/32 scenario (if all
     32 bodies are in one island, speedup is zero — prototype/diagnostic step required)
   - `PositionCorrector` island decomposition recommended alongside velocity solve (same partition)
+
+### Design Review Phase
+- **Started**: 2026-02-17
+- **Completed**: 2026-02-17
+- **Branch**: `0071a-constraint-solver-scalability`
+- **PR**: #74 (draft)
+- **Artifacts**:
+  - `docs/designs/0071a_constraint_solver_scalability/design.md` (review appended)
+- **Notes**:
+  - Status: APPROVED WITH NOTES
+  - No revision cycle required — design approved in single pass
+  - Three implementation-level integration notes (R1-R3) recorded in design.md for implementer:
+    - R1: Per-island warm-start lambda assembly via filtered ContactCache::getWarmStart()
+    - R2: Preserve CC-before-paired-FC ordering within island constraint subsets
+    - R3: propagateSolvedLambdas() must account for per-island lambda offsets
+  - Open Question 1 resolved: PositionCorrector island decomposition (Option A) with clarification
+    that island Constraint* list must be filtered to contact-only before passing to PositionCorrector
+  - Open Question 2 resolved: Always run island detection (no threshold gate)
