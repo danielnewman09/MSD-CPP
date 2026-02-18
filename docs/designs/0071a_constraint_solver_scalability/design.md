@@ -53,22 +53,32 @@ See: `./0071a_constraint_solver_scalability.puml`
     /// no constraint solve and can be skipped entirely.
     ///
     /// @param constraints All contact constraints for the current frame
-    /// @param numBodies Total body count in the simulation (for union-find sizing)
+    /// @param numInertialBodies Number of inertial (dynamic) bodies for union-find sizing.
+    ///        Environment bodies (index >= numInertialBodies) have infinite mass and do not
+    ///        create connectivity between inertial bodies — two cubes touching the same
+    ///        floor remain in separate islands.
     /// @returns List of independent islands, each with its own constraint list
-    ///          and the set of body indices involved
+    ///          and the set of body indices involved (including environment body indices)
     [[nodiscard]] static std::vector<Island> buildIslands(
       const std::vector<Constraint*>& constraints,
-      size_t numBodies);
+      size_t numInertialBodies);
 
     ConstraintIslandBuilder() = delete;
   };
   ```
 
 - **Algorithm**:
-  1. Initialize union-find with `numBodies` elements, one per body.
-  2. For each constraint, union `bodyAIndex()` and `bodyBIndex()`.
-  3. Group constraints by their root representative (find with path compression).
-  4. Collect the unique body indices per group.
+  1. Initialize union-find with `numInertialBodies` elements (environment bodies excluded).
+  2. For each constraint: if both `bodyAIndex()` and `bodyBIndex()` are inertial
+     (< `numInertialBodies`), union them. Constraints where one body is an environment
+     body (index ≥ `numInertialBodies`) do **not** create connectivity — environment
+     bodies have infinite mass (inverse mass = 0) and are unperturbed by contacts, so
+     two inertial bodies touching the same floor are physically independent.
+  3. Group constraints by the root representative of their inertial body (for
+     inertial-environment constraints, use the inertial body's root; for
+     inertial-inertial constraints, use either body's root — they share one after union).
+  4. Collect the unique body indices per group (including the environment body indices
+     referenced by the group's constraints).
   5. Return groups as `Island` structs.
 - **Complexity**: O(n · α(n)) where α is the inverse Ackermann function (effectively O(1) per
   operation, O(n) total).
@@ -163,6 +173,12 @@ For ClusterDrop/32 (32 bodies, ~50 contacts):
 | 32 bodies, 8 islands of 4 bodies each | O((150)³) | 8 × O((20)³) = ~170× faster |
 | 32 bodies, 16 islands of 2 bodies each | O((150)³) | 16 × O((6)³) ≈ 4000× faster |
 
+Environment bodies (e.g., the floor) are excluded from island connectivity because they have
+infinite mass and are unperturbed by contacts. Two cubes that both touch the floor but do not
+touch each other remain in separate islands. This is critical for the ClusterDrop scenario where
+all cubes eventually contact the floor — without this exclusion, all bodies would form a single
+island and the decomposition would yield zero speedup.
+
 In the actual ClusterDrop/32 benchmark (random cluster drop), bodies form transient clusters of
 2-6 bodies per island during settling. The expected real-world speedup is 10-50× for the solve
 phase at 32 bodies, bringing total frame time from ~20ms to ~1-2ms.
@@ -192,8 +208,10 @@ overhead** from island detection (O(n) union-find) and the solve is identical to
 | `ConstraintIslandBuilder` | `buildIslands_singlePair` | Two bodies with one constraint form one island |
 | `ConstraintIslandBuilder` | `buildIslands_twoIndependentPairs` | Two disconnected pairs form two islands |
 | `ConstraintIslandBuilder` | `buildIslands_chainOfThree` | A–B and B–C form one island (transitive connectivity) |
-| `ConstraintIslandBuilder` | `buildIslands_starTopology` | One body contacting N others forms one island |
-| `ConstraintIslandBuilder` | `buildIslands_bodyIndicesCorrect` | Each island's `bodyIndices` contains exactly the bodies in its constraints |
+| `ConstraintIslandBuilder` | `buildIslands_starTopology` | One inertial body contacting N others forms one island |
+| `ConstraintIslandBuilder` | `buildIslands_environmentDoesNotConnect` | Two inertial bodies both contacting the same environment body form two separate islands |
+| `ConstraintIslandBuilder` | `buildIslands_mixedConnectivity` | A–B (inertial-inertial) + B–env + C–env → island {A,B,env} and island {C,env} |
+| `ConstraintIslandBuilder` | `buildIslands_bodyIndicesCorrect` | Each island's `bodyIndices` contains exactly the bodies in its constraints (including environment) |
 
 #### Integration Tests
 
@@ -236,11 +254,12 @@ overhead** from island detection (O(n) union-find) and the solve is identical to
 
 ### Prototype Required
 
-1. **Validate island formation frequency in ClusterDrop/32**: Before implementing, run a diagnostic
-   to count islands formed per frame during ClusterDrop/32. If all 32 bodies form a single island
-   (fully connected contact graph), the speedup will be zero and Option B/C from the ticket should
-   be pursued instead (sparse solver or hybrid PGS). This can be done with a lightweight logging
-   pass in the benchmark before implementing the full design.
+None — the key risk (all bodies forming a single island through the floor) has been resolved by
+excluding environment bodies from island connectivity. Environment bodies have infinite mass
+(`AssetEnvironment::getInverseMass() = 0.0`) and are unperturbed by contacts, so they do not
+create mechanical coupling between inertial bodies. The union-find only operates on inertial body
+indices (< `numInertialBodies`), ensuring cubes that share only the floor remain in separate
+islands.
 
 ### Requirements Clarification
 
