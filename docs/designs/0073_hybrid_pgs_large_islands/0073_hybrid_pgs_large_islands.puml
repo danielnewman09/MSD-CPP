@@ -1,0 +1,134 @@
+@startuml 0073_hybrid_pgs_large_islands
+
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+' ============================================================
+' NEW components
+' ============================================================
+
+class ProjectedGaussSeidel <<new>> {
+    +solve(constraints, states, inverseMasses, inverseInertias,\n        numBodies, dt, initialLambda): SolveResult
+    +setMaxSweeps(n: int): void
+    +setConvergenceTolerance(tol: double): void
+    --
+    -maxSweeps_: int = 50
+    -convergenceTolerance_: double = 1e-6
+    --
+    -assembleJacobians(constraints, states): vector<MatrixXd>
+    -computeDiagonal(constraints, jacobians,\n    inverseMasses, inverseInertias): VectorXd
+    -sweepOnce(A_diag, jacobians, b, lambda,\n    constraints): double
+}
+
+class SolverDispatch <<new>> {
+    +static dispatch(constraints, states, inverseMasses,\n        inverseInertias, numBodies, dt,\n        initialLambda): SolveResult
+    +static kASMThreshold: size_t = 20
+}
+
+' ============================================================
+' MODIFIED components
+' ============================================================
+
+class ConstraintSolver <<modified>> {
+    +solve(constraints, states, inverseMasses,\n        inverseInertias, numBodies, dt,\n        initialLambda): SolveResult
+    --
+    ' Existing members
+    -max_safety_iterations_: int
+    -convergence_tolerance_: double
+    -nloptSolver_: NLoptFrictionSolver
+    --
+    ' New member (ticket 0073)
+    -pgsSolver_: ProjectedGaussSeidel
+}
+
+class CollisionPipeline <<modified>> {
+    +execute(inertialAssets, environmentalAssets, dt): void
+    --
+    ' Existing members
+    -collisionHandler_: CollisionHandler
+    -constraintSolver_: ConstraintSolver
+    -contactCache_: ContactCache
+    -positionCorrector_: PositionCorrector
+    ' ...
+    --
+    -solveConstraintsWithWarmStart(dt): SolveResult
+}
+
+' ============================================================
+' UNCHANGED context components
+' ============================================================
+
+class ConstraintSolver_SolveResult {
+    bodyForces: vector<BodyForces>
+    lambdas: VectorXd
+    converged: bool
+    iterations: int
+    residual: double
+}
+
+class ContactCache {
+    +getWarmStart(...): vector<double>
+    +update(...): void
+}
+
+class Constraint {
+    +lambdaBounds(): LambdaBounds
+    +dimension(): int
+    +jacobian(stateA, stateB, time): MatrixXd
+}
+
+class ContactConstraint {
+}
+
+class FrictionConstraint {
+}
+
+' ============================================================
+' Relationships
+' ============================================================
+
+ConstraintSolver *-- ProjectedGaussSeidel : owns
+ConstraintSolver ..> SolverDispatch : uses dispatch logic\nvia inline threshold check
+SolverDispatch ..> ProjectedGaussSeidel : creates PGS path
+CollisionPipeline *-- ConstraintSolver : owns
+CollisionPipeline *-- ContactCache : owns
+CollisionPipeline ..> ConstraintSolver_SolveResult : receives
+
+ProjectedGaussSeidel ..> Constraint : reads jacobians/bounds
+ProjectedGaussSeidel ..> ConstraintSolver_SolveResult : returns
+
+Constraint <|-- ContactConstraint
+Constraint <|-- FrictionConstraint
+
+note top of ProjectedGaussSeidel
+  O(n) per sweep — scales linearly
+  with constraint count.
+  Used when n > kASMThreshold (default 20).
+  Warm-started from ContactCache lambdas.
+end note
+
+note top of SolverDispatch
+  Dispatch logic embedded in
+  ConstraintSolver::solve().
+  Extracted here conceptually
+  to document the threshold.
+  kASMThreshold = 20 constraints.
+end note
+
+note bottom of ConstraintSolver
+  solve() dispatches based on
+  constraint count AFTER friction
+  detection:
+  - No friction: ASM if n<=20,
+    else PGS
+  - With friction: NLopt if n<=20,
+    else PGS with box friction
+    approximation
+end note
+
+@enduml
