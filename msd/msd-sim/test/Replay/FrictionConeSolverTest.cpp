@@ -121,18 +121,12 @@ TEST_F(FrictionConeSolverTest, test)
   constexpr double friction = 0.5;
   constexpr double initialVelocityX = 5.0;
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.64},
-                              Coordinate{initialVelocityX, 0.0, 0.0},
-                              mass,
-                              restitution,
-                              friction);
-
-  // Physics constants
-  constexpr double g = 9.81;
-  constexpr double dt = 0.016;
-  constexpr double muG = friction * g;  // 4.905 m/s²
+  spawnInertialWithVelocity("unit_cube",
+                            Coordinate{0.0, 0.0, 0.64},
+                            Coordinate{initialVelocityX, 0.0, 0.0},
+                            mass,
+                            restitution,
+                            friction);
 
   // Continue to frame 30 to observe full sliding behavior
   step(250);  // Total: 30 frames

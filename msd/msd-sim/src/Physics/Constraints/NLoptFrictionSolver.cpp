@@ -30,15 +30,15 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
   const std::vector<double>& normalUpperBounds,
   const std::vector<double>& tangent1LowerBounds)
 {
-  const int num_contacts = static_cast<int>(mu.size());
-  const int num_vars = 3 * num_contacts;
+  const auto num_contacts = static_cast<size_t>(mu.size());
+  const auto num_vars = 3 * num_contacts;
 
   // Validate input dimensions
-  if (A.rows() != num_vars || A.cols() != num_vars)
+  if (static_cast<size_t>(A.rows()) != num_vars || static_cast<size_t>(A.cols()) != num_vars)
   {
     throw std::runtime_error("NLoptFrictionSolver: A matrix dimension mismatch");
   }
-  if (b.size() != num_vars)
+  if (static_cast<size_t>(b.size()) != num_vars)
   {
     throw std::runtime_error("NLoptFrictionSolver: b vector dimension mismatch");
   }
@@ -93,13 +93,13 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
 
   // Set lower bounds: lambda_n >= 0, lambda_t1 per-contact (if provided), lambda_t2 unbounded
   std::vector<double> lower_bounds(num_vars, -HUGE_VAL);
-  for (int i = 0; i < num_contacts; ++i)
+  for (size_t i = 0; i < num_contacts; ++i)
   {
     lower_bounds[3 * i] = 0.0;  // lambda_n_i >= 0 (always)
 
     // lambda_t1_i >= tangent1LowerBounds[i] (if provided, for sliding mode)
     if (!tangent1LowerBounds.empty() &&
-        static_cast<int>(tangent1LowerBounds.size()) == num_contacts)
+        tangent1LowerBounds.size() == num_contacts)
     {
       lower_bounds[3 * i + 1] = tangent1LowerBounds[i];
     }
@@ -111,9 +111,9 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
   // NLopt expects c(x) <= 0, so we negate: -(mu^2 * n^2 - t1^2 - t2^2) <= 0
   std::vector<ConstraintData> constraint_data;
   constraint_data.reserve(num_contacts);
-  for (int i = 0; i < num_contacts; ++i)
+  for (size_t i = 0; i < num_contacts; ++i)
   {
-    constraint_data.push_back(ConstraintData{i, mu_clamped[i]});
+    constraint_data.push_back(ConstraintData{static_cast<int>(i), mu_clamped[i]});
     opt.add_inequality_constraint(coneConstraint, &constraint_data[i], tolerance_);
   }
 
@@ -124,9 +124,9 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
   // Set upper bounds on normal impulses if provided
   std::vector<double> upper_bounds(num_vars, HUGE_VAL);
   if (!normalUpperBounds.empty() &&
-      static_cast<int>(normalUpperBounds.size()) == num_contacts)
+      normalUpperBounds.size() == num_contacts)
   {
-    for (int i = 0; i < num_contacts; ++i)
+    for (size_t i = 0; i < num_contacts; ++i)
     {
       upper_bounds[3 * i] = std::max(0.0, normalUpperBounds[i]);
     }
@@ -135,14 +135,14 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
 
   // Initialize solution vector (warm-start or cold start)
   std::vector<double> x(num_vars, 0.0);
-  if (lambda0.size() == num_vars)
+  if (static_cast<size_t>(lambda0.size()) == num_vars)
   {
-    for (int i = 0; i < num_vars; ++i)
+    for (size_t i = 0; i < num_vars; ++i)
     {
-      x[i] = lambda0[i];
+      x[i] = lambda0[static_cast<Eigen::Index>(i)];
     }
     // Clamp warm-start to bounds
-    for (int i = 0; i < num_vars; ++i)
+    for (size_t i = 0; i < num_vars; ++i)
     {
       x[i] = std::max(lower_bounds[i] == -HUGE_VAL ? x[i] : lower_bounds[i], x[i]);
       x[i] = std::min(upper_bounds[i] == HUGE_VAL ? x[i] : upper_bounds[i], x[i]);
@@ -167,20 +167,21 @@ NLoptFrictionSolver::SolveResult NLoptFrictionSolver::solve(
                     result == nlopt::XTOL_REACHED);
 
   // Convert solution back to Eigen
-  Eigen::VectorXd lambda(num_vars);
-  for (int i = 0; i < num_vars; ++i)
+  Eigen::VectorXd lambda(static_cast<Eigen::Index>(num_vars));
+  for (size_t i = 0; i < num_vars; ++i)
   {
-    lambda[i] = x[i];
+    lambda[static_cast<Eigen::Index>(i)] = x[i];
   }
 
   // Compute per-contact constraint violations for diagnostics
   std::vector<double> constraint_violations;
   constraint_violations.reserve(num_contacts);
-  for (int i = 0; i < num_contacts; ++i)
+  for (size_t i = 0; i < num_contacts; ++i)
   {
-    const double n = lambda[3 * i];
-    const double t1 = lambda[3 * i + 1];
-    const double t2 = lambda[3 * i + 2];
+    const auto idx = static_cast<Eigen::Index>(3 * i);
+    const double n = lambda[idx];
+    const double t1 = lambda[idx + 1];
+    const double t2 = lambda[idx + 2];
     const double mu_val = mu_clamped[i];
     const double cone_val = mu_val * mu_val * n * n - t1 * t1 - t2 * t2;
     constraint_violations.push_back(cone_val);
@@ -208,13 +209,13 @@ double NLoptFrictionSolver::objective(
   const Eigen::MatrixXd& A = *obj_data->A;
   const Eigen::VectorXd& b = *obj_data->b;
 
-  const int n = static_cast<int>(lambda.size());
+  const auto n = static_cast<Eigen::Index>(lambda.size());
 
   // Convert std::vector to Eigen::VectorXd
   Eigen::VectorXd lambda_eigen(n);
-  for (int i = 0; i < n; ++i)
+  for (Eigen::Index i = 0; i < n; ++i)
   {
-    lambda_eigen[i] = lambda[i];
+    lambda_eigen[i] = lambda[static_cast<size_t>(i)];
   }
 
   // Compute objective: f = (1/2) lambda^T A lambda - b^T lambda
@@ -224,9 +225,9 @@ double NLoptFrictionSolver::objective(
   if (!grad.empty())
   {
     Eigen::VectorXd grad_eigen = A * lambda_eigen - b;
-    for (int i = 0; i < n; ++i)
+    for (Eigen::Index i = 0; i < n; ++i)
     {
-      grad[i] = grad_eigen[i];
+      grad[static_cast<size_t>(i)] = grad_eigen[i];
     }
   }
 
@@ -239,7 +240,7 @@ double NLoptFrictionSolver::coneConstraint(
   void* data)
 {
   const auto* constraint_data = static_cast<const ConstraintData*>(data);
-  const int contact_idx = constraint_data->contactIndex;
+  const auto contact_idx = static_cast<size_t>(constraint_data->contactIndex);
   const double mu = constraint_data->mu;
 
   const double n = lambda[3 * contact_idx];

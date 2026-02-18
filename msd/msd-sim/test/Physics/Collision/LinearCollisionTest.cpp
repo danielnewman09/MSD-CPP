@@ -149,10 +149,6 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A4_EqualMassElastic_VelocitySwap)
     mass * world().getObject(idA).getInertialState().velocity.x() +
     mass * world().getObject(idB).getInertialState().velocity.x();
 
-  double const initialKE =
-    0.5 * mass * world().getObject(idA).getInertialState().velocity.squaredNorm() +
-    0.5 * mass * world().getObject(idB).getInertialState().velocity.squaredNorm();
-
   // Step simulation to let collision happen
   step(5);
 

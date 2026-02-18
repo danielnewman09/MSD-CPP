@@ -157,7 +157,6 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
       for (int c = 0; c < numContacts; ++c)
       {
         // Flattened structure: [n_0, t1_0, t2_0, n_1, t1_1, t2_1, ...]
-        int const normalIdx = 3 * c;
         int const tangent1Idx = 3 * c + 1;
         int const tangent2Idx = 3 * c + 2;
 
