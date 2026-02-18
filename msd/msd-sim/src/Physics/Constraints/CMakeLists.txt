@@ -10,4 +10,5 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     NLoptFrictionSolver.cpp
     PositionCorrector.cpp
     ContactCache.cpp
+    ConstraintIslandBuilder.cpp
 )
