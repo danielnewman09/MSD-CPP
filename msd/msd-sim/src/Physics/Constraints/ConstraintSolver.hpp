@@ -3,10 +3,12 @@
 // Ticket: 0052d_solver_integration_ecos_removal
 // Ticket: 0068c_constraint_solver_integration
 // Ticket: 0070_nlopt_convergence_energy_injection
+// Ticket: 0073_hybrid_pgs_large_islands
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
 // Design: docs/designs/0068_nlopt_friction_cone_solver/design.md
+// Design: docs/designs/0073_hybrid_pgs_large_islands/design.md
 
 #ifndef MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
 #define MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
@@ -24,6 +26,7 @@
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/NLoptFrictionSolver.hpp"
+#include "msd-sim/src/Physics/Constraints/ProjectedGaussSeidel.hpp"
 #include "msd-sim/src/Physics/Constraints/FrictionSpec.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
@@ -33,19 +36,28 @@ namespace msd_sim
 /**
  * @brief Computes Lagrange multipliers for arbitrary constraint systems
  *
- * Dispatches between Active Set Method (no friction) and FrictionConeSolver
- * (with friction) based on constraint types present. Uses constraint
- * flattening to expand multi-row constraints (FrictionConstraint dim=2) into
- * per-row entries for the 3C x 3C friction system.
+ * Dispatches between:
+ * - Active Set Method (ASM): exact LCP, O(k^3), used when numRows <= kASMThreshold
+ * - Projected Gauss-Seidel (PGS): approximate, O(n) per sweep, used for large islands
+ *
+ * Uses constraint flattening to expand multi-row constraints (FrictionConstraint
+ * dim=2) into per-row entries for the friction system.
  *
  * @ticket 0031_generalized_lagrange_constraints
  * @ticket 0052d_solver_integration_ecos_removal
+ * @ticket 0073_hybrid_pgs_large_islands
  */
 class ConstraintSolver
 {
 public:
   ConstraintSolver() = default;
   ~ConstraintSolver() = default;
+
+  /// Threshold for ASM vs PGS dispatch.
+  /// Islands with total Jacobian rows <= kASMThreshold use exact ASM.
+  /// Islands with numRows > kASMThreshold use PGS.
+  /// Ticket: 0073_hybrid_pgs_large_islands
+  static constexpr size_t kASMThreshold = 20;
 
   // ===== Multi-Body Contact Constraint Solver =====
 
@@ -239,6 +251,9 @@ private:
 
   // Friction cone solver instance (Ticket: 0068c)
   NLoptFrictionSolver nloptSolver_;
+
+  // PGS solver instance for large islands (Ticket: 0073_hybrid_pgs_large_islands)
+  ProjectedGaussSeidel pgsSolver_;
 };
 
 }  // namespace msd_sim

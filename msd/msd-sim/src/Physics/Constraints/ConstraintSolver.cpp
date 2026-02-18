@@ -4,6 +4,7 @@
 // Ticket: 0052d_solver_integration_ecos_removal
 // Ticket: 0068c_constraint_solver_integration
 // Ticket: 0070_nlopt_convergence_energy_injection
+// Ticket: 0073_hybrid_pgs_large_islands
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0045_constraint_solver_unification/design.md
@@ -61,6 +62,41 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
     result.lambdas = Eigen::VectorXd{};
     result.residual = 0.0;
     return result;
+  }
+
+  // ===== Ticket 0073: Hybrid PGS dispatch for large islands =====
+  // Count total Jacobian rows = sum of constraint->dimension().
+  // If numRows > kASMThreshold, route to PGS (O(n) per sweep).
+  // Otherwise, continue with existing exact ASM/decoupled-friction path.
+  {
+    size_t numRows = 0;
+    for (const auto* c : contactConstraints)
+    {
+      numRows += static_cast<size_t>(c->dimension());
+    }
+
+    if (numRows > kASMThreshold)
+    {
+      // PGS path — handles both friction and non-friction cases
+      auto pgsResult = pgsSolver_.solve(
+        contactConstraints, states, inverseMasses, inverseInertias, numBodies,
+        dt, initialLambda);
+
+      // Convert ProjectedGaussSeidel::SolveResult to ConstraintSolver::SolveResult
+      result.lambdas = std::move(pgsResult.lambdas);
+      result.converged = pgsResult.converged;
+      result.iterations = pgsResult.iterations;
+      result.residual = pgsResult.residual;
+      result.bodyForces.resize(numBodies,
+        BodyForces{Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 0.0}});
+      for (size_t k = 0; k < numBodies; ++k)
+      {
+        result.bodyForces[k].linearForce = pgsResult.bodyForces[k].linearForce;
+        result.bodyForces[k].angularTorque =
+          pgsResult.bodyForces[k].angularTorque;
+      }
+      return result;
+    }
   }
 
   // Ticket 0052d: Detect friction constraints via lambdaBounds()

@@ -8,6 +8,7 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     ContactConstraintFactory.cpp
     FrictionConstraint.cpp
     NLoptFrictionSolver.cpp
+    ProjectedGaussSeidel.cpp
     PositionCorrector.cpp
     ContactCache.cpp
     ConstraintIslandBuilder.cpp
