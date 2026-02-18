@@ -12,6 +12,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Required for aarch64: static libraries linked into shared objects (e.g. pybind11 modules)
+# must be compiled with position-independent code
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # Build options
 option(BUILD_TESTING "Build the testing tree" ON)
 option(ENABLE_COVERAGE "Enable code coverage" OFF)
@@ -49,8 +53,12 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     -Wold-style-cast    # Warn on C-style casts
     -Wnull-dereference  # Warn if null pointer dereference is detected
     -Wdouble-promotion  # Warn when float is implicitly promoted to double
-    -Wimplicit-float-conversion  # Warn when double is implicitly converted to float
   )
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-Wimplicit-float-conversion)  # Clang-only: warn on implicit float conversions
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-Wfloat-conversion)  # GCC equivalent
+  endif()
 elseif(MSVC)
   add_compile_options(/W4)
 endif()
