@@ -154,7 +154,7 @@ Create `replay/static/css/live.css` with styles for:
 - **Started**: 2026-02-17 00:00
 - **Completed**: 2026-02-17 00:00
 - **Branch**: 0072c-live-simulation-frontend
-- **PR**: N/A (pending creation)
+- **PR**: #78 (targeting 0072-live-browser-simulation)
 - **Files Created**:
   - `replay/static/live.html`
   - `replay/static/js/live-app.js`
