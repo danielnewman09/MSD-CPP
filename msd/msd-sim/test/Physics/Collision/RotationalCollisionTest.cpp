@@ -140,8 +140,14 @@ TEST_F(ReplayEnabledTest, RotationalCollisionTest_B1_CubeCornerImpact_RotationIn
 }
 
 // ============================================================================
-// B2: Cube edge impact (one edge parallel to floor)
+// B2: Cube edge impact (asymmetric tilt to break symmetry)
 // Validates: Edge contact handling -- predictable rotation axis
+//
+// PHYSICS: A cube rotated exactly 45° about one axis has a symmetric edge
+// contact — both contact points are equidistant from the COM, producing
+// equal and opposite torques that cancel. To test rotation from edge
+// impact, we add a 5° tilt about X to break this symmetry so one end
+// of the edge hits first, generating net torque.
 // ============================================================================
 
 TEST_F(ReplayEnabledTest, RotationalCollisionTest_B2_CubeEdgeImpact_PredictableRotationAxis)
@@ -152,14 +158,11 @@ TEST_F(ReplayEnabledTest, RotationalCollisionTest_B2_CubeEdgeImpact_PredictableR
   // Floor
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  // Cube: rotated 45 degrees about y-axis only (edge down, edge parallel to
-  // y-axis in world frame). This means the cube has an edge pointing down
-  // along the y-axis.
-  Eigen::Quaterniond q{
-    Eigen::AngleAxisd{M_PI / 4.0, Eigen::Vector3d::UnitY()}};
+  // Cube: rotated 45° about Y (edge down) + 5° about X (asymmetric tilt)
+  Eigen::Quaterniond q =
+    Eigen::AngleAxisd{5.0 * M_PI / 180.0, Eigen::Vector3d::UnitX()} *
+    Eigen::AngleAxisd{M_PI / 4.0, Eigen::Vector3d::UnitY()};
 
-  // For a cube rotated 45 degrees about y, the bottom edge is at -sqrt(2)/2
-  // below center. Place center so bottom edge is at z=1 above floor.
   double const halfDiag2D = std::sqrt(2.0) / 2.0;
 
   const auto& cube = spawnInertial("unit_cube",
