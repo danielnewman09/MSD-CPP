@@ -31,15 +31,9 @@ else()
 endif()
 option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ${WARNINGS_AS_ERRORS_DEFAULT})
 
-# Python discovery: prefer project .venv over Xcode's bundled 3.9 or stray framework versions.
+# Python discovery: avoid Xcode's bundled 3.9 or stray framework versions.
 # Must be set before any find_package(Python3) call (including from pybind11 config).
 set(Python3_FIND_FRAMEWORK NEVER)
-if(EXISTS "${CMAKE_SOURCE_DIR}/.venv/bin/python3")
-    execute_process(
-        COMMAND "${CMAKE_SOURCE_DIR}/.venv/bin/python3" -c "import sys; print(sys.base_prefix)"
-        OUTPUT_VARIABLE _MSD_PY_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
-    set(Python3_ROOT_DIR "${_MSD_PY_PREFIX}")
-endif()
 
 # Add useful compiler warnings
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -155,9 +149,8 @@ if(ENABLE_CLANG_TIDY)
 endif()
 
 # Unified Python environment (Ticket: 0065_python_environment_streamlining)
-# All Python tooling uses python/.venv/bin/python3
 # Set up with: python/setup.sh
-set(PROJECT_PYTHON ${CMAKE_SOURCE_DIR}/python/.venv/bin/python3)
+find_program(PROJECT_PYTHON python3 REQUIRED)
 
 # Doxygen documentation (auto-enabled when doxygen is found)
 find_package(Doxygen QUIET)

@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "codebase": {
-      "command": "./scripts/.venv/bin/python3",
+      "command": "python3",
       "args": [
         "./scripts/mcp_codebase_server.py",
         "./build/Debug/docs/codebase.db"

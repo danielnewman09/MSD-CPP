@@ -1,14 +1,14 @@
 {
   "mcpServers": {
     "codebase": {
-      "command": "python/.venv/bin/python3",
+      "command": "python3",
       "args": [
         "scripts/mcp_codebase_server.py",
         "build/Debug/docs/codebase.db"
       ]
     },
     "traceability": {
-      "command": "python/.venv/bin/python3",
+      "command": "python3",
       "args": [
         "scripts/traceability/traceability_server.py",
         "build/Debug/docs/traceability.db",
@@ -17,7 +17,7 @@
       ]
     },
     "replay": {
-      "command": "python/.venv/bin/python3",
+      "command": "python3",
       "args": [
         "replay/mcp_server/server.py"
       ],

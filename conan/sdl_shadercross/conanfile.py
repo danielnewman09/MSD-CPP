@@ -37,9 +37,17 @@ class SDLShadercrossRecipe(ConanFile):
         tc = CMakeToolchain(self)
         tc.variables["CMAKE_EXPORT_COMPILE_COMMANDS"] = "ON"
 
-        # Enable DXC support with vendored mode (builds DXC from source)
-        tc.variables["SDLSHADERCROSS_DXC"] = "ON"
-        tc.variables["SDLSHADERCROSS_VENDORED"] = "ON"
+        # DXC/DXBC require DirectX headers — disable on Linux
+        if self.settings.os == "Linux":
+            tc.variables["SDLSHADERCROSS_DXC"] = "OFF"
+            tc.variables["SDLSHADERCROSS_DXBC"] = "OFF"
+            tc.variables["SDLSHADERCROSS_VENDORED"] = "OFF"
+            # Workaround: suppress __stdcall attribute warnings on aarch64 GCC
+            tc.extra_cflags = ["-Wno-attributes"]
+        else:
+            # macOS/Windows: enable DXC with vendored mode (builds DXC from source)
+            tc.variables["SDLSHADERCROSS_DXC"] = "ON"
+            tc.variables["SDLSHADERCROSS_VENDORED"] = "ON"
 
         # Enable installation
         tc.variables["SDLSHADERCROSS_INSTALL"] = "ON"
@@ -57,9 +65,30 @@ class SDLShadercrossRecipe(ConanFile):
         git.run("submodule update --init --recursive")
         
     def build(self):
+        if self.settings.os == "Linux":
+            self._patch_elf_note_semicolon()
         cmake = CMake(self)
         cmake.configure()
         cmake.build()
+
+    def _patch_elf_note_semicolon(self):
+        """Patch SDL_shadercross.c to add missing semicolons after SDL_ELF_NOTE_DLOPEN.
+
+        SDL 3.3.3's SDL_ELF_NOTE_DLOPEN macro expands to a struct definition
+        without a trailing semicolon, causing parse errors with GCC on Linux.
+        """
+        import re
+        src_file = os.path.join(self.source_folder, "src", "SDL_shadercross.c")
+        with open(src_file, "r") as f:
+            content = f.read()
+        # Add semicolon after SDL_ELF_NOTE_DLOPEN(...) invocations that lack one
+        content = re.sub(
+            r'(SDL_ELF_NOTE_DLOPEN\([^)]*\))\s*\n#endif',
+            r'\1;\n#endif',
+            content
+        )
+        with open(src_file, "w") as f:
+            f.write(content)
     
     def package(self):
         cmake = CMake(self)
@@ -86,28 +115,17 @@ class SDLShadercrossRecipe(ConanFile):
             lib_dir = os.path.join(local_install, "lib")
             os.makedirs(lib_dir, exist_ok=True)
 
-            # ---------------------------------------------------------
-            # FIX: Explicitly copy libdxcompiler.dylib from build folder
-            # ---------------------------------------------------------
-            # Since DXC is often downloaded/built by CMake, it is in the build_folder,
-            # not in self.dependencies.
-            print("Searching for libdxcompiler.dylib in build folder...")
+            # Copy all libraries from package lib directory
             copy(self, "*",
                     src=os.path.join(self.package_folder, "lib"),
                     dst=os.path.join(local_install, "lib"))
-            
-            # Also copy libdxil.dylib if it exists (sometimes needed alongside DXC)
-            # copy(self, "libdxil.dylib",
-            #         src=self.build_folder,
-            #         dst=lib_dir,
-            #         keep_path=False)
 
-            # Copy SDL3 and spirv-cross libraries
+            # Copy dependency shared libraries (platform-appropriate extensions)
+            lib_glob = "*.dylib*" if self.settings.os == "Macos" else "*.so*"
             for dep in self.dependencies.values():
                 dep_cpp_info = dep.cpp_info.aggregated_components()
-                # Copy all .dylib files from dependency lib directories
                 for libdir in dep_cpp_info.libdirs:
-                    copy(self, "*.dylib*",
+                    copy(self, lib_glob,
                          src=libdir,
                          dst=lib_dir,
                          keep_path=False)
@@ -115,7 +133,10 @@ class SDLShadercrossRecipe(ConanFile):
             # Fix the rpath in the shadercross binary to look in ../lib
             import subprocess
             shadercross_path = os.path.join(local_install, "bin", "shadercross")
-            subprocess.run(["install_name_tool", "-add_rpath", "@executable_path/../lib", shadercross_path])
+            if self.settings.os == "Macos":
+                subprocess.run(["install_name_tool", "-add_rpath", "@executable_path/../lib", shadercross_path])
+            elif self.settings.os == "Linux":
+                subprocess.run(["patchelf", "--set-rpath", "$ORIGIN/../lib", shadercross_path])
             print(f"Fixed rpath for {shadercross_path}")
         else:
             print("SHADERCROSS_INSTALL_DIR not set, skipping local install")

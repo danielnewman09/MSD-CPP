@@ -5,13 +5,14 @@
 		"dockerfile": "Dockerfile"
 	},
 	// Set the user that VSCode will use inside the container
-	"remoteUser": "ubuntu",
+	"remoteUser": "root",
 	// Map the entire project folder to /workspaces/your-project-name in the container
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
 	"mounts": [
-		"source=${localWorkspaceFolder}/.devcontainer/conan-profile,target=/home/ubuntu/.conan2/profiles/default,type=bind,consistency=cached",
-		"source=${localEnv:HOME}/.conan2,target=/home/ubuntu/.conan2,type=bind,consistency=cached"
+		"source=${localWorkspaceFolder}/.devcontainer/conan-profile,target=/root/.conan2/profiles/default,type=bind,consistency=cached",
+		"source=${localEnv:HOME}/.conan2,target=/root/.conan2,type=bind,consistency=cached",
+		"source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached"
 	],
 	// Capabilities needed for debugging with gdb/lldb
 	"runArgs": [
@@ -19,10 +20,12 @@
 		"--security-opt",
 		"seccomp=unconfined"
 	],
+	// "postCreateCommand": "bash python/setup.sh",
 	"postStartCommand": "bash .devcontainer/install-npm.sh",
 	// Environment variables for the container
 	"containerEnv": {
-		"CONAN_HOME": "/home/ubuntu/.conan2"
+		"CONAN_HOME": "/root/.conan2",
+		"ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
 	},
 	// VSCode settings to apply inside the container
 	"customizations": {

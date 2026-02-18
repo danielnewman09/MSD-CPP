@@ -8,29 +8,20 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VENV_DIR="$PROJECT_ROOT/python/.venv"
-VENV_PY="$VENV_DIR/bin/python3"
 BUILD_DIR="$PROJECT_ROOT/build/Debug/debug"
 ASSETS_DB="$SCRIPT_DIR/recordings/assets.db"
 RECORDING_DB="$SCRIPT_DIR/recordings/test_cube_drop.db"
 
-# --- 1. Check unified venv exists ---
-if [ ! -d "$VENV_DIR" ]; then
-    echo "ERROR: Unified Python venv not found at $VENV_DIR"
-    echo "Run the setup script first: python/setup.sh"
-    exit 1
-fi
-
-# --- 2. Verify replay package is installed ---
-if ! "$VENV_PY" -c "import replay" 2>/dev/null; then
-    echo "ERROR: replay package not found in $VENV_DIR"
+# --- 1. Verify replay package is installed ---
+if ! python3 -c "import replay" 2>/dev/null; then
+    echo "ERROR: replay package not found"
     echo "Run the setup script to install: python/setup.sh"
     exit 1
 fi
 
-# --- 3. Check msd_reader is available ---
+# --- 2. Check msd_reader is available ---
 export PYTHONPATH="$BUILD_DIR:$PYTHONPATH"
-if ! "$VENV_PY" -c "import msd_reader" 2>/dev/null; then
+if ! python3 -c "import msd_reader" 2>/dev/null; then
     echo "ERROR: msd_reader not found in $BUILD_DIR"
     echo "Build with pybind enabled first:"
     echo "  conan install . --build=missing -s build_type=Debug"
@@ -39,7 +30,7 @@ if ! "$VENV_PY" -c "import msd_reader" 2>/dev/null; then
     exit 1
 fi
 
-# --- 4. Generate asset database if missing ---
+# --- 3. Generate asset database if missing ---
 mkdir -p "$SCRIPT_DIR/recordings"
 if [ ! -f "$ASSETS_DB" ]; then
     ASSET_GEN="$BUILD_DIR/generate_assets"
@@ -52,7 +43,7 @@ if [ ! -f "$ASSETS_DB" ]; then
     "$ASSET_GEN" "$ASSETS_DB"
 fi
 
-# --- 5. Generate test recording if missing ---
+# --- 4. Generate test recording if missing ---
 if [ ! -f "$RECORDING_DB" ]; then
     GENERATOR="$BUILD_DIR/generate_test_recording"
     if [ ! -f "$GENERATOR" ]; then
@@ -64,11 +55,11 @@ if [ ! -f "$RECORDING_DB" ]; then
     "$GENERATOR" "$ASSETS_DB" "$RECORDING_DB"
 fi
 
-# --- 6. Export environment variables ---
+# --- 5. Export environment variables ---
 export MSD_RECORDINGS_DIR="$SCRIPT_DIR/recordings"
 export MSD_ASSETS_DB="$ASSETS_DB"
 
-# --- 7. Start FastAPI server ---
+# --- 6. Start FastAPI server ---
 echo ""
 echo "Starting replay server..."
 echo "  Asset DB:  $ASSETS_DB"
@@ -76,4 +67,4 @@ echo "  Recording: $RECORDING_DB"
 echo "  API:  http://localhost:8000/api/v1"
 echo "  Docs: http://localhost:8000/docs"
 echo ""
-exec "$VENV_PY" -m uvicorn replay.app:app --reload --app-dir "$SCRIPT_DIR"
+exec python3 -m uvicorn replay.app:app --reload --app-dir "$SCRIPT_DIR"

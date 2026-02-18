@@ -27,6 +27,12 @@ class QhullRecipe(ConanFile):
         "fPIC": True,
     }
 
+    def configure(self):
+        # Qhull 8.0.2 is not C++20 compatible (QhullSet.h uses ClassName<T>()
+        # constructor syntax which is invalid in C++20). Force C++17 for compilation;
+        # the resulting library links fine with C++20 consumers.
+        self.settings.compiler.cppstd = "17"
+
     def config_options(self):
         if self.settings.os == "Windows":
             del self.options.fPIC

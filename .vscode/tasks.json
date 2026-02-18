@@ -37,11 +37,6 @@
             "label": "Conan Build",
             "type": "shell",
             "command": "conan build . --build=missing -s build_type=${input:buildType} -o \"&:enable_coverage=${input:enableCoverage}\"",
-            "options": {
-                "env": {
-                    "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"
-                }
-            },
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -87,11 +82,6 @@
             "label": "CMake Build",
             "type": "shell",
             "command": "cmake --build ${command:cmake.buildDirectory}",
-            "options": {
-                "env": {
-                    "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"
-                }
-            },
             "group": "build",
             "presentation": {
                 "echo": true,
@@ -206,9 +196,9 @@
             "problemMatcher": []
         },
         {
-            "label": "Setup Python Venv",
+            "label": "Setup Python",
             "type": "shell",
-            "command": "python3 -m venv .venv && source .venv/bin/activate && pip install pytest",
+            "command": "bash python/setup.sh",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -223,13 +213,13 @@
         {
             "label": "Run Python Tests",
             "type": "shell",
-            "command": "source .venv/bin/activate && python3 -m pytest msd/msd-pybind/test/ -v",
+            "command": "python3 -m pytest msd/msd-pybind/test/ -v",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
             "group": "test",
             "dependsOn": [
-                "Setup Python Venv"
+                "Setup Python"
             ],
             "presentation": {
                 "echo": true,

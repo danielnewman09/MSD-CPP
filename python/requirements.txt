@@ -11,7 +11,7 @@
 #   - Documentation indexing (stdlib only, no deps)
 #
 # Install with: python/setup.sh
-# Or manually: python3 -m venv python/.venv && python/.venv/bin/pip install -r python/requirements.txt
+# Or manually: pip install -r python/requirements.txt
 
 # --- Traceability Indexing ---
 tree-sitter==0.21.3
