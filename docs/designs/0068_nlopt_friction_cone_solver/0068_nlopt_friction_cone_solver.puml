@@ -1,0 +1,112 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<removed>> LightGray
+}
+
+package "msd-sim::Physics::Constraints" {
+
+  ' NEW: NLopt-based solver
+  class NLoptFrictionSolver <<new>> {
+    +solve(A, b, mu, lambda0): SolveResult
+    +setTolerance(eps): void
+    +setMaxIterations(n): void
+    +setAlgorithm(algo): void
+    +getTolerance(): double
+    +getMaxIterations(): int
+    +getAlgorithm(): Algorithm
+    --
+    -objective(lambda, grad): double
+    -coneConstraint(lambda, grad): void
+    -tolerance_: double
+    -max_iterations_: int
+    -algorithm_: Algorithm
+  }
+
+  enum Algorithm <<new>> {
+    SLSQP
+    COBYLA
+    MMA
+    AUGLAG_SLSQP
+  }
+
+  class SolveResult <<new>> {
+    +lambda: Eigen::VectorXd
+    +converged: bool
+    +iterations: int
+    +residual: double
+    +objective_value: double
+    +constraint_violations: std::vector<double>
+  }
+
+  ' MODIFIED: ConstraintSolver integrates NLoptFrictionSolver
+  class ConstraintSolver <<modified>> {
+    +solve(...): SolveResult
+    --
+    -solveWithFriction(...): ActiveSetResult
+    -frictionSolver_: NLoptFrictionSolver
+  }
+
+  ' REMOVED: Custom solver components
+  class FrictionConeSolver <<removed>> {
+    ' Replaced by NLoptFrictionSolver
+  }
+
+  class ConeProjection <<removed>> {
+    ' Projection now handled internally by NLopt
+  }
+
+  ' Unchanged: Data structures
+  class FrictionSpec {
+    +numContacts: int
+    +frictionCoefficients: std::vector<double>
+  }
+
+  ' External: NLopt library
+  class "nlopt::opt" <<external>> {
+    +set_min_objective(f): void
+    +add_inequality_constraint(c): void
+    +set_lower_bounds(lb): void
+    +optimize(x): result
+  }
+}
+
+' Relationships
+NLoptFrictionSolver --> SolveResult : returns
+NLoptFrictionSolver --> Algorithm : uses
+NLoptFrictionSolver ..> "nlopt::opt" : wraps
+ConstraintSolver --> NLoptFrictionSolver : owns
+ConstraintSolver ..> FrictionSpec : uses
+FrictionConeSolver ..[#gray].> NLoptFrictionSolver : replaced by
+ConeProjection ..[#gray].> "nlopt::opt" : replaced by
+
+note right of NLoptFrictionSolver
+  Solves friction cone QP:
+  minimize f(λ) = (1/2)λᵀAλ - bᵀλ
+  subject to μ²λₙ² - λₜ₁² - λₜ₂² ≥ 0
+             λₙ ≥ 0
+
+  Supports warm-starting from
+  previous frame's lambda via ContactCache
+end note
+
+note right of Algorithm
+  SLSQP: Sequential Quadratic Programming
+         (gradient-based, recommended)
+  COBYLA: Constrained Optimization BY
+          Linear Approximation (derivative-free)
+  MMA: Method of Moving Asymptotes
+  AUGLAG_SLSQP: Augmented Lagrangian wrapper
+end note
+
+note left of ConstraintSolver
+  Modified solveWithFriction():
+  1. Build FrictionSpec from constraints
+  2. Flatten constraints to 3C rows
+  3. Assemble A (3C×3C) and b (3C×1)
+  4. Invoke nloptSolver_.solve()
+  5. Extract per-body forces from lambda
+end note
+
+@enduml

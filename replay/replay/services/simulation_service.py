@@ -4,6 +4,7 @@ Simulation Service — Database query wrapper
 Ticket: 0056d_fastapi_backend
 """
 
+import math
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -27,6 +28,7 @@ from ..models import (
     SolverDiagnostics,
     SystemEnergyPoint,
     Vec3,
+    VelocityPoint,
 )
 
 
@@ -266,6 +268,54 @@ class SimulationService:
             )
             for energy in energy_records
         ]
+
+    def get_velocity_by_body(self, body_id: int) -> list[VelocityPoint]:
+        """Get velocity timeseries for a specific body."""
+        frames = self.db.select_all_frames()
+        frame_time_map = {f.id: f.simulation_time for f in frames}
+
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            rows = conn.execute("""
+                SELECT
+                    adr.frame_id,
+                    vel.x, vel.y, vel.z,
+                    quat.w, quat.x, quat.y, quat.z,
+                    qdot.x, qdot.y, qdot.z, qdot.w
+                FROM AssetDynamicStateRecord adr
+                JOIN InertialStateRecord isr ON adr.kinematicState_id = isr.id
+                JOIN VelocityRecord vel ON isr.velocity_id = vel.id
+                JOIN QuaternionDRecord quat ON isr.orientation_id = quat.id
+                JOIN Vector4DRecord qdot ON isr.quaternionRate_id = qdot.id
+                WHERE adr.body_id = ?
+                ORDER BY adr.frame_id
+            """, (body_id,)).fetchall()
+        finally:
+            conn.close()
+
+        results = []
+        for row in rows:
+            frame_id = row[0]
+            vx, vy, vz = row[1], row[2], row[3]
+            speed = math.sqrt(vx * vx + vy * vy + vz * vz)
+
+            omega = self._qdot_to_omega(
+                row[4], row[5], row[6], row[7],   # q: w, x, y, z
+                row[8], row[9], row[10], row[11],  # qdot: x, y, z, w
+            )
+            omega_mag = math.sqrt(omega.x**2 + omega.y**2 + omega.z**2)
+
+            results.append(VelocityPoint(
+                body_id=body_id,
+                frame_id=frame_id,
+                simulation_time=frame_time_map.get(frame_id, 0.0),
+                vx=vx, vy=vy, vz=vz,
+                speed=speed,
+                omega_x=omega.x, omega_y=omega.y, omega_z=omega.z,
+                omega_magnitude=omega_mag,
+            ))
+
+        return results
 
     def get_system_energy(self) -> list[SystemEnergyPoint]:
         """Get system-level energy timeseries."""

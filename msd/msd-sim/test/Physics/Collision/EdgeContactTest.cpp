@@ -303,15 +303,20 @@ TEST_F(ReplayEnabledTest, EdgeContact_CubeEdgeImpact_InitiatesRotation)
 {
   // Ticket: 0040c_edge_contact_manifold
   // Ticket: 0062d_replay_stability_edge_contact_tests
-  // B2 scenario: cube with edge pointing down, dropped onto floor.
-  // After collision, rotation should be initiated due to off-center contact.
+  //
+  // PHYSICS: A cube with an edge pointing down is dropped onto a floor.
+  // To break the symmetry (a perfectly aligned edge produces zero net
+  // torque because both contact points are equidistant from the COM),
+  // we tilt the cube 5° about the X-axis so one end of the edge hits
+  // first. This asymmetric contact should initiate rotation about X.
 
   // Floor: large cube centered at z=-50 (surface at z=0)
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  // Cube: rotated 45 degrees about y-axis (edge down, edge parallel to x-axis)
-  Eigen::Quaterniond q{
-    Eigen::AngleAxisd{std::numbers::pi / 4.0, Eigen::Vector3d::UnitY()}};
+  // Cube: rotated 45° about Y (edge down) + 5° about X (asymmetric tilt)
+  Eigen::Quaterniond q =
+    Eigen::AngleAxisd{5.0 * std::numbers::pi / 180.0, Eigen::Vector3d::UnitX()} *
+    Eigen::AngleAxisd{std::numbers::pi / 4.0, Eigen::Vector3d::UnitY()};
 
   double const halfDiag2D = std::sqrt(2.0) / 2.0;
 
@@ -325,50 +330,36 @@ TEST_F(ReplayEnabledTest, EdgeContact_CubeEdgeImpact_InitiatesRotation)
   // Manually set orientation (fixture limitation workaround)
   world().getObject(cubeId).getInertialState().orientation = q;
 
-  // Set initial velocity to zero
-  world().getObject(cubeId).getInertialState().velocity =
-    Vector3D{0.0, 0.0, 0.0};
-
-  // Simulate until collision occurs
+  // Simulate until collision and check for rotation
   bool collisionOccurred = false;
 
   for (int i = 0; i < 200; ++i)
   {
     step(1);
 
-    // Check if cube has hit the floor (z position decreased significantly)
     auto const& state = world().getObject(cubeId).getInertialState();
     if (state.position.z() < halfDiag2D + 0.5)
     {
       collisionOccurred = true;
     }
 
-    // After collision, check for rotation
     if (collisionOccurred)
     {
-      // Get quaternion rate magnitude
       double const qDotMag = state.quaternionRate.norm();
       if (qDotMag > 1e-4)
       {
-        // Rotation has been initiated — test passes
         SUCCEED();
         return;
       }
     }
   }
 
-  // If we get here, check if angular velocity is non-zero at the end.
-  // Note: Even with 2 contact points providing geometric extent, the
-  // angular response may be very small due to constraint solver behavior
-  // (Baumgarte stabilization, ERP clamping). The key validation is that
-  // the static collision detection tests above verify 2 contact points
-  // with non-zero r x n. This integration test uses a relaxed threshold.
   auto const& finalState = world().getObject(cubeId).getInertialState();
   double const finalQDotMag = finalState.quaternionRate.norm();
 
-  EXPECT_GT(finalQDotMag, 1e-10)
-    << "Edge impact should initiate some rotation (angular velocity should "
-       "be non-zero after edge collision with floor)";
+  EXPECT_GT(finalQDotMag, 1e-4)
+    << "Asymmetric edge impact should initiate rotation. "
+    << "quaternionRate.norm()=" << finalQDotMag;
 }
 
 // ============================================================================

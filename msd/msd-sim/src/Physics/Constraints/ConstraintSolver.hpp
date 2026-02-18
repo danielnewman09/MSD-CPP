@@ -1,9 +1,12 @@
 // Ticket: 0031_generalized_lagrange_constraints
 // Ticket: 0032_contact_constraint_refactor
 // Ticket: 0052d_solver_integration_ecos_removal
+// Ticket: 0068c_constraint_solver_integration
+// Ticket: 0070_nlopt_convergence_energy_injection
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
+// Design: docs/designs/0068_nlopt_friction_cone_solver/design.md
 
 #ifndef MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
 #define MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
@@ -20,7 +23,7 @@
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
-#include "msd-sim/src/Physics/Constraints/FrictionConeSolver.hpp"
+#include "msd-sim/src/Physics/Constraints/NLoptFrictionSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/FrictionSpec.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
@@ -203,14 +206,10 @@ private:
     const FlattenedConstraints& flat,
     const std::vector<std::reference_wrapper<const InertialState>>& states);
 
-  /**
-   * @brief Solve with friction cone constraints via FrictionConeSolver
-   */
-  [[nodiscard]] ActiveSetResult solveWithFriction(
-    const Eigen::MatrixXd& A,
-    const Eigen::VectorXd& b,
-    const FrictionSpec& spec,
-    const std::optional<Eigen::VectorXd>& initialLambda);
+  // Removed methods (Ticket: 0070_nlopt_convergence_energy_injection):
+  // - solveWithFriction(): Replaced by decoupled normal-then-friction in solve()
+  // - clampPositiveWorkFriction(): No longer needed with corrected formulation
+  // - clampImpulseEnergy(): No longer needed with corrected formulation
 
   /**
    * @brief Extract per-body forces from flat lambda (no negative-lambda skip)
@@ -238,8 +237,8 @@ private:
   Eigen::VectorXd asmBw_;
   Eigen::VectorXd asmW_;
 
-  // Friction cone solver instance
-  FrictionConeSolver frictionConeSolver_;
+  // Friction cone solver instance (Ticket: 0068c)
+  NLoptFrictionSolver nloptSolver_;
 };
 
 }  // namespace msd_sim

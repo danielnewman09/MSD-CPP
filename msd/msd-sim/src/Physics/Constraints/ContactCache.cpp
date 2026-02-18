@@ -1,5 +1,6 @@
 // Ticket: 0040d_contact_persistence_warm_starting
 // Ticket: 0052d_solver_integration_ecos_removal
+// Ticket: 0069_friction_velocity_reversal
 
 #include "msd-sim/src/Physics/Constraints/ContactCache.hpp"
 
@@ -96,13 +97,25 @@ void ContactCache::update(uint32_t bodyA,
                            const std::vector<Coordinate>& points)
 {
   auto key = makeKey(bodyA, bodyB);
-  cache_[key] = CachedContact{
-    .bodyA_id = std::min(bodyA, bodyB),
-    .bodyB_id = std::max(bodyA, bodyB),
-    .normal = normal,
-    .lambdas = lambdas,
-    .points = points,
-    .age = 0};
+  auto it = cache_.find(key);
+  if (it != cache_.end())
+  {
+    // Preserve sliding state across updates (ticket 0069)
+    it->second.normal = normal;
+    it->second.lambdas = lambdas;
+    it->second.points = points;
+    it->second.age = 0;
+  }
+  else
+  {
+    cache_[key] = CachedContact{
+      .bodyA_id = std::min(bodyA, bodyB),
+      .bodyB_id = std::max(bodyA, bodyB),
+      .normal = normal,
+      .lambdas = lambdas,
+      .points = points,
+      .age = 0};
+  }
 }
 
 void ContactCache::expireOldEntries(uint32_t maxAge)
@@ -147,6 +160,56 @@ size_t ContactCache::size() const
 ContactCache::BodyPairKey ContactCache::makeKey(uint32_t a, uint32_t b)
 {
   return {std::min(a, b), std::max(a, b)};
+}
+
+void ContactCache::updateSlidingState(uint32_t bodyA,
+                                       uint32_t bodyB,
+                                       const Vector3D& tangentVelocity,
+                                       double velocityThreshold)
+{
+  auto key = makeKey(bodyA, bodyB);
+  auto it = cache_.find(key);
+  if (it == cache_.end())
+  {
+    return;  // No cache entry for this pair
+  }
+
+  CachedContact& cached = it->second;
+
+  double const speed = tangentVelocity.norm();
+  if (speed >= velocityThreshold)
+  {
+    // Sustained sliding — update direction and increment count
+    cached.slidingDirection = tangentVelocity / speed;  // Normalize
+    ++cached.slidingFrameCount;
+  }
+  else
+  {
+    // Velocity dropped below threshold — reset sliding state
+    cached.slidingDirection = std::nullopt;
+    cached.slidingFrameCount = 0;
+  }
+}
+
+std::pair<std::optional<Vector3D>, bool> ContactCache::getSlidingState(
+  uint32_t bodyA,
+  uint32_t bodyB,
+  int minFrames) const
+{
+  auto key = makeKey(bodyA, bodyB);
+  auto it = cache_.find(key);
+  if (it == cache_.end())
+  {
+    return {std::nullopt, false};
+  }
+
+  const CachedContact& cached = it->second;
+
+  // Sliding mode is active if direction is set and frame count meets threshold
+  bool const isActive =
+    cached.slidingDirection.has_value() && (cached.slidingFrameCount >= minFrames);
+
+  return {cached.slidingDirection, isActive};
 }
 
 }  // namespace msd_sim
