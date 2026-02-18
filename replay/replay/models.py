@@ -175,3 +175,43 @@ class AssetGeometry(BaseModel):
     name: str
     positions: list[float]  # Flat [x,y,z,x,y,z,...] for BufferGeometry
     vertex_count: int
+
+
+# ---------------------------------------------------------------------------
+# Live simulation models
+# Ticket: 0072b_websocket_simulation_endpoint
+# ---------------------------------------------------------------------------
+
+
+class SpawnObjectConfig(BaseModel):
+    """Configuration for a single object to spawn in the live simulation.
+
+    Used in the ``configure`` WebSocket message from the client.
+    """
+
+    asset_name: str
+    position: list[float]      # [x, y, z] in metres
+    orientation: list[float]   # [pitch, roll, yaw] in radians
+    object_type: str           # "inertial" or "environment"
+    mass: float = 10.0
+    restitution: float = 0.8
+    friction: float = 0.5
+
+
+class LiveBodyMetadata(BaseModel):
+    """Per-body static metadata included in the ``metadata`` WebSocket message."""
+
+    body_id: int
+    asset_id: int
+    asset_name: str
+    mass: float
+    restitution: float
+    friction: float
+    is_environment: bool
+
+
+class AssetInfo(BaseModel):
+    """Brief asset descriptor returned by ``GET /api/v1/live/assets``."""
+
+    asset_id: int
+    name: str

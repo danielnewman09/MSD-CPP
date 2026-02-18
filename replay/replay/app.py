@@ -2,6 +2,7 @@
 FastAPI application for MSD simulation replay
 
 Ticket: 0056d_fastapi_backend
+Ticket: 0072b_websocket_simulation_endpoint
 """
 
 from pathlib import Path
@@ -11,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from .routes import assets_router, frames_router, simulations_router
+from .routes import assets_router, frames_router, live_router, simulations_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -33,6 +34,8 @@ app.add_middleware(
 app.include_router(simulations_router, prefix="/api/v1")
 app.include_router(frames_router, prefix="/api/v1")
 app.include_router(assets_router, prefix="/api/v1")
+# Live simulation WebSocket + asset-list endpoints (Ticket: 0072b)
+app.include_router(live_router, prefix="/api/v1")
 
 
 # Mount static files (Three.js frontend)
@@ -45,6 +48,15 @@ if static_dir.exists():
         """Serve the main HTML page."""
         index_path = static_dir / "index.html"
         return index_path.read_text()
+
+    @app.get("/live", response_class=HTMLResponse)
+    async def serve_live():
+        """Serve the live simulation HTML page (Ticket: 0072c)."""
+        live_path = static_dir / "live.html"
+        if live_path.exists():
+            return live_path.read_text()
+        # Placeholder until 0072c delivers live.html
+        return "<html><body><p>Live simulation UI coming in ticket 0072c.</p></body></html>"
 
 
 @app.get("/api/v1/health")
