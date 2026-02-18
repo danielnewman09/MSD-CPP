@@ -233,5 +233,12 @@
     "sonarlint.connectedMode.project": {
         "connectionId": "<default>",
         "projectKey": "msd-cpp"
-    }
+    },
+    "python.defaultInterpreterPath": "${workspaceFolder}/python/.venv/bin/python3",
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "msd/msd-pybind/test",
+        "replay/tests",
+        "-v"
+    ]
 }
