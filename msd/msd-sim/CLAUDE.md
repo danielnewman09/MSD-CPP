@@ -306,22 +306,31 @@ Backward compatible: existing code unaffected if recording not enabled.
 ## Engine Component
 
 **Location**: `src/Engine.hpp`, `src/Engine.cpp`
+**Python Binding**: `msd_reader.Engine` (via `msd-pybind/src/engine_bindings.cpp`, [Ticket: 0072a](../../tickets/0072a_engine_pybind_bindings.md))
 
 ### Purpose
-Top-level simulation orchestrator that coordinates asset loading, world management, and simulation updates.
+Top-level simulation orchestrator that coordinates asset loading, world management, and simulation updates. Also exposed to Python via `msd_reader.Engine` for live browser simulation (Ticket 0072).
 
 ### Key Interfaces
 ```cpp
 class Engine {
-  Engine(const std::string& dbPath);
+  explicit Engine(const std::string& dbPath);
 
-  void update(std::chrono::milliseconds simTime);
+  void update(std::chrono::milliseconds simTime);  // absolute time, not delta
 
-  void spawnInertialObject(const std::string assetName,
-                           const Coordinate& position,
-                           const AngularCoordinate& orientation);
+  const AssetInertial& spawnInertialObject(const std::string& assetName,
+                                            const Coordinate& position,
+                                            const AngularCoordinate& orientation,
+                                            double mass = 10.0,
+                                            double restitution = 0.5,
+                                            double friction = 0.5);
+
+  const AssetEnvironment& spawnEnvironmentObject(const std::string& assetName,
+                                                  const Coordinate& position,
+                                                  const AngularCoordinate& orientation);
 
   msd_assets::AssetRegistry& getAssetRegistry();
+  const WorldModel& getWorldModel() const;
 
 private:
   msd_assets::AssetRegistry assetRegistry_;
@@ -340,12 +349,15 @@ msd_sim::Engine engine{"assets.db"};
 engine.spawnInertialObject("cube",
                            Coordinate{0, 0, 10},
                            AngularCoordinate{});
+engine.spawnEnvironmentObject("large_cube",
+                              Coordinate{0, 0, 0},
+                              AngularCoordinate{});
 
-// Run simulation loop
+// Run simulation loop — pass absolute simulation time
 auto simTime = std::chrono::milliseconds{0};
 while (running) {
-  engine.update(simTime);
   simTime += std::chrono::milliseconds{16};  // ~60 FPS
+  engine.update(simTime);
 }
 ```
 

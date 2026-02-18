@@ -6,9 +6,9 @@
 - [x] Implementation Complete — Awaiting Quality Gate
 - [x] Quality Gate Passed — Awaiting Review
 - [x] Approved — Ready to Merge
-- [ ] Merged / Complete
+- [x] Merged / Complete
 
-**Current Phase**: Approved — Ready to Merge
+**Current Phase**: Merged / Complete
 **Type**: Feature
 **Priority**: High
 **Assignee**: TBD
@@ -176,6 +176,18 @@ All Eigen types (`Coordinate`, `AngularCoordinate`, `Eigen::Quaterniond`) are co
 - **PR**: N/A
 - **Status**: APPROVED
 - **Reviewer Notes**: All 5 requirements and all 9 acceptance criteria satisfied. Pattern conformance excellent. 36 tests pass. Minor: two redundant includes (not actionable). Ready to merge.
+
+### Documentation Phase
+- **Started**: 2026-02-17
+- **Completed**: 2026-02-17
+- **Branch**: 0072a-engine-pybind-bindings
+- **PR**: #75
+- **Artifacts**:
+  - `msd/msd-pybind/CLAUDE.md` — Added Engine Bindings section; updated Overview, File Structure, Testing, References
+  - `msd/msd-sim/CLAUDE.md` — Updated Engine Component public interface; added Python binding callout
+  - `msd/CLAUDE.md` — Updated msd-pybind row in Libraries Summary
+  - `docs/designs/0072a_engine_pybind_bindings/doc-sync-summary.md` — Documentation sync summary
+- **Notes**: No PlantUML diagram required (implementation-only ticket, followed existing wrapper pattern). Record layer sync not applicable (msd-transfer not touched). Tutorial skipped (Generate Tutorial: No).
 
 ---
 
