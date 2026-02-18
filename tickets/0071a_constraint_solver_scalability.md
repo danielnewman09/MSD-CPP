@@ -114,7 +114,7 @@ Reduce the number of constraints entering the solver:
 - **Started**: 2026-02-17
 - **Completed**: 2026-02-17
 - **Branch**: `0071a-constraint-solver-scalability`
-- **PR**: N/A (not yet created)
+- **PR**: #74 (draft)
 - **Artifacts**:
   - `docs/designs/0071a_constraint_solver_scalability/design.md`
   - `docs/designs/0071a_constraint_solver_scalability/0071a_constraint_solver_scalability.puml`
