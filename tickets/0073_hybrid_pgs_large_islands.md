@@ -5,10 +5,10 @@
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Implementation
-- [ ] Implementation Complete
+- [x] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Design Approved — Ready for Implementation
+**Current Phase**: Implementation Complete
 **Type**: Performance
 **Priority**: High
 **Created**: 2026-02-17
@@ -159,6 +159,21 @@ This ticket does NOT implement ML — it establishes the PGS infrastructure that
 - **Artifacts**:
   - `docs/designs/0073_hybrid_pgs_large_islands/design.md` (review appended)
 - **Notes**: APPROVED WITH NOTES. All resolved design decisions (kASMThreshold=20 constexpr, ball-projection friction, pre-allocated workspace, 0071a available) confirmed in design. Four risks identified: R1 (medium — ball-projection vs FrictionConstraint::lambdaBounds() box bounds; PGS must apply ball-projection explicitly, not rely on lambdaBounds()); R2 (low — first-frame cold-start penalty); R3 (low — flattenConstraints() reuse recommended); R4 (low — SolverDispatch diagram cleanup). No revision required. PR comment posted.
+
+### Implementation Phase
+- **Started**: 2026-02-17 21:00
+- **Completed**: 2026-02-17 21:35
+- **Branch**: `0073-hybrid-pgs-large-islands`
+- **PR**: #76 (ready for review)
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Constraints/ProjectedGaussSeidel.hpp`
+  - `msd/msd-sim/src/Physics/Constraints/ProjectedGaussSeidel.cpp`
+  - `msd/msd-sim/test/Physics/Constraints/ProjectedGaussSeidelTest.cpp`
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.hpp` (kASMThreshold, pgsSolver_, PGS include)
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp` (threshold dispatch in solve())
+  - `msd/msd-sim/src/Physics/Constraints/CMakeLists.txt` (ProjectedGaussSeidel.cpp added)
+  - `msd/msd-sim/test/Physics/Constraints/CMakeLists.txt` (ProjectedGaussSeidelTest.cpp added)
+- **Notes**: R1 addressed — PGS applies ball-projection directly on friction rows; FrictionConstraint::lambdaBounds() is NOT consulted during PGS sweeps, and setNormalLambda() is not called. R3 addressed — internal FlatRow struct avoids circular include with ConstraintSolver.hpp; flattenConstraints() logic replicated cleanly in ProjectedGaussSeidel.cpp. R4 (PlantUML diagram cleanup) deferred to docs phase. 718/718 tests pass (708 original + 10 new).
 
 ---
 
