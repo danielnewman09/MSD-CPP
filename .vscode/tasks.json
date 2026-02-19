@@ -12,14 +12,14 @@
             "default": "Release"
         },
         {
-            "id": "conanBuildPolicy",
-            "description": "Conan Build Policy",
+            "id": "ClangTidyFix",
+            "description": "Build Type",
             "type": "pickString",
             "options": [
-                "missing",
-                "all"
+                "--fix",
+                ""
             ],
-            "default": "missing"
+            "default": "--fix"
         },
         {
             "id": "enableCoverage",
@@ -52,34 +52,8 @@
             ]
         },
         {
-            "label": "Conan Install",
-            "type": "shell",
-            "command": "conan",
-            "args": [
-                "install",
-                ".",
-                "--build=missing",
-                "-s",
-                "build_type=${input:buildType}",
-                "-o",
-                "\"&:enable_coverage=${input:enableCoverage}\""
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": [
-                "$gcc"
-            ]
-        },
-        {
             "label": "CMake Build",
+            "hide": true,
             "type": "shell",
             "command": "cmake --build ${command:cmake.buildDirectory}",
             "group": "build",
@@ -131,66 +105,33 @@
             "type": "shell",
             "command": [
                 "echo '=== Building Conan Dependencies ===';",
-                "conan create conan/spirv_cross --build=${input:conanBuildPolicy} -s build_type=Release;",
-                // "# conan create conan/dxc --build=${input:conanBuildPolicy} -s build_type=Release;",
-                "conan create conan/sdl_shadercross --build=${input:conanBuildPolicy} -s build_type=Release;",
-                "conan create conan/sdl --build=${input:conanBuildPolicy} -s build_type=Debug;",
-                "conan create conan/sdl --build=${input:conanBuildPolicy} -s build_type=Release;",
-                "conan create conan/sdl_image --build=${input:conanBuildPolicy} -s build_type=Release;",
-                "conan create conan/sdl_image --build=${input:conanBuildPolicy} -s build_type=Debug;",
-                "conan create conan/sdl_mixer --build=${input:conanBuildPolicy} -s build_type=Release;",
-                "conan create conan/sdl_mixer --build=${input:conanBuildPolicy} -s build_type=Debug;",
-                "conan create conan/sdl_ttf --build=${input:conanBuildPolicy} -s build_type=Release;",
-                "conan create conan/sdl_ttf --build=${input:conanBuildPolicy} -s build_type=Debug;",
-                "conan create conan/qhull --build=${input:conanBuildPolicy} -s build_type=Release;",
-                "conan create conan/qhull --build=${input:conanBuildPolicy} -s build_type=Debug;",
-                "conan create conan/cpp_sqlite --build=${input:conanBuildPolicy} -s build_type=Release;",
-                "conan create conan/cpp_sqlite --build=${input:conanBuildPolicy} -s build_type=Debug;",
-            ],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Install DXC",
-            "type": "shell",
-            "command": [
-                "conan create conan/dxc --build=${input:conanBuildPolicy} -s build_type=Release;",
+                "conan create conan/spirv_cross --build=missing -s build_type=Release;",
+                "conan create conan/sdl_shadercross --build=missing -s build_type=Release;",
+                "conan create conan/dxc --build=missing -s build_type=Release;",
+                "conan create conan/sdl --build=missing -s build_type=Debug;",
+                "conan create conan/sdl --build=missing -s build_type=Release;",
+                "conan create conan/sdl_image --build=missing -s build_type=Release;",
+                "conan create conan/sdl_image --build=missing -s build_type=Debug;",
+                "conan create conan/sdl_mixer --build=missing -s build_type=Release;",
+                "conan create conan/sdl_mixer --build=missing -s build_type=Debug;",
+                "conan create conan/sdl_ttf --build=missing -s build_type=Release;",
+                "conan create conan/sdl_ttf --build=missing -s build_type=Debug;",
+                "conan create conan/qhull --build=missing -s build_type=Release;",
+                "conan create conan/qhull --build=missing -s build_type=Debug;",
+                "conan create conan/cpp_sqlite --build=missing -s build_type=Release;",
+                "conan create conan/cpp_sqlite --build=missing -s build_type=Debug;",
             ],
             "options": {
                 "cwd": "${workspaceFolder}",
                 "env": {
+                    "SHADERCROSS_INSTALL_DIR": "${workspaceFolder}/installs/sdl_shadercross",
                     "DXC_INSTALL_DIR": "${workspaceFolder}/installs/dxc"
                 }
             },
             "presentation": {
                 "echo": true,
                 "reveal": "always",
-                "focus": true,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Install Shadercross",
-            "type": "shell",
-            "command": [
-                "conan create conan/sdl_shadercross --build=${input:conanBuildPolicy} -s build_type=Release;",
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}",
-                "env": {
-                    "SHADERCROSS_INSTALL_DIR": "${workspaceFolder}/installs/sdl_shadercross"
-                }
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
+                "focus": false,
                 "panel": "shared"
             },
             "problemMatcher": []
@@ -270,13 +211,9 @@
             ]
         },
         {
-            "label": "Run clang-tidy (--fix)",
+            "label": "Run clang-tidy",
             "type": "shell",
-            "command": "bash",
-            "args": [
-                "${workspaceFolder}/analysis/scripts/run_clang_tidy.sh",
-                "--fix"
-            ],
+            "command": "bash ${workspaceFolder}/analysis/scripts/run_clang_tidy.sh",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -305,8 +242,7 @@
                 }
             },
             "dependsOn": [
-                "Install DXC",
-                "Install Shadercross"
+                "Create Conan Dependencies"
             ],
             "presentation": {
                 "echo": true,

@@ -50,7 +50,8 @@ void ReplayEnabledTest::TearDown()
 
   // Check MSD_KEEP_RECORDINGS env var for cleanup policy
   const char* keepRecordings = std::getenv("MSD_KEEP_RECORDINGS");
-  const bool shouldKeep = (!keepRecordings || std::string(keepRecordings) != "0");
+  const bool shouldKeep =
+    (!keepRecordings || std::string(keepRecordings) != "0");
 
   if (!shouldKeep)
   {
@@ -65,15 +66,15 @@ void ReplayEnabledTest::TearDown()
 }
 
 const AssetInertial& ReplayEnabledTest::spawnCube(const std::string& assetName,
-                                                   const Coordinate& position)
+                                                  const Coordinate& position)
 {
   // Default orientation (identity quaternion)
   return engine_->spawnInertialObject(assetName, position, AngularCoordinate{});
 }
 
-const AssetEnvironment&
-  ReplayEnabledTest::spawnEnvironment(const std::string& assetName,
-                                      const Coordinate& position)
+const AssetEnvironment& ReplayEnabledTest::spawnEnvironment(
+  const std::string& assetName,
+  const Coordinate& position)
 {
   // Default orientation (identity quaternion)
   return engine_->spawnEnvironmentObject(
@@ -96,6 +97,7 @@ const AssetInertial& ReplayEnabledTest::spawnInertial(
 const AssetInertial& ReplayEnabledTest::spawnInertialWithVelocity(
   const std::string& assetName,
   const Coordinate& position,
+  const AngularCoordinate& orientation,
   const Coordinate& velocity,
   double mass,
   double restitution,
@@ -103,13 +105,13 @@ const AssetInertial& ReplayEnabledTest::spawnInertialWithVelocity(
 {
   // Ticket: 0062a_extend_test_asset_generator
   // Spawn with custom physics parameters
-  const AssetInertial& asset =
-    engine_->spawnInertialObject(
-      assetName, position, AngularCoordinate{}, mass, restitution, friction);
+  const AssetInertial& asset = engine_->spawnInertialObject(
+    assetName, position, orientation, mass, restitution, friction);
 
   // Set initial velocity on the spawned object
   // Get mutable access to the spawned object
-  AssetInertial& mutableAsset = engine_->getWorldModel().getObject(asset.getInstanceId());
+  AssetInertial& mutableAsset =
+    engine_->getWorldModel().getObject(asset.getInstanceId());
   mutableAsset.getInertialState().velocity = velocity;
 
   return asset;

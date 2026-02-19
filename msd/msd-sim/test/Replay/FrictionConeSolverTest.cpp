@@ -58,6 +58,7 @@ TEST_F(FrictionConeSolverTest, SlidingCubeOnFloor_FrictionSaturatesAtConeLimit)
   const auto& cube =
     spawnInertialWithVelocity("unit_cube",
                               Coordinate{0.0, 0.0, 0.5},
+                              AngularCoordinate{},
                               Coordinate{initialVelocityX, 0.0, 0.0},
                               mass,
                               restitution,
@@ -124,6 +125,7 @@ TEST_F(FrictionConeSolverTest, test)
   const auto& cube =
     spawnInertialWithVelocity("unit_cube",
                               Coordinate{0.0, 0.0, 0.64},
+                              AngularCoordinate{},
                               Coordinate{initialVelocityX, 0.0, 0.0},
                               mass,
                               restitution,

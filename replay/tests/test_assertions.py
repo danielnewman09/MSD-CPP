@@ -7,26 +7,15 @@ Ticket: 0060c_replay_matchers
 import pytest
 import sqlite3
 from pathlib import Path
+import msd_reader
 
-try:
-    import msd_reader
-    MSD_READER_AVAILABLE = True
-except ImportError:
-    MSD_READER_AVAILABLE = False
-
-if MSD_READER_AVAILABLE:
-    from replay.testing import (
+from replay.testing import (
         assert_energy_conserved,
         assert_never_penetrates_below,
         assert_body_comes_to_rest,
     )
 
 from replay.testing.conftest import recording_for
-
-# Skip assertion tests if msd_reader not available (they depend on RecordingQuery)
-pytestmark_assertions = pytest.mark.skipif(
-    not MSD_READER_AVAILABLE, reason="msd_reader module not available"
-)
 
 
 # Helper to create a minimal recording database for testing
@@ -116,8 +105,6 @@ def create_test_recording(
     conn.commit()
     conn.close()
 
-
-@pytest.mark.skipif(not MSD_READER_AVAILABLE, reason="msd_reader module not available")
 class TestAssertEnergyConserved:
     """Tests for assert_energy_conserved assertion function."""
 
@@ -151,8 +138,6 @@ class TestAssertEnergyConserved:
 
         assert_energy_conserved(db_path, tolerance=0.01)
 
-
-@pytest.mark.skipif(not MSD_READER_AVAILABLE, reason="msd_reader module not available")
 class TestAssertNeverPenetratesBelow:
     """Tests for assert_never_penetrates_below assertion function."""
 
@@ -190,8 +175,6 @@ class TestAssertNeverPenetratesBelow:
         # Should pass (>= allows equality)
         assert_never_penetrates_below(db_path, body_id=1, z_min=-1.0)
 
-
-@pytest.mark.skipif(not MSD_READER_AVAILABLE, reason="msd_reader module not available")
 class TestAssertBodyComesToRest:
     """Tests for assert_body_comes_to_rest assertion function."""
 

@@ -127,6 +127,7 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A4_EqualMassElastic_VelocitySwap)
   const auto& sphereA = spawnInertialWithVelocity(
     "small_sphere",
     Coordinate{-0.05, 0.0, 0.5},
+    AngularCoordinate{},         // orientation (identity)
     Coordinate{2.0, 0.0, 0.0},  // velocity
     1.0,  // mass (kg)
     1.0,  // restitution (elastic)
@@ -136,6 +137,7 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A4_EqualMassElastic_VelocitySwap)
   const auto& sphereB = spawnInertialWithVelocity(
     "small_sphere",
     Coordinate{0.95, 0.0, 0.5},
+    AngularCoordinate{},         // orientation (identity)
     Coordinate{0.0, 0.0, 0.0},  // velocity (stationary)
     1.0,  // mass (kg)
     1.0,  // restitution (elastic)
@@ -227,6 +229,7 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A5_UnequalMassElastic_ClassicalFor
   const auto& sphereA = spawnInertialWithVelocity(
     "small_sphere",
     Coordinate{-0.05, 0.0, 0.5},
+    AngularCoordinate{},         // orientation (identity)
     Coordinate{1.0, 0.0, 0.0},  // velocity
     10.0, // mass (heavy, kg)
     1.0,  // restitution (elastic)
@@ -236,6 +239,7 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A5_UnequalMassElastic_ClassicalFor
   const auto& sphereB = spawnInertialWithVelocity(
     "small_sphere",
     Coordinate{0.95, 0.0, 0.5},
+    AngularCoordinate{},         // orientation (identity)
     Coordinate{0.0, 0.0, 0.0},  // velocity (stationary)
     1.0,  // mass (light, kg)
     1.0,  // restitution (elastic)
@@ -293,6 +297,7 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A6_GlancingCollision_MomentumAndEn
   const auto& sphereA = spawnInertialWithVelocity(
     "small_sphere",
     Coordinate{-0.05, 0.0, 0.5},
+    AngularCoordinate{},         // orientation (identity)
     Coordinate{2.0, 0.0, 0.0},  // velocity
     1.0,  // mass (kg)
     1.0,  // restitution (elastic)
@@ -302,6 +307,7 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A6_GlancingCollision_MomentumAndEn
   const auto& sphereB = spawnInertialWithVelocity(
     "small_sphere",
     Coordinate{0.85, 0.5, 0.5},  // Offset Y for glancing
+    AngularCoordinate{},          // orientation (identity)
     Coordinate{0.0, 0.0, 0.0},   // velocity (stationary)
     1.0,  // mass (kg)
     1.0,  // restitution (elastic)

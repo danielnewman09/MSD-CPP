@@ -28,6 +28,8 @@ RUN rm -rf /var/lib/apt/lists/*
 # Add the conan profile
 ADD conan-profile /root/default-conan-profile
 
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
 # Set environment for root user
 ENV PATH="/root/.local/bin:${PATH}"
 

@@ -30,16 +30,27 @@ echo "MSD-CPP Python Environment Setup"
 echo "========================================="
 echo ""
 
-# --- 1. Upgrade pip ---
+VENV_DIR="$SCRIPT_DIR/.venv"
+
+# --- 1. Create venv if it doesn't exist ---
+if [ ! -d "$VENV_DIR" ]; then
+  echo "Creating virtual environment at $VENV_DIR..."
+  python3 -m venv "$VENV_DIR"
+fi
+
+# Activate the venv for this script
+source "$VENV_DIR/bin/activate"
+
+# --- 2. Upgrade pip ---
 echo "Upgrading pip..."
 pip install --quiet --upgrade pip
 
-# --- 2. Install requirements ---
+# --- 3. Install requirements ---
 echo ""
 echo "Installing dependencies from $REQUIREMENTS..."
 pip install --quiet -r "$REQUIREMENTS"
 
-# --- 3. Install replay package in editable mode ---
+# --- 4. Install replay package in editable mode ---
 echo ""
 echo "Installing replay package in editable mode..."
 if [ ! -d "$REPLAY_DIR" ]; then
@@ -48,7 +59,7 @@ if [ ! -d "$REPLAY_DIR" ]; then
 fi
 pip install --quiet -e "$REPLAY_DIR"
 
-# --- 4. Display summary ---
+# --- 5. Display summary ---
 echo ""
 echo "========================================="
 echo -e "${GREEN}Setup Complete!${NC}"

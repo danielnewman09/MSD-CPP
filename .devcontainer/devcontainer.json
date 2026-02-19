@@ -12,7 +12,8 @@
 	"mounts": [
 		"source=${localWorkspaceFolder}/.devcontainer/conan-profile,target=/root/.conan2/profiles/default,type=bind,consistency=cached",
 		"source=${localEnv:HOME}/.conan2,target=/root/.conan2,type=bind,consistency=cached",
-		"source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached"
+		"source=claude,target=/root/.claude,type=volume",
+		"source=msd-cpp-build,target=/workspaces/${localWorkspaceFolderBasename}/build,type=volume"
 	],
 	// Capabilities needed for debugging with gdb/lldb
 	"runArgs": [
@@ -21,11 +22,10 @@
 		"seccomp=unconfined"
 	],
 	// "postCreateCommand": "bash python/setup.sh",
-	"postStartCommand": "bash .devcontainer/install-npm.sh",
+	// "postStartCommand": "bash .devcontainer/install-npm.sh",
 	// Environment variables for the container
 	"containerEnv": {
 		"CONAN_HOME": "/root/.conan2",
-		"ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
 	},
 	// VSCode settings to apply inside the container
 	"customizations": {

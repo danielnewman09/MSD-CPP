@@ -223,6 +223,7 @@ TEST_F(ReplayEnabledTest,
   const auto& cubeA =
     spawnInertialWithVelocity("unit_cube",
                               Coordinate{-0.05, 0.0, 0.0},
+                              AngularCoordinate{},         // orientation (identity)
                               Coordinate{2.0, 0.0, 0.0},  // velocity
                               1.0,                        // mass (kg)
                               1.0,   // restitution (elastic)

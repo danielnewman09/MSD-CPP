@@ -12,8 +12,8 @@
 
 #include <gtest/gtest.h>
 
-#include "msd-sim/src/Engine.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Engine.hpp"
 #include "msd-sim/src/Environment/WorldModel.hpp"
 
 namespace msd_sim
@@ -113,12 +113,14 @@ protected:
    *
    * Uses default orientation (identity quaternion).
    */
-  const AssetInertial& spawnInertialWithVelocity(const std::string& assetName,
-                                                 const Coordinate& position,
-                                                 const Coordinate& velocity,
-                                                 double mass = 1.0,
-                                                 double restitution = 0.5,
-                                                 double friction = 0.5);
+  const AssetInertial& spawnInertialWithVelocity(
+    const std::string& assetName,
+    const Coordinate& position,
+    const AngularCoordinate& orientation,
+    const Coordinate& velocity,
+    double mass = 1.0,
+    double restitution = 0.5,
+    double friction = 0.5);
 
   /**
    * @brief Disable gravity for isolated collision tests

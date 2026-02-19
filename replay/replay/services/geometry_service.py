@@ -7,10 +7,7 @@ Ticket: 0056e_threejs_core_visualization (R0d)
 
 from pathlib import Path
 
-try:
-    import msd_reader
-except ImportError:
-    msd_reader = None
+import msd_reader
 
 from ..models import AssetGeometry
 
@@ -27,11 +24,6 @@ class GeometryService:
     """
 
     def __init__(self, assets_db_path: Path):
-        if msd_reader is None:
-            raise RuntimeError(
-                "msd_reader module not available. "
-            )
-
         self.registry = msd_reader.AssetRegistry(str(assets_db_path))
 
     def get_geometries(self, asset_ids: list[int] | None = None) -> list[AssetGeometry]:

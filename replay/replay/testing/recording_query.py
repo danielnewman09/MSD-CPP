@@ -7,10 +7,7 @@ Ticket: 0060b_recording_query_api
 import math
 from pathlib import Path
 
-try:
-    import msd_reader
-except ImportError:
-    msd_reader = None
+import msd_reader
 
 
 class RecordingQuery:
@@ -32,15 +29,7 @@ class RecordingQuery:
 
         Args:
             db_path: Path to the recording database (.db file)
-
-        Raises:
-            RuntimeError: If msd_reader module is not available
         """
-        if msd_reader is None:
-            raise RuntimeError(
-                "msd_reader module not available. "
-            )
-
         self._db = msd_reader.Database(str(db_path))
 
     # Frame queries

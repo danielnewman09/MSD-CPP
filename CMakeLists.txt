@@ -31,9 +31,24 @@ else()
 endif()
 option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ${WARNINGS_AS_ERRORS_DEFAULT})
 
-# Python discovery: avoid Xcode's bundled 3.9 or stray framework versions.
+# Unified Python environment (Ticket: 0065_python_environment_streamlining)
 # Must be set before any find_package(Python3) call (including from pybind11 config).
-set(Python3_FIND_FRAMEWORK NEVER)
+set(PROJECT_PYTHON "${CMAKE_SOURCE_DIR}/python/.venv/bin/python3")
+if(NOT EXISTS ${PROJECT_PYTHON})
+  message(FATAL_ERROR "Python venv not found at ${PROJECT_PYTHON}\n"
+    "Run 'python/setup.sh' to create the unified Python environment")
+endif()
+# Resolve Python3 from the venv up front — the venv has the interpreter but
+# headers/libraries live at the base Python installation (framework on macOS,
+# system prefix on Linux). We call find_package here so all subdirectories
+# (including msd-pybind) can reuse the result without re-discovery.
+execute_process(
+  COMMAND ${PROJECT_PYTHON} -c "import sys; print(sys.base_prefix)"
+  OUTPUT_VARIABLE _PYTHON_BASE_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+set(Python3_ROOT_DIR ${_PYTHON_BASE_PREFIX})
+set(Python3_EXECUTABLE ${PROJECT_PYTHON})
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 
 # Add useful compiler warnings
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -148,10 +163,6 @@ if(ENABLE_CLANG_TIDY)
   endif()
 endif()
 
-# Unified Python environment (Ticket: 0065_python_environment_streamlining)
-# Set up with: python/setup.sh
-find_program(PROJECT_PYTHON python3 REQUIRED)
-
 # Doxygen documentation (auto-enabled when doxygen is found)
 find_package(Doxygen QUIET)
 if(DOXYGEN_FOUND)
@@ -168,40 +179,34 @@ if(DOXYGEN_FOUND)
     VERBATIM
   )
 
-  # Check if unified Python venv exists
-  if(EXISTS ${PROJECT_PYTHON})
-    set(DOXYGEN_DB ${CMAKE_BINARY_DIR}/docs/codebase.db)
+  set(DOXYGEN_DB ${CMAKE_BINARY_DIR}/docs/codebase.db)
 
-    # Internal: C++ symbols from Doxygen XML
-    add_custom_target(doxygen-db
-      COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/doxygen_to_sqlite.py
-              ${CMAKE_BINARY_DIR}/docs/xml ${DOXYGEN_DB}
-              --project-root ${CMAKE_SOURCE_DIR}
-      DEPENDS doxygen
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-      COMMENT "Generating codebase SQLite database from Doxygen XML"
-      VERBATIM
-    )
+  # Internal: C++ symbols from Doxygen XML
+  add_custom_target(doxygen-db
+    COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/doxygen_to_sqlite.py
+            ${CMAKE_BINARY_DIR}/docs/xml ${DOXYGEN_DB}
+            --project-root ${CMAKE_SOURCE_DIR}
+    DEPENDS doxygen
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Generating codebase SQLite database from Doxygen XML"
+    VERBATIM
+  )
 
-    # Internal: Python symbols from AST (Ticket: 0064_python_codebase_documentation_index)
-    add_custom_target(python-db
-      COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/python_to_sqlite.py
-              ${CMAKE_SOURCE_DIR}/replay/replay ${DOXYGEN_DB}
-              --project-root ${CMAKE_SOURCE_DIR}
-      DEPENDS doxygen-db
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-      COMMENT "Adding Python symbols to codebase SQLite database"
-      VERBATIM
-    )
+  # Internal: Python symbols from AST (Ticket: 0064_python_codebase_documentation_index)
+  add_custom_target(python-db
+    COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/python_to_sqlite.py
+            ${CMAKE_SOURCE_DIR}/replay/replay ${DOXYGEN_DB}
+            --project-root ${CMAKE_SOURCE_DIR}
+    DEPENDS doxygen-db
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Adding Python symbols to codebase SQLite database"
+    VERBATIM
+  )
 
-    # Public target: complete codebase database (C++ + Python)
-    add_custom_target(codebase-db DEPENDS python-db)
-    message(STATUS "  Run 'cmake --build <build-dir> --target codebase-db' to generate codebase SQLite database")
-  else()
-    message(STATUS "  Python venv not found at ${PROJECT_PYTHON}")
-    message(STATUS "  Run 'python/setup.sh' to create the unified Python environment")
-  endif()
-
+  # Public target: complete codebase database (C++ + Python)
+  add_custom_target(codebase-db DEPENDS python-db)
+  message(STATUS "  Run 'cmake --build <build-dir> --target codebase-db' to generate codebase SQLite database")
+  
   message(STATUS "Doxygen found: ${DOXYGEN_EXECUTABLE}")
   message(STATUS "  Run 'cmake --build <build-dir> --target doxygen' to generate documentation")
   message(STATUS "  Output will be in ${CMAKE_BINARY_DIR}/docs/")
@@ -210,60 +215,55 @@ else()
 endif()
 
 # Traceability database targets (Ticket: 0065_python_environment_streamlining)
-if(EXISTS ${PROJECT_PYTHON})
-  set(TRACEABILITY_DB ${CMAKE_BINARY_DIR}/docs/traceability.db)
+set(TRACEABILITY_DB ${CMAKE_BINARY_DIR}/docs/traceability.db)
 
-  add_custom_target(trace-git
-    COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_git_history.py
-            ${TRACEABILITY_DB}
-            --repo ${CMAKE_SOURCE_DIR}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Indexing git history into traceability database"
-    VERBATIM
-  )
+add_custom_target(trace-git
+  COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_git_history.py
+          ${TRACEABILITY_DB}
+          --repo ${CMAKE_SOURCE_DIR}
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Indexing git history into traceability database"
+  VERBATIM
+)
 
-  add_custom_target(trace-symbols
-    COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_symbols.py
-            ${TRACEABILITY_DB}
-            --repo ${CMAKE_SOURCE_DIR}
-    DEPENDS trace-git
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Indexing symbol snapshots into traceability database"
-    VERBATIM
-  )
+add_custom_target(trace-symbols
+  COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_symbols.py
+          ${TRACEABILITY_DB}
+          --repo ${CMAKE_SOURCE_DIR}
+  DEPENDS trace-git
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Indexing symbol snapshots into traceability database"
+  VERBATIM
+)
 
-  add_custom_target(trace-decisions
-    COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_decisions.py
-            ${TRACEABILITY_DB}
-            --repo ${CMAKE_SOURCE_DIR}
-    DEPENDS trace-git
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Indexing design decisions into traceability database"
-    VERBATIM
-  )
+add_custom_target(trace-decisions
+  COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_decisions.py
+          ${TRACEABILITY_DB}
+          --repo ${CMAKE_SOURCE_DIR}
+  DEPENDS trace-git
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Indexing design decisions into traceability database"
+  VERBATIM
+)
 
-  add_custom_target(trace-record-mappings
-    COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/generate_record_layers.py
-            --update-traceability ${TRACEABILITY_DB}
-    COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_record_mappings.py
-            ${TRACEABILITY_DB}
-            --repo ${CMAKE_SOURCE_DIR}
-    DEPENDS trace-git
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Indexing record layer mappings into traceability database"
-    VERBATIM
-  )
+add_custom_target(trace-record-mappings
+  COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/generate_record_layers.py
+          --update-traceability ${TRACEABILITY_DB}
+  COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/traceability/index_record_mappings.py
+          ${TRACEABILITY_DB}
+          --repo ${CMAKE_SOURCE_DIR}
+  DEPENDS trace-git
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Indexing record layer mappings into traceability database"
+  VERBATIM
+)
 
-  add_custom_target(traceability
-    DEPENDS trace-git trace-symbols trace-decisions trace-record-mappings
-    COMMENT "Building complete traceability database"
-  )
+add_custom_target(traceability
+  DEPENDS trace-git trace-symbols trace-decisions trace-record-mappings
+  COMMENT "Building complete traceability database"
+)
 
-  message(STATUS "Traceability targets available: trace-git, trace-symbols, trace-decisions, trace-record-mappings, traceability")
-else()
-  message(STATUS "Python venv not found at ${PROJECT_PYTHON}")
-  message(STATUS "Run 'python/setup.sh' to create the unified Python environment")
-endif()
+message(STATUS "Traceability targets available: trace-git, trace-symbols, trace-decisions, trace-record-mappings, traceability")
 
 # Always include the test directory first to define testing functions
 # This ensures the testing framework is available to all modules

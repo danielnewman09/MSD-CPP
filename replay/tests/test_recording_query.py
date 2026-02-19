@@ -12,19 +12,8 @@ import math
 import pytest
 from pathlib import Path
 
-try:
-    import msd_reader
-
-    MSD_READER_AVAILABLE = True
-except ImportError:
-    MSD_READER_AVAILABLE = False
-
-if MSD_READER_AVAILABLE:
-    from replay.testing import RecordingQuery
-
-pytestmark = pytest.mark.skipif(
-    not MSD_READER_AVAILABLE, reason="msd_reader module not available"
-)
+import msd_reader
+from replay.testing import RecordingQuery
 
 
 @pytest.fixture
