@@ -126,6 +126,8 @@ For each technical decision from prototype results:
 
 ### Phase 4: Test Coverage
 
+**Note**: Tests are written by a separate `cpp-test-writer` agent, independent from the implementer. This separation prevents implementers from weakening assertions to force tests to pass.
+
 **Required Test Verification**: From design document, verify:
 - All specified unit tests exist
 - All specified integration tests exist
@@ -376,7 +378,8 @@ If git/GitHub operations fail, report the error but do NOT let it block the revi
 | Status | When to Use |
 |--------|-------------|
 | **APPROVED** | All checks pass, or only minor issues noted |
-| **CHANGES REQUESTED** | Issues found that must be addressed, but are fixable |
+| **CHANGES REQUESTED** | Issues found in production code that must be addressed, but are fixable |
+| **CHANGES REQUESTED (Test Coverage)** | Test coverage is inadequate — triggers re-invocation of the cpp-test-writer agent |
 | **BLOCKED** | Fundamental problems requiring design revision or significant rework |
 
 ## Iteration Handling

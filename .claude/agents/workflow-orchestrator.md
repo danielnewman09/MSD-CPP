@@ -19,25 +19,124 @@ This project follows specific coding standards from CLAUDE.md including:
 - Use NaN for uninitialized floating-point values
 - PlantUML diagrams for architectural documentation
 
+## Multi-Language Support
+
+Tickets may span multiple languages: C++, Python, and Frontend (JS/HTML/CSS). The `Languages` metadata field determines which agents are invoked.
+
+### Language Detection
+
+1. Read the ticket's `Languages` metadata field
+2. Default to `C++` if the field is missing or empty
+3. Split on comma and trim whitespace to get language list
+4. Valid languages: `C++`, `Python`, `Frontend`
+
+### Single-Language Shortcut
+
+If `Languages: C++` (the default), the **existing 16-phase pipeline runs unchanged**. No integration, Python, or Frontend phases are triggered. This preserves full backward compatibility.
+
 ## Workflow Phases and Agent Mapping
+
+### Core Phases (all tickets)
 
 | Current Status | Action | Agent File |
 |----------------|--------|------------|
-| Draft | Check Requires Math Design flag, advance appropriately | None |
+| Draft | Check flags, advance appropriately | None |
 | Ready for Math Design | Execute Math Designer | `.claude/agents/math-designer.md` |
 | Math Design Complete — Awaiting Review | Execute Math Reviewer | `.claude/agents/math-reviewer.md` |
 | Math Design Approved — Ready for Architectural Design | Advance to Ready for Design | None |
-| Ready for Design | Execute Designer | `.claude/agents/cpp-architect.md` |
+| Ready for Design | Execute C++ Designer (if C++ in Languages) | `.claude/agents/cpp-architect.md` |
 | Design Complete — Awaiting Review | Execute Design Reviewer | `.claude/agents/design-reviewer.md` |
+
+### Integration Design Phases (multi-language only)
+
+| Current Status | Action | Agent File | Condition |
+|----------------|--------|------------|-----------|
+| Design Approved — Ready for Integration Design | Execute Integration Designer | `.claude/agents/integration-designer.md` | 2+ languages |
+| Integration Design Complete — Awaiting Review | Execute Integration Reviewer | `.claude/agents/integration-reviewer.md` | Integration design ran |
+| Integration Design Approved | Advance to language-specific designs | None | Integration review passed |
+
+### Language-Specific Design Phases (multi-language only)
+
+| Current Status | Action | Agent File | Condition |
+|----------------|--------|------------|-----------|
+| Ready for Python Design | Execute Python Architect | `.claude/agents/python-architect.md` | Python in Languages |
+| Python Design Complete — Awaiting Review | Review Python design | Human review | Python design ran |
+| Ready for Frontend Design | Execute Frontend Architect | `.claude/agents/frontend-architect.md` | Frontend in Languages |
+| Frontend Design Complete — Awaiting Review | Review Frontend design | Human review | Frontend design ran |
+
+### Prototype and Implementation Phases
+
+| Current Status | Action | Agent File |
+|----------------|--------|------------|
 | Design Approved — Ready for Prototype | Execute Prototyper | `.claude/agents/cpp-prototyper.md` |
 | Prototype Complete — Awaiting Review | Inform human review needed | None |
-| Ready for Implementation | Execute Implementer | `.claude/agents/cpp-implementer.md` |
-| Implementation Complete — Awaiting Quality Gate | Execute Quality Gate | `.claude/agents/code-quality-gate.md` |
-| Quality Gate Passed — Awaiting Review | Execute Implementation Reviewer | `.claude/agents/implementation-reviewer.md` |
-| Approved — Ready to Merge | Execute Doc Updater, then check tutorial flag | `.claude/agents/docs-updater.md` |
-| Documentation Complete — Awaiting Tutorial | Execute Tutorial Generator (if flagged) | `.claude/agents/cpp-tutorial-generator.md` |
+| Ready for Implementation | Fan out per language (see below) | Per-language implementers |
+| Implementation Complete — Awaiting Test Writing | Fan out per language (see below) | Per-language test writers |
+| Test Writing Complete — Awaiting Quality Gate | Execute Quality Gate | `.claude/agents/code-quality-gate.md` |
+| Quality Gate Passed — Awaiting Review | Fan out per language reviews | Per-language reviewers |
+| Approved — Ready to Merge | Execute Doc Updater, check tutorial | `.claude/agents/docs-updater.md` |
+| Documentation Complete — Awaiting Tutorial | Execute Tutorial Generator | `.claude/agents/cpp-tutorial-generator.md` |
 | Tutorial Complete — Ready to Merge | Complete workflow | None |
 | Merged / Complete | Inform human workflow is complete | None |
+
+### Implementation Fan-Out
+
+When status reaches "Ready for Implementation":
+
+**For C++-only tickets** (Languages: C++):
+- Execute `.claude/agents/cpp-implementer.md` (production code only, no tests)
+
+**For multi-language tickets**:
+- Execute language-specific implementers in parallel where possible:
+  - C++: `.claude/agents/cpp-implementer.md` (if C++ in Languages)
+  - Python: `.claude/agents/python-implementer.md` (if Python in Languages)
+  - Frontend: `.claude/agents/frontend-implementer.md` (if Frontend in Languages)
+- All implementations must complete before advancing to test writing
+
+### Test Writing Fan-Out
+
+When status reaches "Implementation Complete — Awaiting Test Writing":
+
+**For C++-only tickets** (Languages: C++):
+- Execute `.claude/agents/cpp-test-writer.md`
+
+**For multi-language tickets**:
+- Execute language-specific test writers in parallel where possible:
+  - C++: `.claude/agents/cpp-test-writer.md` (if C++ in Languages)
+  - Python: `.claude/agents/python-test-writer.md` (if Python in Languages)
+  - Frontend: Skip — no automated test framework exists
+- All test writing must complete before advancing to quality gate
+
+### Review Fan-Out
+
+When status reaches "Quality Gate Passed — Awaiting Review":
+
+**For C++-only tickets**:
+- Execute `.claude/agents/implementation-reviewer.md` (unchanged behavior)
+
+**For multi-language tickets**:
+- Execute language-specific reviewers:
+  - C++: `.claude/agents/implementation-reviewer.md` (if C++ in Languages)
+  - Python: `.claude/agents/python-reviewer.md` (if Python in Languages)
+  - Frontend: `.claude/agents/frontend-reviewer.md` (if Frontend in Languages)
+- All reviews must pass before advancing
+
+### Multi-Language Phase Ordering
+
+For tickets with 2+ languages, phases execute in this order:
+
+1. **C++ design** (if C++ in Languages — may be needed before integration design)
+2. **C++ design review**
+3. **Integration design** (defines cross-language contracts)
+4. **Integration design review**
+5. **Python + Frontend design** (parallel, each reads integration-design.md)
+6. **Language-specific design reviews** (human review)
+7. **Prototype** (if applicable)
+8. **All implementations** (can be parallel — production code only, no tests)
+9. **All test writing** (can be parallel — cpp-test-writer, python-test-writer; skip Frontend)
+10. **Quality gate**
+11. **All reviews** (can be parallel)
+12. **Documentation, tutorial, merge**
 
 ### Tutorial Generation (Conditional Phase)
 
@@ -88,13 +187,14 @@ The math-reviewer agent validates:
 The Quality Gate phase operates as an automated loop:
 
 1. **On PASSED**: Advance to "Quality Gate Passed — Awaiting Review"
-2. **On FAILED**:
+2. **On FAILED** (build or test failures):
    - Do NOT advance status
-   - Re-invoke implementer with specific failures from quality gate report
-   - Implementer fixes issues
-   - Re-run quality gate
+   - Re-invoke the **implementer** (not test writer) with specific failures from quality gate report — the implementer fixes production code
+   - After implementer fixes, re-run quality gate
    - Track iteration count in Workflow Log
 3. **On 3rd consecutive failure**: Escalate to human, may indicate design issue
+
+**Test writer re-invocation**: The test writer is only re-invoked if the implementation reviewer (Phase: Review) returns "CHANGES REQUESTED (Test Coverage)" — indicating inadequate coverage. In that case, the workflow returns to "Implementation Complete — Awaiting Test Writing" and the test writer runs again with reviewer feedback.
 
 ### Tutorial Generation Handling
 
@@ -116,23 +216,24 @@ When processing the "Approved — Ready to Merge" status:
 ### 1. Process ticket: {feature-name}
 1. Read `tickets/{feature-name}.md`
 2. Parse current status (which checkbox is marked)
-3. Check for human feedback to incorporate
-4. Execute the appropriate agent based on status
-5. Update the ticket with results:
+3. **Parse Languages metadata** to determine language tracks
+4. Check for human feedback to incorporate
+5. Execute the appropriate agent based on status and language tracks
+6. Update the ticket with results:
    - Advance status checkbox
    - Update Workflow Log with timestamp, artifacts, notes
    - Address/clear incorporated feedback
-6. Report summary to human
+7. Report summary to human
 
 ### 2. Status: {feature-name}
 1. Read `tickets/{feature-name}.md`
-2. Report current status, recent activity, and next steps
+2. Report current status, language tracks, recent activity, and next steps
 3. Do NOT execute any phase
 
 ### 3. List tickets
 1. Read all `.md` files in `tickets/` directory
-2. Parse each ticket's status
-3. Report table of tickets with their statuses
+2. Parse each ticket's status and languages
+3. Report table of tickets with their statuses and language tracks
 
 ### 4. New ticket: {feature-name}
 1. Copy `.claude/templates/ticket.md.template` to `tickets/{feature-name}.md`
@@ -148,6 +249,7 @@ Location: tickets/{feature-name}.md
 ```
 Extract:
 - Current status (checkbox state)
+- **Languages metadata** (comma-separated list)
 - Requirements and constraints
 - Human feedback sections
 - Design decisions and guidance
@@ -174,6 +276,7 @@ Read the appropriate agent file and invoke it with:
 - Human feedback to incorporate
 - Project context from CLAUDE.md
 - GitHub context: branch name, issue number, PR number (from Step 2.5)
+- **Language tracks**: which languages are in scope for this ticket
 - **Iteration log path** (if one exists): `docs/designs/{feature-name}/iteration-log.md` or `docs/investigations/{feature-name}/iteration-log.md`. Pass the path so the agent can read previous iterations before making changes. Both implementation and investigation/debug agents maintain iteration logs.
 
 ### Step 4: Handle Agent Results
@@ -209,6 +312,7 @@ Provide structured summary:
 
 **Previous Status**: {status}
 **New Status**: {status}
+**Languages**: {language tracks}
 **Branch**: {branch-name}
 **PR**: #{pr-number} ({draft/ready}) or "N/A"
 **Issue**: #{issue-number} or "N/A"
@@ -234,17 +338,27 @@ project/
 ├── tickets/                    # Feature tickets
 │   └── {feature-name}.md
 ├── docs/
-│   ├── designs/               # Design artifacts
+│   ├── api-contracts/          # Authoritative API contracts
+│   │   └── contracts.yaml
+│   ├── designs/                # Design artifacts
 │   │   └── {feature-name}/
-│   └── tutorials/             # Tutorial documentation (if generated)
-│       ├── TUTORIAL_STATE.md  # Continuation state for tutorial agent
-│       └── {feature-name}/    # Feature-specific tutorials
-├── prototypes/                # Prototype code
+│   │       ├── design.md               # C++ design
+│   │       ├── {feature-name}.puml     # C++ architecture diagram
+│   │       ├── integration-design.md   # Cross-language contracts (multi-lang)
+│   │       ├── {feature-name}-sequence.puml  # Sequence diagram (multi-lang)
+│   │       ├── python/
+│   │       │   └── design.md           # Python design (if Python in Languages)
+│   │       └── frontend/
+│   │           └── design.md           # Frontend design (if Frontend in Languages)
+│   └── tutorials/              # Tutorial documentation (if generated)
+│       ├── TUTORIAL_STATE.md   # Continuation state for tutorial agent
+│       └── {feature-name}/     # Feature-specific tutorials
+├── prototypes/                 # Prototype code
 │   └── {feature-name}/
 └── .claude/
-    ├── agents/                # Agent definitions
-    ├── skills/                # User-invocable skills
-    └── templates/             # Ticket templates
+    ├── agents/                 # Agent definitions
+    ├── skills/                 # User-invocable skills
+    └── templates/              # Ticket templates
 ```
 
 ## Error Handling
@@ -289,11 +403,12 @@ When a review returns revision requests:
 
 Ensure all work adheres to project standards:
 - C++20 best practices per CLAUDE.md
+- Python: type hints, async patterns, Pydantic models
+- Frontend: ES6+ modules, Three.js best practices
 - PlantUML diagrams for architectural components
 - Test files mirror source structure
-- Proper error handling with std::expected where appropriate
+- Proper error handling
 - Memory management via references and unique_ptr
-- Brace initialization throughout
 
 ## GitHub Integration Conventions
 
