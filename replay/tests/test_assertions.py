@@ -28,6 +28,10 @@ def create_test_recording(
 ) -> None:
     """Create a minimal recording database for testing assertions.
 
+    Creates a normalized relational schema matching the cpp_sqlite ORM used by
+    msd_reader.Database. Sub-records (position, velocity, etc.) are stored in
+    separate tables and referenced by foreign key IDs.
+
     Args:
         db_path: Path where database should be created
         energy_values: List of total system energy values (one per frame)
@@ -37,35 +41,109 @@ def create_test_recording(
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # Create tables
-    cursor.execute("""
-        CREATE TABLE SimulationFrameRecord (
-            frame_id INTEGER PRIMARY KEY,
-            simulation_time REAL
-        )
-    """)
+    # Create tables matching the cpp_sqlite ORM normalized schema.
+    # BaseTransferObject provides 'id' as primary key for all record types.
 
     cursor.execute("""
-        CREATE TABLE InertialStateRecord (
-            frame_id INTEGER,
-            body_id INTEGER,
-            position_x REAL,
-            position_y REAL,
-            position_z REAL,
-            velocity_x REAL,
-            velocity_y REAL,
-            velocity_z REAL
+        CREATE TABLE SimulationFrameRecord (
+            id INTEGER PRIMARY KEY,
+            simulation_time REAL,
+            wall_clock_time REAL
         )
     """)
 
     cursor.execute("""
         CREATE TABLE SystemEnergyRecord (
-            frame_id INTEGER PRIMARY KEY,
-            total_system_e REAL
+            id INTEGER PRIMARY KEY,
+            total_linear_ke REAL,
+            total_rotational_ke REAL,
+            total_potential_e REAL,
+            total_system_e REAL,
+            delta_e REAL,
+            energy_injection INTEGER,
+            collision_active INTEGER,
+            frame_id INTEGER
         )
     """)
 
-    # Insert frame records
+    # Sub-record tables for InertialStateRecord nested fields
+    cursor.execute("""
+        CREATE TABLE CoordinateRecord (
+            id INTEGER PRIMARY KEY, x REAL, y REAL, z REAL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE VelocityRecord (
+            id INTEGER PRIMARY KEY, x REAL, y REAL, z REAL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE AccelerationRecord (
+            id INTEGER PRIMARY KEY, x REAL, y REAL, z REAL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE QuaternionDRecord (
+            id INTEGER PRIMARY KEY, w REAL, x REAL, y REAL, z REAL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE Vector4DRecord (
+            id INTEGER PRIMARY KEY, x REAL, y REAL, z REAL, w REAL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE AngularAccelerationRecord (
+            id INTEGER PRIMARY KEY, pitch REAL, roll REAL, yaw REAL
+        )
+    """)
+
+    # Body reference table
+    cursor.execute("""
+        CREATE TABLE AssetInertialStaticRecord (
+            id INTEGER PRIMARY KEY,
+            body_id INTEGER,
+            mass REAL,
+            restitution REAL,
+            friction REAL
+        )
+    """)
+
+    # Main inertial state table with FK references to sub-records
+    cursor.execute("""
+        CREATE TABLE InertialStateRecord (
+            id INTEGER PRIMARY KEY,
+            position_id INTEGER,
+            velocity_id INTEGER,
+            acceleration_id INTEGER,
+            orientation_id INTEGER,
+            quaternionRate_id INTEGER,
+            angularAcceleration_id INTEGER,
+            body_id INTEGER,
+            frame_id INTEGER
+        )
+    """)
+
+    # Vector3DRecord for collision normals
+    cursor.execute("""
+        CREATE TABLE Vector3DRecord (
+            id INTEGER PRIMARY KEY, x REAL, y REAL, z REAL
+        )
+    """)
+
+    # Collision table (empty but must exist for RecordingQuery)
+    cursor.execute("""
+        CREATE TABLE CollisionResultRecord (
+            id INTEGER PRIMARY KEY,
+            body_a_id INTEGER,
+            body_b_id INTEGER,
+            normal_id INTEGER,
+            penetrationDepth REAL,
+            frame_id INTEGER
+        )
+    """)
+
+    # Determine frame count
     frame_count = 0
     if energy_values:
         frame_count = max(frame_count, len(energy_values))
@@ -73,34 +151,101 @@ def create_test_recording(
         for positions in body_positions.values():
             frame_count = max(frame_count, len(positions))
 
-    for frame_id in range(frame_count):
+    # Insert frame records (id starts at 1 for cpp_sqlite convention)
+    for i in range(frame_count):
         cursor.execute(
-            "INSERT INTO SimulationFrameRecord (frame_id, simulation_time) VALUES (?, ?)",
-            (frame_id, frame_id * 0.01),
+            "INSERT INTO SimulationFrameRecord (id, simulation_time, wall_clock_time) VALUES (?, ?, ?)",
+            (i + 1, i * 0.01, 0.0),
         )
 
     # Insert energy records
     if energy_values:
-        for frame_id, energy in enumerate(energy_values):
+        for i, energy in enumerate(energy_values):
             cursor.execute(
-                "INSERT INTO SystemEnergyRecord (frame_id, total_system_e) VALUES (?, ?)",
-                (frame_id, energy),
+                """INSERT INTO SystemEnergyRecord
+                   (id, total_linear_ke, total_rotational_ke, total_potential_e,
+                    total_system_e, delta_e, energy_injection, collision_active, frame_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (i + 1, 0.0, 0.0, 0.0, energy, 0.0, 0, 0, i + 1),
             )
 
-    # Insert position/velocity records
+    # Insert position/velocity records with normalized sub-record tables
     if body_positions:
+        sub_record_id = 1  # Auto-incrementing ID for sub-record tables
+        state_id = 1
+        body_asset_ids = {}  # Map body_id -> AssetInertialStaticRecord.id
+
         for body_id, positions in body_positions.items():
-            velocities = body_velocities.get(body_id, [(0, 0, 0)] * len(positions)) if body_velocities else [(0, 0, 0)] * len(positions)
-            for frame_id, (pos, vel) in enumerate(zip(positions, velocities)):
+            # Create an AssetInertialStaticRecord for each unique body
+            if body_id not in body_asset_ids:
+                asset_id = len(body_asset_ids) + 1
                 cursor.execute(
-                    """
-                    INSERT INTO InertialStateRecord
-                    (frame_id, body_id, position_x, position_y, position_z,
-                     velocity_x, velocity_y, velocity_z)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (frame_id, body_id, pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]),
+                    "INSERT INTO AssetInertialStaticRecord (id, body_id, mass, restitution, friction) VALUES (?, ?, ?, ?, ?)",
+                    (asset_id, body_id, 1.0, 0.5, 0.5),
                 )
+                body_asset_ids[body_id] = asset_id
+
+            velocities = (
+                body_velocities.get(body_id, [(0, 0, 0)] * len(positions))
+                if body_velocities
+                else [(0, 0, 0)] * len(positions)
+            )
+
+            for frame_idx, (pos, vel) in enumerate(zip(positions, velocities)):
+                # Insert sub-records and track their IDs
+                pos_id = sub_record_id
+                cursor.execute(
+                    "INSERT INTO CoordinateRecord (id, x, y, z) VALUES (?, ?, ?, ?)",
+                    (pos_id, pos[0], pos[1], pos[2]),
+                )
+                sub_record_id += 1
+
+                vel_id = sub_record_id
+                cursor.execute(
+                    "INSERT INTO VelocityRecord (id, x, y, z) VALUES (?, ?, ?, ?)",
+                    (vel_id, vel[0], vel[1], vel[2]),
+                )
+                sub_record_id += 1
+
+                accel_id = sub_record_id
+                cursor.execute(
+                    "INSERT INTO AccelerationRecord (id, x, y, z) VALUES (?, ?, ?, ?)",
+                    (accel_id, 0.0, 0.0, 0.0),
+                )
+                sub_record_id += 1
+
+                orient_id = sub_record_id
+                cursor.execute(
+                    "INSERT INTO QuaternionDRecord (id, w, x, y, z) VALUES (?, ?, ?, ?, ?)",
+                    (orient_id, 1.0, 0.0, 0.0, 0.0),
+                )
+                sub_record_id += 1
+
+                qrate_id = sub_record_id
+                cursor.execute(
+                    "INSERT INTO Vector4DRecord (id, x, y, z, w) VALUES (?, ?, ?, ?, ?)",
+                    (qrate_id, 0.0, 0.0, 0.0, 0.0),
+                )
+                sub_record_id += 1
+
+                ang_accel_id = sub_record_id
+                cursor.execute(
+                    "INSERT INTO AngularAccelerationRecord (id, pitch, roll, yaw) VALUES (?, ?, ?, ?)",
+                    (ang_accel_id, 0.0, 0.0, 0.0),
+                )
+                sub_record_id += 1
+
+                # Insert the main InertialStateRecord with FK references
+                cursor.execute(
+                    """INSERT INTO InertialStateRecord
+                       (id, position_id, velocity_id, acceleration_id,
+                        orientation_id, quaternionRate_id, angularAcceleration_id,
+                        body_id, frame_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (state_id, pos_id, vel_id, accel_id, orient_id, qrate_id,
+                     ang_accel_id, body_asset_ids[body_id], frame_idx + 1),
+                )
+                state_id += 1
 
     conn.commit()
     conn.close()
