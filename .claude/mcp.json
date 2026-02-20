@@ -6,6 +6,13 @@
         "./scripts/mcp_codebase_server.py",
         "./build/Debug/docs/codebase.db"
       ]
+    },
+    "api-contracts": {
+      "command": "python3",
+      "args": [
+        "./scripts/mcp_api_contract_server.py",
+        "./docs/api-contracts/contracts.yaml"
+      ]
     }
   }
 }
