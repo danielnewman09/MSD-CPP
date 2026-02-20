@@ -44,9 +44,10 @@ The current system only supports post-hoc replay of pre-recorded simulations. Li
 | [0072a](0072a_engine_pybind_bindings.md) | Engine pybind11 bindings | — |
 | [0072b](0072b_websocket_simulation_endpoint.md) | WebSocket simulation endpoint | 0072a |
 | [0072c](0072c_live_simulation_frontend.md) | Live simulation frontend | 0072b |
+| [0072d](0072d_remove_database_pybind_bindings.md) | Remove database pybind bindings, replace with native Python SQLite | — |
 
 ## Acceptance Criteria
-- [ ] All three sub-tickets completed and merged
+- [ ] All four sub-tickets completed and merged
 - [ ] Existing replay viewer at `/` is unmodified and functional
 - [ ] User can navigate to `/live`, configure objects, start simulation, and watch in real-time
 
