@@ -1,0 +1,154 @@
+@startuml 0072d_remove_database_pybind_bindings
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<removed>> LightCoral
+}
+
+title Remove Database Pybind Bindings (Ticket 0072d)
+
+package "msd-pybind (C++)" {
+    class "msd_reader module" <<modified>> {
+        +bind_records()
+        +bind_geometry()
+        +bind_asset_registry()
+        +bind_engine()
+        --
+        -bind_database() <<removed>>
+    }
+
+    class "DatabaseWrapper" <<removed>> {
+        +selectAll<T>(): vector<T>
+        +selectById<T>(id): optional<T>
+        +selectWhere<T>(col, val): vector<T>
+        +selectByFrame<T>(frame_id): vector<T>
+        +selectByBody<T>(body_id): vector<T>
+        --
+        -db_: cpp_sqlite::Database
+    }
+
+    class "database_bindings.cpp" <<removed>> {
+        +bind_database(m): void
+    }
+}
+
+package "replay/replay/db/ (NEW)" {
+    class "RecordingDB" <<new>> {
+        +__init__(db_path: Path): None
+        +close(): None
+        --
+        +select_all_frames(): list[dict]
+        +select_all_static_assets(): list[dict]
+        +select_all_collisions(): list[dict]
+        +select_all_system_energy(): list[dict]
+        --
+        +select_collisions_by_frame(frame_id: int): list[dict]
+        +select_solver_diagnostic_by_frame(frame_id: int): list[dict]
+        +select_friction_constraints_by_frame(frame_id: int): list[dict]
+        --
+        +select_energy_by_body(body_id: int): list[dict]
+        +select_body_states_by_frame(frame_id: int): list[dict]
+        +select_body_states_all_frames(): list[dict]
+        --
+        -_conn: sqlite3.Connection
+    }
+}
+
+package "replay/replay/services/" {
+    class "SimulationService" <<modified>> {
+        +__init__(db_path: Path): None
+        +get_frames(): list[FrameInfo]
+        +get_metadata(): SimulationMetadata
+        +get_frame_data(frame_id: int): FrameData
+        +get_frame_range(start: int, count: int): list[FrameData]
+        +get_energy_by_body(body_id: int): list[EnergyPoint]
+        +get_velocity_by_body(body_id: int): list[VelocityPoint]
+        +get_system_energy(): list[SystemEnergyPoint]
+        --
+        -db_path: Path
+        -db: RecordingDB
+    }
+
+    class "GeometryService" {
+        +__init__(assets_db_path: Path): None
+        +get_geometries(asset_ids): list[AssetGeometry]
+        --
+        -registry: msd_reader.AssetRegistry
+    }
+}
+
+package "replay/replay/testing/" {
+    class "RecordingQuery" <<modified>> {
+        +__init__(db_path: Path): None
+        +frame_count(): int
+        +total_simulation_time(): float
+        +position_history(body_id: int): list[tuple]
+        +velocity_history(body_id: int): list[tuple]
+        +speed_history(body_id: int): list[float]
+        +position_at_frame(body_id, frame_id): tuple
+        +min_z(body_id: int): float
+        +max_z(body_id: int): float
+        +max_speed(body_id: int): float
+        +system_energy_history(): list[float]
+        +max_energy_drift(): float
+        +total_contact_frames(): int
+        +contact_frames_between(a, b): int
+        --
+        -_db: RecordingDB
+    }
+}
+
+package "Python stdlib" {
+    class "sqlite3.Connection" {
+        +execute(sql, params): Cursor
+        +close(): None
+    }
+}
+
+package "msd_reader module (Python)" {
+    class "AssetRegistry" {
+        +list_assets(): list[tuple]
+        +get_collision_vertices(id): list[tuple]
+    }
+    class "Engine" {
+        +spawn_inertial_object(...): dict
+        +update(ms): None
+        +get_frame_state(): dict
+    }
+}
+
+' Relationships
+"database_bindings.cpp" ..> "DatabaseWrapper" : defines
+"msd_reader module" ..> "database_bindings.cpp" : <<removed>>\ncall removed
+
+RecordingDB --> "sqlite3.Connection" : uses
+SimulationService --> RecordingDB : owns
+RecordingQuery --> RecordingDB : owns
+GeometryService --> AssetRegistry : uses (unchanged)
+
+note top of "DatabaseWrapper"
+  REMOVED: No longer compiled.
+  msd_reader.Database will no
+  longer exist in Python.
+end note
+
+note top of "RecordingDB"
+  NEW: Pure Python sqlite3 wrapper.
+  Returns plain dicts. Single persistent
+  connection per instance.
+end note
+
+note right of "SimulationService"
+  MODIFIED: Replaces msd_reader.Database
+  with RecordingDB. Inline sqlite3.connect()
+  calls moved into RecordingDB methods.
+  Public API unchanged.
+end note
+
+note right of "RecordingQuery"
+  MODIFIED: Replaces msd_reader.Database
+  with RecordingDB. Internal _db changes
+  type; public API unchanged.
+end note
+
+@enduml

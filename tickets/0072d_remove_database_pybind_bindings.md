@@ -2,8 +2,8 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Design
-- [ ] Design Complete — Awaiting Review
+- [x] Ready for Design
+- [x] Design Complete — Awaiting Review
 - [ ] Ready for Integration Design
 - [ ] Integration Design Complete — Awaiting Review
 - [ ] Integration Design Approved
@@ -126,22 +126,18 @@ The current `database_bindings.cpp` wraps `cpp_sqlite::Database` and exposes ~30
 {This section is automatically updated as the workflow progresses}
 
 ### Design Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-02-20 00:00
+- **Completed**: 2026-02-20 00:00
+- **Branch**: 0072d-remove-database-pybind-bindings
+- **PR**: N/A (pending creation after push)
 - **Artifacts**:
   - `docs/designs/0072d_remove_database_pybind_bindings/design.md`
   - `docs/designs/0072d_remove_database_pybind_bindings/0072d_remove_database_pybind_bindings.puml`
-- **Design Decisions**: {Add structured DD blocks to design.md using the format below}
-  ```
-  ### DD-0072d-001: {Short imperative title}
-  - **Affects**: {Comma-separated qualified class/function names}
-  - **Rationale**: {Why this approach was chosen}
-  - **Alternatives Considered**:
-    - {Alternative A}: {Why rejected}
-  - **Trade-offs**: {Known compromises}
-  - **Status**: active
-  ```
-- **Notes**:
+- **Design Decisions**:
+  - DD-0072d-001: Place `RecordingDB` in `replay/replay/db/` subpackage (active)
+  - DD-0072d-002: `RecordingDB` returns plain dicts, not Pydantic models (active)
+  - DD-0072d-003: Single persistent SQLite connection per `RecordingDB` instance (active)
+- **Notes**: Design introduces `RecordingDB` as a pure Python sqlite3 wrapper replacing `msd_reader.Database`. Two open questions for human: disposition of `query_recording.py` example and database tests in `test_msd_reader.py`.
 
 ### Design Review Phase
 - **Started**:
