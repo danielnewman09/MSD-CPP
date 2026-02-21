@@ -178,9 +178,9 @@ TEST(WorldModelContactIntegrationTest, RestingContact_StableFor1000Frames)
   ReferenceFrame frameBox{Coordinate{0.0, 0.0, 1.0}};
 
   world.spawnEnvironmentObject(0, hullFloor, frameFloor);  // Static floor
-  world.spawnObject(1, hullBox, frameBox);                 // Dynamic box
+  const auto& box = world.spawnObject(1, hullBox, frameBox);  // Dynamic box
 
-  uint32_t boxId = 1;
+  uint32_t boxId = box.getInstanceId();
 
   // Box at rest
   world.getObject(boxId).getInertialState().velocity =
@@ -293,10 +293,10 @@ TEST(WorldModelContactIntegrationTest, DynamicStaticCollision_StaticUnmoved)
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 5.0}};
   ReferenceFrame frameStatic{Coordinate{0.9, 0.0, 5.0}};
 
-  world.spawnObject(0, hullDynamic, frameDynamic);
+  const auto& dynamic = world.spawnObject(0, hullDynamic, frameDynamic);
   world.spawnEnvironmentObject(1, hullStatic, frameStatic);
 
-  uint32_t dynamicId = 1;
+  uint32_t dynamicId = dynamic.getInstanceId();
 
   // Dynamic moving toward static with high velocity
   world.getObject(dynamicId).setCoefficientOfRestitution(1.0);
@@ -347,11 +347,11 @@ TEST(WorldModelContactIntegrationTest,
   ReferenceFrame frameFloor{Coordinate{0.0, 0.0, -0.5}};  // Floor below
   ReferenceFrame frameWall{Coordinate{-0.5, 0.0, 0.5}};   // Wall to left
 
-  world.spawnObject(0, hullBox, frameBox);
+  const auto& box = world.spawnObject(0, hullBox, frameBox);
   world.spawnEnvironmentObject(1, hullFloor, frameFloor);
   world.spawnEnvironmentObject(2, hullWall, frameWall);
 
-  uint32_t boxId = 1;
+  uint32_t boxId = box.getInstanceId();
 
   // Box has velocity toward corner (down and left)
   world.getObject(boxId).getInertialState().velocity =

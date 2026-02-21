@@ -367,8 +367,9 @@ private:
   // Current simulation time
   std::chrono::milliseconds time_{0};
 
-  uint32_t inertialAssetIdCounter_{0};
-  uint32_t environmentAssetIdCounter_{0};
+  // Single shared counter for globally unique instance IDs across all object
+  // types (inertial + environment). Prevents body_id collisions in frame state.
+  uint32_t nextInstanceId_{0};
 
   // NEW: Gravity (deprecated, ticket 0023a, replaced by potentialEnergies_ in
   // ticket 0030)
