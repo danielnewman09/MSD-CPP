@@ -491,3 +491,135 @@ A: No. A custom no-op deleter adds cognitive overhead and is a code smell when p
 **Q: Does `contactCache_.update()` store a copy or reference to `solvedLambdas`?**
 A: `ContactCache::update()` takes `const std::vector<double>&` and stores a copy internally.
    Reusing `solvedLambdas_` as a workspace is safe.
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-21
+**Status**: APPROVED WITH NOTES
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | PASS | `ConstraintPool`, `allocateContact()`, `contactStorage_`, `contactCount_` all follow project PascalCase/camelCase/snake_case_ conventions |
+| Namespace organization | PASS | New class in `msd_sim` namespace, file in `Physics/Constraints/` alongside existing constraint types |
+| File structure | PASS | `ConstraintPool.hpp`/`.cpp` in `msd/msd-sim/src/Physics/Constraints/` matches project layout |
+| Dependency direction | PASS | `ConstraintPool` depends on `ContactConstraint` and `FrictionConstraint` (same module). `CollisionPipeline` depends on `ConstraintPool` (Collision depends on Constraints -- existing direction). No new dependency cycles introduced |
+
+#### C++ Design Quality
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | PASS | `std::vector` backing stores handle memory via RAII. Pool lifetime managed by `CollisionPipeline` member ownership |
+| Smart pointer appropriateness | PASS | Correctly replaces `unique_ptr` with pool ownership + raw pointer non-owning view. Per CLAUDE.md: "plain references for non-owning access" -- raw pointers in `vector<Constraint*>` are justified since the existing solver interface already uses this type |
+| Value/reference semantics | PASS | `ContactConstraint` and `FrictionConstraint` are concrete leaf types with default copy/move -- safe for `std::vector` value storage without slicing risk. Pool returns raw pointers (non-owning, frame-scoped lifetime) |
+| Rule of 0/3/5 | PASS | `ConstraintPool` correctly uses Rule of Zero. Both `ContactConstraint` and `FrictionConstraint` already declare Rule of Five with `= default` |
+| Const correctness | PASS | `contactCount()` and `frictionCount()` are const. `allocate*()` methods are non-const (correct). `reset()` is non-const (correct) |
+| Exception safety | NOTE | The `resize()` + assignment approach provides basic exception safety. If `ContactConstraint` constructor throws (e.g., invalid normal), the pool is in a valid but partially-filled state. This matches the existing `make_unique` behavior where a throw would leave `allConstraints_` partially populated. No regression |
+| Brace initialization | PASS | Design shows `ContactConstraint{args...}` for pool assignment, consistent with CLAUDE.md brace initialization requirement |
+
+#### Feasibility
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | PASS | `ConstraintPool.hpp` includes `ContactConstraint.hpp` and `FrictionConstraint.hpp` -- both already included by `CollisionPipeline.hpp`. No new transitive includes |
+| Template complexity | PASS | No templates used. Pool is a concrete class with typed methods |
+| Memory strategy | PASS | Clear high-water-mark growth pattern. `resize()` + counter approach avoids reallocation in steady state. Frame lifecycle (reset -> allocate batch -> use -> reset) prevents pointer invalidation within a frame |
+| Thread safety | PASS | Single-threaded physics loop (documented). No thread safety concerns |
+| Build integration | PASS | New `.cpp` file added to existing `msd-sim` CMake target. No new dependencies |
+
+#### Testability
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | PASS | `ConstraintPool` is a standalone class with no external dependencies beyond the constraint types. Can be unit tested in isolation |
+| Mockable dependencies | PASS | Pool has no dependencies to mock. Pipeline's pool is a value member -- testable via `CollisionPipelineTest` friend class |
+| Observable state | PASS | `contactCount()` and `frictionCount()` expose pool state. Returned pointers can be inspected for correctness |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | `resize()` default-constructs `ContactConstraint`/`FrictionConstraint` objects, which may call constructors with invalid arguments or trigger validation exceptions | Technical | Low | Medium | Both types have parameterized constructors only (no default constructor). `resize()` requires a default-constructible type. See Note N1 below | Yes |
+| R2 | Factory bypass (`Approach 2`) may miss edge cases in `createFromCollision()` such as rest velocity threshold, per-contact depth, or future factory logic changes | Maintenance | Low | Low | Only one call site. Factory utility functions (`computeRelativeNormalVelocity`, `combineRestitution`) are preserved. The inlined logic is identical to the factory's loop body |
+| R3 | `extractContactPoints` lambda in `solveConstraintsWithWarmStart()` accesses `allConstraints_[idx].get()` -- after the type change to raw pointers, `.get()` must be removed | Technical | Low | Low | Compiler will catch: `dynamic_cast<ContactConstraint*>(allConstraints_[idx])` compiles; `dynamic_cast<ContactConstraint*>(allConstraints_[idx].get())` will not if `allConstraints_` is `vector<Constraint*>` |
+
+### Notes
+
+**N1 (Critical Implementation Detail): Default Constructibility**
+
+The design proposes using `resize()` to grow the backing vector:
+```cpp
+if (contactCount_ >= contactStorage_.size()) {
+    contactStorage_.resize(contactStorage_.size() + kGrowthChunk);
+}
+contactStorage_[contactCount_] = ContactConstraint{args...};
+```
+
+This requires `ContactConstraint` to be **default-constructible** because `resize()` default-constructs new elements. Currently, `ContactConstraint` has NO default constructor -- its only constructor takes 10 parameters with validation (throws `std::invalid_argument` for invalid normals, negative penetration, out-of-range restitution). Similarly, `FrictionConstraint` has no default constructor.
+
+**Two viable solutions** (implementer should choose):
+
+1. **`reserve()` + `emplace_back()`**: Use `reserve()` to pre-allocate capacity, then `emplace_back()` to construct in-place. Track active count separately from `size()`. On `reset()`, call `clear()` (which destructs elements but preserves capacity). This avoids default construction entirely but calls destructors on reset.
+
+2. **Add private default constructor**: Add a private default constructor that initializes members to safe defaults (NaN for floats per CLAUDE.md, zero-length normal). Mark it as `friend` of `ConstraintPool`. Use `resize()` + assignment as designed. This preserves the zero-destruction-on-reset benefit.
+
+Option 1 is simpler and avoids adding a friend relationship. The destructor calls on `clear()` are trivial for these types (virtual destructor, no owned resources). The steady-state performance difference is negligible.
+
+**N2: `allConstraints_` Type Change and `dynamic_cast` Sites**
+
+The design correctly identifies that all `.get()` calls on `allConstraints_` elements must be removed. There are 7 `dynamic_cast` sites in `CollisionPipeline.cpp` that currently use `c.get()` or `allConstraints_[i].get()`. The compiler will enforce this -- `dynamic_cast` on a raw pointer does not require `.get()`. This is a mechanical change with no risk of silent failure.
+
+**N3: `buildSolverView()` Simplification**
+
+The design notes that `buildSolverView()` can return `allConstraints_` directly since it is already `vector<Constraint*>`. Currently both the interleaved and non-interleaved branches do the same thing (iterate and push `.get()`). After the change, the method can simply `return allConstraints_;` (copy) or return a `const` reference if the caller does not need ownership. This is a minor simplification opportunity.
+
+**N4: `constraintToGlobalGroup` Map Keying**
+
+The `constraintToGlobalGroup` map in `solveConstraintsWithWarmStart()` currently keys on `allConstraints_[i].get()`. After the type change, this becomes `allConstraints_[i]` directly. Mechanical change, no risk.
+
+**N5: Member Declaration Order**
+
+The design correctly specifies that `constraintPool_` should be declared before `allConstraints_` in `CollisionPipeline` to ensure the pool outlives the non-owning view. This is important for destruction order safety, though in practice `clearEphemeralState()` clears `allConstraints_` before `constraintPool_` is destroyed.
+
+### Prototype Guidance
+
+#### Prototype P1: Default Constructibility Validation
+
+**Risk addressed**: R1
+**Question to answer**: Can `ContactConstraint` and `FrictionConstraint` be stored in a `vector` and reused via assignment without default construction?
+
+**Success criteria**:
+- Pool allocates 100 `ContactConstraint` objects and 100 `FrictionConstraint` objects
+- `reset()` + re-allocation produces valid constraint objects (verify via `dimension()`, `getContactNormal()`)
+- No heap allocations after the first allocation batch (verify with a counter or Instruments)
+- Existing `ContactConstraintFactoryTest` cases pass when constraints are pool-allocated
+
+**Prototype approach**:
+```
+Location: prototypes/0071g_constraint_pool_allocation/p1_pool_allocation/
+Type: Catch2 test harness
+
+Steps:
+1. Implement ConstraintPool with reserve() + emplace_back() + clear() approach (Option 1 from N1)
+2. Allocate 100 ContactConstraints and 100 FrictionConstraints
+3. Verify pointer stability within a batch (no reallocation)
+4. Call reset(), re-allocate same count, verify constraint validity
+5. Measure: confirm zero heap allocations on second batch
+```
+
+**Time box**: 1 hour
+
+**If prototype fails**:
+- Fall back to Option 2 (private default constructor with friend access)
+- If both fail, use `std::deque` for stable pointers (accepting cache locality trade-off)
+
+### Summary
+
+The design is well-reasoned and addresses a real performance problem (200+ heap allocations per frame for fixed-size objects). The typed free-list pool approach (Option B) is the right choice given the open constraint type hierarchy. The ownership model change from `unique_ptr` to pool + raw pointer view is clean and preserves all downstream interfaces unchanged.
+
+The primary implementation concern is the `resize()` vs `reserve()` + `emplace_back()` decision (Note N1), which must be resolved during implementation since neither `ContactConstraint` nor `FrictionConstraint` is default-constructible. This is a straightforward implementation choice, not a design flaw. The `reserve()` + `emplace_back()` + `clear()` approach is recommended as it avoids adding artificial default constructors.
+
+Estimated prototype time: 1 hour. The design is ready for human review and subsequent implementation.
