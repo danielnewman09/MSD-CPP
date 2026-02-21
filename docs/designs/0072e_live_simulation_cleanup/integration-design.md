@@ -459,3 +459,165 @@ None blocking. All integration design decisions are resolved.
    call at implementation time should use `*cfg.position` and `*cfg.orientation`. FR-4's length
    constraint (exactly 3 elements) ensures that if a list is passed, its length is guaranteed
    correct at the Python/C++ boundary. Verification is required during implementation.
+
+---
+
+## Integration Design Review
+
+**Reviewer**: Integration Design Reviewer
+**Date**: 2026-02-21
+**Status**: APPROVED WITH MANDATORY ADDITION
+**Iteration**: 0 of 1 (no autonomous revision; mandatory addition escalated to Python Design phase)
+
+---
+
+### Criteria Assessment
+
+#### Contract Completeness
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| All layer boundaries documented | ✓ | Four contracts cover all six FRs across pybind11, Pydantic, WebSocket, and dead code boundaries |
+| Wire format before/after documented | ✓ | Both `configure` and `frame` messages show pre/post 0072e JSON |
+| Error propagation paths documented | ✓ | pybind11, configure, and frame-phase error paths all specified |
+| Backward compatibility assessment | ✓ | Each contract row in summary table includes backward-compat flag with justification |
+| Sequence diagram present | ✓ | `0072e_live_simulation_cleanup-sequence.puml` correctly depicts lifecycle |
+
+#### Contract Accuracy
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| pybind11 return schema accurate | ✓ | Matches `engine_bindings.cpp` `getFrameState()` implementation — both inertial fields and the proposed environment extension are correct |
+| FR-3 validation contract accurate | ✓ | `SpawnObjectConfig(**obj)` raises `ValidationError` on bad `object_type` — propagates to outer `except Exception` handler as documented |
+| FR-4 validation contract accurate | ✓ | `Annotated[list[float], Field(min_length=3, max_length=3)]` on `position`/`orientation` will enforce length at parse time |
+| FR-5 dead code removal accurate | ✓ | `_run_simulation` is confirmed present in `live.py` lines 88–134 and never called |
+| FR-6 payload omission accurate | ✓ | Environment objects currently send `mass`/`restitution`/`friction`; Pydantic defaults fill absent fields |
+| **`body_id` consistency guarantee accurate** | **✗** | **CRITICAL GAP — see Finding I1 below** |
+
+#### Sequence Diagram Accuracy
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Configure phase flow correct | ✗ | Sequence diagram shows `spawn_inertial_object` with `*cfg.position, *cfg.orientation` but actual `live.py` line 205–211 passes `cfg.position` and `cfg.orientation` as list objects (N2 bug confirmed in source) |
+| Frame phase flow correct | ✓ | `engine.get_frame_state()` → augment with `frame_id` → `send_json` pattern is correct |
+| Error paths complete | ✓ | `ValidationError` → `error` message → close is correctly depicted |
+| Stop-signal handling shown | ✓ | `_listen_for_stop` background task and `stop_requested.asyncio.Event` correctly shown |
+
+---
+
+### Critical Finding
+
+#### I1: `body_id` Consistency Guarantee Is Unsupported by Existing Code
+
+**Severity**: Critical (correctness defect — frame state `body_id` values will not match metadata `body_id` values unless the C++ instance ID assignment happens to coincide with Python's `enumerate`)
+
+**Evidence from source code**:
+
+In `replay/replay/routes/live.py` line 202:
+```python
+for body_id, cfg in enumerate(spawn_configs, start=1):
+    ...
+    engine.spawn_inertial_object(cfg.asset_name, cfg.position, ...)  # return value DISCARDED
+    ...
+    body_metadata.append(LiveBodyMetadata(body_id=body_id, ...))  # body_id from enumerate
+```
+
+The `spawn_inertial_object` and `spawn_environment_object` pybind11 methods return dicts:
+```python
+{"instance_id": int, "asset_id": int}
+```
+
+These return values are never captured. The `LiveBodyMetadata.body_id` is set from Python's `enumerate`, while `get_frame_state()["states"][i]["body_id"]` is set from C++'s `asset.getInstanceId()` inside `getFrameState()`.
+
+**The integration design's Contract 1 states**:
+
+> The configure phase assigns sequential `body_id` values starting at 1 to each spawned object (both inertial and environment), stored in `LiveBodyMetadata`. The C++ `getInstanceId()` method returns the same ID.
+
+This assertion may coincidentally hold today if the C++ Engine's internal instance ID counter also starts at 1 and increments in spawn order. However:
+
+1. The guarantee is **implementation-dependent and undocumented** — it relies on an assumption about C++ internal state that is not part of any explicit API contract.
+2. If a new Engine instance is created (which already happens per WebSocket connection), the counter may reset to 1 — but if any future change initializes C++ state differently (e.g., pre-populates the world model), the IDs will diverge.
+3. The sequence diagram shows `body_id = 1` and `body_id = 2` as comments annotated on the spawn calls, suggesting the design author assumed the IDs would be 1 and 2. But the Python code does not capture or verify this.
+
+**Required fix** (to be implemented in the Python Design phase):
+
+Capture the return value of each spawn call and use the returned `instance_id` as the `body_id` in `LiveBodyMetadata`. This makes the consistency guarantee explicit and self-enforcing:
+
+```python
+for cfg in spawn_configs:
+    asset_id = name_to_id[cfg.asset_name]
+    if cfg.object_type == "inertial":
+        result = engine.spawn_inertial_object(
+            cfg.asset_name,
+            *cfg.position,      # FR-4 + N2: unpack 3-element list
+            *cfg.orientation,   # FR-4 + N2: unpack 3-element list
+            cfg.mass,
+            cfg.restitution,
+            cfg.friction,
+        )
+    else:
+        result = engine.spawn_environment_object(
+            cfg.asset_name,
+            *cfg.position,
+            *cfg.orientation,
+        )
+    body_id = result["instance_id"]  # Use C++-assigned ID, not Python enumerate
+    body_metadata.append(
+        LiveBodyMetadata(
+            body_id=body_id,
+            asset_id=result["asset_id"],  # Also use C++-returned asset_id
+            ...
+        )
+    )
+```
+
+Note this also fixes:
+- The N2 issue (list unpacking with `*cfg.position`, `*cfg.orientation`)
+- The `asset_id` source — currently using `name_to_id[cfg.asset_name]` (from `list_assets()`) which may differ from `asset.getAssetId()` in C++ if the registry ID assignment differs
+
+**Disposition**: This finding is a **mandatory addition** to the Python Design phase scope. The integration design document's body_id consistency guarantee section must be updated to reflect the correct implementation approach. The Python Design agent must capture `instance_id` from spawn return values.
+
+---
+
+#### I2: N2 Bug Confirmed in Source — `*cfg.position` Unpacking Missing
+
+**Severity**: High (runtime error — currently broken at the Python/C++ pybind11 boundary for any non-mocked test)
+
+**Evidence**: `live.py` lines 205–211 pass `cfg.position` (a `list[float]`) as the `x` positional argument to `spawn_inertial_object`, which expects `double x, double y, double z` as separate scalar arguments. This will raise a `TypeError` at runtime against a real Engine.
+
+The sequence diagram correctly shows `*cfg.position` (list-unpacking) on the spawn calls, but the actual code does not unpack. The fix is the same as I1's required code change above — both issues are resolved simultaneously by capturing the return value and unpacking the position/orientation lists.
+
+**Disposition**: Absorbed into the I1 fix. The Python Design phase must specify `*cfg.position` and `*cfg.orientation` at all spawn call sites.
+
+---
+
+### Items Passing Review
+
+- All six FR contracts are logically sound and complete
+- Wire format schemas for `configure`, `metadata`, and `frame` are accurate
+- Error propagation at all three layer boundaries is documented
+- FR-5 dead code removal has no integration impact (confirmed no callers)
+- FR-6 Pydantic defaults correctly fill absent `mass`/`restitution`/`friction` fields
+- FR-2 contracts.yaml `x-pybind11-schemas` section is already complete on branch
+- `is_environment` discriminated union design is correct for both C++ and Python consumers
+- Sequence diagram structure and message ordering are accurate (modulo N2 bug on spawn calls)
+
+---
+
+### Mandatory Addition to Python Design Phase Scope
+
+The Python Design phase MUST include the following as **FR-7** (new requirement discovered during integration design review):
+
+> **FR-7**: `live.py` configure phase shall capture the `instance_id` returned by `engine.spawn_inertial_object()` and `engine.spawn_environment_object()` and use it as the `body_id` in `LiveBodyMetadata`, replacing the current `enumerate`-based assignment. This guarantees that `body_id` values in the `metadata` message are identical to `body_id` values in `get_frame_state()` frame entries, closing the correctness gap identified in Integration Design Review Finding I1.
+
+The fix simultaneously resolves:
+- FR-7 (body_id consistency — new)
+- N2 from design review (list unpacking — `*cfg.position`, `*cfg.orientation`)
+
+The Python Design agent should also update `contracts.yaml` to document the `instance_id` return type from spawn calls as part of the pybind11 contract.
+
+---
+
+### Summary
+
+The integration design is thorough and correctly documents five of the six FR contracts. The single critical gap is the `body_id` consistency guarantee in Contract 1, which is stated as fact but is not enforced by the existing `live.py` code. The fix — capturing `instance_id` from spawn return values — is straightforward, self-documenting, and simultaneously resolves the N2 list-unpacking bug. This is scoped as a mandatory addition (FR-7) to the Python Design phase rather than a revision to the integration design, since the integration design correctly identifies the desired contract; the gap is in how `live.py` implements it. The integration design is approved to proceed to the Python Design phase with FR-7 added to scope.

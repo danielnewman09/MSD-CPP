@@ -6,9 +6,9 @@
 - [x] Design Complete — Awaiting Review
 - [x] Ready for Integration Design
 - [x] Integration Design Complete — Awaiting Review
-- [ ] Integration Design Approved
-- [ ] Ready for Python Design
-- [ ] Python Design Complete — Awaiting Review
+- [x] Integration Design Approved
+- [x] Ready for Python Design
+- [x] Python Design Complete — Awaiting Review
 - [ ] Ready for Frontend Design
 - [ ] Frontend Design Complete — Awaiting Review
 - [ ] Design Approved — Ready for Prototype
@@ -65,6 +65,10 @@ These are not production-breaking bugs, but they represent contract violations a
 
 6. **FR-6**: The `configure` message payload in `live-app.js` shall omit `mass`, `restitution`, and `friction` fields for environment objects (addresses 0072c-FU-01)
 
+#### From Integration Design Review
+
+7. **FR-7**: `live.py` configure phase shall capture the `instance_id` returned by `engine.spawn_inertial_object()` and `engine.spawn_environment_object()` and use it as the `body_id` in `LiveBodyMetadata`, replacing the current `enumerate`-based assignment. This guarantees that `body_id` values in the `metadata` message match `body_id` values in `get_frame_state()` frame entries. This fix simultaneously resolves the N2 list-unpacking issue (`*cfg.position`, `*cfg.orientation`) identified in the original design review. (addresses Integration Design Review I1 and I2)
+
 ### Non-Functional Requirements
 - **Performance**: No impact — validation changes are negligible
 - **Memory**: No change
@@ -85,6 +89,8 @@ These are not production-breaking bugs, but they represent contract violations a
 - [ ] Environment objects in the `configure` message do not include `mass`, `restitution`, or `friction`
 - [ ] All existing tests pass (`test_engine_bindings.py`, `test_live_api.py`)
 - [ ] New tests cover the added validation (invalid object_type, wrong-length position/orientation)
+- [ ] `LiveBodyMetadata.body_id` is sourced from the `instance_id` returned by `engine.spawn_inertial_object()` / `engine.spawn_environment_object()`, not from `enumerate`
+- [ ] `engine.spawn_inertial_object()` and `engine.spawn_environment_object()` are called with unpacked position/orientation arguments (`*cfg.position`, `*cfg.orientation`)
 
 ---
 
@@ -188,17 +194,37 @@ These are not production-breaking bugs, but they represent contract violations a
   - spawn_inertial_object call site open question (N2 from design review) retained as an implementation-time verification item
 
 ### Integration Design Review Phase
-- **Started**:
-- **Completed**:
-- **Status**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
+- **Branch**: 0072e-live-simulation-cleanup
+- **PR**: #88
+- **Status**: APPROVED WITH MANDATORY ADDITION
+- **Artifacts**:
+  - `docs/designs/0072e_live_simulation_cleanup/integration-design.md` (review appended)
 - **Reviewer Notes**:
+  - I1 (Critical): `body_id` consistency guarantee in Contract 1 is unsupported by current `live.py` code. Python uses `enumerate(spawn_configs, start=1)` for `body_id` but never captures return values from spawn calls. C++ `getFrameState()` uses `asset.getInstanceId()`. IDs may coincidentally match today but the guarantee is implementation-dependent and unverified.
+  - I2 (High): N2 bug confirmed — `live.py` passes `cfg.position` as a `list` object, not `*cfg.position`, to `spawn_inertial_object`. This is a runtime `TypeError` against a real (non-mocked) Engine.
+  - Fix: Capture `result = engine.spawn_inertial_object(...)`, use `result["instance_id"]` as `body_id`, unpack `*cfg.position` and `*cfg.orientation` at all spawn call sites.
+  - This fix is scoped as FR-7, mandatory addition to Python Design phase.
+  - All other six FR contracts are logically correct and complete.
+  - Integration design approved to proceed to Python Design with FR-7 added to scope.
 
 ### Python Design Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
+- **Branch**: 0072e-live-simulation-cleanup
+- **PR**: #88
 - **Artifacts**:
   - `docs/designs/0072e_live_simulation_cleanup/python/design.md`
 - **Notes**:
+  - FR-3: `SpawnObjectConfig.object_type` changed to `Literal["inertial", "environment"]`
+  - FR-4: `position` and `orientation` changed to `Annotated[list[float], Field(min_length=3, max_length=3)]`
+  - FR-5: `_run_simulation` function deleted (confirmed dead code, no callers)
+  - FR-7 (mandatory from integration review): Spawn loop rewritten to capture `result["instance_id"]` and use as `body_id`; `*cfg.position` / `*cfg.orientation` unpacking fixes N2 bug simultaneously
+  - Two existing tests (`test_inertial_object_spawned_with_physics_params`, `test_environment_object_spawned_without_physics_params`) must be updated to assert unpacked scalar args
+  - `_make_mock_engine` helper must be updated to configure spawn return values
+  - New test classes: `TestSpawnObjectConfigValidation`, `TestWebSocketValidationErrors`, `TestDeadCodeRemoval`, `TestBodyIdConsistency`
+  - FR-6 has no Python implementation change — Pydantic defaults already handle absent fields
 
 ### Python Design Review Phase
 - **Started**:
