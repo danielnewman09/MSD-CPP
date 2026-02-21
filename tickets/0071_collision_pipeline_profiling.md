@@ -271,15 +271,21 @@ Three scenarios exercising different collision density profiles:
 - Consider integrating position correction into the velocity solve (Baumgarte stabilization tradeoff)
 **Est. Impact**: ~0.3-0.5% CPU reduction.
 
-### 0071c: Eigen Fixed-Size Matrices (Medium Priority, Deferred from 0053e)
+### 0071c: Eigen Fixed-Size Matrices — Direct Conversions (Medium Priority, Deferred from 0053e)
 
-**Problem**: Eigen BLAS kernels dominate at 3.6%. Dense matrix operations (gebp_kernel, triangular_solve, LLT) use dynamic allocation and dispatch.
-**Solutions**:
-- Use fixed-size Eigen matrices for bounded contact counts (typically 1-4 contacts per pair)
-- Template constraint solver on system size for small systems
-**Est. Impact**: ~1-2% CPU reduction from eliminating dynamic dispatch overhead.
+**Ticket**: [0071c_eigen_fixed_size_matrices](0071c_eigen_fixed_size_matrices.md)
+**Problem**: Solver-internal data structures use `Eigen::MatrixXd` / `VectorXd` where dimensions are compile-time constants. `FlattenedConstraints::jacobianRows` stores 1x12 rows as heap-allocated `RowVectorXd`. `assembleJacobians()` returns `vector<MatrixXd>` for rows that are always 1x12.
+**Scope**: Convert solver-internal types to fixed-size Eigen without changing the `Constraint` virtual interface.
+**Est. Impact**: Reduced heap allocations per frame, improved Eigen compile-time optimization for block operations.
 
-### 0071d: DataRecorder Batch Insert Optimization (Low Priority)
+### 0071d: Constraint Interface Static Dispatch Investigation (Medium Priority)
+
+**Ticket**: [0071d_constraint_interface_static_dispatch](0071d_constraint_interface_static_dispatch.md)
+**Problem**: The `Constraint` virtual interface forces `Eigen::MatrixXd` / `VectorXd` return types on `evaluate()` and `jacobian()`, causing heap allocation per virtual call. All active constraint types have fixed compile-time dimensions.
+**Scope**: Investigate CRTP, `std::variant`, output buffer, or hybrid approaches to enable fixed-size returns at the interface level. Depends on 0071c completing first to establish residual cost baseline.
+**Est. Impact**: Further reduction beyond 0071c; magnitude depends on investigation findings.
+
+### 0071e: DataRecorder Batch Insert Optimization (Low Priority)
 
 **Problem**: Per-record SQLite inserts with full SQL parsing per insert (3.8% in test workload).
 **Solution**: Use prepared statements and batch transaction grouping more aggressively.
