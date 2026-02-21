@@ -4,7 +4,7 @@
 - [x] Draft
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
-- [ ] Ready for Integration Design
+- [x] Ready for Integration Design
 - [ ] Integration Design Complete — Awaiting Review
 - [ ] Integration Design Approved
 - [ ] Ready for Python Design
@@ -154,10 +154,21 @@ These are not production-breaking bugs, but they represent contract violations a
   - Open question noted: verify that `live.py` correctly unpacks `cfg.position` as `*cfg.position` when calling the C++ binding
 
 ### Design Review Phase
-- **Started**:
-- **Completed**:
-- **Status**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
+- **Branch**: 0072e-live-simulation-cleanup
+- **PR**: #88
+- **Status**: APPROVED WITH NOTES
+- **Artifacts**:
+  - `docs/designs/0072e_live_simulation_cleanup/design.md` (review appended)
 - **Reviewer Notes**:
+  - All six FRs pass architectural fit, C++ quality, feasibility, and testability criteria
+  - `is_environment: false` on inertial entries (uniform discriminated union schema) endorsed
+  - `x-pybind11-schemas` approach in contracts.yaml (FR-2) endorsed and already committed
+  - FR-2 artifact (`x-pybind11-schemas` in contracts.yaml) confirmed already complete on branch
+  - N1: Verify `AssetEnvironment::static_state_.orientation` is a valid unit quaternion in tests
+  - N2: Verify list-unpacking (`*cfg.position`) at the `spawn_inertial_object` call site in `live.py` during implementation
+  - N3: `BodyState` vs `EngineBodyState` schema discrepancy in contracts.yaml is acceptable for this ticket; reconcile in a future ticket
 
 ### Integration Design Phase
 - **Started**:
