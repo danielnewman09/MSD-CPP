@@ -16,8 +16,8 @@
 - [x] Ready for Implementation
 - [x] Implementation Complete — Awaiting Test Writing
 - [x] Test Writing Complete — Awaiting Quality Gate
-- [ ] Quality Gate Passed — Awaiting Review
-- [ ] Approved — Ready to Merge
+- [x] Quality Gate Passed — Awaiting Review
+- [x] Approved — Ready to Merge
 - [ ] Merged / Complete
 
 ## Metadata
@@ -316,10 +316,75 @@ These are not production-breaking bugs, but they represent contract violations a
   - FR-5 dead code removal verified via AST parsing — `_run_simulation` not present in live.py.
 
 ### Implementation Review Phase
-- **Started**:
-- **Completed**:
-- **Status**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
+- **Branch**: 0072e-live-simulation-cleanup
+- **PR**: #88
+- **Status**: APPROVED
 - **Reviewer Notes**:
+
+  **Summary**: All seven functional requirements (FR-1 through FR-7) plus the N2 fix are fully implemented and conform to the design documents. The implementation is clean, surgical, and well-tested. All 83 tests pass (46 C++ pybind11 tests + 37 live API tests + 697 C++ simulation tests). No blocking issues identified.
+
+  **FR-1 — C++: Environment objects in getFrameState() (engine_bindings.cpp)**
+  - PASS: Second loop over `worldModel.getEnvironmentalObjects()` correctly appended after the inertial body loop.
+  - PASS: Environment entries include `is_environment: true`; inertial entries include `is_environment: false`. Discriminated union schema is uniform across all body types.
+  - PASS: Position sourced from `asset.getReferenceFrame().getOrigin()`. Orientation from `asset.getInertialState().orientation`. Both are correct API calls.
+  - PASS: Velocity and angular_velocity are literal `0.0` floats, not NaN — correct for wire protocol values.
+  - PASS: `body_id` and `asset_id` sourced from `asset.getInstanceId()` and `asset.getAssetId()` — consistent with inertial body pattern.
+  - PASS: The Doxygen comment on `getFrameState()` is thorough and accurately describes the extended schema.
+  - NOTE: The pybind11 binding `.def("get_frame_state", ...)` docstring is also updated and accurate.
+
+  **FR-2 — API Contract Documentation (contracts.yaml)**
+  - PASS: `x-pybind11-schemas` section present in `docs/api-contracts/contracts.yaml`. Both `EngineBodyState` and `EngineFrameState` schemas are complete and accurate.
+  - PASS: `is_environment` correctly documented as required on both body types in `EngineBodyState`.
+  - PASS: `SpawnObjectConfig` schema in `components/schemas` reflects FR-3/FR-4 constraints (`minItems: 3`, `maxItems: 3`, `enum: [inertial, environment]`).
+
+  **FR-3 — Pydantic: `object_type` Literal constraint (models.py)**
+  - PASS: `object_type: Literal["inertial", "environment"]` is correctly declared.
+  - PASS: `Literal` imported from `typing`. `Field` imported from `pydantic`. `Annotated` from `typing`. All three additions confirmed.
+  - PASS: Existing model defaults (`mass=10.0`, `restitution=0.8`, `friction=0.5`) are preserved.
+
+  **FR-4 — Pydantic: position/orientation length constraints (models.py)**
+  - PASS: `Annotated[list[float], Field(min_length=3, max_length=3)]` on both `position` and `orientation`. Correct Pydantic v2 idiom.
+
+  **FR-5 — Dead code removal: `_run_simulation` (live.py)**
+  - PASS: `_run_simulation` function is absent from `live.py`. The file's top-level symbol table is exactly as specified in the Python design: `_build_asset_geometries`, `live_simulation`, `_listen_for_stop` (nested), `list_live_assets`.
+
+  **FR-6 — Frontend: conditional physics fields (live-app.js)**
+  - PASS: `onStartSimulation()` uses the conditional builder pattern. Base object contains the four always-present fields; inertial branch adds `mass`, `restitution`, `friction`.
+  - PASS: Comment on lines 254–255 explicitly references FR-6 and the ticket.
+  - PASS: `scene.js`, `live.html`, and `live.css` are untouched per the ticket constraint.
+
+  **FR-7 + N2 fix — spawn loop rewrite (live.py)**
+  - PASS: `enumerate()` is removed. Loop iterates `for cfg in spawn_configs:`.
+  - PASS: Both `engine.spawn_inertial_object()` and `engine.spawn_environment_object()` return values are captured as `result`.
+  - PASS: `body_id=result["instance_id"]` is used in `LiveBodyMetadata` construction. `asset_id=result["asset_id"]` is also sourced from the C++ return value.
+  - PASS: `*cfg.position` and `*cfg.orientation` are used at both spawn call sites. N2 bug is definitively fixed.
+  - PASS: `name_to_id` dict is retained for `_build_asset_geometries` and is no longer used in the spawn loop — correctly resolved in the Python design.
+  - PASS: Inline comments clearly explain both the FR-7 fix and the N2 fix.
+
+  **Test Coverage Assessment**
+
+  C++ pybind11 tests (`test_engine_bindings.py`, 46 total):
+  - PASS: `TestGetFrameStateEnvironmentObjects` (9 tests) covers: environment entry present in states, `is_environment: True` flag, zero velocity, zero angular_velocity, position matches spawn coordinates, valid unit quaternion orientation (Design Review N1), all required keys present, mixed inertial+environment, velocity stays zero after update steps.
+  - PASS: `test_frame_state_no_inertial_before_spawn` correctly accounts for the default floor environment object via the `baseline_env_count` pattern in `setup_method`. This was the fix added in commit `a7d8005` and is sound.
+  - PASS: `test_inertial_body_has_is_environment_false` verifies the discriminated union on inertial entries.
+
+  Python API tests (`test_live_api.py`, 37 total):
+  - PASS: `TestSpawnObjectConfigValidation` — 8 tests covering FR-3 (invalid/valid type) and FR-4 (parametrized under/over/empty for both position and orientation, plus valid 3-element cases).
+  - PASS: `TestWebSocketValidationErrors` — 5 tests covering FR-3/FR-4 error propagation to WebSocket error message.
+  - PASS: `TestDeadCodeRemoval` — 1 test using `hasattr` check on `live_module`.
+  - PASS: `TestBodyIdConsistency` — 4 tests: adversarial non-sequential IDs (42, 99) test definitively detects enumerate bug; two call-site unpacking tests assert scalars; sequential default ID test.
+  - PASS: `_CONFIGURE_MSG` fixture omits physics fields for the environment object (large_cube) — correctly testing the post-FR-6 client payload.
+  - PASS: `_make_mock_engine` includes `spawn_inertial_object.return_value` and `spawn_environment_object.return_value` with correct dict structure.
+
+  **Minor Observations (non-blocking)**
+
+  R1 (informational): There is a default value mismatch between the Pydantic `SpawnObjectConfig.restitution` default (`0.8`) and the C++ pybind11 `spawn_inertial_object` default (`restitution=0.5`). Since `cfg.restitution` is always passed explicitly from the Pydantic model to the spawn call (the Pydantic value wins), this is not a runtime bug. However, the discrepancy means that if someone bypasses the Python layer and calls `engine.spawn_inertial_object(name, x, y, z)` from Python directly, they get `restitution=0.5`, while the documented contract (contracts.yaml) says `default: 0.8`. This pre-existing inconsistency is out of scope for this ticket but worth a future reconciliation.
+
+  R2 (informational): The `_CONFIGURE_MSG` fixture in `test_live_api.py` includes `"asset_name": "large_cube"` for the environment object. The `_make_mock_engine` asset list returns `[(1, "cube"), (2, "large_cube")]`, so the asset name validation passes. This is correct and consistent.
+
+  R3 (informational): `test_frame_schema` asserts `"collisions" in data`, but the live simulation frame dict from `get_frame_state()` (the real C++ implementation) does not include a `collisions` key — only `simulation_time` and `states`. The mock's `get_frame_state.return_value` includes `"collisions": []` which is why the test passes. This is a pre-existing issue from 0072b tests, out of scope for this ticket.
 
 ### Documentation Update Phase
 - **Started**:
