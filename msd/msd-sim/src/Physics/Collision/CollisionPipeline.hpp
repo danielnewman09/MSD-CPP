@@ -422,6 +422,13 @@ private:
   };
   std::vector<PairConstraintRange> pairRanges_;
 
+  // Ticket: 0071e_trivial_allocation_elimination
+  // Per-pair contact points, indexed by collision pair index.
+  // Pre-computed once in solveConstraintsWithWarmStart() and reused for
+  // both the warm-start query and the cache-update loop, eliminating
+  // one extractContactPoints() call per pair per frame.
+  std::vector<std::vector<Coordinate>> pairContactPoints_;
+
   // Friend declarations for unit testing
   friend class CollisionPipelineTest;
 };

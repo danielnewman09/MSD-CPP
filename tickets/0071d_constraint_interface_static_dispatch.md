@@ -2,13 +2,13 @@
 
 ## Status
 - [x] Draft
-- [ ] Investigation Complete
+- [x] Investigation Complete
 - [ ] Design Complete — Awaiting Review
 - [ ] Design Approved — Ready for Implementation
 - [ ] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Investigation Complete — No Implementation Required
 **Type**: Performance / Investigation
 **Priority**: Medium
 **Created**: 2026-02-21
@@ -194,3 +194,32 @@ constraint->jacobianInto(j.data(), 1, 12);
   - Four candidate approaches documented (CRTP, variant, hybrid, output buffer)
   - Investigation questions defined to guide design phase
   - Depends on 0071c completing first to establish residual cost baseline
+
+### Investigation Phase
+- **Started**: 2026-02-21
+- **Completed**: 2026-02-21
+- **Branch**: 0071d-constraint-interface-static-dispatch
+- **PR**: N/A
+- **Artifacts**:
+  - `docs/designs/0071d_constraint_interface_static_dispatch/design.md`
+  - `docs/investigations/0071d_constraint_interface_static_dispatch/iteration-log.md`
+- **Notes**:
+  - Investigated all four options (CRTP, std::variant, hybrid, output buffer)
+  - Confirmed 0071c delivered the boundary pattern: fixed-size types in solver
+    compute zone, MatrixXd only at virtual call boundary in flattenConstraints
+    and PositionCorrector
+  - Profiling attribution: remaining virtual-interface MatrixXd allocations
+    contribute <0.2% of CPU vs 3.6% Eigen BLAS baseline — not justifiable
+  - All four architectural options: cost/benefit unfavorable (closed type set
+    or maintenance burden, <0.2% gain)
+  - **Recommendation: Do not proceed with any architectural change**
+  - Identified PositionCorrector::jacobians_ (vector<MatrixXd>) as the only
+    remaining worthwhile non-architectural conversion — suggest follow-on ticket
+  - Investigation questions from Draft all answered:
+    1. Cost split: allocation cost is minor vs BLAS compute; virtual dispatch
+       overhead itself is negligible. Neither justifies architectural change.
+    2. Type set: NOT closed (joints planned). Strengthens case against CRTP/variant.
+    3. 0071c residual: after boundary pattern, remaining alloc is flattenConstraints
+       temporary MatrixXd per constraint — confirmed minor.
+    4. PositionCorrector: already uses reused workspace (0053f); after frame 1,
+       no allocation — only virtual call + copy overhead.

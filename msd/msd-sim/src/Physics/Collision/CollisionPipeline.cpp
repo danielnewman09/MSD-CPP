@@ -1,6 +1,7 @@
 // Ticket: 0044_collision_pipeline_integration
 // Ticket: 0052d_solver_integration_ecos_removal
 // Ticket: 0071a_constraint_solver_scalability
+// Ticket: 0071e_trivial_allocation_elimination
 // Design: docs/designs/0044_collision_pipeline_integration/design.md
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
 // Design: docs/designs/0071a_constraint_solver_scalability/design.md
@@ -69,7 +70,18 @@ void CollisionPipeline::execute(
   double dt)
 {
   // Clear all state from previous frame
+  // Ticket: 0071e_trivial_allocation_elimination
+  // Capture previous collision count before clearing so we can re-reserve below.
+  // clear() preserves capacity, so this reserve is a no-op after frame 1.
+  const size_t prevCollisionCount = collisions_.size();
   collisions_.clear();
+  if (prevCollisionCount == 0)
+  {
+    // First frame: reserve a reasonable estimate (inertial × environment pairs)
+    const size_t numInertialEst = inertialAssets.size();
+    const size_t numEnvEst = environmentalAssets.size();
+    collisions_.reserve(numInertialEst * (numInertialEst + numEnvEst));
+  }
   solverData_ = SolverData{};
   clearEphemeralState();
 
@@ -248,6 +260,15 @@ void CollisionPipeline::createConstraints(
     }
   }
 
+  // Ticket: 0071e_trivial_allocation_elimination
+  // Worst case: 1 contact + 1 friction constraint per collision pair.
+  // Each CollisionResult may have up to 4 contact points, so the actual
+  // bound is collisions_.size() * 4 * (anyFriction ? 2 : 1).
+  // Use a conservative estimate of 2 constraints per pair (1 contact point
+  // is most common) to avoid excessive over-reservation.
+  allConstraints_.reserve(collisions_.size() * 2 * (anyFriction ? 2 : 1));
+  pairRanges_.reserve(collisions_.size());
+
   // Ticket: 0058_constraint_ownership_cleanup
   // Store all constraints in allConstraints_ with interleaved pattern when
   // friction is active: [CC_0, FC_0, CC_1, FC_1, ...]
@@ -413,6 +434,20 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
 
   auto constraintPtrs = buildSolverView(hasFriction);
 
+  // Ticket: 0071e_trivial_allocation_elimination
+  // Pre-compute contact points for all pairs once. Both the warm-start query
+  // loop and the cache-update loop need these, so computing them once here
+  // eliminates one extractContactPoints() call per pair per frame.
+  // pairContactPoints_[i] corresponds to collisions_[i] / pairRanges entry
+  // with pairIdx == i.
+  pairContactPoints_.clear();
+  pairContactPoints_.resize(collisions_.size());
+  for (const auto& range : pairRanges_)
+  {
+    const auto& pair = collisions_[range.pairIdx];
+    pairContactPoints_[range.pairIdx] = extractContactPoints(range, pair);
+  }
+
   // Determine numInertial: inertial bodies have non-zero inverse mass,
   // environment bodies have inverseMass == 0.0. Find the highest index
   // with positive inverse mass + 1.
@@ -521,7 +556,8 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
       }
 
       const auto& pair = collisions_[range.pairIdx];
-      auto currentPoints = extractContactPoints(range, pair);
+      // Ticket: 0071e_trivial_allocation_elimination — reuse pre-computed points
+      const auto& currentPoints = pairContactPoints_[range.pairIdx];
 
       Vector3D const normalVec{pair.result.normal.x(),
                                pair.result.normal.y(),
@@ -621,7 +657,11 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
       }
     }
 
-    auto contactPoints = extractContactPoints(range, pair);
+    // Ticket: 0071e_trivial_allocation_elimination
+    // Contact points for this pair were already computed in the warm-start
+    // query loop above (stored in pairContactPoints_). Reuse them here to
+    // avoid a second extractContactPoints() call per pair per frame.
+    auto contactPoints = pairContactPoints_[range.pairIdx];
 
     Vector3D const normalVec{pair.result.normal.x(),
                              pair.result.normal.y(),
@@ -818,6 +858,7 @@ void CollisionPipeline::clearEphemeralState()
   inverseMasses_.clear();
   inverseInertias_.clear();
   pairRanges_.clear();
+  pairContactPoints_.clear();
 }
 
 std::vector<Constraint*>
