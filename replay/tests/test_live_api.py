@@ -89,6 +89,12 @@ def _make_mock_engine(asset_list: list[tuple[int, str]] | None = None) -> MagicM
         "solver": None,
     }
 
+    # FR-7 (0072e): spawn methods return C++-assigned instance_id and asset_id.
+    # Default values match the default asset_list indices so existing tests
+    # continue to pass with body_id=1 (inertial) and body_id=2 (environment).
+    engine.spawn_inertial_object.return_value = {"instance_id": 1, "asset_id": 1}
+    engine.spawn_environment_object.return_value = {"instance_id": 2, "asset_id": 2}
+
     return engine
 
 
@@ -372,7 +378,11 @@ class TestWebSocketLifecycle:
     def test_inertial_object_spawned_with_physics_params(
         self, client: TestClient
     ) -> None:
-        """spawn_inertial_object called with mass/restitution/friction from config."""
+        """spawn_inertial_object called with unpacked scalar args and physics params.
+
+        N2 fix (0072e): position/orientation are unpacked into individual scalars
+        rather than passed as list objects.
+        """
         mock_engine = _make_mock_engine()
         with patch("replay.routes.live.msd_reader") as mock_mod:
             mock_mod.Engine.return_value = mock_engine
@@ -381,15 +391,20 @@ class TestWebSocketLifecycle:
                 ws.receive_json()  # metadata
                 # Don't start — just check spawn was called correctly
 
-        # First object is inertial "cube"
+        # First object is inertial "cube" — position and orientation are unpacked
+        # into scalars: (name, x, y, z, pitch, roll, yaw, mass, restitution, friction)
         mock_engine.spawn_inertial_object.assert_called_once_with(
-            "cube", [0.0, 0.0, 5.0], [0.0, 0.0, 0.0], 10.0, 0.8, 0.5
+            "cube", 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 10.0, 0.8, 0.5
         )
 
     def test_environment_object_spawned_without_physics_params(
         self, client: TestClient
     ) -> None:
-        """spawn_environment_object called without mass/restitution/friction."""
+        """spawn_environment_object called with unpacked scalar args only.
+
+        N2 fix (0072e): position/orientation are unpacked into individual scalars.
+        No mass/restitution/friction arguments for environment objects.
+        """
         mock_engine = _make_mock_engine()
         with patch("replay.routes.live.msd_reader") as mock_mod:
             mock_mod.Engine.return_value = mock_engine
@@ -397,7 +412,318 @@ class TestWebSocketLifecycle:
                 ws.send_json(_CONFIGURE_MSG)
                 ws.receive_json()  # metadata
 
-        # Second object is environment "large_cube"
+        # Second object is environment "large_cube" — position and orientation
+        # are unpacked into scalars: (name, x, y, z, pitch, roll, yaw)
         mock_engine.spawn_environment_object.assert_called_once_with(
-            "large_cube", [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+            "large_cube", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
         )
+
+
+# ---------------------------------------------------------------------------
+# Pydantic model validation (FR-3, FR-4 — Ticket 0072e)
+# ---------------------------------------------------------------------------
+
+
+class TestSpawnObjectConfigValidation:
+    """Tests for SpawnObjectConfig Pydantic validation (FR-3, FR-4).
+
+    These tests construct SpawnObjectConfig directly (no WebSocket needed)
+    to verify that invalid inputs are rejected at the model layer.
+    """
+
+    def test_invalid_object_type_raises_validation_error(self) -> None:
+        """FR-3: object_type not in {'inertial', 'environment'} raises ValidationError."""
+        from pydantic import ValidationError
+
+        from replay.models import SpawnObjectConfig
+
+        with pytest.raises(ValidationError):
+            SpawnObjectConfig(
+                asset_name="cube",
+                position=[0.0, 0.0, 5.0],
+                orientation=[0.0, 0.0, 0.0],
+                object_type="kinematic",
+            )
+
+    def test_valid_inertial_object_type_accepted(self) -> None:
+        """FR-3: object_type='inertial' is accepted."""
+        from replay.models import SpawnObjectConfig
+
+        cfg = SpawnObjectConfig(
+            asset_name="cube",
+            position=[0.0, 0.0, 5.0],
+            orientation=[0.0, 0.0, 0.0],
+            object_type="inertial",
+        )
+        assert cfg.object_type == "inertial"
+
+    def test_valid_environment_object_type_accepted(self) -> None:
+        """FR-3: object_type='environment' is accepted."""
+        from replay.models import SpawnObjectConfig
+
+        cfg = SpawnObjectConfig(
+            asset_name="plane",
+            position=[0.0, 0.0, 0.0],
+            orientation=[0.0, 0.0, 0.0],
+            object_type="environment",
+        )
+        assert cfg.object_type == "environment"
+
+    @pytest.mark.parametrize("position", [
+        [0.0, 1.0],              # too short (2 elements)
+        [0.0, 1.0, 2.0, 3.0],   # too long (4 elements)
+        [],                      # empty (0 elements)
+    ])
+    def test_invalid_position_length_raises_validation_error(
+        self, position: list[float]
+    ) -> None:
+        """FR-4: position with wrong element count raises ValidationError."""
+        from pydantic import ValidationError
+
+        from replay.models import SpawnObjectConfig
+
+        with pytest.raises(ValidationError):
+            SpawnObjectConfig(
+                asset_name="cube",
+                position=position,
+                orientation=[0.0, 0.0, 0.0],
+                object_type="inertial",
+            )
+
+    @pytest.mark.parametrize("orientation", [
+        [0.0, 1.0],              # too short (2 elements)
+        [0.0, 1.0, 2.0, 3.0],   # too long (4 elements)
+        [],                      # empty (0 elements)
+    ])
+    def test_invalid_orientation_length_raises_validation_error(
+        self, orientation: list[float]
+    ) -> None:
+        """FR-4: orientation with wrong element count raises ValidationError."""
+        from pydantic import ValidationError
+
+        from replay.models import SpawnObjectConfig
+
+        with pytest.raises(ValidationError):
+            SpawnObjectConfig(
+                asset_name="cube",
+                position=[0.0, 0.0, 5.0],
+                orientation=orientation,
+                object_type="inertial",
+            )
+
+    def test_valid_three_element_position_accepted(self) -> None:
+        """FR-4: position with exactly 3 elements is accepted."""
+        from replay.models import SpawnObjectConfig
+
+        cfg = SpawnObjectConfig(
+            asset_name="cube",
+            position=[1.0, 2.0, 3.0],
+            orientation=[0.0, 0.0, 0.0],
+            object_type="inertial",
+        )
+        assert cfg.position == [1.0, 2.0, 3.0]
+
+    def test_valid_three_element_orientation_accepted(self) -> None:
+        """FR-4: orientation with exactly 3 elements is accepted."""
+        from replay.models import SpawnObjectConfig
+
+        cfg = SpawnObjectConfig(
+            asset_name="cube",
+            position=[0.0, 0.0, 5.0],
+            orientation=[0.1, 0.2, 0.3],
+            object_type="inertial",
+        )
+        assert cfg.orientation == [0.1, 0.2, 0.3]
+
+
+# ---------------------------------------------------------------------------
+# WebSocket-level validation error propagation (FR-3, FR-4 — Ticket 0072e)
+# ---------------------------------------------------------------------------
+
+
+class TestWebSocketValidationErrors:
+    """Tests that Pydantic ValidationError propagates to 'error' WebSocket message.
+
+    When invalid configure data is sent over the WebSocket, the server should
+    respond with an error message rather than crashing or spawning incorrectly.
+    """
+
+    def test_invalid_object_type_triggers_error_message(
+        self, client: TestClient
+    ) -> None:
+        """FR-3: configure with invalid object_type results in error WebSocket message."""
+        mock_engine = _make_mock_engine()
+        with patch("replay.routes.live.msd_reader") as mock_mod:
+            mock_mod.Engine.return_value = mock_engine
+            with client.websocket_connect("/api/v1/live") as ws:
+                ws.send_json({
+                    "type": "configure",
+                    "objects": [{
+                        "asset_name": "cube",
+                        "position": [0.0, 0.0, 5.0],
+                        "orientation": [0.0, 0.0, 0.0],
+                        "object_type": "kinematic",  # invalid
+                    }]
+                })
+                msg = ws.receive_json()
+
+        assert msg["type"] == "error"
+        # Pydantic v2 ValidationError string includes the field name or invalid value
+        assert "object_type" in msg["message"].lower() or "kinematic" in msg["message"].lower()
+
+    @pytest.mark.parametrize("bad_position", [
+        [0.0, 1.0],              # too short
+        [0.0, 1.0, 2.0, 3.0],   # too long
+    ])
+    def test_invalid_position_length_triggers_error_message(
+        self, client: TestClient, bad_position: list[float]
+    ) -> None:
+        """FR-4: configure with wrong-length position results in error WebSocket message."""
+        mock_engine = _make_mock_engine()
+        with patch("replay.routes.live.msd_reader") as mock_mod:
+            mock_mod.Engine.return_value = mock_engine
+            with client.websocket_connect("/api/v1/live") as ws:
+                ws.send_json({
+                    "type": "configure",
+                    "objects": [{
+                        "asset_name": "cube",
+                        "position": bad_position,
+                        "orientation": [0.0, 0.0, 0.0],
+                        "object_type": "inertial",
+                    }]
+                })
+                msg = ws.receive_json()
+
+        assert msg["type"] == "error"
+
+    @pytest.mark.parametrize("bad_orientation", [
+        [0.0, 1.0],
+        [0.0, 1.0, 2.0, 3.0],
+    ])
+    def test_invalid_orientation_length_triggers_error_message(
+        self, client: TestClient, bad_orientation: list[float]
+    ) -> None:
+        """FR-4: configure with wrong-length orientation results in error WebSocket message."""
+        mock_engine = _make_mock_engine()
+        with patch("replay.routes.live.msd_reader") as mock_mod:
+            mock_mod.Engine.return_value = mock_engine
+            with client.websocket_connect("/api/v1/live") as ws:
+                ws.send_json({
+                    "type": "configure",
+                    "objects": [{
+                        "asset_name": "cube",
+                        "position": [0.0, 0.0, 5.0],
+                        "orientation": bad_orientation,
+                        "object_type": "inertial",
+                    }]
+                })
+                msg = ws.receive_json()
+
+        assert msg["type"] == "error"
+
+
+# ---------------------------------------------------------------------------
+# Dead code removal verification (FR-5 — Ticket 0072e)
+# ---------------------------------------------------------------------------
+
+
+class TestDeadCodeRemoval:
+    """Tests verifying that dead code was removed (FR-5)."""
+
+    def test_run_simulation_no_longer_exists(self) -> None:
+        """FR-5: _run_simulation function is no longer defined in the live module."""
+        import replay.routes.live as live_module
+
+        assert not hasattr(live_module, "_run_simulation"), (
+            "_run_simulation should have been removed as dead code (FR-5, 0072e). "
+            "The inline simulation loop in live_simulation() is the only implementation."
+        )
+
+
+# ---------------------------------------------------------------------------
+# body_id consistency: sourced from C++ instance_id (FR-7 — Ticket 0072e)
+# ---------------------------------------------------------------------------
+
+
+class TestBodyIdConsistency:
+    """Tests verifying body_id in metadata comes from C++ instance_id (FR-7).
+
+    The critical test uses non-sequential mock IDs (42, 99) to definitively
+    detect whether the enumerate-based assignment bug has been fixed.
+    If enumerate() is still used, body_ids would be {1, 2} instead of {42, 99}.
+    """
+
+    def test_metadata_body_id_uses_instance_id_from_spawn(
+        self, client: TestClient
+    ) -> None:
+        """FR-7: body_id in metadata message matches instance_id returned by spawn calls.
+
+        Uses adversarial non-sequential mock IDs (42 and 99) to detect the
+        enumerate-based body_id assignment bug. With the fix, body_ids must be
+        {42, 99}. With the bug, they would be {1, 2}.
+        """
+        mock_engine = _make_mock_engine()
+        # Override with non-sequential IDs to expose the enumerate bug
+        mock_engine.spawn_inertial_object.return_value = {"instance_id": 42, "asset_id": 1}
+        mock_engine.spawn_environment_object.return_value = {"instance_id": 99, "asset_id": 2}
+
+        with patch("replay.routes.live.msd_reader") as mock_mod:
+            mock_mod.Engine.return_value = mock_engine
+            with client.websocket_connect("/api/v1/live") as ws:
+                ws.send_json(_CONFIGURE_MSG)
+                metadata = ws.receive_json()
+
+        assert metadata["type"] == "metadata"
+        body_ids = {b["body_id"] for b in metadata["bodies"]}
+        assert body_ids == {42, 99}, (
+            f"Expected body_ids {{42, 99}} from C++ instance_id, got {body_ids}. "
+            "Likely still using enumerate-based body_id assignment (FR-7 not fixed)."
+        )
+
+    def test_spawn_inertial_called_with_unpacked_position(
+        self, client: TestClient
+    ) -> None:
+        """FR-7 / N2: spawn_inertial_object is called with unpacked scalar position args."""
+        mock_engine = _make_mock_engine()
+        with patch("replay.routes.live.msd_reader") as mock_mod:
+            mock_mod.Engine.return_value = mock_engine
+            with client.websocket_connect("/api/v1/live") as ws:
+                ws.send_json(_CONFIGURE_MSG)
+                ws.receive_json()  # metadata
+
+        # Assert unpacked scalar args: (name, x, y, z, pitch, roll, yaw, mass, rest, fric)
+        mock_engine.spawn_inertial_object.assert_called_once_with(
+            "cube", 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 10.0, 0.8, 0.5
+        )
+
+    def test_spawn_environment_called_with_unpacked_position(
+        self, client: TestClient
+    ) -> None:
+        """FR-7 / N2: spawn_environment_object is called with unpacked scalar position args."""
+        mock_engine = _make_mock_engine()
+        with patch("replay.routes.live.msd_reader") as mock_mod:
+            mock_mod.Engine.return_value = mock_engine
+            with client.websocket_connect("/api/v1/live") as ws:
+                ws.send_json(_CONFIGURE_MSG)
+                ws.receive_json()  # metadata
+
+        # Assert unpacked scalar args: (name, x, y, z, pitch, roll, yaw)
+        mock_engine.spawn_environment_object.assert_called_once_with(
+            "large_cube", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+        )
+
+    def test_metadata_body_ids_match_sequential_instance_ids(
+        self, client: TestClient
+    ) -> None:
+        """FR-7: body_ids in metadata match the default sequential instance_ids from mock."""
+        mock_engine = _make_mock_engine()
+        # Default mock returns instance_id=1 for inertial, instance_id=2 for environment
+        with patch("replay.routes.live.msd_reader") as mock_mod:
+            mock_mod.Engine.return_value = mock_engine
+            with client.websocket_connect("/api/v1/live") as ws:
+                ws.send_json(_CONFIGURE_MSG)
+                metadata = ws.receive_json()
+
+        assert metadata["type"] == "metadata"
+        body_ids = {b["body_id"] for b in metadata["bodies"]}
+        assert body_ids == {1, 2}

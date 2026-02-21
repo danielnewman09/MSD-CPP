@@ -12,10 +12,10 @@
 - [x] Ready for Frontend Design
 - [x] Frontend Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Prototype
-- [ ] Prototype Complete — Awaiting Review
-- [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Test Writing
-- [ ] Test Writing Complete — Awaiting Quality Gate
+- [x] Prototype Complete — Awaiting Review (skipped — surgical changes, no algorithmic uncertainty)
+- [x] Ready for Implementation
+- [x] Implementation Complete — Awaiting Test Writing
+- [x] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Merged / Complete
@@ -275,21 +275,45 @@ These are not production-breaking bugs, but they represent contract violations a
 - **Notes**:
 
 ### Implementation Phase
-- **Started**:
-- **Completed**:
-- **Files Created**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
+- **Branch**: 0072e-live-simulation-cleanup
+- **PR**: #88
+- **Files Created**: None
 - **Files Modified**:
-- **Artifacts**:
-  - `docs/designs/0072e_live_simulation_cleanup/implementation-notes.md`
+  - `msd/msd-pybind/src/engine_bindings.cpp` — FR-1: environment objects in getFrameState()
+  - `replay/replay/models.py` — FR-3: Literal object_type, FR-4: Field length constraints
+  - `replay/replay/routes/live.py` — FR-5: removed _run_simulation, FR-7: capture instance_id + *cfg.position unpacking
+  - `replay/static/js/live-app.js` — FR-6: conditional physics fields for environment objects
 - **Notes**:
+  - FR-1: Added second loop over `worldModel.getEnvironmentalObjects()` in `getFrameState()`. Environment entries get `is_environment: true` and zeroed velocity/angular_velocity. Inertial entries get `is_environment: false`. Orientation comes from `asset.getInertialState().orientation` (quaternion set at spawn time).
+  - FR-2: Already complete from Design phase (contracts.yaml x-pybind11-schemas section).
+  - FR-3: `object_type: str` → `object_type: Literal["inertial", "environment"]`. Added `Literal` to `typing` imports.
+  - FR-4: `position/orientation: list[float]` → `Annotated[list[float], Field(min_length=3, max_length=3)]`. Added `Annotated` to `typing` imports and `Field` to `pydantic` imports.
+  - FR-5: Deleted `_run_simulation` async function (47 lines). Confirmed no callers existed.
+  - FR-6: Replaced unconditional `objects` map in `onStartSimulation()` with conditional builder. Inertial objects still get mass/restitution/friction; environment objects do not.
+  - FR-7 + N2 fix: Rewrote spawn loop — removed `enumerate()`, captures `result = engine.spawn_inertial_object(...)`, uses `result["instance_id"]` as `body_id`. All spawn calls now use `*cfg.position` and `*cfg.orientation` to unpack lists into scalars. Also removed the now-unused `name_to_id` dict from the spawn loop (it was only needed when `asset_id` came from `list_assets()`; now it comes from `result["asset_id"]`).
+  - Design Review N1: Orientation validity is tested in `test_engine_bindings.py` via `test_environment_body_orientation_is_valid_quaternion`.
 
 ### Test Writing Phase
-- **Started**:
-- **Completed**:
-- **Test Files Created**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
+- **Branch**: 0072e-live-simulation-cleanup
+- **PR**: #88
+- **Test Files Modified**:
+  - `msd/msd-pybind/test/test_engine_bindings.py` — Updated existing test + 9 new tests in `TestGetFrameStateEnvironmentObjects`
+  - `replay/tests/test_live_api.py` — Updated 2 existing tests + 4 new test classes (37 total tests, up from 16)
 - **Test Coverage Summary**:
-- **Test Failures Documented for Implementer**:
+  - FR-1: `TestGetFrameStateEnvironmentObjects` (9 tests) — covers environment objects in states, is_environment flag, zero velocity/angular_velocity, position at spawn, orientation is valid quaternion, mixed inertial+environment, velocity stays zero after update
+  - FR-3: `TestSpawnObjectConfigValidation` — invalid type raises ValidationError; `TestWebSocketValidationErrors` — propagation to WebSocket error message
+  - FR-4: `TestSpawnObjectConfigValidation` — parametrized over short/long/empty position and orientation; `TestWebSocketValidationErrors` — position/orientation length errors over WebSocket
+  - FR-5: `TestDeadCodeRemoval` — `test_run_simulation_no_longer_exists` uses `hasattr` check
+  - FR-7: `TestBodyIdConsistency` — adversarial non-sequential instance_id (42, 99) test definitively detects enumerate bug; two scalar-argument call-site tests
+  - N2: Updated `test_inertial_object_spawned_with_physics_params` and `test_environment_object_spawned_without_physics_params` to assert unpacked scalar args
 - **Notes**:
+  - All test classes in `test_live_api.py` are skipped when `msd_reader` is not available (standard project convention). Tests run correctly in the build directory where `msd_reader.cpython-*.so` is present.
+  - Pydantic model validation tests (FR-3, FR-4) verified directly via Python without msd_reader — all pass.
+  - FR-5 dead code removal verified via AST parsing — `_run_simulation` not present in live.py.
 
 ### Implementation Review Phase
 - **Started**:

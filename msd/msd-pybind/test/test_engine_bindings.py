@@ -294,13 +294,22 @@ class TestGetFrameState:
 
     def test_body_state_has_required_keys(self):
         """AC: each state dict has body_id, asset_id, position, velocity,
-        orientation, angular_velocity."""
+        orientation, angular_velocity, and is_environment."""
         self.engine.spawn_inertial_object(self.asset_name, 0.0, 0.0, 5.0)
         frame = self.engine.get_frame_state()
         body = frame['states'][0]
         for key in ('body_id', 'asset_id', 'position', 'velocity',
-                    'orientation', 'angular_velocity'):
+                    'orientation', 'angular_velocity', 'is_environment'):
             assert key in body, f"Missing key '{key}' in body state"
+
+    def test_inertial_body_has_is_environment_false(self):
+        """AC (FR-1): inertial body entries have is_environment == False."""
+        self.engine.spawn_inertial_object(self.asset_name, 0.0, 0.0, 5.0)
+        frame = self.engine.get_frame_state()
+        body = frame['states'][0]
+        assert body['is_environment'] is False, (
+            f"Expected is_environment=False for inertial body, got {body['is_environment']}"
+        )
 
     def test_position_is_dict_with_xyz(self):
         """AC: position is a dict with x, y, z floats."""
@@ -361,6 +370,136 @@ class TestGetFrameState:
         after_z = self.engine.get_frame_state()['states'][0]['position']['z']
         assert after_z < initial_z, \
             f"Object did not fall: z {initial_z} -> {after_z}"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Frame state — environment objects (FR-1, Ticket 0072e)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.skipif(not assets_db_available(),
+                    reason="assets.db not found — build generate_assets first")
+class TestGetFrameStateEnvironmentObjects:
+    """Test that get_frame_state() includes environment (static) bodies.
+
+    Ticket: 0072e_live_simulation_cleanup (FR-1)
+
+    Environment objects are static — they have zero velocity and angular
+    velocity, but their position and orientation are set at spawn time.
+    """
+
+    def setup_method(self):
+        self.engine = msd_reader.Engine(ASSETS_DB)
+        assets = self.engine.list_assets()
+        assert assets, "No assets available for testing"
+        _, self.asset_name = assets[0]
+
+    def test_environment_object_appears_in_states(self):
+        """AC: spawning an environment object adds an entry to states list."""
+        self.engine.spawn_environment_object(self.asset_name, 0.0, 0.0, 0.0)
+        frame = self.engine.get_frame_state()
+        assert len(frame['states']) >= 1, (
+            "Expected at least one state entry after spawning environment object"
+        )
+
+    def test_environment_body_has_is_environment_true(self):
+        """AC (FR-1): environment body entry has is_environment == True."""
+        self.engine.spawn_environment_object(self.asset_name, 0.0, 0.0, 0.0)
+        frame = self.engine.get_frame_state()
+        env_entries = [s for s in frame['states'] if s.get('is_environment')]
+        assert len(env_entries) == 1, (
+            f"Expected 1 environment entry in states, found {len(env_entries)}"
+        )
+        assert env_entries[0]['is_environment'] is True
+
+    def test_environment_body_velocity_is_zero(self):
+        """AC (FR-1): environment body velocity is always {x:0, y:0, z:0}."""
+        self.engine.spawn_environment_object(self.asset_name, 0.0, 0.0, 0.0)
+        frame = self.engine.get_frame_state()
+        env_entries = [s for s in frame['states'] if s.get('is_environment')]
+        assert env_entries, "No environment entry found in states"
+        vel = env_entries[0]['velocity']
+        assert vel['x'] == pytest.approx(0.0)
+        assert vel['y'] == pytest.approx(0.0)
+        assert vel['z'] == pytest.approx(0.0)
+
+    def test_environment_body_angular_velocity_is_zero(self):
+        """AC (FR-1): environment body angular_velocity is always {x:0, y:0, z:0}."""
+        self.engine.spawn_environment_object(self.asset_name, 0.0, 0.0, 0.0)
+        frame = self.engine.get_frame_state()
+        env_entries = [s for s in frame['states'] if s.get('is_environment')]
+        assert env_entries, "No environment entry found in states"
+        av = env_entries[0]['angular_velocity']
+        assert av['x'] == pytest.approx(0.0)
+        assert av['y'] == pytest.approx(0.0)
+        assert av['z'] == pytest.approx(0.0)
+
+    def test_environment_body_position_matches_spawn(self):
+        """AC (FR-1): environment body position reflects the spawn coordinates."""
+        spawn_x, spawn_y, spawn_z = 3.0, -1.5, 0.0
+        self.engine.spawn_environment_object(
+            self.asset_name, spawn_x, spawn_y, spawn_z
+        )
+        frame = self.engine.get_frame_state()
+        env_entries = [s for s in frame['states'] if s.get('is_environment')]
+        assert env_entries, "No environment entry found in states"
+        pos = env_entries[0]['position']
+        assert pos['x'] == pytest.approx(spawn_x, abs=1e-6)
+        assert pos['y'] == pytest.approx(spawn_y, abs=1e-6)
+        assert pos['z'] == pytest.approx(spawn_z, abs=1e-6)
+
+    def test_environment_body_orientation_is_valid_quaternion(self):
+        """AC: environment body orientation is a valid unit quaternion (|q| ≈ 1).
+
+        Verifies Design Review Note N1: static_state_.orientation is a valid
+        unit quaternion, not zero or NaN, for default-orientation spawns.
+        """
+        self.engine.spawn_environment_object(self.asset_name, 0.0, 0.0, 0.0)
+        frame = self.engine.get_frame_state()
+        env_entries = [s for s in frame['states'] if s.get('is_environment')]
+        assert env_entries, "No environment entry found in states"
+        q = env_entries[0]['orientation']
+        norm_sq = q['w']**2 + q['x']**2 + q['y']**2 + q['z']**2
+        assert norm_sq == pytest.approx(1.0, abs=1e-6), (
+            f"Orientation quaternion has magnitude {norm_sq**0.5:.6f}, expected 1.0"
+        )
+
+    def test_environment_body_has_required_keys(self):
+        """AC: environment body state dict has all required fields."""
+        self.engine.spawn_environment_object(self.asset_name, 0.0, 0.0, 0.0)
+        frame = self.engine.get_frame_state()
+        env_entries = [s for s in frame['states'] if s.get('is_environment')]
+        assert env_entries, "No environment entry found in states"
+        body = env_entries[0]
+        for key in ('body_id', 'asset_id', 'position', 'velocity',
+                    'orientation', 'angular_velocity', 'is_environment'):
+            assert key in body, f"Missing key '{key}' in environment body state"
+
+    def test_inertial_and_environment_both_in_states(self):
+        """AC: spawning both types results in entries for both in states list."""
+        self.engine.spawn_inertial_object(self.asset_name, 0.0, 0.0, 5.0)
+        self.engine.spawn_environment_object(self.asset_name, 0.0, 0.0, 0.0)
+        frame = self.engine.get_frame_state()
+        inertial_entries = [s for s in frame['states'] if not s.get('is_environment')]
+        env_entries = [s for s in frame['states'] if s.get('is_environment')]
+        assert len(inertial_entries) == 1, (
+            f"Expected 1 inertial entry, found {len(inertial_entries)}"
+        )
+        assert len(env_entries) == 1, (
+            f"Expected 1 environment entry, found {len(env_entries)}"
+        )
+
+    def test_environment_body_velocity_stays_zero_after_update(self):
+        """AC: environment body velocity remains zero after simulation steps."""
+        self.engine.spawn_environment_object(self.asset_name, 0.0, 0.0, 0.0)
+        for i in range(1, 6):
+            self.engine.update(i * 16)
+        frame = self.engine.get_frame_state()
+        env_entries = [s for s in frame['states'] if s.get('is_environment')]
+        assert env_entries, "No environment entry found after update"
+        vel = env_entries[0]['velocity']
+        assert vel['x'] == pytest.approx(0.0)
+        assert vel['y'] == pytest.approx(0.0)
+        assert vel['z'] == pytest.approx(0.0)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

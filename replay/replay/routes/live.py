@@ -82,59 +82,6 @@ def _build_asset_geometries(engine, asset_names: list[str]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Simulation loop
-# ---------------------------------------------------------------------------
-
-async def _run_simulation(
-    engine,
-    websocket: WebSocket,
-    timestep_ms: int,
-    duration_s: float,
-    frame_count_start: int = 0,
-) -> int:
-    """Stream frame data over *websocket* until duration or disconnect.
-
-    CPU-bound Engine calls are offloaded to a thread-pool via
-    ``asyncio.to_thread`` so the event loop stays responsive.
-
-    Args:
-        engine: Constructed msd_reader.Engine (objects already spawned).
-        websocket: Active FastAPI WebSocket connection.
-        timestep_ms: Simulation step size in milliseconds.
-        duration_s: Total simulation time in seconds.
-        frame_count_start: Frame counter offset (default 0).
-
-    Returns:
-        Total number of frames sent.
-    """
-    sim_time_ms: int = 0
-    max_time_ms: int = int(duration_s * 1000)
-    frame_count: int = frame_count_start
-    target_interval: float = timestep_ms / 1000.0
-
-    while sim_time_ms <= max_time_ms:
-        t0 = time.monotonic()
-
-        # Run physics step in thread pool (Engine is not coroutine-safe)
-        await asyncio.to_thread(engine.update, sim_time_ms)
-        frame_dict: dict = await asyncio.to_thread(engine.get_frame_state)
-        frame_dict["frame_id"] = frame_count
-
-        await websocket.send_json({"type": "frame", "data": frame_dict})
-
-        sim_time_ms += timestep_ms
-        frame_count += 1
-
-        # Real-time pacing: yield remaining slice to event loop
-        elapsed = time.monotonic() - t0
-        sleep_for = target_interval - elapsed
-        if sleep_for > 0:
-            await asyncio.sleep(sleep_for)
-
-    return frame_count
-
-
-# ---------------------------------------------------------------------------
 # WebSocket endpoint
 # ---------------------------------------------------------------------------
 
@@ -195,32 +142,36 @@ async def live_simulation(websocket: WebSocket) -> None:
                 await websocket.close()
                 return
 
-        # Spawn objects; Engine assigns sequential body_ids starting at 1
+        # Spawn objects and capture C++-assigned instance_id for each body.
+        # FR-7 (0072e): Use result["instance_id"] as body_id rather than
+        # enumerate(), so metadata body_ids are guaranteed to match the
+        # body_id values returned by get_frame_state().
+        # N2 fix: Unpack position/orientation lists into scalar arguments
+        # with *cfg.position / *cfg.orientation so the C++ binding receives
+        # individual x, y, z scalars rather than a list object.
         body_metadata: list[LiveBodyMetadata] = []
-        name_to_id: dict[str, int] = {name: aid for aid, name in all_assets}
 
-        for body_id, cfg in enumerate(spawn_configs, start=1):
-            asset_id = name_to_id[cfg.asset_name]
+        for cfg in spawn_configs:
             if cfg.object_type == "inertial":
-                engine.spawn_inertial_object(
+                result = engine.spawn_inertial_object(
                     cfg.asset_name,
-                    cfg.position,
-                    cfg.orientation,
+                    *cfg.position,      # unpack [x, y, z] → x, y, z scalars
+                    *cfg.orientation,   # unpack [pitch, roll, yaw] → scalars
                     cfg.mass,
                     cfg.restitution,
                     cfg.friction,
                 )
             else:
-                engine.spawn_environment_object(
+                result = engine.spawn_environment_object(
                     cfg.asset_name,
-                    cfg.position,
-                    cfg.orientation,
+                    *cfg.position,      # unpack [x, y, z] → x, y, z scalars
+                    *cfg.orientation,   # unpack [pitch, roll, yaw] → scalars
                 )
 
             body_metadata.append(
                 LiveBodyMetadata(
-                    body_id=body_id,
-                    asset_id=asset_id,
+                    body_id=result["instance_id"],  # C++-assigned ID (FR-7)
+                    asset_id=result["asset_id"],
                     asset_name=cfg.asset_name,
                     mass=cfg.mass,
                     restitution=cfg.restitution,

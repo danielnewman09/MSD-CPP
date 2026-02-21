@@ -250,16 +250,23 @@ function onStartSimulation() {
     clearError();
     resetStatusCounters();
 
-    // Build the objects payload (strip internal id / label fields)
-    const objects = spawnList.map(entry => ({
-        asset_name:  entry.asset_name,
-        position:    entry.position,
-        orientation: entry.orientation,
-        object_type: entry.object_type,
-        mass:        entry.mass,
-        restitution: entry.restitution,
-        friction:    entry.friction,
-    }));
+    // Build the objects payload (strip internal id / label fields).
+    // FR-6 (0072e): Omit mass/restitution/friction for environment objects —
+    // they have no dynamics; the server applies Pydantic defaults when absent.
+    const objects = spawnList.map(entry => {
+        const obj = {
+            asset_name:  entry.asset_name,
+            position:    entry.position,
+            orientation: entry.orientation,
+            object_type: entry.object_type,
+        };
+        if (entry.object_type === 'inertial') {
+            obj.mass        = entry.mass;
+            obj.restitution = entry.restitution;
+            obj.friction    = entry.friction;
+        }
+        return obj;
+    });
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const wsUrl = `${wsProtocol}://${window.location.host}/api/v1/live`;

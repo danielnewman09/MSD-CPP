@@ -122,11 +122,15 @@ public:
   }
 
   /**
-   * @brief Get the current simulation state for all dynamic bodies
+   * @brief Get the current simulation state for all bodies (inertial and environment)
    *
-   * Returns the simulation time plus the state of every inertial asset
-   * spawned into the world. Position, velocity, orientation (quaternion),
-   * and angular velocity are extracted from each AssetInertial.
+   * Returns the simulation time plus the state of every asset spawned into the
+   * world. Inertial (dynamic) bodies appear first, followed by environment
+   * (static) bodies. Each entry includes an `is_environment` flag so that
+   * downstream consumers can distinguish body types without additional metadata.
+   *
+   * Environment bodies have zeroed velocity and angular_velocity fields because
+   * they are immovable by definition.
    *
    * @return dict with:
    *   "simulation_time": float (seconds)
@@ -137,6 +141,9 @@ public:
    *     "velocity":         {"x": float, "y": float, "z": float}
    *     "orientation":      {"w": float, "x": float, "y": float, "z": float}
    *     "angular_velocity": {"x": float, "y": float, "z": float}
+   *     "is_environment":   bool  (false for inertial, true for environment)
+   *
+   * @ticket 0072e_live_simulation_cleanup (FR-1)
    */
   py::dict getFrameState()
   {
@@ -189,6 +196,52 @@ public:
       bodyState["velocity"] = velocity;
       bodyState["orientation"] = orientation;
       bodyState["angular_velocity"] = angularVelocity;
+      bodyState["is_environment"] = false;
+
+      states.append(bodyState);
+    }
+
+    // Iterate over all static (environment) bodies — FR-1 (0072e)
+    for (const auto& asset : worldModel.getEnvironmentalObjects())
+    {
+      const auto& state = asset.getInertialState();
+      const auto& frame = asset.getReferenceFrame();
+
+      // Position from reference frame origin
+      const auto& origin = frame.getOrigin();
+      py::dict position;
+      position["x"] = origin.x();
+      position["y"] = origin.y();
+      position["z"] = origin.z();
+
+      // Environment objects are always stationary — velocity is zero
+      py::dict velocity;
+      velocity["x"] = 0.0;
+      velocity["y"] = 0.0;
+      velocity["z"] = 0.0;
+
+      // Orientation quaternion from static inertial state (set at spawn time)
+      const auto& q = state.orientation;
+      py::dict orientation;
+      orientation["w"] = q.w();
+      orientation["x"] = q.x();
+      orientation["y"] = q.y();
+      orientation["z"] = q.z();
+
+      // Environment objects are always stationary — angular velocity is zero
+      py::dict angularVelocity;
+      angularVelocity["x"] = 0.0;
+      angularVelocity["y"] = 0.0;
+      angularVelocity["z"] = 0.0;
+
+      py::dict bodyState;
+      bodyState["body_id"] = asset.getInstanceId();
+      bodyState["asset_id"] = asset.getAssetId();
+      bodyState["position"] = position;
+      bodyState["velocity"] = velocity;
+      bodyState["orientation"] = orientation;
+      bodyState["angular_velocity"] = angularVelocity;
+      bodyState["is_environment"] = true;
 
       states.append(bodyState);
     }
@@ -287,9 +340,10 @@ void bind_engine(py::module_& m)
 
     .def("get_frame_state",
          &EngineWrapper::getFrameState,
-         "Get the current simulation state for all dynamic bodies. Returns "
-         "dict with simulation_time (float, seconds) and states (list of body "
-         "state dicts).")
+         "Get the current simulation state for all bodies (inertial and "
+         "environment). Returns dict with simulation_time (float, seconds) and "
+         "states (list of body state dicts). Each state dict includes "
+         "is_environment (bool) to distinguish static from dynamic bodies.")
 
     .def("list_assets",
          &EngineWrapper::listAssets,
