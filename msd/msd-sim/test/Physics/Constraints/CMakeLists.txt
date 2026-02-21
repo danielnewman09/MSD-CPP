@@ -9,6 +9,8 @@
 # Ticket: 0068a_nlopt_conan_dependency
 # Ticket: 0068b_nlopt_friction_solver_class
 # Ticket: 0068c_constraint_solver_integration
+# Ticket: 0071a_constraint_solver_scalability
+# Ticket: 0073_hybrid_pgs_large_islands
 
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintTest.cpp
@@ -23,4 +25,6 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/WarmStartTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/NLoptDependencyTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/NLoptFrictionSolverTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintIslandBuilderTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ProjectedGaussSeidelTest.cpp
 )

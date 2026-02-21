@@ -10,6 +10,7 @@ add_executable(msd_sim_bench
   ConvexHullBench.cpp
   GJKBench.cpp
   DataRecorderBench.cpp
+  MultiBodyCollisionBench.cpp
 )
 
 # Link dependencies
