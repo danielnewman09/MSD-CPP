@@ -665,3 +665,75 @@ components:
         restitution: { type: number }
         friction: { type: number }
         is_environment: { type: boolean }
+
+# =============================================================================
+# pybind11 Python API Schemas
+# Non-standard OpenAPI extension documenting data shapes produced by C++ pybind11
+# bindings (msd_reader module). These are not REST/WebSocket schemas but serve
+# as the formal contract between the C++ engine layer and its Python consumers.
+#
+# Ticket: 0072e_live_simulation_cleanup (FR-2)
+# =============================================================================
+x-pybind11-schemas:
+
+  EngineBodyState:
+    description: |
+      Per-body state entry within EngineFrameState["states"].
+      Produced by EngineWrapper::getFrameState() in engine_bindings.cpp.
+      Both inertial (dynamic) and environment (static) bodies appear in this
+      list, distinguished by the is_environment flag.
+    type: object
+    required: [body_id, asset_id, position, velocity, orientation, angular_velocity, is_environment]
+    properties:
+      body_id:
+        type: integer
+        description: Instance ID assigned at spawn time (getInstanceId())
+      asset_id:
+        type: integer
+        description: Asset type ID from the assets database (getAssetId())
+      position:
+        $ref: "#/components/schemas/Vec3"
+        description: World-space position in metres
+      velocity:
+        $ref: "#/components/schemas/Vec3"
+        description: Linear velocity in m/s; always {x:0,y:0,z:0} for environment bodies
+      orientation:
+        $ref: "#/components/schemas/Quaternion"
+        description: Orientation as unit quaternion (WXYZ ordering)
+      angular_velocity:
+        $ref: "#/components/schemas/Vec3"
+        description: Angular velocity in rad/s; always {x:0,y:0,z:0} for environment bodies
+      is_environment:
+        type: boolean
+        description: |
+          True for static environment objects (AssetEnvironment), false for
+          dynamic inertial objects (AssetInertial). Use this to distinguish
+          body types without referencing the metadata message.
+
+  EngineFrameState:
+    description: |
+      Return value of engine.get_frame_state() (msd_reader.Engine.get_frame_state).
+      Produced by EngineWrapper::getFrameState() in engine_bindings.cpp.
+      Consumed by the live simulation WebSocket endpoint (live.py) which forwards
+      it as the "data" field of each "frame" WebSocket message.
+
+      Body ordering: inertial bodies first (in spawn order), then environment
+      bodies (in spawn order). Both groups use getInstanceId() for body_id.
+
+      Ticket: 0072a_engine_pybind_bindings (original)
+               0072e_live_simulation_cleanup (FR-1 extension — environment bodies added)
+    type: object
+    required: [simulation_time, states]
+    properties:
+      simulation_time:
+        type: number
+        description: Absolute simulation time in seconds (worldModel.getTime() / 1000.0)
+      states:
+        type: array
+        description: |
+          States of all bodies in the simulation. Inertial (dynamic) bodies appear
+          first (in spawn order), followed by environment (static) bodies (in spawn order).
+          All entries include the is_environment discriminator field.
+        items:
+          type: object
+          description: EngineBodyState — see x-pybind11-schemas/EngineBodyState

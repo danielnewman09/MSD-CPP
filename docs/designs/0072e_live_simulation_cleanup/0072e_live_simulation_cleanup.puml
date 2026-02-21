@@ -1,0 +1,88 @@
+@startuml 0072e_live_simulation_cleanup
+skinparam class {
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<removed>> Pink
+}
+
+title Live Simulation Cleanup — Modified Components\n(Ticket 0072e)
+
+package "C++ pybind11 (msd-pybind)" {
+  class EngineWrapper <<modified>> {
+    -engine_: msd_sim::Engine
+    +getFrameState() : py::dict
+    ..
+    FR-1: now also iterates\ngetEnvironmentalObjects()\nand appends with is_environment:true
+  }
+}
+
+package "Python FastAPI (replay)" {
+  class SpawnObjectConfig <<modified>> {
+    +asset_name: str
+    +position: Annotated[list[float], Field(min_length=3, max_length=3)]
+    +orientation: Annotated[list[float], Field(min_length=3, max_length=3)]
+    +object_type: Literal["inertial", "environment"]
+    +mass: float = 10.0
+    +restitution: float = 0.8
+    +friction: float = 0.5
+    ..
+    FR-3: object_type is now Literal\nFR-4: position/orientation constrained to length 3
+  }
+
+  class "_run_simulation() [REMOVED]" <<removed>> {
+    FR-5: Dead async function removed.\nSimulation loop is inlined in\nlive_simulation() with stop-signal support.
+  }
+}
+
+package "JavaScript Frontend (replay/static/js)" {
+  class "live-app.js\nonStartSimulation()" <<modified>> {
+    ..
+    FR-6: configure payload now omits\nmass/restitution/friction for\nenvironment objects
+  }
+}
+
+package "Documentation" {
+  class "contracts.yaml\nx-pybind11-schemas" <<modified>> {
+    ..
+    FR-2: New section formalising the\nEngineFrameState dict schema returned\nby engine.get_frame_state()
+  }
+}
+
+package "msd-sim (context only)" {
+  class WorldModel {
+    +getInertialAssets() : vector<AssetInertial>&
+    +getEnvironmentalObjects() : vector<AssetEnvironment>&
+  }
+
+  class AssetEnvironment {
+    +getInstanceId() : uint32_t
+    +getAssetId() : uint32_t
+    +getReferenceFrame() : ReferenceFrame&
+    +getInertialState() : InertialState&
+  }
+}
+
+EngineWrapper ..> WorldModel : "reads (via engine_)"
+WorldModel "1" o-- "0..*" AssetEnvironment : "getEnvironmentalObjects()"
+
+note right of EngineWrapper
+  FR-1 adds this loop to getFrameState():
+  for (const auto& asset : worldModel.getEnvironmentalObjects()) {
+      // append entry with zeroed velocity/angular_velocity
+      // and is_environment: true
+  }
+end note
+
+note right of SpawnObjectConfig
+  Pydantic v2 rejects at parse time:
+  - object_type not in {"inertial","environment"} → 422
+  - len(position) != 3 → 422
+  - len(orientation) != 3 → 422
+end note
+
+note right of "live-app.js\nonStartSimulation()"
+  Environment object payload:
+  { asset_name, position, orientation, object_type }
+  (mass/restitution/friction omitted — server uses defaults)
+end note
+
+@enduml
