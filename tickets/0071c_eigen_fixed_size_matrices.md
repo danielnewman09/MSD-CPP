@@ -5,10 +5,10 @@
 - [x] Investigation Complete
 - [ ] Design Complete — Awaiting Review
 - [ ] Design Approved — Ready for Implementation
-- [ ] Implementation Complete
+- [x] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Investigation Complete
+**Current Phase**: Implementation Complete
 **Type**: Performance
 **Priority**: Medium
 **Created**: 2026-02-21
@@ -126,3 +126,20 @@ Similarly, `assembleJacobians()` in the no-friction path collects virtual `jacob
   - Identified that solver internals decouple from the virtual interface after `flattenConstraints()` / `assembleJacobians()` — fixed-size storage is possible at the boundary
   - Confirmed all two-body velocity-level Jacobian rows are 1x12
   - Scoped to direct conversions only; architectural interface changes deferred to 0071d
+
+### Implementation Phase
+- **Started**: 2026-02-21
+- **Completed**: 2026-02-21
+- **Branch**: 0071c-eigen-fixed-size-matrices
+- **PR**: N/A
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.hpp`
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp`
+  - `docs/designs/0071c_eigen_fixed_size_matrices/implementation-notes.md`
+  - `docs/designs/0071c_eigen_fixed_size_matrices/iteration-log.md`
+- **Notes**:
+  - Added `JacobianRow = Matrix<double,1,12>` type alias in ConstraintSolver
+  - Converted `assembleJacobians()` return type and all 3 callers to use `JacobianRow`
+  - `FlattenedConstraints::jacobianRows` was already fixed-size from a prior ticket
+  - Virtual `Constraint::jacobian()` interface unchanged (0071d scope)
+  - 718/718 tests passing, no regressions

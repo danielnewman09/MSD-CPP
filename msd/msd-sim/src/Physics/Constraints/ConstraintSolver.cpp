@@ -5,6 +5,7 @@
 // Ticket: 0068c_constraint_solver_integration
 // Ticket: 0070_nlopt_convergence_energy_injection
 // Ticket: 0073_hybrid_pgs_large_islands
+// Ticket: 0071c_eigen_fixed_size_matrices
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0045_constraint_solver_unification/design.md
@@ -311,28 +312,38 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
 
 // ===== Contact solver helper implementations =====
 
-std::vector<Eigen::MatrixXd> ConstraintSolver::assembleJacobians(
+// Ticket 0071c: assembleJacobians returns fixed-size JacobianRow (Matrix<double,1,12>).
+// All contact constraints in the no-friction path are ContactConstraint (dim=1, 12 columns).
+// The virtual jacobian() still returns MatrixXd — we copy row 0 into the fixed-size type
+// at this boundary, eliminating per-constraint heap allocations downstream.
+std::vector<ConstraintSolver::JacobianRow> ConstraintSolver::assembleJacobians(
   const std::vector<Constraint*>& contactConstraints,
   const std::vector<std::reference_wrapper<const InertialState>>& states)
 {
   const size_t c = contactConstraints.size();
-  std::vector<Eigen::MatrixXd> jacobians(c);
+  std::vector<JacobianRow> jacobians;
+  jacobians.reserve(c);
 
   for (size_t i = 0; i < c; ++i)
   {
     const auto* contact = contactConstraints[i];
     size_t const bodyA = contact->bodyAIndex();
     size_t const bodyB = contact->bodyBIndex();
-    jacobians[i] =
+    // Virtual call returns MatrixXd; row 0 is always 1x12 for ContactConstraint
+    const Eigen::MatrixXd j =
       contact->jacobian(states[bodyA].get(), states[bodyB].get(), 0.0);
+    jacobians.push_back(j.row(0));
   }
 
   return jacobians;
 }
 
+// Ticket 0071c: jacobians parameter is now vector<JacobianRow> (fixed-size 1x12).
+// Block extractions are compile-time sized: leftCols<6>() / rightCols<6>()
+// instead of runtime block<1,6>(0,0) / block<1,6>(0,6).
 Eigen::MatrixXd ConstraintSolver::assembleEffectiveMass(
   const std::vector<Constraint*>& contactConstraints,
-  const std::vector<Eigen::MatrixXd>& jacobians,
+  const std::vector<JacobianRow>& jacobians,
   const std::vector<double>& inverseMasses,
   const std::vector<Eigen::Matrix3d>& inverseInertias,
   size_t numBodies)
@@ -357,16 +368,17 @@ Eigen::MatrixXd ConstraintSolver::assembleEffectiveMass(
     size_t const bodyAI = contactConstraints[i]->bodyAIndex();
     size_t const bodyBI = contactConstraints[i]->bodyBIndex();
 
-    Eigen::Matrix<double, 1, 6> const jIA = jacobians[i].block<1, 6>(0, 0);
-    Eigen::Matrix<double, 1, 6> const jIB = jacobians[i].block<1, 6>(0, 6);
+    // Ticket 0071c: leftCols<6>() / rightCols<6>() are compile-time sized
+    Eigen::Matrix<double, 1, 6> const jIA = jacobians[i].leftCols<6>();
+    Eigen::Matrix<double, 1, 6> const jIB = jacobians[i].rightCols<6>();
 
     for (size_t j = i; j < c; ++j)
     {
       size_t const bodyAJ = contactConstraints[j]->bodyAIndex();
       size_t const bodyBJ = contactConstraints[j]->bodyBIndex();
 
-      Eigen::Matrix<double, 1, 6> jJA = jacobians[j].block<1, 6>(0, 0);
-      Eigen::Matrix<double, 1, 6> jJB = jacobians[j].block<1, 6>(0, 6);
+      Eigen::Matrix<double, 1, 6> const jJA = jacobians[j].leftCols<6>();
+      Eigen::Matrix<double, 1, 6> const jJB = jacobians[j].rightCols<6>();
 
       double aIj = 0.0;
 
@@ -402,9 +414,12 @@ Eigen::MatrixXd ConstraintSolver::assembleEffectiveMass(
   return a;
 }
 
+// Ticket 0071c: jacobians parameter is now vector<JacobianRow> (fixed-size 1x12).
+// The (1x12)*(12x1) dot product is fully compile-time-sized — Eigen resolves it
+// to a scalar without heap allocation.
 Eigen::VectorXd ConstraintSolver::assembleRHS(
   const std::vector<Constraint*>& contactConstraints,
-  const std::vector<Eigen::MatrixXd>& jacobians,
+  const std::vector<JacobianRow>& jacobians,
   const std::vector<std::reference_wrapper<const InertialState>>& states,
   double /* dt */)
 {
@@ -422,6 +437,7 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
     const InertialState& stateB = states[bodyB].get();
 
     // Ticket 0053f: Stack-allocated fixed-size velocity vector (zero heap cost)
+    // Ticket 0071c: (JacobianRow 1x12) * (v 12x1) is a compile-time scalar product
     Eigen::Matrix<double, 12, 1> v;
     v.segment<3>(0) =
       Vector3D{stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
@@ -432,7 +448,7 @@ Eigen::VectorXd ConstraintSolver::assembleRHS(
     AngularVelocity omegaB = stateB.getAngularVelocity();
     v.segment<3>(9) = Vector3D{omegaB.x(), omegaB.y(), omegaB.z()};
 
-    double const jv = (jacobians[i] * v)(0);
+    double const jv = jacobians[i].dot(v);
 
     if (contact != nullptr)
     {
@@ -607,10 +623,12 @@ ConstraintSolver::ActiveSetResult ConstraintSolver::solveActiveSet(
     .active_set_size = static_cast<int>(activeIndices.size())};
 }
 
+// Ticket 0071c: jacobians parameter is now vector<JacobianRow> (fixed-size 1x12).
+// leftCols<6>() / rightCols<6>() are compile-time sized block extractions.
 std::vector<ConstraintSolver::BodyForces>
 ConstraintSolver::extractBodyForces(
   const std::vector<Constraint*>& contactConstraints,
-  const std::vector<Eigen::MatrixXd>& jacobians,
+  const std::vector<JacobianRow>& jacobians,
   const Eigen::VectorXd& lambda,
   size_t numBodies,
   double dt)
@@ -630,8 +648,9 @@ ConstraintSolver::extractBodyForces(
     size_t const bodyA = contactConstraints[i]->bodyAIndex();
     size_t const bodyB = contactConstraints[i]->bodyBIndex();
 
-    Eigen::Matrix<double, 1, 6> jIA = jacobians[i].block<1, 6>(0, 0);
-    Eigen::Matrix<double, 1, 6> jIB = jacobians[i].block<1, 6>(0, 6);
+    // Ticket 0071c: compile-time sized sub-block extractions
+    Eigen::Matrix<double, 1, 6> const jIA = jacobians[i].leftCols<6>();
+    Eigen::Matrix<double, 1, 6> const jIB = jacobians[i].rightCols<6>();
 
     Eigen::Matrix<double, 6, 1> forceA =
       jIA.transpose() * lambda(static_cast<Eigen::Index>(i)) / dt;

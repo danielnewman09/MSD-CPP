@@ -4,6 +4,7 @@
 // Ticket: 0068c_constraint_solver_integration
 // Ticket: 0070_nlopt_convergence_energy_injection
 // Ticket: 0073_hybrid_pgs_large_islands
+// Ticket: 0071c_eigen_fixed_size_matrices
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
@@ -170,20 +171,24 @@ public:
 private:
   // ===== Contact solver helpers =====
 
-  [[nodiscard]] static std::vector<Eigen::MatrixXd> assembleJacobians(
+  // Ticket 0071c: Fixed-size Jacobian row type for no-friction (contact-only) path.
+  // All two-body velocity-level contact Jacobian rows are 1x12 by construction.
+  using JacobianRow = Eigen::Matrix<double, 1, 12>;
+
+  [[nodiscard]] static std::vector<JacobianRow> assembleJacobians(
     const std::vector<Constraint*>& contactConstraints,
     const std::vector<std::reference_wrapper<const InertialState>>& states);
 
   [[nodiscard]] static Eigen::MatrixXd assembleEffectiveMass(
     const std::vector<Constraint*>& contactConstraints,
-    const std::vector<Eigen::MatrixXd>& jacobians,
+    const std::vector<JacobianRow>& jacobians,
     const std::vector<double>& inverseMasses,
     const std::vector<Eigen::Matrix3d>& inverseInertias,
     size_t numBodies);
 
   [[nodiscard]] static Eigen::VectorXd assembleRHS(
     const std::vector<Constraint*>& contactConstraints,
-    const std::vector<Eigen::MatrixXd>& jacobians,
+    const std::vector<JacobianRow>& jacobians,
     const std::vector<std::reference_wrapper<const InertialState>>& states,
     double dt);
 
@@ -195,7 +200,7 @@ private:
 
   [[nodiscard]] static std::vector<BodyForces> extractBodyForces(
     const std::vector<Constraint*>& contactConstraints,
-    const std::vector<Eigen::MatrixXd>& jacobians,
+    const std::vector<JacobianRow>& jacobians,
     const Eigen::VectorXd& lambda,
     size_t numBodies,
     double dt);
