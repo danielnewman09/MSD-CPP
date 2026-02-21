@@ -198,3 +198,46 @@ Create `replay/static/css/live.css` with styles for:
 ---
 
 ## Human Feedback
+
+### Retroactive Design Review (2026-02-20)
+
+A retroactive design review was conducted because this ticket was implemented before the
+Design and Frontend Design phases were part of the workflow template.
+
+**Review document**: `docs/designs/0072c_live_simulation_frontend/retroactive-review.md`
+
+**Overall verdict**: APPROVED with minor follow-up items. No production defects found.
+
+**SceneManager integration**: Verified correct. `loadBodies()` and `updateFrame()` receive
+exactly the field names they expect from the 0072b wire protocol. No adapter is needed, as
+the implementation notes claim.
+
+**Wire protocol conformance**: All four server→client message types and all three
+client→server message types are handled correctly.
+
+**Findings (all minor):**
+
+- **F-01**: Extra fields in metadata wire format (asset_name, vertex_count) silently
+  ignored by SceneManager — correct but undocumented.
+- **F-02**: SceneManager.updateFrame() checks window.overlays, which is undefined on
+  the live page. Silently no-ops — correct behavior but the coupling is invisible.
+- **F-03** (FU-01): Configure payload always includes mass/restitution/friction for
+  environment objects even though they are unused by the backend. Functionally harmless
+  but inconsistent with the UI (mass input is hidden for environment type). Recommend
+  omitting mass for environment objects in the payload.
+- **F-04** (FU-02): The simulation_time guard in handleFrame() is defensive and correct,
+  but the field contract with engine.get_frame_state() was assumed rather than verified
+  against the 0072a pybind11 binding.
+- **F-05**: The 500ms force-close timeout in onStopSimulation() is correct but its
+  rationale is not documented inline.
+
+**Missing design artifacts** (informational — no action required for merged ticket):
+- No PlantUML component diagram was produced.
+- No formal state machine specification was recorded.
+- Five design decisions (DD-0072C-001 through DD-0072C-005) were made implicitly —
+  they are now documented in the retroactive review.
+
+**Follow-up items**: FU-01 (omit mass for environment payloads), FU-02 (verify
+simulation_time contract), FU-03 (document window.overlays coupling), FU-04 (document
+500ms stop timeout). All are minor and can be addressed in a small cleanup commit or
+deferred.

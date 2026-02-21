@@ -192,3 +192,55 @@ All Eigen types (`Coordinate`, `AngularCoordinate`, `Eigen::Quaterniond`) are co
 ---
 
 ## Human Feedback
+
+### Retroactive Design Review — 2026-02-20
+
+A retroactive design review was conducted to reconstruct what the Design, Integration Design, and Python Design phases should have produced. The full review document is at:
+
+`docs/designs/0072a_engine_pybind_bindings/retroactive-review.md`
+
+**Overall assessment**: Implementation is sound and follows project coding standards. Five follow-up items were identified.
+
+#### Coding Standards — PASS
+
+All project standards from CLAUDE.md are satisfied: brace initialization, Rule of Zero, no raw pointers, no `shared_ptr`, `const T&` for non-owning access, correct naming conventions, Doxygen comments, ticket reference.
+
+Two redundant includes (`AssetRegistry.hpp` and `AngularVelocity.hpp`) were noted by the original implementation reviewer (m1, m2) and are acceptable as-is.
+
+#### Follow-Up Items
+
+**FU-002 (Medium) — Requirement R2 deviation: environment objects absent from `get_frame_state()`**
+
+The ticket stated: "Include environmental objects with zero velocity/angular_velocity" in `get_frame_state()`. The implementation includes only inertial (dynamic) assets. Static environment objects are not in the returned `states` list.
+
+Decision required from ticket author:
+- Option A: Fix `EngineWrapper::getFrameState()` to also iterate `worldModel.getEnvironmentalObjects()` and include them with zeroed velocity/angular_velocity fields.
+- Option B: Formally close R2 as "won't fix" with rationale: environment object positions are known at spawn time and do not change, so per-frame inclusion is redundant for the WebSocket use case.
+
+This decision must be made before 0072b's design phase begins, as it affects the `get_frame_state()` schema.
+
+**FU-003 (Medium) — No formal API contract for `get_frame_state()` schema**
+
+The `get_frame_state()` return dict is the primary integration contract between 0072a and the 0072b WebSocket endpoint. It is documented only in CLAUDE.md prose and implicit in the tests. A JSON Schema or YAML contract should be created in `docs/api-contracts/` as part of 0072b's Integration Design phase.
+
+**FU-001 (Low) — `update()` absolute-time semantics must be communicated to 0072b**
+
+`engine.update(ms)` receives absolute simulation time, not a delta. The 0072b WebSocket loop must maintain a cumulative counter. This should be explicitly noted in the 0072b ticket's Design Decisions section before implementation.
+
+**FU-004 (Low) — Keyword-arg usage for physics parameters (acknowledged, no action)**
+
+`pitch`, `roll`, `yaw`, `mass`, `restitution`, `friction` in `spawn_inertial_object` can be passed positionally, which may cause confusion. pybind11 has no keyword-only separator equivalent. Callers should use keyword arguments. This is already the pattern in all tests. No code change required.
+
+**FU-005 (Low) — Thread safety pattern for FastAPI must be addressed in 0072b**
+
+`EngineWrapper` is not thread-safe. The 0072b Python Design phase should specify the concurrency pattern (asyncio lock, thread pool executor, or single background task).
+
+#### Design Decisions Reconstructed
+
+The retroactive review formally documented five design decisions (DD-0072a-001 through DD-0072a-005) that were made implicitly during implementation:
+
+- DD-0072a-001: Wrapper owns Engine by value
+- DD-0072a-002: No Eigen type casters — all conversion in C++ wrapper
+- DD-0072a-003: `update()` receives absolute simulation time, not delta
+- DD-0072a-004: `get_frame_state()` excludes environment objects (deviation from R2)
+- DD-0072a-005: `getCollisionVertices` duplicated on EngineWrapper for self-contained API

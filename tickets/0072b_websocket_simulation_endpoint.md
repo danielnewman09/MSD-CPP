@@ -212,3 +212,32 @@ class SpawnObjectConfig(BaseModel):
 ---
 
 ## Human Feedback
+
+### Retroactive Design Review (2026-02-20)
+
+A retroactive design review was performed because this ticket was implemented before the current
+workflow template existed (skipped Design, Python Design, and Integration Design phases). The full
+review is at:
+
+`docs/designs/0072b-websocket-simulation-endpoint/retroactive-review.md`
+
+**Overall Assessment**: The implementation correctly realizes all design intent. Six implicit design
+decisions were reconstructed and documented. No critical or major issues were found.
+
+**Follow-up items identified** (in priority order):
+
+| ID | Priority | Description |
+|----|----------|-------------|
+| FU-002 | Moderate | Add `Literal["inertial", "environment"]` to `SpawnObjectConfig.object_type` — unknown values silently fall through as environment objects |
+| FU-003 | Moderate | Add `min_length=3, max_length=3` to `position` and `orientation` fields — wrong-length lists reach the C++ Engine with unclear errors |
+| FU-001 | Low | Remove dead `_run_simulation` function (lines 88–134 of `live.py`) |
+| FU-004 | Low | Wrap `list_live_assets` Engine calls in `asyncio.to_thread` for consistency with WebSocket endpoint |
+| FU-005 | Low | Add configurable maximum `duration_s` cap to prevent runaway sessions |
+| FU-008 | Low | Add tests for invalid `object_type`, wrong-length vectors, and zero `duration_s` |
+| FU-006 | Informational | Document pybind11 Engine API contract in `docs/api-contracts/` as part of ticket 0072a |
+| FU-007 | Informational | Clarify that `mass`/`restitution`/`friction` on `SpawnObjectConfig` are ignored for environment objects |
+
+**Recommended action before 0072c implementation begins**: Address FU-002 and FU-003. The frontend
+will receive unclear error messages if it sends invalid `object_type` values or wrong-length
+position vectors.
+
