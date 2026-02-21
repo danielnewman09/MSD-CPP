@@ -357,3 +357,100 @@ This is out of scope for this ticket but should be verified during implementatio
 call is `engine.spawn_inertial_object(cfg.asset_name, *cfg.position, *cfg.orientation, ...)`,
 then FR-4 (adding length constraints) is especially important — a wrong-length list would cause
 a C++ argument count error.
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-21
+**Status**: APPROVED WITH NOTES
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | `getFrameState()` / `spawnInertialObject()` follow existing camelCase method naming; `is_environment` follows snake_case field naming consistent with the rest of the frame state dict |
+| Namespace organization | ✓ | No new namespaces introduced; all changes are confined to existing files and packages |
+| File/folder structure | ✓ | `engine_bindings.cpp` stays in `msd/msd-pybind/src/`; `models.py` and `live.py` stay in `replay/replay/`; contract doc stays in `docs/api-contracts/contracts.yaml`. No new directories introduced |
+| Dependency direction | ✓ | No new dependencies introduced. `engine_bindings.cpp` already uses `WorldModel::getEnvironmentalObjects()` (via `Engine::getWorldModel()`); that method exists and returns `const std::vector<AssetEnvironment>&`. Dependency direction is unchanged |
+
+#### C++ Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII | ✓ | No resources introduced. The `py::list` / `py::dict` objects in `getFrameState()` are pybind11-managed RAII types — no manual cleanup needed |
+| Smart pointer appropriateness | ✓ | No smart pointers introduced. `AssetEnvironment` is accessed via const reference from `WorldModel::getEnvironmentalObjects()` which returns `const std::vector<AssetEnvironment>&` — correct non-owning access |
+| Value/reference semantics | ✓ | Loop body uses `const auto& asset` range-for — correct, avoids unnecessary copies of AssetEnvironment. The `getReferenceFrame()` and `getInertialState()` calls return const references, consistent with the existing inertial body loop |
+| Rule of 0/3/5 | ✓ | No new C++ classes introduced. `AssetEnvironment` follows Rule of Five already (custom move, deleted copy) — no impact from this change |
+| Const correctness | ✓ | `getFrameState()` is non-const (consistent with existing signature); all asset accessors called on const references. `static_state_` inside `AssetEnvironment` is returned as `const InertialState&` — correct |
+| Exception safety | ✓ | No exception paths added. pybind11 py::dict/py::list constructors and `append()` may throw `py::error_already_set` on memory exhaustion, but this is equivalent to the existing inertial body loop behavior |
+| Initialization | ✓ | Zero velocity/angular_velocity dicts will be initialized with literal `0.0` values — no NaN concern since these are wire protocol values, not C++ member variables. Brace initialization is not applicable to py::dict construction (uses `[]` operator, pybind11 idiom) |
+| Return values | ✓ | Existing pattern of building and returning `py::dict` is preserved. No output parameters introduced |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | `WorldModel::getEnvironmentalObjects()` is already available in the scope of `EngineWrapper::getFrameState()` via `engine_.getWorldModel()`. `AssetEnvironment.hpp` is included transitively. No new headers needed |
+| Template complexity | ✓ | No templates introduced |
+| Memory strategy | ✓ | Environment objects are appended to the existing `py::list states` — no additional allocation strategy needed |
+| Thread safety | ✓ | `getFrameState()` is called from `asyncio.to_thread` in `live.py` (one call at a time), same as before. The underlying simulation is single-threaded. No thread safety regression |
+| Build integration | ✓ | No new source files, no CMakeLists.txt changes required. All changes are confined to `.cpp`, `.py`, `.js`, and `.yaml` files already in the build |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | The new loop in `getFrameState()` is exercised by spawning an environment object and calling `get_frame_state()` — same pattern as existing inertial body tests in `test_engine_bindings.py` |
+| Mockable dependencies | ✓ | Python-layer changes (FR-3, FR-4) use Pydantic validation which is directly testable by constructing `SpawnObjectConfig` with invalid inputs — no mocking required. FR-5 is a deletion — trivially testable by confirming the symbol no longer exists |
+| Observable state | ✓ | `get_frame_state()["states"]` is a plain Python list of dicts — all fields directly inspectable in tests without any helper infrastructure |
+
+---
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | `AssetEnvironment::getInertialState()` returns `static_state_` which is initialized in the constructor from the spawn-time frame but does NOT store orientation as a quaternion in `InertialState::orientation` in the expected WXYZ format — the constructor path from `spawnEnvironmentObject` uses `AngularCoordinate` (pitch/roll/yaw), and the conversion to quaternion happens inside `AssetEnvironment`'s constructor | Technical | Low | Low | Verify in implementation that `static_state_.orientation` is a valid quaternion (not a zero or NaN quaternion). If `AssetEnvironment` is constructed with a zero angular coordinate, Eigen's `AngleAxisd` path should produce the identity quaternion w=1,x=y=z=0. This should be confirmed by the test `test_get_frame_state_environment_position_matches_spawn` | No |
+| R2 | `spawn_inertial_object` list-unpacking concern noted in design Notes section: if `live.py` passes `cfg.position` as a list object (not `*cfg.position`), FR-4 length constraints are the only safety net preventing a C++ type mismatch | Integration | Low | Medium | FR-4 is precisely the right mitigation. The implementation must verify the actual call site in `live.py` and confirm list unpacking (`*cfg.position`) is used, or the binding call will fail at the Python/C++ boundary regardless of length validation | No |
+| R3 | The `BodyState` schema in `contracts.yaml` (line 478) does not include `is_environment` or `asset_id` fields, but the pybind11 `EngineFrameState` schema (in `x-pybind11-schemas`) does. The live WebSocket `frame` message sends `EngineFrameState` data, not `BodyState` — so the two schemas describe different shapes at different layers. This inconsistency already existed before this ticket but becomes more pronounced with FR-1 adding `is_environment` | Maintenance | Low | Low | Acceptable for now — the design correctly places the new schema under `x-pybind11-schemas` as a separate layer. Future tickets that formalize the live frame message in the REST/WebSocket `components/schemas` section can reconcile the two schemas. No action needed in this ticket | No |
+
+---
+
+### Notes
+
+#### FR-1: `is_environment` on Inertial Entries — Design Choice Endorsed
+
+The design adds `is_environment: false` to inertial body entries as well as `is_environment: true` to environment entries. This is the correct choice for a discriminated union — a uniform schema where all entries have the same fields is significantly easier for downstream consumers (Python and JavaScript) to process without special-casing the absence of a field.
+
+The ticket's preferred approach says "include with `is_environment: true` flag" — this refers to environment objects specifically, but does not preclude adding the flag to inertial entries. The design's interpretation (uniform schema) is endorsed.
+
+The `x-pybind11-schemas/EngineBodyState` section in `contracts.yaml` already correctly documents `is_environment` as required on both body types.
+
+#### FR-2: `x-pybind11-schemas` in `contracts.yaml` — Already Committed
+
+The review notes that the `x-pybind11-schemas` section is already present in the current `docs/api-contracts/contracts.yaml` on this branch (containing both `EngineBodyState` and `EngineFrameState` schemas). This artifact is complete and correctly structured. No further action is required for FR-2 in the design phase.
+
+#### FR-5: Dead Code Removal — Verified Safe
+
+The `_run_simulation` function at lines 88–134 of `live.py` is confirmed dead code by inspection: `grep "def "` over the file shows only `_build_asset_geometries`, `_run_simulation`, `live_simulation`, `_listen_for_stop`, and `list_live_assets` as top-level definitions. No call site for `_run_simulation` exists in `live.py` or any other file. The inline simulation loop in `live_simulation` (lines 295–320) is the real implementation with full stop-signal support via `asyncio.Event`. Deletion is safe.
+
+#### FR-6: Frontend Payload Hygiene — JavaScript Pattern is Clean
+
+The proposed conditional payload builder in `onStartSimulation()` follows idiomatic JavaScript (property assignment after object creation). The existing UI already hides the mass input group for environment objects (`elMassGroup.classList.add('hidden')`), so the payload omission is consistent with the UI behavior. The backend Pydantic defaults (`mass=10.0`, `restitution=0.8`, `friction=0.5`) will apply when these fields are absent, which is the correct behavior.
+
+#### `spawn_inertial_object` Call Site — Must Be Verified
+
+The design correctly flags in its Notes section that `spawn_inertial_object` may be called with `cfg.position` as a list object rather than unpacked as `*cfg.position`. This must be confirmed during implementation. If the call site uses list unpacking, FR-4's length constraint is the last line of defense against a wrong-length list causing a pybind11 argument count error. If the call site does NOT unpack, this is a separate bug (outside this ticket's scope) that FR-4 does not fix but at least makes detectable earlier via a Pydantic 422 rather than a cryptic C++ error.
+
+---
+
+### Summary
+
+The design is clean, minimal, and well-scoped. All six functional requirements are addressed with surgical changes to three existing files plus one documentation artifact. No new classes, endpoints, or architectural layers are introduced. The C++ change (FR-1) correctly uses the existing `AssetEnvironment` API (`getEnvironmentalObjects()`, `getInstanceId()`, `getAssetId()`, `getReferenceFrame()`, `getInertialState()`) in a pattern directly parallel to the existing inertial body loop. The Python changes (FR-3, FR-4) follow Pydantic v2 idioms correctly. The JavaScript change (FR-6) is consistent with the existing UI state management.
+
+The design is approved for progression to Integration Design. The risks identified are low-likelihood or already mitigated by the design itself.
