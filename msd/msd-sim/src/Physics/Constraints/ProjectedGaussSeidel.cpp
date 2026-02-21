@@ -13,6 +13,8 @@
 
 #include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/ForceVector.hpp"
+#include "msd-sim/src/DataTypes/TorqueVector.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
@@ -36,7 +38,7 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
 {
   SolveResult result;
   result.bodyForces.resize(
-    numBodies, BodyForces{Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 0.0}});
+    numBodies, BodyForces{ForceVector{0.0, 0.0, 0.0}, TorqueVector{0.0, 0.0, 0.0}});
 
   if (constraints.empty())
   {
@@ -62,15 +64,15 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
     size_t const bodyA = constraint->bodyAIndex();
     size_t const bodyB = constraint->bodyBIndex();
     auto j = constraint->jacobian(states[bodyA].get(), states[bodyB].get(), 0.0);
-    int const dim = constraint->dimension();
+    size_t const dim = static_cast<size_t>(constraint->dimension());
 
     const auto* cc = dynamic_cast<const ContactConstraint*>(constraint);
     const auto* fc = dynamic_cast<const FrictionConstraint*>(constraint);
 
-    for (int row = 0; row < dim; ++row)
+    for (size_t row = 0; row < dim; ++row)
     {
       FlatRow flatRow;
-      flatRow.jacobianRow = j.row(row);
+      flatRow.jacobianRow = j.row(static_cast<Eigen::Index>(row));
       flatRow.bodyAIndex = bodyA;
       flatRow.bodyBIndex = bodyB;
 
@@ -113,16 +115,18 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
     size_t const bodyA = row.bodyAIndex;
     size_t const bodyB = row.bodyBIndex;
 
-    Eigen::Matrix<double, 1, 6> const jA = row.jacobianRow.leftCols<6>();
-    Eigen::Matrix<double, 1, 6> const jB = row.jacobianRow.rightCols<6>();
+    Eigen::Matrix<double, 1, kBodyDof> const jA =
+      row.jacobianRow.template leftCols<kBodyDof>();
+    Eigen::Matrix<double, 1, kBodyDof> const jB =
+      row.jacobianRow.template rightCols<kBodyDof>();
 
     double aii = 0.0;
-    aii += inverseMasses[bodyA] * jA.leftCols<3>().squaredNorm();
-    aii += (jA.rightCols<3>() * inverseInertias[bodyA] *
-            jA.rightCols<3>().transpose())(0);
-    aii += inverseMasses[bodyB] * jB.leftCols<3>().squaredNorm();
-    aii += (jB.rightCols<3>() * inverseInertias[bodyB] *
-            jB.rightCols<3>().transpose())(0);
+    aii += inverseMasses[bodyA] * jA.template leftCols<kLinearDof>().squaredNorm();
+    aii += (jA.template rightCols<kAngularDof>() * inverseInertias[bodyA] *
+            jA.template rightCols<kAngularDof>().transpose())(0);
+    aii += inverseMasses[bodyB] * jB.template leftCols<kLinearDof>().squaredNorm();
+    aii += (jB.template rightCols<kAngularDof>() * inverseInertias[bodyB] *
+            jB.template rightCols<kAngularDof>().transpose())(0);
 
     diag(i) = aii + kRegularizationEpsilon;
   }
@@ -140,15 +144,17 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
     const InertialState& stateA = states[bodyA].get();
     const InertialState& stateB = states[bodyB].get();
 
-    Eigen::Matrix<double, 12, 1> v;
-    v.segment<3>(0) = Eigen::Vector3d{
+    Eigen::Matrix<double, kTwoBodyDof, 1> v;
+    v.segment<kLinearDof>(0) = Eigen::Vector3d{
       stateA.velocity.x(), stateA.velocity.y(), stateA.velocity.z()};
     AngularVelocity omegaA = stateA.getAngularVelocity();
-    v.segment<3>(3) = Eigen::Vector3d{omegaA.x(), omegaA.y(), omegaA.z()};
-    v.segment<3>(6) = Eigen::Vector3d{
+    v.segment<kAngularDof>(kLinearDof) =
+      Eigen::Vector3d{omegaA.x(), omegaA.y(), omegaA.z()};
+    v.segment<kLinearDof>(kBodyDof) = Eigen::Vector3d{
       stateB.velocity.x(), stateB.velocity.y(), stateB.velocity.z()};
     AngularVelocity omegaB = stateB.getAngularVelocity();
-    v.segment<3>(9) = Eigen::Vector3d{omegaB.x(), omegaB.y(), omegaB.z()};
+    v.segment<kAngularDof>(kBodyDof + kLinearDof) =
+      Eigen::Vector3d{omegaB.x(), omegaB.y(), omegaB.z()};
 
     double const jv = (row.jacobianRow * v)(0);
 
@@ -177,17 +183,17 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
     }
   }
 
-  // ===== Initialize velocity residual v_res =====
-  // v_res[6k..6k+5] = M^{-1} * J^T * lambda, accumulated over all rows.
-  // Layout: [vLin_k(3), omega_k(3)] for body k.
-  Eigen::VectorXd vRes =
-    Eigen::VectorXd::Zero(static_cast<Eigen::Index>(6 * numBodies));
+  // ===== Initialize velocity residual vRes_ =====
+  // vRes_[kBodyDof*k .. kBodyDof*k+5] = M^{-1} * J^T * lambda, accumulated
+  // over all rows. Layout: [vLin_k(3), omega_k(3)] for body k.
+  vRes_ = Eigen::VectorXd::Zero(
+    static_cast<Eigen::Index>(kBodyDof * numBodies));
 
   for (Eigen::Index i = 0; i < numRows; ++i)
   {
     if (lambda(i) != 0.0)
     {
-      updateVRes(rows, static_cast<size_t>(i), lambda(i), vRes, inverseMasses,
+      updateVRes(rows, static_cast<size_t>(i), lambda(i), inverseMasses,
                  inverseInertias);
     }
   }
@@ -200,7 +206,7 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
   for (sweep = 0; sweep < maxSweeps_; ++sweep)
   {
     lastMaxDelta = sweepOnce(
-      rows, muPerContact, diag, b, lambda, vRes, inverseMasses, inverseInertias);
+      rows, muPerContact, diag, b, lambda, inverseMasses, inverseInertias);
 
     if (lastMaxDelta < convergenceTolerance_)
     {
@@ -218,22 +224,24 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
     size_t const bodyA = row.bodyAIndex;
     size_t const bodyB = row.bodyBIndex;
 
-    Eigen::Matrix<double, 1, 6> jA = row.jacobianRow.leftCols<6>();
-    Eigen::Matrix<double, 1, 6> jB = row.jacobianRow.rightCols<6>();
+    Eigen::Matrix<double, 1, kBodyDof> jA =
+      row.jacobianRow.template leftCols<kBodyDof>();
+    Eigen::Matrix<double, 1, kBodyDof> jB =
+      row.jacobianRow.template rightCols<kBodyDof>();
     double const lam = lambda(static_cast<Eigen::Index>(i));
 
-    Eigen::Matrix<double, 6, 1> forceA = jA.transpose() * lam / dt;
-    Eigen::Matrix<double, 6, 1> forceB = jB.transpose() * lam / dt;
+    Eigen::Matrix<double, kBodyDof, 1> forceA = jA.transpose() * lam / dt;
+    Eigen::Matrix<double, kBodyDof, 1> forceB = jB.transpose() * lam / dt;
 
     result.bodyForces[bodyA].linearForce +=
-      Coordinate{forceA(0), forceA(1), forceA(2)};
+      ForceVector{forceA(0), forceA(1), forceA(2)};
     result.bodyForces[bodyA].angularTorque +=
-      Coordinate{forceA(3), forceA(4), forceA(5)};
+      TorqueVector{forceA(3), forceA(4), forceA(5)};
 
     result.bodyForces[bodyB].linearForce +=
-      Coordinate{forceB(0), forceB(1), forceB(2)};
+      ForceVector{forceB(0), forceB(1), forceB(2)};
     result.bodyForces[bodyB].angularTorque +=
-      Coordinate{forceB(3), forceB(4), forceB(5)};
+      TorqueVector{forceB(3), forceB(4), forceB(5)};
   }
 
   result.lambdas = lambda;
@@ -252,7 +260,6 @@ void ProjectedGaussSeidel::updateVRes(
   const std::vector<FlatRow>& rows,
   size_t rowIdx,
   double dLambda,
-  Eigen::VectorXd& vRes,
   const std::vector<double>& inverseMasses,
   const std::vector<Eigen::Matrix3d>& inverseInertias)
 {
@@ -265,20 +272,26 @@ void ProjectedGaussSeidel::updateVRes(
   size_t const bodyA = row.bodyAIndex;
   size_t const bodyB = row.bodyBIndex;
 
-  Eigen::Matrix<double, 1, 6> const jA = row.jacobianRow.leftCols<6>();
-  Eigen::Matrix<double, 1, 6> const jB = row.jacobianRow.rightCols<6>();
+  Eigen::Matrix<double, 1, kBodyDof> const jA =
+    row.jacobianRow.template leftCols<kBodyDof>();
+  Eigen::Matrix<double, 1, kBodyDof> const jB =
+    row.jacobianRow.template rightCols<kBodyDof>();
 
-  // Body A: v_res += M_A^{-1} * J_A^T * dLambda
-  auto const aOff = static_cast<Eigen::Index>(6 * bodyA);
-  Eigen::Matrix<double, 6, 1> const dA = jA.transpose() * dLambda;
-  vRes.segment<3>(aOff) += inverseMasses[bodyA] * dA.segment<3>(0);
-  vRes.segment<3>(aOff + 3) += inverseInertias[bodyA] * dA.segment<3>(3);
+  // Body A: vRes_ += M_A^{-1} * J_A^T * dLambda
+  auto const aOff = static_cast<Eigen::Index>(kBodyDof * bodyA);
+  Eigen::Matrix<double, kBodyDof, 1> const dA = jA.transpose() * dLambda;
+  vRes_.segment<kLinearDof>(aOff) +=
+    inverseMasses[bodyA] * dA.segment<kLinearDof>(0);
+  vRes_.segment<kAngularDof>(aOff + kLinearDof) +=
+    inverseInertias[bodyA] * dA.segment<kAngularDof>(kLinearDof);
 
-  // Body B: v_res += M_B^{-1} * J_B^T * dLambda
-  auto const bOff = static_cast<Eigen::Index>(6 * bodyB);
-  Eigen::Matrix<double, 6, 1> const dB = jB.transpose() * dLambda;
-  vRes.segment<3>(bOff) += inverseMasses[bodyB] * dB.segment<3>(0);
-  vRes.segment<3>(bOff + 3) += inverseInertias[bodyB] * dB.segment<3>(3);
+  // Body B: vRes_ += M_B^{-1} * J_B^T * dLambda
+  auto const bOff = static_cast<Eigen::Index>(kBodyDof * bodyB);
+  Eigen::Matrix<double, kBodyDof, 1> const dB = jB.transpose() * dLambda;
+  vRes_.segment<kLinearDof>(bOff) +=
+    inverseMasses[bodyB] * dB.segment<kLinearDof>(0);
+  vRes_.segment<kAngularDof>(bOff + kLinearDof) +=
+    inverseInertias[bodyB] * dB.segment<kAngularDof>(kLinearDof);
 }
 
 // ============================================================================
@@ -291,7 +304,6 @@ double ProjectedGaussSeidel::sweepOnce(
   const Eigen::VectorXd& diag,
   const Eigen::VectorXd& b,
   Eigen::VectorXd& lambda,
-  Eigen::VectorXd& vRes,
   const std::vector<double>& inverseMasses,
   const std::vector<Eigen::Matrix3d>& inverseInertias)
 {
@@ -311,14 +323,17 @@ double ProjectedGaussSeidel::sweepOnce(
 
       size_t const bodyA = curRow.bodyAIndex;
       size_t const bodyB = curRow.bodyBIndex;
-      auto const aOff = static_cast<Eigen::Index>(6 * bodyA);
-      auto const bOff = static_cast<Eigen::Index>(6 * bodyB);
+      auto const aOff = static_cast<Eigen::Index>(kBodyDof * bodyA);
+      auto const bOff = static_cast<Eigen::Index>(kBodyDof * bodyB);
 
-      Eigen::Matrix<double, 1, 6> const jA = curRow.jacobianRow.leftCols<6>();
-      Eigen::Matrix<double, 1, 6> const jB = curRow.jacobianRow.rightCols<6>();
+      Eigen::Matrix<double, 1, kBodyDof> const jA =
+        curRow.jacobianRow.template leftCols<kBodyDof>();
+      Eigen::Matrix<double, 1, kBodyDof> const jB =
+        curRow.jacobianRow.template rightCols<kBodyDof>();
 
       double const jvRes =
-        (jA * vRes.segment<6>(aOff))(0) + (jB * vRes.segment<6>(bOff))(0);
+        (jA * vRes_.segment<kBodyDof>(aOff))(0) +
+        (jB * vRes_.segment<kBodyDof>(bOff))(0);
 
       double const delta = (b(i) - jvRes) / diag(i);
       double const lambdaOld = lambda(i);
@@ -327,7 +342,7 @@ double ProjectedGaussSeidel::sweepOnce(
       lambda(i) = lambdaNew;
 
       maxDelta = std::max(maxDelta, std::abs(dLambda));
-      updateVRes(rows, static_cast<size_t>(i), dLambda, vRes, inverseMasses,
+      updateVRes(rows, static_cast<size_t>(i), dLambda, inverseMasses,
                  inverseInertias);
 
       // Check for following friction pair (t1, t2 rows)
@@ -349,28 +364,32 @@ double ProjectedGaussSeidel::sweepOnce(
         // ===== Solve t1 (unclamped PGS update) =====
         {
           const FlatRow& r = rows[t1Idx];
-          auto const taOff = static_cast<Eigen::Index>(6 * r.bodyAIndex);
-          auto const tbOff = static_cast<Eigen::Index>(6 * r.bodyBIndex);
-          Eigen::Matrix<double, 1, 6> const ja = r.jacobianRow.leftCols<6>();
-          Eigen::Matrix<double, 1, 6> const jb = r.jacobianRow.rightCols<6>();
+          auto const taOff = static_cast<Eigen::Index>(kBodyDof * r.bodyAIndex);
+          auto const tbOff = static_cast<Eigen::Index>(kBodyDof * r.bodyBIndex);
+          Eigen::Matrix<double, 1, kBodyDof> const ja =
+            r.jacobianRow.template leftCols<kBodyDof>();
+          Eigen::Matrix<double, 1, kBodyDof> const jb =
+            r.jacobianRow.template rightCols<kBodyDof>();
 
           double const jv =
-            (ja * vRes.segment<6>(taOff))(0) +
-            (jb * vRes.segment<6>(tbOff))(0);
+            (ja * vRes_.segment<kBodyDof>(taOff))(0) +
+            (jb * vRes_.segment<kBodyDof>(tbOff))(0);
           lambda(i + 1) += (b(i + 1) - jv) / diag(i + 1);
         }
 
         // ===== Solve t2 (unclamped PGS update) =====
         {
           const FlatRow& r = rows[t2Idx];
-          auto const taOff = static_cast<Eigen::Index>(6 * r.bodyAIndex);
-          auto const tbOff = static_cast<Eigen::Index>(6 * r.bodyBIndex);
-          Eigen::Matrix<double, 1, 6> const ja = r.jacobianRow.leftCols<6>();
-          Eigen::Matrix<double, 1, 6> const jb = r.jacobianRow.rightCols<6>();
+          auto const taOff = static_cast<Eigen::Index>(kBodyDof * r.bodyAIndex);
+          auto const tbOff = static_cast<Eigen::Index>(kBodyDof * r.bodyBIndex);
+          Eigen::Matrix<double, 1, kBodyDof> const ja =
+            r.jacobianRow.template leftCols<kBodyDof>();
+          Eigen::Matrix<double, 1, kBodyDof> const jb =
+            r.jacobianRow.template rightCols<kBodyDof>();
 
           double const jv =
-            (ja * vRes.segment<6>(taOff))(0) +
-            (jb * vRes.segment<6>(tbOff))(0);
+            (ja * vRes_.segment<kBodyDof>(taOff))(0) +
+            (jb * vRes_.segment<kBodyDof>(tbOff))(0);
           lambda(i + 2) += (b(i + 2) - jv) / diag(i + 2);
         }
 
@@ -418,8 +437,8 @@ double ProjectedGaussSeidel::sweepOnce(
         maxDelta = std::max(maxDelta, std::abs(dLt2));
 
         // Update velocity residual for projection changes
-        updateVRes(rows, t1Idx, dLt1, vRes, inverseMasses, inverseInertias);
-        updateVRes(rows, t2Idx, dLt2, vRes, inverseMasses, inverseInertias);
+        updateVRes(rows, t1Idx, dLt1, inverseMasses, inverseInertias);
+        updateVRes(rows, t2Idx, dLt2, inverseMasses, inverseInertias);
 
         ++contactIdx;
         i += 3;  // Consumed normal + t1 + t2
@@ -435,21 +454,24 @@ double ProjectedGaussSeidel::sweepOnce(
       // Standalone tangent row (no preceding normal in this sweep window)
       size_t const bodyA = curRow.bodyAIndex;
       size_t const bodyB = curRow.bodyBIndex;
-      auto const aOff = static_cast<Eigen::Index>(6 * bodyA);
-      auto const bOff = static_cast<Eigen::Index>(6 * bodyB);
+      auto const aOff = static_cast<Eigen::Index>(kBodyDof * bodyA);
+      auto const bOff = static_cast<Eigen::Index>(kBodyDof * bodyB);
 
-      Eigen::Matrix<double, 1, 6> const jA = curRow.jacobianRow.leftCols<6>();
-      Eigen::Matrix<double, 1, 6> const jB = curRow.jacobianRow.rightCols<6>();
+      Eigen::Matrix<double, 1, kBodyDof> const jA =
+        curRow.jacobianRow.template leftCols<kBodyDof>();
+      Eigen::Matrix<double, 1, kBodyDof> const jB =
+        curRow.jacobianRow.template rightCols<kBodyDof>();
 
       double const jvRes =
-        (jA * vRes.segment<6>(aOff))(0) + (jB * vRes.segment<6>(bOff))(0);
+        (jA * vRes_.segment<kBodyDof>(aOff))(0) +
+        (jB * vRes_.segment<kBodyDof>(bOff))(0);
       double const delta = (b(i) - jvRes) / diag(i);
       double const lambdaOld = lambda(i);
       lambda(i) += delta;
       double const dLambda = lambda(i) - lambdaOld;
 
       maxDelta = std::max(maxDelta, std::abs(dLambda));
-      updateVRes(rows, static_cast<size_t>(i), dLambda, vRes, inverseMasses,
+      updateVRes(rows, static_cast<size_t>(i), dLambda, inverseMasses,
                  inverseInertias);
 
       ++i;

@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/DataTypes/ForceVector.hpp"
+#include "msd-sim/src/DataTypes/TorqueVector.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
@@ -57,11 +59,11 @@ public:
   /// Per-body forces result (mirrors ConstraintSolver::BodyForces)
   struct BodyForces
   {
-    Coordinate linearForce;
-    Coordinate angularTorque;
+    ForceVector linearForce;
+    TorqueVector angularTorque;
 
     BodyForces() = default;
-    BodyForces(const Coordinate& lf, const Coordinate& at)
+    BodyForces(const ForceVector& lf, const TorqueVector& at)
       : linearForce{lf}, angularTorque{at}
     {
     }
@@ -70,22 +72,12 @@ public:
   /// Solve result (mirrors ConstraintSolver::SolveResult fields)
   struct SolveResult
   {
-    std::vector<BodyForces> bodyForces;
-    Eigen::VectorXd lambdas;
+    std::vector<BodyForces> bodyForces;  ///< Per-body force/torque (size = numBodies)
+    Eigen::VectorXd lambdas;  ///< Constraint impulse multipliers (size = total constraint rows)
     bool converged{false};
     int iterations{0};
     double residual{std::numeric_limits<double>::quiet_NaN()};
-
-    SolveResult() = default;
   };
-
-  ProjectedGaussSeidel() = default;
-  ~ProjectedGaussSeidel() = default;
-
-  ProjectedGaussSeidel(const ProjectedGaussSeidel&) = default;
-  ProjectedGaussSeidel& operator=(const ProjectedGaussSeidel&) = default;
-  ProjectedGaussSeidel(ProjectedGaussSeidel&&) noexcept = default;
-  ProjectedGaussSeidel& operator=(ProjectedGaussSeidel&&) noexcept = default;
 
   /**
    * @brief Solve mixed LCP using Projected Gauss-Seidel.
@@ -140,6 +132,12 @@ public:
   }
 
 private:
+  // Velocity-level DOF layout constants for two-body constraints
+  static constexpr size_t kLinearDof = 3;   ///< Linear velocity components per body
+  static constexpr size_t kAngularDof = 3;  ///< Angular velocity components per body
+  static constexpr size_t kBodyDof = kLinearDof + kAngularDof;  ///< DOF per body (6)
+  static constexpr size_t kTwoBodyDof = 2 * kBodyDof;          ///< DOF per two-body constraint (12)
+
   // Regularization epsilon added to diagonal (matches ConstraintSolver pattern)
   static constexpr double kRegularizationEpsilon = 1e-8;
 
@@ -153,7 +151,7 @@ private:
   // Flattened per-row data for PGS sweep
   struct FlatRow
   {
-    Eigen::Matrix<double, 1, 12> jacobianRow;
+    Eigen::Matrix<double, 1, kTwoBodyDof> jacobianRow;
     size_t bodyAIndex{0};
     size_t bodyBIndex{0};
     RowType rowType{RowType::Normal};
@@ -165,41 +163,43 @@ private:
    *
    * Processes rows in flat order. When a Normal row is followed by two Tangent
    * rows (standard friction pair), they are solved together with ball-projection.
+   * Updates vRes_ member in-place.
    *
    * @param rows Flattened per-row data
    * @param muPerContact Friction coefficient per contact (indexed by contact)
    * @param diag Diagonal effective-mass elements A_ii (size = numRows)
    * @param b RHS vector (size = numRows)
    * @param lambda In/out lambda vector updated in-place
-   * @param vRes In/out velocity residual (size = 6 * numBodies), updated in-place
    * @param inverseMasses Per-body inverse mass
    * @param inverseInertias Per-body inverse inertia
    * @return max |delta_lambda| this sweep (for convergence check)
    */
-  static double sweepOnce(
+  double sweepOnce(
     const std::vector<FlatRow>& rows,
     const std::vector<double>& muPerContact,
     const Eigen::VectorXd& diag,
     const Eigen::VectorXd& b,
     Eigen::VectorXd& lambda,
-    Eigen::VectorXd& vRes,
     const std::vector<double>& inverseMasses,
     const std::vector<Eigen::Matrix3d>& inverseInertias);
 
   /**
    * @brief Update velocity residual after a lambda change on row rowIdx.
-   * v_res += M^{-1} * J_i^T * dLambda
+   * vRes_ += M^{-1} * J_i^T * dLambda
    */
-  static void updateVRes(
+  void updateVRes(
     const std::vector<FlatRow>& rows,
     size_t rowIdx,
     double dLambda,
-    Eigen::VectorXd& vRes,
     const std::vector<double>& inverseMasses,
     const std::vector<Eigen::Matrix3d>& inverseInertias);
 
   int maxSweeps_{50};
   double convergenceTolerance_{1e-6};
+
+  /// Velocity residual workspace: v_res[kBodyDof*k .. kBodyDof*k+5] = accumulated
+  /// M^{-1} * J^T * lambda for body k. Resized per solve() call.
+  Eigen::VectorXd vRes_;
 };
 
 }  // namespace msd_sim
