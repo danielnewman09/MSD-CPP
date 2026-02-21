@@ -26,7 +26,7 @@ _None detected._
 ## Iterations
 
 ### Iteration 1 — 2026-02-21 00:00
-**Commit**: (pending — pre-commit state ae8051c)
+**Commit**: 80e7902
 **Hypothesis**: Promote per-solve local variables in all three solvers (PGS, ConstraintSolver friction path, PositionCorrector) to member workspaces using clear/resize-only semantics, eliminating O(islands) heap allocations per frame.
 **Changes**:
 - `msd/msd-sim/src/Physics/Constraints/ProjectedGaussSeidel.hpp`: Added 5 member workspace variables: `rows_`, `muPerContact_`, `diag_`, `b_`, `lambda_`
