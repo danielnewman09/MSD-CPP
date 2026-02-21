@@ -281,10 +281,15 @@ class TestGetFrameState:
         assert 'states' in frame
         assert isinstance(frame['states'], list)
 
-    def test_frame_state_empty_before_spawn(self):
-        """states list is empty before any objects are spawned."""
+    def test_frame_state_no_inertial_before_spawn(self):
+        """No inertial bodies exist before any user objects are spawned.
+
+        Note: The Engine constructor spawns a default floor environment object,
+        so states is not empty — but no inertial entries should be present.
+        """
         frame = self.engine.get_frame_state()
-        assert frame['states'] == []
+        inertial = [s for s in frame['states'] if not s.get('is_environment')]
+        assert inertial == []
 
     def test_frame_state_has_body_after_spawn(self):
         """AC: states list contains an entry after spawning an inertial object."""
@@ -392,13 +397,21 @@ class TestGetFrameStateEnvironmentObjects:
         assets = self.engine.list_assets()
         assert assets, "No assets available for testing"
         _, self.asset_name = assets[0]
+        # Engine constructor spawns a default floor environment object.
+        # Record the baseline so tests can detect newly-spawned entries.
+        baseline_frame = self.engine.get_frame_state()
+        self.baseline_env_count = len(
+            [s for s in baseline_frame['states'] if s.get('is_environment')]
+        )
 
     def test_environment_object_appears_in_states(self):
         """AC: spawning an environment object adds an entry to states list."""
         self.engine.spawn_environment_object(self.asset_name, 0.0, 0.0, 0.0)
         frame = self.engine.get_frame_state()
-        assert len(frame['states']) >= 1, (
-            "Expected at least one state entry after spawning environment object"
+        env_entries = [s for s in frame['states'] if s.get('is_environment')]
+        assert len(env_entries) == self.baseline_env_count + 1, (
+            f"Expected {self.baseline_env_count + 1} environment entries "
+            f"after spawn, found {len(env_entries)}"
         )
 
     def test_environment_body_has_is_environment_true(self):
@@ -406,10 +419,12 @@ class TestGetFrameStateEnvironmentObjects:
         self.engine.spawn_environment_object(self.asset_name, 0.0, 0.0, 0.0)
         frame = self.engine.get_frame_state()
         env_entries = [s for s in frame['states'] if s.get('is_environment')]
-        assert len(env_entries) == 1, (
-            f"Expected 1 environment entry in states, found {len(env_entries)}"
+        assert len(env_entries) == self.baseline_env_count + 1, (
+            f"Expected {self.baseline_env_count + 1} environment entries, "
+            f"found {len(env_entries)}"
         )
-        assert env_entries[0]['is_environment'] is True
+        # The last entry is the one we just spawned
+        assert env_entries[-1]['is_environment'] is True
 
     def test_environment_body_velocity_is_zero(self):
         """AC (FR-1): environment body velocity is always {x:0, y:0, z:0}."""
@@ -417,7 +432,7 @@ class TestGetFrameStateEnvironmentObjects:
         frame = self.engine.get_frame_state()
         env_entries = [s for s in frame['states'] if s.get('is_environment')]
         assert env_entries, "No environment entry found in states"
-        vel = env_entries[0]['velocity']
+        vel = env_entries[-1]['velocity']
         assert vel['x'] == pytest.approx(0.0)
         assert vel['y'] == pytest.approx(0.0)
         assert vel['z'] == pytest.approx(0.0)
@@ -428,7 +443,7 @@ class TestGetFrameStateEnvironmentObjects:
         frame = self.engine.get_frame_state()
         env_entries = [s for s in frame['states'] if s.get('is_environment')]
         assert env_entries, "No environment entry found in states"
-        av = env_entries[0]['angular_velocity']
+        av = env_entries[-1]['angular_velocity']
         assert av['x'] == pytest.approx(0.0)
         assert av['y'] == pytest.approx(0.0)
         assert av['z'] == pytest.approx(0.0)
@@ -441,8 +456,11 @@ class TestGetFrameStateEnvironmentObjects:
         )
         frame = self.engine.get_frame_state()
         env_entries = [s for s in frame['states'] if s.get('is_environment')]
-        assert env_entries, "No environment entry found in states"
-        pos = env_entries[0]['position']
+        assert len(env_entries) > self.baseline_env_count, (
+            "No new environment entry found after spawn"
+        )
+        # The last entry is the one we just spawned
+        pos = env_entries[-1]['position']
         assert pos['x'] == pytest.approx(spawn_x, abs=1e-6)
         assert pos['y'] == pytest.approx(spawn_y, abs=1e-6)
         assert pos['z'] == pytest.approx(spawn_z, abs=1e-6)
@@ -457,7 +475,7 @@ class TestGetFrameStateEnvironmentObjects:
         frame = self.engine.get_frame_state()
         env_entries = [s for s in frame['states'] if s.get('is_environment')]
         assert env_entries, "No environment entry found in states"
-        q = env_entries[0]['orientation']
+        q = env_entries[-1]['orientation']
         norm_sq = q['w']**2 + q['x']**2 + q['y']**2 + q['z']**2
         assert norm_sq == pytest.approx(1.0, abs=1e-6), (
             f"Orientation quaternion has magnitude {norm_sq**0.5:.6f}, expected 1.0"
@@ -469,7 +487,7 @@ class TestGetFrameStateEnvironmentObjects:
         frame = self.engine.get_frame_state()
         env_entries = [s for s in frame['states'] if s.get('is_environment')]
         assert env_entries, "No environment entry found in states"
-        body = env_entries[0]
+        body = env_entries[-1]
         for key in ('body_id', 'asset_id', 'position', 'velocity',
                     'orientation', 'angular_velocity', 'is_environment'):
             assert key in body, f"Missing key '{key}' in environment body state"
@@ -484,8 +502,9 @@ class TestGetFrameStateEnvironmentObjects:
         assert len(inertial_entries) == 1, (
             f"Expected 1 inertial entry, found {len(inertial_entries)}"
         )
-        assert len(env_entries) == 1, (
-            f"Expected 1 environment entry, found {len(env_entries)}"
+        assert len(env_entries) == self.baseline_env_count + 1, (
+            f"Expected {self.baseline_env_count + 1} environment entries "
+            f"(baseline + 1 spawned), found {len(env_entries)}"
         )
 
     def test_environment_body_velocity_stays_zero_after_update(self):
@@ -496,7 +515,7 @@ class TestGetFrameStateEnvironmentObjects:
         frame = self.engine.get_frame_state()
         env_entries = [s for s in frame['states'] if s.get('is_environment')]
         assert env_entries, "No environment entry found after update"
-        vel = env_entries[0]['velocity']
+        vel = env_entries[-1]['velocity']
         assert vel['x'] == pytest.approx(0.0)
         assert vel['y'] == pytest.approx(0.0)
         assert vel['z'] == pytest.approx(0.0)
