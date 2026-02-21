@@ -5,7 +5,7 @@
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
 - [x] Ready for Integration Design
-- [ ] Integration Design Complete — Awaiting Review
+- [x] Integration Design Complete — Awaiting Review
 - [ ] Integration Design Approved
 - [ ] Ready for Python Design
 - [ ] Python Design Complete — Awaiting Review
@@ -171,13 +171,21 @@ These are not production-breaking bugs, but they represent contract violations a
   - N3: `BodyState` vs `EngineBodyState` schema discrepancy in contracts.yaml is acceptable for this ticket; reconcile in a future ticket
 
 ### Integration Design Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
+- **Branch**: 0072e-live-simulation-cleanup
+- **PR**: #88
 - **Artifacts**:
   - `docs/designs/0072e_live_simulation_cleanup/integration-design.md`
   - `docs/designs/0072e_live_simulation_cleanup/0072e_live_simulation_cleanup-sequence.puml`
-  - Updates to `docs/api-contracts/contracts.yaml`
+  - `docs/api-contracts/contracts.yaml` — no additional changes needed; Design phase already committed the `x-pybind11-schemas` and constrained `SpawnObjectConfig` schema
 - **Notes**:
+  - Four formal contracts documented: pybind11 boundary (FR-1), configure validation (FR-3/FR-4/FR-6), frame wire format (FR-1), dead code removal (FR-5)
+  - `body_id` consistency guarantee documented: `getInstanceId()` in C++ matches sequential IDs assigned in `live.py` configure phase; clients can join frame state to metadata by `body_id` without additional mapping
+  - Pydantic `ValidationError` for FR-3/FR-4 violations propagates through the generic `except Exception` handler in `live.py` — produces an `error` WebSocket message then closes; acceptable for now
+  - FR-6 omission of `mass`/`restitution`/`friction` for environment objects fills Pydantic defaults; `metadata` message carries those defaults — frontend ignores them for environment objects
+  - Confirmed: `contracts.yaml` already complete (Design phase); no changes needed for FR-2 in this phase
+  - spawn_inertial_object call site open question (N2 from design review) retained as an implementation-time verification item
 
 ### Integration Design Review Phase
 - **Started**:
