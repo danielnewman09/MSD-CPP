@@ -312,10 +312,10 @@ TEST(WorldModelStaticCollisionTest, inertialVsEnvironment_ImpulseApplied)
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
   ReferenceFrame frameStatic{Coordinate{0.8, 0.0, 0.0}};  // Overlapping
 
-  world.spawnObject(0, hullDynamic, frameDynamic);
+  const auto& dynamic = world.spawnObject(0, hullDynamic, frameDynamic);
   world.spawnEnvironmentObject(1, hullStatic, frameStatic);
 
-  uint32_t dynamicId = 1;
+  uint32_t dynamicId = dynamic.getInstanceId();
 
   // Set dynamic object moving toward static
   world.getObject(dynamicId).setCoefficientOfRestitution(1.0);
@@ -349,10 +349,10 @@ TEST(WorldModelStaticCollisionTest, inertialVsEnvironment_PositionCorrected)
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
   ReferenceFrame frameStatic{Coordinate{0.5, 0.0, 0.0}};  // Deep overlap
 
-  world.spawnObject(0, hullDynamic, frameDynamic);
+  const auto& dynamic = world.spawnObject(0, hullDynamic, frameDynamic);
   world.spawnEnvironmentObject(1, hullStatic, frameStatic);
 
-  uint32_t dynamicId = 1;
+  uint32_t dynamicId = dynamic.getInstanceId();
 
   // Dynamic at rest
   world.getObject(dynamicId).getInertialState().velocity =
@@ -380,10 +380,10 @@ TEST(WorldModelStaticCollisionTest, inertialVsEnvironment_StaticUnchanged)
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
   ReferenceFrame frameStatic{Coordinate{0.8, 0.0, 0.0}};
 
-  world.spawnObject(0, hullDynamic, frameDynamic);
+  const auto& dynamic = world.spawnObject(0, hullDynamic, frameDynamic);
   world.spawnEnvironmentObject(1, hullStatic, frameStatic);
 
-  uint32_t dynamicId = 1;
+  uint32_t dynamicId = dynamic.getInstanceId();
 
   // Dynamic object with high velocity toward static
   world.getObject(dynamicId).getInertialState().velocity =
@@ -420,10 +420,10 @@ TEST(WorldModelStaticCollisionTest, inertialVsEnvironment_NoCollision_NoEffect)
   ReferenceFrame frameDynamic{Coordinate{0.0, 0.0, 0.0}};
   ReferenceFrame frameStatic{Coordinate{10.0, 0.0, 0.0}};
 
-  world.spawnObject(0, hullDynamic, frameDynamic);
+  const auto& dynamic = world.spawnObject(0, hullDynamic, frameDynamic);
   world.spawnEnvironmentObject(1, hullStatic, frameStatic);
 
-  uint32_t dynamicId = 1;
+  uint32_t dynamicId = dynamic.getInstanceId();
 
   // Dynamic object moving away from static
   world.getObject(dynamicId).getInertialState().velocity =

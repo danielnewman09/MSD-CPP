@@ -306,59 +306,11 @@ Backward compatible: existing code unaffected if recording not enabled.
 ## Engine Component
 
 **Location**: `src/Engine.hpp`, `src/Engine.cpp`
+**Python Binding**: `msd_reader.Engine` (via `msd-pybind/src/engine_bindings.cpp`, [Ticket: 0072a](../../tickets/0072a_engine_pybind_bindings.md))
 
-### Purpose
-Top-level simulation orchestrator that coordinates asset loading, world management, and simulation updates.
+Top-level simulation orchestrator that coordinates asset loading, world management, and simulation updates. Also exposed to Python via `msd_reader.Engine` for live browser simulation (Ticket 0072).
 
-### Key Interfaces
-```cpp
-class Engine {
-  Engine(const std::string& dbPath);
-
-  void update(std::chrono::milliseconds simTime);
-
-  void spawnInertialObject(const std::string assetName,
-                           const Coordinate& position,
-                           const AngularCoordinate& orientation);
-
-  msd_assets::AssetRegistry& getAssetRegistry();
-
-private:
-  msd_assets::AssetRegistry assetRegistry_;
-  WorldModel worldModel_;
-};
-```
-
-### Usage Example
-```cpp
-#include "msd-sim/src/Engine.hpp"
-
-// Create engine with database path
-msd_sim::Engine engine{"assets.db"};
-
-// Spawn objects into simulation
-engine.spawnInertialObject("cube",
-                           Coordinate{0, 0, 10},
-                           AngularCoordinate{});
-
-// Run simulation loop
-auto simTime = std::chrono::milliseconds{0};
-while (running) {
-  engine.update(simTime);
-  simTime += std::chrono::milliseconds{16};  // ~60 FPS
-}
-```
-
-### Thread Safety
-**Not thread-safe** — Single-threaded simulation assumed.
-
-### Memory Management
-- Owns `AssetRegistry` and `WorldModel` by value
-- Objects spawned are owned by WorldModel
-
-### Dependencies
-- `msd-assets` — Asset loading and management
-- Environment module — WorldModel, Coordinate, AngularCoordinate
+For detailed API documentation, use the codebase MCP tools (`find_class Engine`, `get_class_members Engine`).
 
 ---
 

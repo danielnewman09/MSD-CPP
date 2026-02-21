@@ -14,11 +14,33 @@
 namespace msd_sim
 {
 
+/**
+ * @brief Top-level simulation orchestrator
+ *
+ * Coordinates asset loading (via AssetRegistry), world management (via
+ * WorldModel), and physics simulation updates.  Provides the primary entry
+ * point for spawning objects into the simulation and stepping time forward.
+ *
+ * Also exposed to Python as @c msd_reader.Engine via the pybind11
+ * @c EngineWrapper (see @c msd-pybind/src/engine_bindings.cpp).
+ *
+ * @note Not thread-safe — single-threaded simulation assumed.
+ */
 class Engine
 {
 public:
+  /**
+   * @brief Construct an Engine from an assets database path
+   * @param dbPath Path to the SQLite assets database (created by generate_assets)
+   * @throws std::runtime_error if the database cannot be opened
+   */
   explicit Engine(const std::string& dbPath);
 
+  /**
+   * @brief Advance the simulation to the given absolute time
+   * @param simTime Absolute simulation time (not a delta). Pass increasing
+   *        values on each call (e.g. 16ms, 32ms, 48ms for 60 FPS).
+   */
   void update(std::chrono::milliseconds simTime);
 
   const AssetInertial& spawnInertialObject(
@@ -89,6 +111,10 @@ public:
    */
   void setPlayerInputCommands(const InputCommands& commands);
 
+  /**
+   * @brief Get access to the asset registry
+   * @return Reference to the asset registry used by this engine
+   */
   msd_assets::AssetRegistry& getAssetRegistry();
 
   /**

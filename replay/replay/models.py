@@ -4,7 +4,9 @@ Pydantic response models for MSD Replay API
 Ticket: 0056d_fastapi_backend
 """
 
-from pydantic import BaseModel
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, Field
 
 
 class Vec3(BaseModel):
@@ -175,3 +177,47 @@ class AssetGeometry(BaseModel):
     name: str
     positions: list[float]  # Flat [x,y,z,x,y,z,...] for BufferGeometry
     vertex_count: int
+
+
+# ---------------------------------------------------------------------------
+# Live simulation models
+# Ticket: 0072b_websocket_simulation_endpoint
+# ---------------------------------------------------------------------------
+
+
+class SpawnObjectConfig(BaseModel):
+    """Configuration for a single object to spawn in the live simulation.
+
+    Used in the ``configure`` WebSocket message from the client.
+
+    Ticket: 0072e_live_simulation_cleanup (FR-3, FR-4)
+    """
+
+    asset_name: str
+    # FR-4: Exactly 3 elements required; Pydantic rejects under/over-length lists.
+    position: Annotated[list[float], Field(min_length=3, max_length=3)]
+    orientation: Annotated[list[float], Field(min_length=3, max_length=3)]
+    # FR-3: Literal constraint rejects any value outside {"inertial", "environment"}.
+    object_type: Literal["inertial", "environment"]
+    mass: float = 10.0
+    restitution: float = 0.8
+    friction: float = 0.5
+
+
+class LiveBodyMetadata(BaseModel):
+    """Per-body static metadata included in the ``metadata`` WebSocket message."""
+
+    body_id: int
+    asset_id: int
+    asset_name: str
+    mass: float
+    restitution: float
+    friction: float
+    is_environment: bool
+
+
+class AssetInfo(BaseModel):
+    """Brief asset descriptor returned by ``GET /api/v1/live/assets``."""
+
+    asset_id: int
+    name: str

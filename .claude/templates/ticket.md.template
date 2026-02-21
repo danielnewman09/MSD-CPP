@@ -7,10 +7,19 @@
 - [ ] Math Design Approved — Ready for Architectural Design (if Requires Math Design: Yes)
 - [ ] Ready for Design
 - [ ] Design Complete — Awaiting Review
+- [ ] Design Approved — Ready for Integration Design (if multi-language)
+- [ ] Ready for Integration Design (if Languages has 2+ entries)
+- [ ] Integration Design Complete — Awaiting Review (if multi-language)
+- [ ] Integration Design Approved (if multi-language)
+- [ ] Ready for Python Design (if Python in Languages)
+- [ ] Python Design Complete — Awaiting Review (if Python in Languages)
+- [ ] Ready for Frontend Design (if Frontend in Languages)
+- [ ] Frontend Design Complete — Awaiting Review (if Frontend in Languages)
 - [ ] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Quality Gate
+- [ ] Implementation Complete — Awaiting Test Writing
+- [ ] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Documentation Complete — Awaiting Tutorial (if Generate Tutorial: Yes)
@@ -23,6 +32,7 @@
 - **Priority**: Low / Medium / High / Critical
 - **Estimated Complexity**: Small / Medium / Large / XL
 - **Target Component(s)**: {e.g., networking, storage, ui}
+- **Languages**: C++ (options: C++, Python, Frontend — comma-separated for multi-language)
 - **Generate Tutorial**: No (set to Yes for features with educational value)
 - **Requires Math Design**: No (set to Yes for features with significant mathematical content)
 - **GitHub Issue**: (set to #N if a corresponding GitHub issue exists)
@@ -121,37 +131,74 @@
   - **Trade-offs**: {Known compromises}
   - **Status**: active
   ```
-- **Notes**: 
+- **Notes**:
 
 ### Design Review Phase
-- **Started**: 
-- **Completed**: 
-- **Status**: 
-- **Reviewer Notes**: 
+- **Started**:
+- **Completed**:
+- **Status**:
+- **Reviewer Notes**:
+
+### Integration Design Phase (if multi-language)
+- **Started**:
+- **Completed**:
+- **Artifacts**:
+  - `docs/designs/{feature-name}/integration-design.md`
+  - `docs/designs/{feature-name}/{feature-name}-sequence.puml`
+  - Updates to `docs/api-contracts/contracts.yaml`
+- **Notes**:
+
+### Integration Design Review Phase (if multi-language)
+- **Started**:
+- **Completed**:
+- **Status**:
+- **Reviewer Notes**:
+
+### Python Design Phase (if Python in Languages)
+- **Started**:
+- **Completed**:
+- **Artifacts**:
+  - `docs/designs/{feature-name}/python/design.md`
+- **Notes**:
+
+### Frontend Design Phase (if Frontend in Languages)
+- **Started**:
+- **Completed**:
+- **Artifacts**:
+  - `docs/designs/{feature-name}/frontend/design.md`
+- **Notes**:
 
 ### Prototype Phase
-- **Started**: 
-- **Completed**: 
-- **Prototypes**: 
+- **Started**:
+- **Completed**:
+- **Prototypes**:
   - P1: {name} — {result}
-- **Artifacts**: 
+- **Artifacts**:
   - `docs/designs/{feature-name}/prototype-results.md`
-- **Notes**: 
+- **Notes**:
 
 ### Implementation Phase
-- **Started**: 
-- **Completed**: 
-- **Files Created**: 
-- **Files Modified**: 
-- **Artifacts**: 
+- **Started**:
+- **Completed**:
+- **Files Created**:
+- **Files Modified**:
+- **Artifacts**:
   - `docs/designs/{feature-name}/implementation-notes.md`
-- **Notes**: 
+- **Notes**:
+
+### Test Writing Phase
+- **Started**:
+- **Completed**:
+- **Test Files Created**:
+- **Test Coverage Summary**:
+- **Test Failures Documented for Implementer**:
+- **Notes**:
 
 ### Implementation Review Phase
-- **Started**: 
-- **Completed**: 
-- **Status**: 
-- **Reviewer Notes**: 
+- **Started**:
+- **Completed**:
+- **Status**:
+- **Reviewer Notes**:
 
 ### Documentation Update Phase
 - **Started**:
@@ -183,11 +230,23 @@
 ### Feedback on Design
 {Your comments on the design}
 
+### Feedback on Integration Design (if multi-language)
+{Your comments on the integration design, API contracts, wire protocols}
+
+### Feedback on Python Design (if Python in Languages)
+{Your comments on the Python architecture}
+
+### Feedback on Frontend Design (if Frontend in Languages)
+{Your comments on the frontend architecture}
+
 ### Feedback on Prototypes
 {Your comments on prototype results}
 
 ### Feedback on Implementation
 {Your comments on the implementation}
+
+### Feedback on Tests
+{Your comments on test coverage, test quality, or missing test scenarios}
 
 ### Feedback on Tutorial (if Generate Tutorial: Yes)
 {Your comments on the tutorial content, concepts to cover, or presentation style}

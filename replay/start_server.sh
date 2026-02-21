@@ -9,6 +9,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$PROJECT_ROOT/build/Debug/debug"
+
+# Activate the project venv
+source "$PROJECT_ROOT/python/.venv/bin/activate"
 ASSETS_DB="$SCRIPT_DIR/recordings/assets.db"
 RECORDING_DB="$SCRIPT_DIR/recordings/test_cube_drop.db"
 

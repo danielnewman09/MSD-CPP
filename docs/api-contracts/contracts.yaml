@@ -1,0 +1,739 @@
+openapi: "3.1.0"
+info:
+  title: MSD Replay API
+  version: "1.0.0"
+  description: |
+    REST and WebSocket API for the MSD Replay server.
+    This is the authoritative contract for all external API surfaces.
+
+    Tickets: 0056d_fastapi_backend, 0056e_threejs_core_visualization,
+             0072b_websocket_simulation_endpoint, 0072c_live_simulation_frontend
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development server
+
+paths:
+  # ---------------------------------------------------------------------------
+  # Simulations
+  # ---------------------------------------------------------------------------
+  /simulations:
+    get:
+      operationId: listSimulations
+      summary: List available recording databases
+      tags: [simulations]
+      responses:
+        "200":
+          description: List of available simulations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SimulationInfo"
+
+  /simulations/{sim_id}/metadata:
+    get:
+      operationId: getSimulationMetadata
+      summary: Get simulation metadata (body properties and frame count)
+      tags: [simulations]
+      parameters:
+        - $ref: "#/components/parameters/SimId"
+      responses:
+        "200":
+          description: Simulation metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulationMetadata"
+        "404":
+          description: Simulation not found
+
+  # ---------------------------------------------------------------------------
+  # Frames
+  # ---------------------------------------------------------------------------
+  /simulations/{sim_id}/frames:
+    get:
+      operationId: listFrames
+      summary: Get list of all frames with timestamps
+      tags: [frames]
+      parameters:
+        - $ref: "#/components/parameters/SimId"
+      responses:
+        "200":
+          description: List of frame info entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FrameInfo"
+        "404":
+          description: Simulation not found
+
+  /simulations/{sim_id}/frames/{frame_id}/state:
+    get:
+      operationId: getFrameState
+      summary: Get complete frame data (states, collisions, solver)
+      tags: [frames]
+      parameters:
+        - $ref: "#/components/parameters/SimId"
+        - $ref: "#/components/parameters/FrameId"
+      responses:
+        "200":
+          description: Complete frame data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FrameData"
+        "404":
+          description: Simulation or frame not found
+
+  /simulations/{sim_id}/frames/range:
+    get:
+      operationId: getFrameRange
+      summary: Get bulk frame data for playback buffering
+      tags: [frames]
+      parameters:
+        - $ref: "#/components/parameters/SimId"
+        - name: start
+          in: query
+          required: true
+          description: Starting frame ID
+          schema:
+            type: integer
+        - name: count
+          in: query
+          required: true
+          description: Number of frames to return
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Array of frame data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FrameData"
+        "404":
+          description: Simulation not found
+
+  # ---------------------------------------------------------------------------
+  # Energy & Velocity
+  # ---------------------------------------------------------------------------
+  /simulations/{sim_id}/energy:
+    get:
+      operationId: getSystemEnergy
+      summary: Get system-level energy timeseries
+      tags: [frames]
+      parameters:
+        - $ref: "#/components/parameters/SimId"
+      responses:
+        "200":
+          description: System energy timeseries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SystemEnergyPoint"
+        "404":
+          description: Simulation not found
+
+  /simulations/{sim_id}/energy/{body_id}:
+    get:
+      operationId: getBodyEnergy
+      summary: Get per-body energy timeseries
+      tags: [frames]
+      parameters:
+        - $ref: "#/components/parameters/SimId"
+        - $ref: "#/components/parameters/BodyId"
+      responses:
+        "200":
+          description: Per-body energy timeseries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EnergyPoint"
+        "404":
+          description: Simulation or body not found
+
+  /simulations/{sim_id}/velocity/{body_id}:
+    get:
+      operationId: getBodyVelocity
+      summary: Get per-body velocity timeseries (linear + angular)
+      tags: [frames]
+      parameters:
+        - $ref: "#/components/parameters/SimId"
+        - $ref: "#/components/parameters/BodyId"
+      responses:
+        "200":
+          description: Per-body velocity timeseries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VelocityPoint"
+        "404":
+          description: Simulation or body not found
+
+  # ---------------------------------------------------------------------------
+  # Assets (recording-scoped)
+  # ---------------------------------------------------------------------------
+  /simulations/{sim_id}/assets:
+    get:
+      operationId: getAssets
+      summary: Get geometry data for bodies in Three.js BufferGeometry format
+      tags: [assets]
+      parameters:
+        - $ref: "#/components/parameters/SimId"
+        - name: asset_ids
+          in: query
+          required: false
+          description: Filter by asset IDs
+          schema:
+            type: array
+            items:
+              type: integer
+      responses:
+        "200":
+          description: Asset geometry data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AssetGeometry"
+        "404":
+          description: Simulation not found
+
+  # ---------------------------------------------------------------------------
+  # Live Simulation
+  # ---------------------------------------------------------------------------
+  /live/assets:
+    get:
+      operationId: listLiveAssets
+      summary: Return all available asset types from the assets database
+      tags: [live]
+      responses:
+        "200":
+          description: List of available assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AssetInfo"
+        "503":
+          description: msd_reader module not available
+
+  /live:
+    x-websocket: true
+    get:
+      operationId: liveSimulation
+      summary: WebSocket endpoint for live physics simulation
+      tags: [live]
+      description: |
+        WebSocket lifecycle:
+        1. Client sends `configure` message with spawn configs
+        2. Server constructs Engine, spawns objects, sends `metadata`
+        3. Client sends `start` message with timestep and duration
+        4. Server streams `frame` messages; client may send `stop`
+        5. Server sends `complete` when duration reached or `stop` received
+      responses:
+        "101":
+          description: WebSocket upgrade
+
+# =============================================================================
+# WebSocket Message Schemas
+# =============================================================================
+x-websocket-messages:
+  client-to-server:
+    configure:
+      description: Configure the simulation by specifying objects to spawn
+      schema:
+        type: object
+        required: [type, objects]
+        properties:
+          type:
+            type: string
+            const: configure
+          objects:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpawnObjectConfig"
+            minItems: 1
+
+    start:
+      description: Start the simulation loop with given parameters
+      schema:
+        type: object
+        required: [type]
+        properties:
+          type:
+            type: string
+            const: start
+          timestep_ms:
+            type: integer
+            default: 16
+            description: Simulation step size in milliseconds
+            minimum: 1
+          duration_s:
+            type: number
+            default: 30.0
+            description: Total simulation time in seconds
+
+    stop:
+      description: Stop the running simulation
+      schema:
+        type: object
+        required: [type]
+        properties:
+          type:
+            type: string
+            const: stop
+
+  server-to-client:
+    metadata:
+      description: Body and asset metadata after configuration
+      schema:
+        type: object
+        required: [type, bodies, assets]
+        properties:
+          type:
+            type: string
+            const: metadata
+          bodies:
+            type: array
+            items:
+              $ref: "#/components/schemas/LiveBodyMetadata"
+          assets:
+            type: array
+            items:
+              $ref: "#/components/schemas/AssetGeometry"
+
+    frame:
+      description: Single simulation frame data
+      schema:
+        type: object
+        required: [type, data]
+        properties:
+          type:
+            type: string
+            const: frame
+          data:
+            $ref: "#/components/schemas/FrameData"
+
+    complete:
+      description: Simulation finished (duration reached or stop received)
+      schema:
+        type: object
+        required: [type, total_frames, elapsed_s]
+        properties:
+          type:
+            type: string
+            const: complete
+          total_frames:
+            type: integer
+          elapsed_s:
+            type: number
+
+    error:
+      description: Error occurred during simulation
+      schema:
+        type: object
+        required: [type, message]
+        properties:
+          type:
+            type: string
+            const: error
+          message:
+            type: string
+
+# =============================================================================
+# Components
+# =============================================================================
+components:
+  parameters:
+    SimId:
+      name: sim_id
+      in: path
+      required: true
+      description: Simulation identifier (database filename without extension)
+      schema:
+        type: string
+
+    FrameId:
+      name: frame_id
+      in: path
+      required: true
+      description: Frame ID
+      schema:
+        type: integer
+
+    BodyId:
+      name: body_id
+      in: path
+      required: true
+      description: Body ID
+      schema:
+        type: integer
+
+  schemas:
+    # -------------------------------------------------------------------------
+    # Primitives
+    # -------------------------------------------------------------------------
+    Vec3:
+      type: object
+      required: [x, y, z]
+      properties:
+        x: { type: number }
+        y: { type: number }
+        z: { type: number }
+
+    Quaternion:
+      type: object
+      required: [w, x, y, z]
+      properties:
+        w: { type: number }
+        x: { type: number }
+        y: { type: number }
+        z: { type: number }
+
+    # -------------------------------------------------------------------------
+    # Simulation
+    # -------------------------------------------------------------------------
+    SimulationInfo:
+      type: object
+      required: [id, name, path]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        path: { type: string }
+
+    SimulationMetadata:
+      type: object
+      required: [bodies, total_frames]
+      properties:
+        bodies:
+          type: array
+          items:
+            $ref: "#/components/schemas/BodyMetadata"
+        total_frames: { type: integer }
+
+    BodyMetadata:
+      type: object
+      required: [body_id, mass, restitution, friction]
+      properties:
+        body_id: { type: integer }
+        mass: { type: number }
+        restitution: { type: number }
+        friction: { type: number }
+        asset_id:
+          type: integer
+          nullable: true
+        is_environment:
+          type: boolean
+          default: false
+
+    # -------------------------------------------------------------------------
+    # Frames
+    # -------------------------------------------------------------------------
+    FrameInfo:
+      type: object
+      required: [frame_id, simulation_time]
+      properties:
+        frame_id: { type: integer }
+        simulation_time: { type: number }
+
+    FrameData:
+      type: object
+      required: [frame_id, simulation_time, states, collisions, solver]
+      properties:
+        frame_id: { type: integer }
+        simulation_time: { type: number }
+        states:
+          type: array
+          items:
+            $ref: "#/components/schemas/BodyState"
+        collisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CollisionInfo"
+        friction_constraints:
+          type: array
+          items:
+            $ref: "#/components/schemas/FrictionConstraintInfo"
+          default: []
+        solver:
+          oneOf:
+            - $ref: "#/components/schemas/SolverDiagnostics"
+            - type: "null"
+
+    BodyState:
+      type: object
+      required: [body_id, position, velocity, orientation]
+      properties:
+        body_id: { type: integer }
+        position:
+          $ref: "#/components/schemas/Vec3"
+        velocity:
+          $ref: "#/components/schemas/Vec3"
+        orientation:
+          $ref: "#/components/schemas/Quaternion"
+        angular_velocity:
+          oneOf:
+            - $ref: "#/components/schemas/Vec3"
+            - type: "null"
+
+    CollisionInfo:
+      type: object
+      required: [body_a_id, body_b_id, normal, penetration_depth, contacts]
+      properties:
+        body_a_id: { type: integer }
+        body_b_id: { type: integer }
+        normal:
+          $ref: "#/components/schemas/Vec3"
+        penetration_depth: { type: number }
+        contacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContactPoint"
+
+    ContactPoint:
+      type: object
+      required: [point_a, point_b, depth]
+      properties:
+        point_a:
+          $ref: "#/components/schemas/Vec3"
+        point_b:
+          $ref: "#/components/schemas/Vec3"
+        depth: { type: number }
+
+    SolverDiagnostics:
+      type: object
+      required: [iterations, residual, converged, num_constraints, num_contacts]
+      properties:
+        iterations: { type: integer }
+        residual: { type: number }
+        converged: { type: boolean }
+        num_constraints: { type: integer }
+        num_contacts: { type: integer }
+
+    FrictionConstraintInfo:
+      type: object
+      required:
+        - body_a_id
+        - body_b_id
+        - normal
+        - tangent1
+        - tangent2
+        - lever_arm_a
+        - lever_arm_b
+        - friction_coefficient
+        - normal_lambda
+      properties:
+        body_a_id: { type: integer }
+        body_b_id: { type: integer }
+        normal:
+          $ref: "#/components/schemas/Vec3"
+        tangent1:
+          $ref: "#/components/schemas/Vec3"
+        tangent2:
+          $ref: "#/components/schemas/Vec3"
+        lever_arm_a:
+          $ref: "#/components/schemas/Vec3"
+        lever_arm_b:
+          $ref: "#/components/schemas/Vec3"
+        friction_coefficient: { type: number }
+        normal_lambda: { type: number }
+        tangent1_lambda:
+          type: number
+          default: 0.0
+        tangent2_lambda:
+          type: number
+          default: 0.0
+
+    # -------------------------------------------------------------------------
+    # Energy & Velocity
+    # -------------------------------------------------------------------------
+    EnergyPoint:
+      type: object
+      required: [body_id, frame_id, simulation_time, linear_ke, rotational_ke, potential_e, total_e]
+      properties:
+        body_id: { type: integer }
+        frame_id: { type: integer }
+        simulation_time: { type: number }
+        linear_ke: { type: number }
+        rotational_ke: { type: number }
+        potential_e: { type: number }
+        total_e: { type: number }
+
+    SystemEnergyPoint:
+      type: object
+      required: [frame_id, simulation_time, total_system_e, delta_e]
+      properties:
+        frame_id: { type: integer }
+        simulation_time: { type: number }
+        total_system_e: { type: number }
+        delta_e: { type: number }
+
+    VelocityPoint:
+      type: object
+      required: [body_id, frame_id, simulation_time, vx, vy, vz, speed, omega_x, omega_y, omega_z, omega_magnitude]
+      properties:
+        body_id: { type: integer }
+        frame_id: { type: integer }
+        simulation_time: { type: number }
+        vx: { type: number }
+        vy: { type: number }
+        vz: { type: number }
+        speed: { type: number }
+        omega_x: { type: number }
+        omega_y: { type: number }
+        omega_z: { type: number }
+        omega_magnitude: { type: number }
+
+    # -------------------------------------------------------------------------
+    # Assets
+    # -------------------------------------------------------------------------
+    AssetGeometry:
+      type: object
+      required: [asset_id, name, positions, vertex_count]
+      properties:
+        asset_id: { type: integer }
+        name: { type: string }
+        positions:
+          type: array
+          items: { type: number }
+          description: "Flat [x,y,z,x,y,z,...] for Three.js BufferGeometry"
+        vertex_count: { type: integer }
+
+    AssetInfo:
+      type: object
+      required: [asset_id, name]
+      properties:
+        asset_id: { type: integer }
+        name: { type: string }
+
+    # -------------------------------------------------------------------------
+    # Live Simulation
+    # -------------------------------------------------------------------------
+    SpawnObjectConfig:
+      type: object
+      required: [asset_name, position, orientation, object_type]
+      properties:
+        asset_name: { type: string }
+        position:
+          type: array
+          items: { type: number }
+          minItems: 3
+          maxItems: 3
+          description: "[x, y, z] in metres"
+        orientation:
+          type: array
+          items: { type: number }
+          minItems: 3
+          maxItems: 3
+          description: "[pitch, roll, yaw] in radians"
+        object_type:
+          type: string
+          enum: [inertial, environment]
+        mass:
+          type: number
+          default: 10.0
+        restitution:
+          type: number
+          default: 0.8
+        friction:
+          type: number
+          default: 0.5
+
+    LiveBodyMetadata:
+      type: object
+      required: [body_id, asset_id, asset_name, mass, restitution, friction, is_environment]
+      properties:
+        body_id: { type: integer }
+        asset_id: { type: integer }
+        asset_name: { type: string }
+        mass: { type: number }
+        restitution: { type: number }
+        friction: { type: number }
+        is_environment: { type: boolean }
+
+# =============================================================================
+# pybind11 Python API Schemas
+# Non-standard OpenAPI extension documenting data shapes produced by C++ pybind11
+# bindings (msd_reader module). These are not REST/WebSocket schemas but serve
+# as the formal contract between the C++ engine layer and its Python consumers.
+#
+# Ticket: 0072e_live_simulation_cleanup (FR-2)
+# =============================================================================
+x-pybind11-schemas:
+
+  EngineBodyState:
+    description: |
+      Per-body state entry within EngineFrameState["states"].
+      Produced by EngineWrapper::getFrameState() in engine_bindings.cpp.
+      Both inertial (dynamic) and environment (static) bodies appear in this
+      list, distinguished by the is_environment flag.
+    type: object
+    required: [body_id, asset_id, position, velocity, orientation, angular_velocity, is_environment]
+    properties:
+      body_id:
+        type: integer
+        description: Instance ID assigned at spawn time (getInstanceId())
+      asset_id:
+        type: integer
+        description: Asset type ID from the assets database (getAssetId())
+      position:
+        $ref: "#/components/schemas/Vec3"
+        description: World-space position in metres
+      velocity:
+        $ref: "#/components/schemas/Vec3"
+        description: Linear velocity in m/s; always {x:0,y:0,z:0} for environment bodies
+      orientation:
+        $ref: "#/components/schemas/Quaternion"
+        description: Orientation as unit quaternion (WXYZ ordering)
+      angular_velocity:
+        $ref: "#/components/schemas/Vec3"
+        description: Angular velocity in rad/s; always {x:0,y:0,z:0} for environment bodies
+      is_environment:
+        type: boolean
+        description: |
+          True for static environment objects (AssetEnvironment), false for
+          dynamic inertial objects (AssetInertial). Use this to distinguish
+          body types without referencing the metadata message.
+
+  EngineFrameState:
+    description: |
+      Return value of engine.get_frame_state() (msd_reader.Engine.get_frame_state).
+      Produced by EngineWrapper::getFrameState() in engine_bindings.cpp.
+      Consumed by the live simulation WebSocket endpoint (live.py) which forwards
+      it as the "data" field of each "frame" WebSocket message.
+
+      Body ordering: inertial bodies first (in spawn order), then environment
+      bodies (in spawn order). Both groups use getInstanceId() for body_id.
+
+      Ticket: 0072a_engine_pybind_bindings (original)
+               0072e_live_simulation_cleanup (FR-1 extension — environment bodies added)
+    type: object
+    required: [simulation_time, states]
+    properties:
+      simulation_time:
+        type: number
+        description: Absolute simulation time in seconds (worldModel.getTime() / 1000.0)
+      states:
+        type: array
+        description: |
+          States of all bodies in the simulation. Inertial (dynamic) bodies appear
+          first (in spawn order), followed by environment (static) bodies (in spawn order).
+          All entries include the is_environment discriminator field.
+        items:
+          type: object
+          description: EngineBodyState — see x-pybind11-schemas/EngineBodyState

@@ -1,0 +1,116 @@
+@startuml 0072e_live_simulation_cleanup_sequence
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+title Live Simulation WebSocket Lifecycle\n(0072e post-cleanup wire protocol)
+
+actor "Browser\n(live-app.js)" as Browser
+participant "FastAPI\nWebSocket\n(live.py)" as Server
+participant "SpawnObject\nConfig\n(models.py)" as Pydantic
+participant "msd_reader\nEngine\n(pybind11)" as Engine
+participant "EngineWrapper::\ngetFrameState()\n(engine_bindings.cpp)" as CPP
+
+== Phase 1: Configure ==
+
+Browser -> Server : WebSocket connect
+activate Server
+
+Browser -> Server : {"type": "configure",\n"objects": [\n  {"asset_name": "cube",\n   "position": [0,0,5],\n   "orientation": [0,0,0],\n   "object_type": "inertial",\n   "mass": 10.0, "restitution": 0.8, "friction": 0.5},\n  {"asset_name": "plane",\n   "position": [0,0,0],\n   "orientation": [0,0,0],\n   "object_type": "environment"}\n  // FR-6: mass/restitution/friction omitted\n]}
+
+Server -> Pydantic : SpawnObjectConfig(**obj) for each object
+note over Pydantic
+  FR-3: object_type validated against
+  Literal["inertial", "environment"]
+  FR-4: position and orientation must
+  have exactly 3 elements
+  FR-6: missing mass/restitution/friction
+  filled with defaults (10.0, 0.8, 0.5)
+end note
+
+alt Validation failure (FR-3 or FR-4)
+  Pydantic --> Server : ValidationError
+  Server -> Browser : {"type": "error", "message": "..."}
+  Server -> Browser : close(1011)
+else Validation success
+  Pydantic --> Server : SpawnObjectConfig instances
+end
+
+Server -> Engine : Engine(assets_db_path)
+activate Engine
+
+Server -> Engine : engine.spawn_inertial_object(\n  "cube", *cfg.position, *cfg.orientation,\n  cfg.mass, cfg.restitution, cfg.friction)
+note right: body_id = 1 assigned by Engine
+
+Server -> Engine : engine.spawn_environment_object(\n  "plane", *cfg.position, *cfg.orientation)
+note right: body_id = 2 assigned by Engine
+
+Server -> Engine : engine.get_collision_vertices(asset_id)
+Engine --> Server : geometry data
+
+Server -> Browser : {"type": "metadata",\n"bodies": [\n  {body_id:1, asset_id:3, is_environment:false, ...},\n  {body_id:2, asset_id:7, is_environment:true, ...}\n],\n"assets": [{asset_id:3, positions:[...]}, ...]}
+
+== Phase 2: Start ==
+
+Browser -> Server : {"type": "start",\n"timestep_ms": 16,\n"duration_s": 30.0}
+
+Server -> Server : create stop_requested asyncio.Event\ncreate _listen_for_stop task
+
+== Phase 3: Simulation Loop ==
+
+loop every timestep_ms (until duration or stop)
+
+  Server -> Engine : engine.update(sim_time_ms)\n[asyncio.to_thread]
+  Engine --> Server : (void)
+
+  Server -> CPP : engine.get_frame_state()\n[asyncio.to_thread]
+  activate CPP
+
+  note over CPP
+    Iterates inertial assets (unchanged):
+      bodyState["is_environment"] = false  ← FR-1 new field
+
+    Iterates environment assets (FR-1 new loop):
+      bodyState["body_id"] = asset.getInstanceId()
+      bodyState["asset_id"] = asset.getAssetId()
+      bodyState["position"] = frame.getOrigin()
+      bodyState["velocity"] = {x:0, y:0, z:0}
+      bodyState["orientation"] = static_state_.orientation
+      bodyState["angular_velocity"] = {x:0, y:0, z:0}
+      bodyState["is_environment"] = true
+  end note
+
+  CPP --> Server : {"simulation_time": 0.016,\n"states": [\n  {body_id:1, ..., is_environment:false},\n  {body_id:2, position:{x:0,y:0,z:0},\n   velocity:{x:0,y:0,z:0},\n   angular_velocity:{x:0,y:0,z:0},\n   is_environment:true}\n]}
+  deactivate CPP
+
+  Server -> Server : frame_dict["frame_id"] = total_frames
+
+  Server -> Browser : {"type": "frame",\n"data": {\n  "simulation_time": 0.016,\n  "frame_id": 0,\n  "states": [\n    {body_id:1, ..., is_environment:false},\n    {body_id:2, velocity:{0,0,0}, is_environment:true}\n  ]\n}}
+
+end
+
+== Phase 4: Termination ==
+
+alt Duration elapsed
+  Server -> Browser : {"type": "complete",\n"total_frames": N, "elapsed_s": T}
+else Client sends stop
+  Browser -> Server : {"type": "stop"}
+  Server -> Server : stop_requested.set()
+  Server -> Browser : {"type": "complete",\n"total_frames": N, "elapsed_s": T}
+else WebSocketDisconnect
+  Browser -> Server : (disconnect)
+  Server -> Server : caught silently
+end
+
+Server -> Server : engine = None\n(deterministic C++ resource release)
+deactivate Engine
+deactivate Server
+
+== FR-5: Dead Code (REMOVED) ==
+note over Server
+  _run_simulation() at live.py lines 88-134 is deleted.
+  It was never called — the simulation loop above
+  (with stop-signal support via asyncio.Event) is the
+  only real implementation.
+end note
+
+@enduml

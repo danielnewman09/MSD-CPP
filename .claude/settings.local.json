@@ -51,7 +51,9 @@
       "Bash(PYTHONPATH=/Users/danielnewman/Documents/GitHub/replay-gtest/build/Debug/debug /Users/danielnewman/Documents/GitHub/replay-gtest/replay/.venv/bin/pytest:*)",
       "Bash(PYTHONPATH=/Users/danielnewman/Documents/GitHub/replay-gtest/build/Debug/debug .venv/bin/pytest:*)",
       "Bash(awk:*)",
-      "Bash(conan build:*)"
+      "Bash(conan build:*)",
+      "Bash(echo:*)",
+      "Bash(gh issue create:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

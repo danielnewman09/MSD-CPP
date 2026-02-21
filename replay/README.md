@@ -96,6 +96,12 @@ Interactive API documentation available at:
 
 - `GET /simulations/{id}/assets` - Geometry data for all bodies
 
+### Live Simulation (Ticket: 0072b)
+
+- `WS  /api/v1/live` - WebSocket: configure, start, stream frames, stop
+- `GET /api/v1/live/assets` - List available asset types for live simulation
+- `GET /live` - Live simulation HTML viewer (see ticket 0072c)
+
 ### Energy
 
 - `GET /simulations/{id}/energy` - System-level energy timeseries
@@ -120,11 +126,17 @@ replay/
       simulations.py          # /simulations endpoints
       frames.py               # /frames endpoints
       assets.py               # /assets endpoints
+      live.py                 # WebSocket /live endpoint + GET /live/assets (0072b)
     services/
       simulation_service.py   # Database query wrapper
       geometry_service.py     # Geometry conversion
   static/
-    index.html                # Placeholder (Three.js frontend in 0056e)
+    index.html                # Replay viewer (Three.js frontend in 0056e)
+    live.html                 # Live simulation viewer (0072c)
+    js/
+      live-app.js             # WebSocket client + UI controller (0072c)
+    css/
+      live.css                # Styles for live simulation page (0072c)
 ```
 
 ## MCP Server for AI-Assisted Physics Debugging

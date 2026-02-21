@@ -733,9 +733,9 @@ TEST_F(ReplayEnabledTest, ParameterIsolation_H8_TiltedCube_FeedbackLoop)
     Eigen::Quaterniond::Identity();
 
   ReferenceFrame cubeFrame{Coordinate{0.0, 0.0, 0.6}, tiltQ};
-  world().spawnObject(1, cubeHull, 10.0, cubeFrame);
+  const auto& cube = world().spawnObject(1, cubeHull, 10.0, cubeFrame);
 
-  uint32_t cubeId = 1;
+  uint32_t cubeId = cube.getInstanceId();
   world().getObject(cubeId).setCoefficientOfRestitution(0.0);
   world().getObject(cubeId).getInertialState().velocity = Velocity{0.0, 0.0, 0.0};
 

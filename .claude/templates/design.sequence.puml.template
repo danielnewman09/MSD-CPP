@@ -1,0 +1,62 @@
+@startuml
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize 200
+
+title {Feature Name} — Cross-Language Sequence Diagram
+
+actor User
+participant "Frontend\n(Three.js)" as FE
+participant "Backend\n(FastAPI)" as BE
+participant "C++ Engine\n(pybind11)" as CPP
+
+== Setup ==
+
+User -> FE: {user action}
+activate FE
+FE -> BE: {REST or WS message}
+activate BE
+BE -> CPP: {pybind11 call}
+activate CPP
+CPP --> BE: {return value}
+deactivate CPP
+BE --> FE: {response or WS message}
+deactivate BE
+FE --> User: {UI update}
+deactivate FE
+
+== Steady State ==
+
+loop {description of repeated action}
+    FE -> BE: {request}
+    activate BE
+    BE -> CPP: {engine call}
+    activate CPP
+    CPP --> BE: {frame data}
+    deactivate CPP
+    BE --> FE: {streamed response}
+    deactivate BE
+    FE -> FE: {render frame}
+end
+
+== Error Path ==
+
+FE -> BE: {request}
+activate BE
+BE -> CPP: {engine call}
+activate CPP
+CPP --> BE: {exception}
+deactivate CPP
+BE --> FE: {error response}
+deactivate BE
+FE --> User: {error message}
+
+== Teardown ==
+
+User -> FE: {stop/disconnect}
+FE -> BE: {close message}
+BE -> CPP: {cleanup}
+FE --> User: {final state}
+
+@enduml

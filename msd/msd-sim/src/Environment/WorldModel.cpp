@@ -114,7 +114,7 @@ const AssetEnvironment& WorldModel::spawnEnvironmentObject(
   ConvexHull& hull,
   const ReferenceFrame& origin)
 {
-  auto instanceId = ++environmentAssetIdCounter_;
+  auto instanceId = ++nextInstanceId_;
   environmentalAssets_.emplace_back(
     assetId, instanceId, hull, origin, 0.5, 0.5);
 
@@ -280,7 +280,7 @@ void WorldModel::updateCollisions(double dt)
 
 uint32_t WorldModel::getInertialAssetId()
 {
-  return ++inertialAssetIdCounter_;
+  return ++nextInstanceId_;
 }
 
 // ========== Potential Energy Configuration (ticket 0030) ==========

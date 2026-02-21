@@ -47,6 +47,7 @@ Before running checks, identify:
 - Feature name (for locating design documents)
 - Which components were implemented (to scope test runs if needed)
 - Whether benchmarks are specified in the design
+- **Languages** from ticket metadata (C++, Python, Frontend — determines which gates to run)
 
 ## Quality Gate Process
 
@@ -126,6 +127,44 @@ ctest --preset conan-release --output-on-failure 2>&1
 
 **Pass Criteria:** No regressions exceeding threshold (default 10%)
 
+### Gate 5: Python Test Verification (Conditional)
+
+**Check if applicable:** Only run if `Python` is in the ticket's Languages metadata.
+
+**Execute:**
+```bash
+# Run Python tests for the replay server
+cd replay && python -m pytest tests/ -v 2>&1
+```
+
+**Capture:**
+- Exit code
+- Number of tests run
+- Number of tests passed/failed
+- Names and output of any failing tests
+
+**Pass Criteria:** All tests pass, no import errors
+
+### Gate 6: Frontend Validation (Conditional)
+
+**Check if applicable:** Only run if `Frontend` is in the ticket's Languages metadata.
+
+**Execute:**
+```bash
+# Basic JS syntax validation (check for syntax errors)
+for f in $(find replay/static/js -name '*.js' 2>/dev/null); do
+    node --check "$f" 2>&1
+done
+```
+
+**Capture:**
+- Exit code for each file
+- Any syntax errors found
+
+**Pass Criteria:** No JavaScript syntax errors
+
+**Note:** There is no formal JS test framework currently. This gate performs basic validation only.
+
 ## Output Format
 
 Create quality gate report at `docs/designs/{feature-name}/quality-gate-report.md`:
@@ -192,6 +231,31 @@ Create quality gate report at `docs/designs/{feature-name}/quality-gate-report.m
 
 ---
 
+## Gate 5: Python Tests (if Python in Languages)
+
+**Status**: PASSED / FAILED / N/A
+**Reason for N/A**: {If N/A, explain: "Python not in Languages"}
+**Tests Run**: {N}
+**Tests Passed**: {N}
+**Tests Failed**: {N}
+
+### Failing Tests
+{If any, list each test name with failure output}
+{If none: "All tests passed"}
+
+---
+
+## Gate 6: Frontend Validation (if Frontend in Languages)
+
+**Status**: PASSED / FAILED / N/A
+**Reason for N/A**: {If N/A, explain: "Frontend not in Languages"}
+
+### Syntax Errors
+{If any, list each file with error}
+{If none: "No syntax errors found"}
+
+---
+
 ## Summary
 
 | Gate | Status | Notes |
@@ -200,6 +264,8 @@ Create quality gate report at `docs/designs/{feature-name}/quality-gate-report.m
 | Tests | {PASSED/FAILED} | {N} passed, {N} failed |
 | Static Analysis | {PASSED/FAILED} | {N} warnings, {N} errors |
 | Benchmarks | {PASSED/FAILED/N/A} | {brief note} |
+| Python Tests | {PASSED/FAILED/N/A} | {brief note} |
+| Frontend Validation | {PASSED/FAILED/N/A} | {brief note} |
 
 **Overall**: {PASSED/FAILED}
 
