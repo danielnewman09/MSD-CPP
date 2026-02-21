@@ -2,12 +2,12 @@
 
 ## Status
 - [x] Draft
-- [ ] Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Implementation
-- [ ] Implementation Complete
+- [x] Design Complete — Awaiting Review
+- [x] Design Approved — Ready for Implementation
+- [x] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Implementation Complete
 **Type**: Performance
 **Priority**: Medium
 **Created**: 2026-02-21
@@ -102,3 +102,24 @@ In `CollisionPipeline::solveConstraintsWithWarmStart()`, `extractContactPoints()
   - Identified from allocation churn investigation of StackCollapse/16 profiling data
   - All changes are additive (reserve calls) or subtractive (remove duplicate call)
   - No design phase needed — changes are mechanical
+
+### Implementation Phase
+- **Started**: 2026-02-21
+- **Completed**: 2026-02-21
+- **Branch**: `0071e-trivial-allocation-elimination`
+- **PR**: #91 (draft)
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp` — added `pairContactPoints_` member
+  - `msd/msd-sim/src/Physics/Collision/CollisionPipeline.cpp` — all four allocation fixes
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp` — pre-reserve in `flattenConstraints()`
+- **Notes**:
+  - Change 1: Pre-computed `extractContactPoints()` once per pair into `pairContactPoints_`
+    member (indexed by `collisions_` index). Both warm-start query and cache-update loops
+    now reference pre-computed data. `pairContactPoints_` cleared in `clearEphemeralState()`.
+  - Change 2: Added `allConstraints_.reserve(collisions_.size() * 2 * (anyFriction ? 2 : 1))`
+    and `pairRanges_.reserve(collisions_.size())` in `createConstraints()`.
+  - Change 3: Added pre-pass in `flattenConstraints()` computing `totalRows`, then reserved
+    all 5 `FlattenedConstraints` vectors before the constraint iteration loop.
+  - Change 4: Added first-frame `collisions_.reserve()` estimate in `execute()`;
+    after frame 1 `clear()` preserves capacity (no-op).
+  - All 718 existing tests pass with no regressions.
