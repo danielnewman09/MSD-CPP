@@ -5,6 +5,7 @@ Ticket: 0056d_fastapi_backend
 Ticket: 0072b_websocket_simulation_endpoint
 """
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -14,11 +15,23 @@ from fastapi.staticfiles import StaticFiles
 
 from .routes import assets_router, frames_router, live_router, simulations_router
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create a persistent msd_reader.Engine for the REST asset-list endpoint."""
+    import msd_reader
+    from .config import config
+
+    app.state.engine = msd_reader.Engine(str(config.assets_db_path))
+    yield
+
+
 # Create FastAPI app
 app = FastAPI(
     title="MSD Replay API",
     description="REST API for MSD simulation replay visualization",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Add CORS middleware for development

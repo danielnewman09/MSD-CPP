@@ -23,15 +23,12 @@ Wire protocol (server -> client)
 import asyncio
 import time
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 
 from ..config import config
 from ..models import AssetGeometry, AssetInfo, LiveBodyMetadata, SpawnObjectConfig
 
-try:
-    import msd_reader
-except ImportError:
-    msd_reader = None
+import msd_reader
 
 router = APIRouter(prefix="/live", tags=["live"])
 
@@ -82,65 +79,85 @@ def _build_asset_geometries(engine, asset_names: list[str]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# WebSocket endpoint
+# LiveSimulationSession: manages a single WebSocket simulation lifecycle
 # ---------------------------------------------------------------------------
 
-@router.websocket("")
-async def live_simulation(websocket: WebSocket) -> None:
-    """WebSocket endpoint for live physics simulation.
+class LiveSimulationSession:
+    """Manages a single WebSocket live simulation session.
 
-    Lifecycle
-    ---------
-    1. Client sends ``configure`` message with spawn configs.
-    2. Server constructs Engine, spawns objects, sends ``metadata``.
-    3. Client sends ``start`` message with timestep and duration.
-    4. Server streams ``frame`` messages; client may send ``stop``.
-    5. Server sends ``complete`` when duration is reached or ``stop`` received.
+    Each session creates an isolated Engine instance so that physics state
+    is fully independent across concurrent connections.
 
-    Each connection creates an isolated Engine instance.
+    Lifecycle:
+        1. Client sends ``configure`` — server constructs Engine, spawns objects,
+           sends ``metadata``.
+        2. Client sends ``start`` — server streams ``frame`` messages.
+        3. Client may send ``stop`` at any time; server sends ``complete``.
     """
-    if msd_reader is None:
-        await websocket.close(code=1011, reason="msd_reader module not available")
-        return
 
-    await websocket.accept()
-    engine = None
+    def __init__(self, websocket: WebSocket, db_path: str):
+        self.websocket = websocket
+        self.db_path = db_path
+        self.engine = None
 
-    try:
-        # ------------------------------------------------------------------
-        # Phase 1: configure
-        # ------------------------------------------------------------------
-        configure_msg: dict = await websocket.receive_json()
+    async def run(self) -> None:
+        """Main entry point — orchestrates the full session lifecycle."""
+        await self.websocket.accept()
+        try:
+            await self._configure()
+            timestep_ms, duration_s = await self._wait_for_start()
+            if timestep_ms > 0:
+                await self._run_simulation(timestep_ms, duration_s)
+        except WebSocketDisconnect:
+            # Client disconnected mid-session — clean up silently
+            pass
+        except Exception as exc:
+            # Best-effort error reporting before closing
+            try:
+                await self.websocket.send_json({"type": "error", "message": str(exc)})
+            except Exception:
+                pass
+            try:
+                await self.websocket.close()
+            except Exception:
+                pass
+        finally:
+            # Engine holds C++ resources; release deterministically
+            self.engine = None
+
+    async def _configure(self) -> list[LiveBodyMetadata]:
+        """Phase 1: receive configure msg, construct Engine, spawn objects, send metadata."""
+        configure_msg: dict = await self.websocket.receive_json()
         if configure_msg.get("type") != "configure":
-            await websocket.send_json(
+            await self.websocket.send_json(
                 {"type": "error", "message": "Expected 'configure' message first"}
             )
-            await websocket.close()
-            return
+            await self.websocket.close()
+            return []
 
         raw_objects: list[dict] = configure_msg.get("objects", [])
         if not raw_objects:
-            await websocket.send_json(
+            await self.websocket.send_json(
                 {"type": "error", "message": "'configure' must include at least one object"}
             )
-            await websocket.close()
-            return
+            await self.websocket.close()
+            return []
 
         spawn_configs = [SpawnObjectConfig(**obj) for obj in raw_objects]
 
         # Construct Engine (one per connection for memory isolation)
-        engine = msd_reader.Engine(str(config.assets_db_path))
+        self.engine = msd_reader.Engine(self.db_path)
 
         # Validate asset names before spawning
-        all_assets: list[tuple[int, str]] = engine.list_assets()
+        all_assets: list[tuple[int, str]] = self.engine.list_assets()
         valid_names: set[str] = {name for _, name in all_assets}
         for cfg in spawn_configs:
             if cfg.asset_name not in valid_names:
-                await websocket.send_json(
+                await self.websocket.send_json(
                     {"type": "error", "message": f"Asset '{cfg.asset_name}' not found"}
                 )
-                await websocket.close()
-                return
+                await self.websocket.close()
+                return []
 
         # Spawn objects and capture C++-assigned instance_id for each body.
         # FR-7 (0072e): Use result["instance_id"] as body_id rather than
@@ -153,7 +170,7 @@ async def live_simulation(websocket: WebSocket) -> None:
 
         for cfg in spawn_configs:
             if cfg.object_type == "inertial":
-                result = engine.spawn_inertial_object(
+                result = self.engine.spawn_inertial_object(
                     cfg.asset_name,
                     *cfg.position,      # unpack [x, y, z] → x, y, z scalars
                     *cfg.orientation,   # unpack [pitch, roll, yaw] → scalars
@@ -162,7 +179,7 @@ async def live_simulation(websocket: WebSocket) -> None:
                     cfg.friction,
                 )
             else:
-                result = engine.spawn_environment_object(
+                result = self.engine.spawn_environment_object(
                     cfg.asset_name,
                     *cfg.position,      # unpack [x, y, z] → x, y, z scalars
                     *cfg.orientation,   # unpack [pitch, roll, yaw] → scalars
@@ -183,10 +200,10 @@ async def live_simulation(websocket: WebSocket) -> None:
         # Build geometry for unique assets referenced in this session
         asset_names_ordered = [cfg.asset_name for cfg in spawn_configs]
         asset_geometries = await asyncio.to_thread(
-            _build_asset_geometries, engine, asset_names_ordered
+            _build_asset_geometries, self.engine, asset_names_ordered
         )
 
-        await websocket.send_json(
+        await self.websocket.send_json(
             {
                 "type": "metadata",
                 "bodies": [bm.model_dump() for bm in body_metadata],
@@ -194,35 +211,40 @@ async def live_simulation(websocket: WebSocket) -> None:
             }
         )
 
-        # ------------------------------------------------------------------
-        # Phase 2: wait for start (or stop)
-        # ------------------------------------------------------------------
-        start_msg: dict = await websocket.receive_json()
+        return body_metadata
+
+    async def _wait_for_start(self) -> tuple[int, float]:
+        """Phase 2: await start/stop message, return (timestep_ms, duration_s).
+
+        Returns (0, 0.0) if the client sends ``stop`` before ``start``.
+        """
+        start_msg: dict = await self.websocket.receive_json()
         msg_type = start_msg.get("type")
         if msg_type == "stop":
-            await websocket.send_json(
+            await self.websocket.send_json(
                 {"type": "complete", "total_frames": 0, "elapsed_s": 0.0}
             )
-            return
+            return (0, 0.0)
         if msg_type != "start":
-            await websocket.send_json(
+            await self.websocket.send_json(
                 {"type": "error", "message": f"Expected 'start' or 'stop', got '{msg_type}'"}
             )
-            await websocket.close()
-            return
+            await self.websocket.close()
+            return (0, 0.0)
 
         timestep_ms: int = int(start_msg.get("timestep_ms", 16))
         duration_s: float = float(start_msg.get("duration_s", 30.0))
         if timestep_ms <= 0:
-            await websocket.send_json(
+            await self.websocket.send_json(
                 {"type": "error", "message": "'timestep_ms' must be positive"}
             )
-            await websocket.close()
-            return
+            await self.websocket.close()
+            return (0, 0.0)
 
-        # ------------------------------------------------------------------
-        # Phase 3: simulation loop with stop-signal support
-        # ------------------------------------------------------------------
+        return (timestep_ms, duration_s)
+
+    async def _run_simulation(self, timestep_ms: int, duration_s: float) -> None:
+        """Phase 3: simulation loop with stop-signal support."""
         sim_start = time.monotonic()
 
         # Run simulation loop; client can send "stop" concurrently
@@ -232,7 +254,7 @@ async def live_simulation(websocket: WebSocket) -> None:
             """Background task: watch for a stop message from the client."""
             try:
                 while True:
-                    msg = await websocket.receive_json()
+                    msg = await self.websocket.receive_json()
                     if msg.get("type") == "stop":
                         stop_requested.set()
                         return
@@ -250,11 +272,11 @@ async def live_simulation(websocket: WebSocket) -> None:
             while sim_time_ms <= max_time_ms and not stop_requested.is_set():
                 t0 = time.monotonic()
 
-                await asyncio.to_thread(engine.update, sim_time_ms)
-                frame_dict: dict = await asyncio.to_thread(engine.get_frame_state)
+                await asyncio.to_thread(self.engine.update, sim_time_ms)
+                frame_dict: dict = await asyncio.to_thread(self.engine.get_frame_state)
                 frame_dict["frame_id"] = total_frames
 
-                await websocket.send_json({"type": "frame", "data": frame_dict})
+                await self.websocket.send_json({"type": "frame", "data": frame_dict})
 
                 sim_time_ms += timestep_ms
                 total_frames += 1
@@ -272,7 +294,7 @@ async def live_simulation(websocket: WebSocket) -> None:
                 pass
 
         elapsed_s = time.monotonic() - sim_start
-        await websocket.send_json(
+        await self.websocket.send_json(
             {
                 "type": "complete",
                 "total_frames": total_frames,
@@ -280,22 +302,19 @@ async def live_simulation(websocket: WebSocket) -> None:
             }
         )
 
-    except WebSocketDisconnect:
-        # Client disconnected mid-session — clean up silently
-        pass
-    except Exception as exc:
-        # Best-effort error reporting before closing
-        try:
-            await websocket.send_json({"type": "error", "message": str(exc)})
-        except Exception:
-            pass
-        try:
-            await websocket.close()
-        except Exception:
-            pass
-    finally:
-        # Engine holds C++ resources; release deterministically
-        engine = None
+
+# ---------------------------------------------------------------------------
+# WebSocket endpoint
+# ---------------------------------------------------------------------------
+
+@router.websocket("")
+async def live_simulation(websocket: WebSocket) -> None:
+    """WebSocket endpoint for live physics simulation.
+
+    Each connection creates an isolated Engine instance.
+    """
+    session = LiveSimulationSession(websocket, str(config.assets_db_path))
+    await session.run()
 
 
 # ---------------------------------------------------------------------------
@@ -303,18 +322,14 @@ async def live_simulation(websocket: WebSocket) -> None:
 # ---------------------------------------------------------------------------
 
 @router.get("/assets", response_model=list[AssetInfo])
-async def list_live_assets() -> list[AssetInfo]:
+async def list_live_assets(request: Request) -> list[AssetInfo]:
     """Return all available asset types from the assets database.
 
-    Uses a temporary Engine instance to query available assets.
+    Uses the persistent Engine instance from app.state (created at startup).
 
     Returns:
         List of AssetInfo with asset_id and name.
     """
-    if msd_reader is None:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=503, detail="msd_reader module not available")
-
-    engine = msd_reader.Engine(str(config.assets_db_path))
+    engine = request.app.state.engine
     assets: list[tuple[int, str]] = engine.list_assets()
     return [AssetInfo(asset_id=aid, name=name) for aid, name in assets]

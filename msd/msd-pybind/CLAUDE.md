@@ -188,6 +188,16 @@ assets = engine.list_assets()        # [(asset_id, "name"), ...]
 vertices = engine.get_collision_vertices(asset_id)  # [(x, y, z), ...]
 ```
 
+### Sync Verification
+
+`EngineWrapper` must stay in sync with `msd_sim::Engine` (Engine.hpp). After modifying Engine's public API, verify parity using the codebase MCP tools:
+
+```
+get_class_members Engine
+```
+
+Compare the listed public methods with the `bind_engine()` function in `engine_bindings.cpp` to ensure all relevant methods are exposed.
+
 ### Design Pattern
 
 Follows the `DatabaseWrapper` / `AssetRegistryWrapper` pattern: all C++ to Python type conversion (Eigen `Coordinate`, `AngularCoordinate`, quaternions) is done inside the C++ wrapper. No pybind11 Eigen type casters are used. The Python API only sees plain dicts, lists, and tuples.

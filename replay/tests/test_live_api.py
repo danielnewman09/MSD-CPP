@@ -104,14 +104,18 @@ def _make_mock_engine(asset_list: list[tuple[int, str]] | None = None) -> MagicM
 
 
 class TestListLiveAssets:
-    """Tests for GET /api/v1/live/assets."""
+    """Tests for GET /api/v1/live/assets.
+
+    The endpoint uses the persistent Engine from app.state (created at startup
+    via the lifespan context manager). Tests override app.state.engine with a
+    mock to control asset data.
+    """
 
     def test_returns_200_with_asset_list(self, client: TestClient) -> None:
-        """Endpoint returns 200 and a non-empty list when msd_reader available."""
+        """Endpoint returns 200 and a non-empty list."""
         mock_engine = _make_mock_engine()
-        with patch("replay.routes.live.msd_reader") as mock_mod:
-            mock_mod.Engine.return_value = mock_engine
-            response = client.get("/api/v1/live/assets")
+        app.state.engine = mock_engine
+        response = client.get("/api/v1/live/assets")
 
         assert response.status_code == 200
         data = response.json()
@@ -121,9 +125,8 @@ class TestListLiveAssets:
     def test_asset_schema(self, client: TestClient) -> None:
         """Each item has asset_id (int) and name (str)."""
         mock_engine = _make_mock_engine([(3, "sphere"), (7, "capsule")])
-        with patch("replay.routes.live.msd_reader") as mock_mod:
-            mock_mod.Engine.return_value = mock_engine
-            response = client.get("/api/v1/live/assets")
+        app.state.engine = mock_engine
+        response = client.get("/api/v1/live/assets")
 
         assert response.status_code == 200
         data = response.json()
@@ -131,12 +134,6 @@ class TestListLiveAssets:
         ids = {item["asset_id"] for item in data}
         assert names == {"sphere", "capsule"}
         assert ids == {3, 7}
-
-    def test_returns_503_when_msd_reader_missing(self, client: TestClient) -> None:
-        """Returns 503 if msd_reader is unavailable (simulated by patching to None)."""
-        with patch("replay.routes.live.msd_reader", None):
-            response = client.get("/api/v1/live/assets")
-        assert response.status_code == 503
 
 
 # ---------------------------------------------------------------------------
@@ -330,14 +327,6 @@ class TestWebSocketLifecycle:
 
         assert msg["type"] == "error"
         assert "nonexistent_asset" in msg["message"]
-
-    def test_missing_msd_reader_closes_connection(self, client: TestClient) -> None:
-        """If msd_reader is None the WebSocket closes with an error code."""
-        with patch("replay.routes.live.msd_reader", None):
-            with pytest.raises(Exception):
-                # TestClient raises when server closes with code != 1000
-                with client.websocket_connect("/api/v1/live") as ws:
-                    ws.receive_text()  # triggers the close
 
     def test_wrong_first_message_type_returns_error(self, client: TestClient) -> None:
         """Sending 'start' before 'configure' triggers an error message."""
@@ -638,6 +627,32 @@ class TestDeadCodeRemoval:
             "_run_simulation should have been removed as dead code (FR-5, 0072e). "
             "The inline simulation loop in live_simulation() is the only implementation."
         )
+
+
+# ---------------------------------------------------------------------------
+# LiveSimulationSession class verification (PR #88 refactor)
+# ---------------------------------------------------------------------------
+
+
+class TestLiveSimulationSessionExists:
+    """Verify that the LiveSimulationSession class was introduced by the refactor."""
+
+    def test_class_exists_in_module(self) -> None:
+        """LiveSimulationSession class should be defined in the live module."""
+        import replay.routes.live as live_module
+
+        assert hasattr(live_module, "LiveSimulationSession"), (
+            "LiveSimulationSession class should exist in replay.routes.live"
+        )
+
+    def test_class_has_expected_methods(self) -> None:
+        """LiveSimulationSession should have run, _configure, _wait_for_start, _run_simulation."""
+        from replay.routes.live import LiveSimulationSession
+
+        assert hasattr(LiveSimulationSession, "run")
+        assert hasattr(LiveSimulationSession, "_configure")
+        assert hasattr(LiveSimulationSession, "_wait_for_start")
+        assert hasattr(LiveSimulationSession, "_run_simulation")
 
 
 # ---------------------------------------------------------------------------

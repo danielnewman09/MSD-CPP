@@ -1,5 +1,9 @@
 // Ticket: 0072a_engine_pybind_bindings
 // Python bindings for msd_sim::Engine — live simulation control from Python
+//
+// SYNC NOTE: EngineWrapper must stay in sync with msd_sim::Engine (Engine.hpp).
+// After modifying Engine's public API, verify parity using the codebase MCP
+// tools: `get_class_members Engine` and compare with the methods exposed below.
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
