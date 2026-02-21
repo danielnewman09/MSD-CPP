@@ -18,7 +18,7 @@
 - [x] Test Writing Complete — Awaiting Quality Gate
 - [x] Quality Gate Passed — Awaiting Review
 - [x] Approved — Ready to Merge
-- [ ] Merged / Complete
+- [x] Merged / Complete
 
 ## Metadata
 - **Created**: 2026-02-20
@@ -387,11 +387,16 @@ These are not production-breaking bugs, but they represent contract violations a
   R3 (informational): `test_frame_schema` asserts `"collisions" in data`, but the live simulation frame dict from `get_frame_state()` (the real C++ implementation) does not include a `collisions` key — only `simulation_time` and `states`. The mock's `get_frame_state.return_value` includes `"collisions": []` which is why the test passes. This is a pre-existing issue from 0072b tests, out of scope for this ticket.
 
 ### Documentation Update Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
 - **CLAUDE.md Updates**:
-- **Diagrams Indexed**:
+  - `msd/msd-sim/CLAUDE.md` — Trimmed Engine section from ~70 lines to 4-line summary + MCP tool pointer (`find_class Engine`, `get_class_members Engine`)
+  - `msd/msd-pybind/CLAUDE.md` — Added "Sync Verification" subsection under Engine Bindings with `get_class_members Engine` guidance
+- **Doxygen Updates**:
+  - `msd/msd-sim/src/Engine.hpp` — Added class-level, constructor, `update()`, and `getAssetRegistry()` Doxygen comments
+  - `msd/msd-pybind/src/engine_bindings.cpp` — Added sync guidance comment at file top
 - **Notes**:
+  - PR #88 review feedback addressed: loud msd_reader import, persistent Engine via lifespan, LiveSimulationSession class refactor, Engine docs moved to Doxygen, engine binding sync note
 
 ---
 
