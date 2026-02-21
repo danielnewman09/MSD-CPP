@@ -7,6 +7,7 @@
 // Ticket: 0073_hybrid_pgs_large_islands
 // Ticket: 0071c_eigen_fixed_size_matrices
 // Ticket: 0071e_trivial_allocation_elimination
+// Ticket: 0071f_solver_workspace_reuse
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0045_constraint_solver_unification/design.md
@@ -126,20 +127,23 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
     // This prevents the friction cone from distorting the restitution impulse.
 
     // Step 1: Flatten constraints into per-row entries
-    auto flat = flattenConstraints(contactConstraints, states);
+    // Ticket 0071f: populateFlatConstraints_() writes into flat_ member workspace,
+    // clearing and refilling without reallocating the underlying vector buffers.
+    populateFlatConstraints_(contactConstraints, states);
 
     // Step 2: Assemble 3C x 3C effective mass matrix
-    auto a = assembleFlatEffectiveMass(
-      flat, inverseMasses, inverseInertias, numBodies);
+    // Ticket 0071f: assembleFlatEffectiveMassInPlace_() writes into flatEffectiveMass_
+    // member workspace, using resize()-only semantics to avoid per-solve allocation.
+    assembleFlatEffectiveMassInPlace_(inverseMasses, inverseInertias, numBodies);
 
     // Step 3: Assemble 3C x 1 RHS vector
-    auto b = assembleFlatRHS(flat, states);
+    auto b = assembleFlatRHS(flat_, states);
 
     // Step 4: Extract normal-only subproblem
     std::vector<int> normalIndices;
-    for (size_t i = 0; i < flat.rowTypes.size(); ++i)
+    for (size_t i = 0; i < flat_.rowTypes.size(); ++i)
     {
-      if (flat.rowTypes[i] == RowType::Normal)
+      if (flat_.rowTypes[i] == RowType::Normal)
       {
         normalIndices.push_back(static_cast<int>(i));
       }
@@ -156,7 +160,7 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
       for (int j = 0; j < numNormals; ++j)
       {
         int const rowJ = normalIndices[static_cast<size_t>(j)];
-        aNormal(i, j) = a(rowI, rowJ);
+        aNormal(i, j) = flatEffectiveMass_(rowI, rowJ);
       }
     }
 
@@ -167,14 +171,14 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
     // Jv_new = Jv_old + A * lambda
     // Since b = -Jv_old (for tangents) or b = -(1+e)*Jv_old (for normals),
     // we have Jv_old = -b (tangents). Therefore Jv_new = -b + A * lambda.
-    Eigen::VectorXd lambdaNormal = Eigen::VectorXd::Zero(a.rows());
+    Eigen::VectorXd lambdaNormal = Eigen::VectorXd::Zero(flatEffectiveMass_.rows());
     for (int i = 0; i < numNormals; ++i)
     {
       int const rowI = normalIndices[static_cast<size_t>(i)];
       lambdaNormal(rowI) = normalResult.lambda(i);
     }
 
-    Eigen::VectorXd const jvPostNormal = -b + a * lambdaNormal;
+    Eigen::VectorXd const jvPostNormal = -b + flatEffectiveMass_ * lambdaNormal;
 
     // Step 7: Solve friction with Gauss-Seidel iteration
     // Iterate per-contact friction solves to handle multi-contact coupling through A matrix
@@ -182,7 +186,7 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
     auto spec = buildFrictionSpec(contactConstraints);
     const int numContacts = spec.numContacts;
 
-    Eigen::VectorXd lambdaFriction = Eigen::VectorXd::Zero(a.rows());
+    Eigen::VectorXd lambdaFriction = Eigen::VectorXd::Zero(flatEffectiveMass_.rows());
 
     constexpr int maxGSIterations = 10;
     constexpr double gsConvergenceTol = 1e-6;
@@ -200,10 +204,10 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
 
         // Extract 2x2 tangent block from A matrix
         Eigen::Matrix2d att;
-        att(0, 0) = a(tangent1Idx, tangent1Idx);
-        att(0, 1) = a(tangent1Idx, tangent2Idx);
-        att(1, 0) = a(tangent2Idx, tangent1Idx);
-        att(1, 1) = a(tangent2Idx, tangent2Idx);
+        att(0, 0) = flatEffectiveMass_(tangent1Idx, tangent1Idx);
+        att(0, 1) = flatEffectiveMass_(tangent1Idx, tangent2Idx);
+        att(1, 0) = flatEffectiveMass_(tangent2Idx, tangent1Idx);
+        att(1, 1) = flatEffectiveMass_(tangent2Idx, tangent2Idx);
 
         // Current tangent velocity including effects from normal impulse
         // and friction impulses from OTHER contacts (exclude self to avoid
@@ -215,8 +219,10 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
         lambdaFriction(tangent2Idx) = 0.0;
 
         Eigen::Vector2d jvCurrent;
-        jvCurrent(0) = jvPostNormal(tangent1Idx) + (a.row(tangent1Idx) * lambdaFriction)(0);
-        jvCurrent(1) = jvPostNormal(tangent2Idx) + (a.row(tangent2Idx) * lambdaFriction)(0);
+        jvCurrent(0) = jvPostNormal(tangent1Idx) +
+                       (flatEffectiveMass_.row(tangent1Idx) * lambdaFriction)(0);
+        jvCurrent(1) = jvPostNormal(tangent2Idx) +
+                       (flatEffectiveMass_.row(tangent2Idx) * lambdaFriction)(0);
 
         lambdaFriction(tangent1Idx) = savedT1;
         lambdaFriction(tangent2Idx) = savedT2;
@@ -266,14 +272,14 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
 
     // Step 9: Extract per-body forces
     result.bodyForces =
-      extractBodyForcesFlat(flat, lambdaCombined, numBodies, dt);
+      extractBodyForcesFlat(flat_, lambdaCombined, numBodies, dt);
 
     result.lambdas = lambdaCombined;
     result.converged = normalResult.converged;
     result.iterations = normalResult.iterations;
 
     // Compute residual: ||A*lambda - b||
-    Eigen::VectorXd const residualVec = a * lambdaCombined - b;
+    Eigen::VectorXd const residualVec = flatEffectiveMass_ * lambdaCombined - b;
     result.residual = residualVec.norm();
   }
   else
@@ -673,6 +679,141 @@ ConstraintSolver::extractBodyForces(
 }
 
 // ===== Friction Solver Integration (Ticket 0052d) =====
+
+// ===== In-place workspace population (Ticket 0071f_solver_workspace_reuse) =====
+
+void ConstraintSolver::populateFlatConstraints_(
+  const std::vector<Constraint*>& contactConstraints,
+  const std::vector<std::reference_wrapper<const InertialState>>& states)
+{
+  // Clear vector contents but retain allocated capacity, so push_back() below
+  // will reuse the existing heap buffers rather than reallocating.
+  flat_.jacobianRows.clear();
+  flat_.bodyAIndices.clear();
+  flat_.bodyBIndices.clear();
+  flat_.rowTypes.clear();
+  flat_.restitutions.clear();
+  flat_.numContacts = 0;
+
+  // Reserve based on current constraint set (same two-pass strategy as
+  // flattenConstraints() + Ticket 0071e: compute total rows first).
+  size_t totalRows = 0;
+  for (const auto* constraint : contactConstraints)
+  {
+    totalRows += static_cast<size_t>(constraint->dimension());
+  }
+  flat_.jacobianRows.reserve(totalRows);
+  flat_.bodyAIndices.reserve(totalRows);
+  flat_.bodyBIndices.reserve(totalRows);
+  flat_.rowTypes.reserve(totalRows);
+  flat_.restitutions.reserve(totalRows);
+
+  int numContacts = 0;
+  for (const auto* constraint : contactConstraints)
+  {
+    size_t const bodyA = constraint->bodyAIndex();
+    size_t const bodyB = constraint->bodyBIndex();
+    auto j = constraint->jacobian(states[bodyA].get(), states[bodyB].get(), 0.0);
+    int const dim = constraint->dimension();
+
+    const auto* contact = dynamic_cast<const ContactConstraint*>(constraint);
+
+    for (int row = 0; row < dim; ++row)
+    {
+      flat_.jacobianRows.push_back(j.row(row));
+      flat_.bodyAIndices.push_back(bodyA);
+      flat_.bodyBIndices.push_back(bodyB);
+
+      if (contact != nullptr)
+      {
+        flat_.rowTypes.push_back(RowType::Normal);
+        flat_.restitutions.push_back(contact->getRestitution());
+        ++numContacts;
+      }
+      else
+      {
+        flat_.rowTypes.push_back(RowType::Tangent);
+        flat_.restitutions.push_back(0.0);
+      }
+    }
+  }
+
+  flat_.numContacts = numContacts;
+}
+
+void ConstraintSolver::assembleFlatEffectiveMassInPlace_(
+  const std::vector<double>& inverseMasses,
+  const std::vector<Eigen::Matrix3d>& inverseInertias,
+  size_t numBodies)
+{
+  const auto numRows = static_cast<Eigen::Index>(flat_.jacobianRows.size());
+
+  // Build per-body inverse mass matrices (6x6)
+  std::vector<Eigen::Matrix<double, 6, 6>> bodyMInv(numBodies);
+  for (size_t k = 0; k < numBodies; ++k)
+  {
+    bodyMInv[k] = Eigen::Matrix<double, 6, 6>::Zero();
+    bodyMInv[k].block<3, 3>(0, 0) =
+      inverseMasses[k] * Eigen::Matrix3d::Identity();
+    bodyMInv[k].block<3, 3>(3, 3) = inverseInertias[k];
+  }
+
+  // Resize-only: Eigen::MatrixXd::resize() does NOT reallocate when dimensions
+  // are the same as current (Eigen caches the allocated size). This avoids the
+  // 720KB allocation for 300-row problems identified in the ticket.
+  flatEffectiveMass_.resize(numRows, numRows);
+  flatEffectiveMass_.setZero();
+
+  for (Eigen::Index i = 0; i < numRows; ++i)
+  {
+    size_t const bodyAI = flat_.bodyAIndices[static_cast<size_t>(i)];
+    size_t const bodyBI = flat_.bodyBIndices[static_cast<size_t>(i)];
+
+    Eigen::Matrix<double, 1, 6> const jIA =
+      flat_.jacobianRows[static_cast<size_t>(i)].leftCols<6>();
+    Eigen::Matrix<double, 1, 6> const jIB =
+      flat_.jacobianRows[static_cast<size_t>(i)].rightCols<6>();
+
+    for (Eigen::Index j = i; j < numRows; ++j)
+    {
+      size_t const bodyAJ = flat_.bodyAIndices[static_cast<size_t>(j)];
+      size_t const bodyBJ = flat_.bodyBIndices[static_cast<size_t>(j)];
+
+      Eigen::Matrix<double, 1, 6> const jJA =
+        flat_.jacobianRows[static_cast<size_t>(j)].leftCols<6>();
+      Eigen::Matrix<double, 1, 6> const jJB =
+        flat_.jacobianRows[static_cast<size_t>(j)].rightCols<6>();
+
+      double aIj = 0.0;
+
+      if (bodyAI == bodyAJ)
+      {
+        aIj += (jIA * bodyMInv[bodyAI] * jJA.transpose())(0);
+      }
+      if (bodyAI == bodyBJ)
+      {
+        aIj += (jIA * bodyMInv[bodyAI] * jJB.transpose())(0);
+      }
+      if (bodyBI == bodyAJ)
+      {
+        aIj += (jIB * bodyMInv[bodyBI] * jJA.transpose())(0);
+      }
+      if (bodyBI == bodyBJ)
+      {
+        aIj += (jIB * bodyMInv[bodyBI] * jJB.transpose())(0);
+      }
+
+      flatEffectiveMass_(i, j) = aIj;
+      flatEffectiveMass_(j, i) = aIj;
+    }
+  }
+
+  // Add regularization to diagonal
+  for (Eigen::Index i = 0; i < numRows; ++i)
+  {
+    flatEffectiveMass_(i, i) += kRegularizationEpsilon;
+  }
+}
 
 ConstraintSolver::FlattenedConstraints ConstraintSolver::flattenConstraints(
   const std::vector<Constraint*>& contactConstraints,

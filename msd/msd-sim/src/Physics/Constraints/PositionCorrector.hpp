@@ -1,4 +1,5 @@
 // Ticket: 0040b_split_impulse_position_correction
+// Ticket: 0071f_solver_workspace_reuse
 // Design: docs/designs/0040b-split-impulse-position-correction/design.md
 
 #ifndef MSD_SIM_PHYSICS_POSITION_CORRECTOR_HPP
@@ -98,6 +99,11 @@ private:
   Eigen::MatrixXd asmAw_;
   Eigen::VectorXd asmBw_;
   Eigen::VectorXd asmW_;
+
+  // Additional workspace promoted from local variables
+  // Ticket: 0071f_solver_workspace_reuse
+  std::vector<Eigen::Matrix<double, 6, 6>> bodyMInv_;  ///< Per-body 6x6 inverse mass matrix
+  std::vector<int> activeIndices_;                      ///< ASM active constraint set
 };
 
 }  // namespace msd_sim

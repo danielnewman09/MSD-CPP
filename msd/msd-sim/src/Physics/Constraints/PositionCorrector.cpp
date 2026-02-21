@@ -1,5 +1,6 @@
 // Ticket: 0040b_split_impulse_position_correction
 // Ticket: 0053f_wire_solver_workspace
+// Ticket: 0071f_solver_workspace_reuse
 // Design: docs/designs/0040b-split-impulse-position-correction/design.md
 
 #include "msd-sim/src/Physics/Constraints/PositionCorrector.hpp"
@@ -103,13 +104,15 @@ void PositionCorrector::correctPositions(
   }
 
   // ===== Step 3: Build effective mass matrix A = J * M^-1 * J^T =====
-  std::vector<Eigen::Matrix<double, 6, 6>> bodyMInv(numBodies);
+  // Ticket 0071f: bodyMInv_ is a member workspace. resize() reuses the existing
+  // buffer when numBodies is unchanged; per-element assignment overwrites stale data.
+  bodyMInv_.resize(numBodies);
   for (size_t k = 0; k < numBodies; ++k)
   {
-    bodyMInv[k] = Eigen::Matrix<double, 6, 6>::Zero();
-    bodyMInv[k].block<3, 3>(0, 0) =
+    bodyMInv_[k] = Eigen::Matrix<double, 6, 6>::Zero();
+    bodyMInv_[k].block<3, 3>(0, 0) =
       inverseMasses[k] * Eigen::Matrix3d::Identity();
-    bodyMInv[k].block<3, 3>(3, 3) = inverseInertias[k];
+    bodyMInv_[k].block<3, 3>(3, 3) = inverseInertias[k];
   }
 
   // Ticket 0053f: Reuse workspace
@@ -136,19 +139,19 @@ void PositionCorrector::correctPositions(
 
       if (bodyAI == bodyAJ)
       {
-        aIj += (jIA * bodyMInv[bodyAI] * jJA.transpose())(0);
+        aIj += (jIA * bodyMInv_[bodyAI] * jJA.transpose())(0);
       }
       if (bodyAI == bodyBJ)
       {
-        aIj += (jIA * bodyMInv[bodyAI] * jJB.transpose())(0);
+        aIj += (jIA * bodyMInv_[bodyAI] * jJB.transpose())(0);
       }
       if (bodyBI == bodyAJ)
       {
-        aIj += (jIB * bodyMInv[bodyBI] * jJA.transpose())(0);
+        aIj += (jIB * bodyMInv_[bodyBI] * jJA.transpose())(0);
       }
       if (bodyBI == bodyBJ)
       {
-        aIj += (jIB * bodyMInv[bodyBI] * jJB.transpose())(0);
+        aIj += (jIB * bodyMInv_[bodyBI] * jJB.transpose())(0);
       }
 
       effectiveMass_(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) = aIj;
@@ -169,18 +172,20 @@ void PositionCorrector::correctPositions(
   lambdaPos_.setZero();
 
   // Initialize active set: all constraints
-  std::vector<int> activeIndices;
-  activeIndices.reserve(static_cast<size_t>(numConstraints));
+  // Ticket 0071f: activeIndices_ is a member workspace. clear() + reserve() reuses
+  // the existing buffer rather than heap-allocating a new vector each call.
+  activeIndices_.clear();
+  activeIndices_.reserve(static_cast<size_t>(numConstraints));
   for (int i = 0; i < numConstraints; ++i)
   {
-    activeIndices.push_back(i);
+    activeIndices_.push_back(i);
   }
 
   int const maxIter = std::min(2 * numConstraints, 100);
 
   for (int iter = 1; iter <= maxIter; ++iter)
   {
-    int const activeSize = static_cast<int>(activeIndices.size());
+    int const activeSize = static_cast<int>(activeIndices_.size());
 
     if (activeSize == 0)
     {
@@ -194,11 +199,11 @@ void PositionCorrector::correctPositions(
 
       for (int i = 0; i < activeSize; ++i)
       {
-        asmBw_(i) = bPos_(activeIndices[static_cast<size_t>(i)]);
+        asmBw_(i) = bPos_(activeIndices_[static_cast<size_t>(i)]);
         for (int j = 0; j < activeSize; ++j)
         {
-          asmAw_(i, j) = effectiveMass_(activeIndices[static_cast<size_t>(i)],
-                                        activeIndices[static_cast<size_t>(j)]);
+          asmAw_(i, j) = effectiveMass_(activeIndices_[static_cast<size_t>(i)],
+                                        activeIndices_[static_cast<size_t>(j)]);
         }
       }
 
@@ -213,7 +218,7 @@ void PositionCorrector::correctPositions(
       lambdaPos_.setZero();
       for (int i = 0; i < activeSize; ++i)
       {
-        lambdaPos_(activeIndices[static_cast<size_t>(i)]) = asmBw_(i);
+        lambdaPos_(activeIndices_[static_cast<size_t>(i)]) = asmBw_(i);
       }
     }
 
@@ -222,7 +227,7 @@ void PositionCorrector::correctPositions(
     int minIndex = -1;
     for (int i = 0; i < activeSize; ++i)
     {
-      int const idx = activeIndices[static_cast<size_t>(i)];
+      int const idx = activeIndices_[static_cast<size_t>(i)];
       double const val = lambdaPos_(idx);
       if (val < minLambda || (val == minLambda && idx < minIndex))
       {
@@ -233,7 +238,7 @@ void PositionCorrector::correctPositions(
 
     if (minLambda < 0.0)
     {
-      std::erase(activeIndices, minIndex);
+      std::erase(activeIndices_, minIndex);
       continue;
     }
 
@@ -249,7 +254,7 @@ void PositionCorrector::correctPositions(
     for (int i = 0; i < numConstraints; ++i)
     {
       bool const isActive =
-        std::ranges::find(activeIndices, i) != activeIndices.end();
+        std::ranges::find(activeIndices_, i) != activeIndices_.end();
       if (isActive)
       {
         continue;
@@ -271,8 +276,8 @@ void PositionCorrector::correctPositions(
       break;  // All KKT conditions satisfied
     }
 
-    auto insertPos = std::ranges::lower_bound(activeIndices, maxViolationIndex);
-    activeIndices.insert(insertPos, maxViolationIndex);
+    auto insertPos = std::ranges::lower_bound(activeIndices_, maxViolationIndex);
+    activeIndices_.insert(insertPos, maxViolationIndex);
   }
 
   // ===== Step 5: Compute pseudo-velocity and apply as position change =====
