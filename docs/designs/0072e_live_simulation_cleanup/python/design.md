@@ -593,3 +593,73 @@ None. All design decisions are resolved.
    objects in the frontend `configure` message) has no Python implementation change. The Pydantic
    model already has `mass`, `restitution`, and `friction` as optional fields with defaults.
    When the frontend omits them, the defaults apply. No new Python code is needed.
+
+---
+
+## Python Design Review
+
+**Reviewer**: Python Design Reviewer
+**Date**: 2026-02-21
+**Status**: APPROVED
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Design Conformance
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| All integration contract requirements addressed | ✓ | FR-3, FR-4, FR-5, FR-6 (no-op), FR-7 all explicitly covered |
+| No new files outside scope | ✓ | All changes confined to `models.py`, `live.py`, `test_live_api.py` |
+| No changes to C++ or frontend | ✓ | Scope is correctly bounded |
+| Existing patterns followed | ✓ | `Annotated[list[float], Field(...)]` is Pydantic v2 idiom used consistently; `Literal` from `typing` follows project Python style |
+
+#### Pydantic Model Correctness
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| FR-3 `Literal` type is correct | ✓ | `Literal["inertial", "environment"]` raises `ValidationError` on any other value at parse time; this is Pydantic v2 correct |
+| FR-4 `Annotated[list[float], Field(min_length=3, max_length=3)]` is correct | ✓ | This is the Pydantic v2 idiomatic pattern; `min_length`/`max_length` constraints on list fields are enforced at parse time |
+| Import additions are complete | ✓ | `Annotated`, `Literal` from `typing`; `Field` from `pydantic` — all three additions specified. `Field` is the only non-stdlib new import |
+| Existing model defaults preserved | ✓ | `mass=10.0`, `restitution=0.8`, `friction=0.5` defaults on `SpawnObjectConfig` are unchanged |
+
+#### Route Change Correctness
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| FR-7 spawn loop captures return values | ✓ | `result = engine.spawn_inertial_object(...)` / `result = engine.spawn_environment_object(...)` and `body_id=result["instance_id"]` is correct |
+| N2 fix `*cfg.position` unpacking is correct | ✓ | `*cfg.position` with `Annotated[list[float], Field(min_length=3, max_length=3)]` guarantees exactly 3 scalars reach the C++ pybind11 `x, y, z` parameters |
+| `asset_id` source updated consistently | ✓ | `asset_id=result["asset_id"]` from spawn return value replaces `name_to_id[cfg.asset_name]` — C++ value is canonical |
+| `name_to_id` dict retained for geometry | ✓ | Design correctly notes `name_to_id` is still needed for `_build_asset_geometries` and should not be removed |
+| FR-5 dead code removal is safe | ✓ | `_run_simulation` is confirmed dead — no callers in the file or test suite |
+
+#### Test Strategy
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| FR-3 unit test (direct Pydantic) | ✓ | `TestSpawnObjectConfigValidation.test_invalid_object_type_raises_validation_error` imports and constructs `SpawnObjectConfig` directly |
+| FR-3 integration test (WebSocket) | ✓ | `TestWebSocketValidationErrors.test_invalid_object_type_triggers_error_message` tests error propagation to wire |
+| FR-4 parametrized position/orientation tests | ✓ | `@pytest.mark.parametrize` on `[0.0, 1.0]`, `[0.0, 1.0, 2.0, 3.0]`, `[]` covers under, over, and empty cases |
+| FR-4 integration test (WebSocket) | ✓ | `@pytest.mark.parametrize` on wrong-length position and orientation covers both directions |
+| FR-5 dead code test | ✓ | `TestDeadCodeRemoval.test_run_simulation_no_longer_exists` uses `hasattr` — simple and reliable |
+| FR-7 body_id consistency test | ✓ | Uses non-sequential mock IDs (42, 99) — will definitively detect if `enumerate` is still used instead of `result["instance_id"]` |
+| FR-7 call-site unpacking tests | ✓ | `assert_called_once_with("cube", 0.0, 0.0, 5.0, ...)` correctly asserts scalars, not list |
+| Existing test updates specified | ✓ | Both `test_inertial_object_spawned_with_physics_params` and `test_environment_object_spawned_without_physics_params` updated to assert unpacked scalars |
+| `_make_mock_engine` update specified | ✓ | Default spawn return values (`{"instance_id": 1, "asset_id": 1}`, `{"instance_id": 2, "asset_id": 2}`) will make all existing tests continue to pass |
+
+#### Async Correctness
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| No async changes introduced | ✓ | Configure phase spawn calls are synchronous (in-memory, fast) and correctly remain direct calls. `asyncio.to_thread` is not needed and not added |
+
+### Risks Identified
+
+| ID | Risk | Category | Likelihood | Impact | Mitigation |
+|----|------|----------|------------|--------|------------|
+| R1 | If any existing test passes `position` as a 2-element list (testing other behavior), it will now raise `ValidationError` at parse time instead of propagating to the spawn call — test semantics change | Test | Low | Low | All existing tests in `test_live_api.py` use `[0.0, 0.0, 5.0]` (3 elements) for position — existing tests pass the constraint |
+| R2 | `_make_mock_engine` spawn return value defaults (`instance_id=1` for inertial, `instance_id=2` for environment) assume a single object of each type per test session. Tests with multiple inertial objects would need different return value sequences | Test | Low | Low | All existing tests in `_CONFIGURE_MSG` spawn exactly one inertial and one environment object. Acceptable for current scope |
+
+### Summary
+
+The Python design is minimal, correct, and complete. All five in-scope FRs (3, 4, 5, 7 + N2 fix) are addressed with targeted modifications to two production files and one test file. The design correctly identifies that FR-6 requires no Python code change (Pydantic defaults handle the case). The test strategy is thorough: unit tests validate Pydantic directly; WebSocket integration tests validate error propagation; the FR-7 body_id consistency test uses adversarial mock IDs (42, 99) to definitively detect the enumerate-based bug. The design is approved for progression to Frontend Design.

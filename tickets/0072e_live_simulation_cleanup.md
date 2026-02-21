@@ -9,9 +9,9 @@
 - [x] Integration Design Approved
 - [x] Ready for Python Design
 - [x] Python Design Complete — Awaiting Review
-- [ ] Ready for Frontend Design
-- [ ] Frontend Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Prototype
+- [x] Ready for Frontend Design
+- [x] Frontend Design Complete — Awaiting Review
+- [x] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
 - [ ] Implementation Complete — Awaiting Test Writing
@@ -227,23 +227,43 @@ These are not production-breaking bugs, but they represent contract violations a
   - FR-6 has no Python implementation change — Pydantic defaults already handle absent fields
 
 ### Python Design Review Phase
-- **Started**:
-- **Completed**:
-- **Status**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
+- **Branch**: 0072e-live-simulation-cleanup
+- **PR**: #88
+- **Status**: APPROVED
 - **Reviewer Notes**:
+  - All FR-3, FR-4, FR-5, FR-7 + N2 fix correctly specified
+  - Pydantic v2 `Literal` and `Annotated[list[float], Field(min_length=3, max_length=3)]` idioms are correct
+  - FR-7 test uses adversarial non-sequential mock IDs (42, 99) to definitively detect enumerate-based bug
+  - `_make_mock_engine` update with spawn return values is the right single place to fix mock behavior
+  - Two existing tests updated to assert unpacked scalar args — test suite will correctly validate N2 fix
+  - No risks requiring prototype
 
 ### Frontend Design Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
+- **Branch**: 0072e-live-simulation-cleanup
+- **PR**: #88
 - **Artifacts**:
   - `docs/designs/0072e_live_simulation_cleanup/frontend/design.md`
 - **Notes**:
+  - FR-6: `onStartSimulation()` in `live-app.js` — replace unconditional `objects` map with conditional builder that omits `mass`/`restitution`/`friction` for environment objects
+  - No changes to `live.html`, `live.css`, or `scene.js`
+  - `handleFrame()` confirmed no-op for FR-1 extended frame data (SceneManager dispatches on body_id only)
+  - Change is 4 lines in one function; no new modules, no state changes
 
 ### Frontend Design Review Phase
-- **Started**:
-- **Completed**:
-- **Status**:
+- **Started**: 2026-02-21 00:00
+- **Completed**: 2026-02-21 00:00
+- **Branch**: 0072e-live-simulation-cleanup
+- **PR**: #88
+- **Status**: APPROVED
 - **Reviewer Notes**:
+  - Minimal and correct — conditional builder pattern is idiomatic JS
+  - Scope correctly bounded: `scene.js` unchanged per ticket constraint
+  - FR-1 frame handling confirmed no-op — `SceneManager.updateFrame()` dispatches on body_id; `is_environment` field ignored
+  - No risks identified; no prototype needed
 
 ### Prototype Phase
 - **Started**:
