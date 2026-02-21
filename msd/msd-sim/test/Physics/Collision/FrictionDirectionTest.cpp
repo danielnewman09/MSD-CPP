@@ -58,6 +58,7 @@ TEST_F(FrictionDirectionTest, SlidingCube_FrictionOpposesTangentialVelocity)
   const auto& cube =
     spawnInertialWithVelocity("unit_cube",
                               Coordinate{0.0, 0.0, 0.5},
+                              AngularCoordinate{},
                               Coordinate{initialVelocityX, 0.0, 0.0},
                               mass,
                               restitution,
@@ -128,6 +129,7 @@ TEST_F(FrictionDirectionTest, SlidingCube_EnergyInjectionBelowThreshold)
   const auto& cube =
     spawnInertialWithVelocity("unit_cube",
                               Coordinate{0.0, 0.0, 0.5},
+                              AngularCoordinate{},
                               Coordinate{initialVelocityX, 0.0, 0.0},
                               mass,
                               restitution,
@@ -146,9 +148,9 @@ TEST_F(FrictionDirectionTest, SlidingCube_EnergyInjectionBelowThreshold)
     // Get energy before step
     const auto& stateBefore = cube.getInertialState();
     const double vBefore = stateBefore.velocity.norm();
-    Eigen::Vector3d omegaVecBefore{stateBefore.getAngularVelocity().x(),
+    Eigen::Vector3d omegaVecBefore(stateBefore.getAngularVelocity().x(),
                                    stateBefore.getAngularVelocity().y(),
-                                   stateBefore.getAngularVelocity().z()};
+                                   stateBefore.getAngularVelocity().z());
     const double keBefore = 0.5 * mass * vBefore * vBefore +
                             0.5 * omegaVecBefore.transpose() * cube.getInertiaTensor() * omegaVecBefore;
     const double peBefore = mass * 9.81 * stateBefore.position.z();
@@ -160,9 +162,9 @@ TEST_F(FrictionDirectionTest, SlidingCube_EnergyInjectionBelowThreshold)
     // Get energy after step
     const auto& stateAfter = cube.getInertialState();
     const double vAfter = stateAfter.velocity.norm();
-    Eigen::Vector3d omegaVecAfter{stateAfter.getAngularVelocity().x(),
+    Eigen::Vector3d omegaVecAfter(stateAfter.getAngularVelocity().x(),
                                   stateAfter.getAngularVelocity().y(),
-                                  stateAfter.getAngularVelocity().z()};
+                                  stateAfter.getAngularVelocity().z());
     const double keAfter = 0.5 * mass * vAfter * vAfter +
                            0.5 * omegaVecAfter.transpose() * cube.getInertiaTensor() * omegaVecAfter;
     const double peAfter = mass * 9.81 * stateAfter.position.z();

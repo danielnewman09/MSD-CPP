@@ -8,36 +8,19 @@ They will be skipped if msd_reader is not available.
 """
 
 import pytest
-
-try:
-    import msd_reader
-
-    MSD_READER_AVAILABLE = True
-except ImportError:
-    MSD_READER_AVAILABLE = False
-
-if MSD_READER_AVAILABLE:
-    from fastapi.testclient import TestClient
-    from replay.app import app
-
-pytestmark = pytest.mark.skipif(
-    not MSD_READER_AVAILABLE, reason="msd_reader module not available"
-)
+import msd_reader
+from fastapi.testclient import TestClient
+from replay.app import app
 
 
 @pytest.fixture
 def client():
     """Create test client."""
-    if MSD_READER_AVAILABLE:
-        return TestClient(app)
-    return None
+    return TestClient(app)
 
 
 def test_health_check(client):
     """Test health check endpoint."""
-    if client is None:
-        pytest.skip("msd_reader not available")
-
     response = client.get("/api/v1/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -45,9 +28,6 @@ def test_health_check(client):
 
 def test_list_simulations(client):
     """Test listing available simulations."""
-    if client is None:
-        pytest.skip("msd_reader not available")
-
     response = client.get("/api/v1/simulations")
     assert response.status_code == 200
     data = response.json()
@@ -57,9 +37,6 @@ def test_list_simulations(client):
 
 def test_openapi_docs(client):
     """Test that OpenAPI docs are accessible."""
-    if client is None:
-        pytest.skip("msd_reader not available")
-
     response = client.get("/docs")
     assert response.status_code == 200
 

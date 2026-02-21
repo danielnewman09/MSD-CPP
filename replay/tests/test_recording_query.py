@@ -12,19 +12,8 @@ import math
 import pytest
 from pathlib import Path
 
-try:
-    import msd_reader
-
-    MSD_READER_AVAILABLE = True
-except ImportError:
-    MSD_READER_AVAILABLE = False
-
-if MSD_READER_AVAILABLE:
-    from replay.testing import RecordingQuery
-
-pytestmark = pytest.mark.skipif(
-    not MSD_READER_AVAILABLE, reason="msd_reader module not available"
-)
+import msd_reader
+from replay.testing import RecordingQuery
 
 
 @pytest.fixture
@@ -111,7 +100,7 @@ class TestPositionVelocityQueries:
         query = RecordingQuery(step_recording)
 
         # Find a body_id that exists in the recording
-        states = query._db.select_all_states()
+        states = query._db.select_all_inertial_states()
         if not states:
             pytest.skip("Recording has no states")
 
@@ -127,7 +116,7 @@ class TestPositionVelocityQueries:
         """velocity_history() returns list of (vx, vy, vz) tuples."""
         query = RecordingQuery(step_recording)
 
-        states = query._db.select_all_states()
+        states = query._db.select_all_inertial_states()
         if not states:
             pytest.skip("Recording has no states")
 
@@ -143,7 +132,7 @@ class TestPositionVelocityQueries:
         """speed_history() returns non-negative speed values."""
         query = RecordingQuery(step_recording)
 
-        states = query._db.select_all_states()
+        states = query._db.select_all_inertial_states()
         if not states:
             pytest.skip("Recording has no states")
 
@@ -157,7 +146,7 @@ class TestPositionVelocityQueries:
         """speed_history() correctly computes velocity magnitude."""
         query = RecordingQuery(step_recording)
 
-        states = query._db.select_all_states()
+        states = query._db.select_all_inertial_states()
         if not states:
             pytest.skip("Recording has no states")
 
@@ -176,7 +165,7 @@ class TestPositionVelocityQueries:
         """position_history() returns positions ordered by frame ID."""
         query = RecordingQuery(step_recording)
 
-        states = query._db.select_all_states()
+        states = query._db.select_all_inertial_states()
         if not states:
             pytest.skip("Recording has no states")
 
@@ -186,7 +175,7 @@ class TestPositionVelocityQueries:
         positions_from_query = query.position_history(body_id)
 
         # Get states directly and manually filter/sort
-        all_states = query._db.select_all_states()
+        all_states = query._db.select_all_inertial_states()
         body_states = [s for s in all_states if s.body_id == body_id]
         body_states.sort(key=lambda s: s.frame_id)
         positions_expected = [
@@ -203,7 +192,7 @@ class TestPositionAggregates:
         """position_at_frame() returns the correct position for a specific frame."""
         query = RecordingQuery(step_recording)
 
-        states = query._db.select_all_states()
+        states = query._db.select_all_inertial_states()
         if not states:
             pytest.skip("Recording has no states")
 
@@ -228,7 +217,7 @@ class TestPositionAggregates:
         """min_z() returns the lowest z-coordinate across all frames."""
         query = RecordingQuery(step_recording)
 
-        states = query._db.select_all_states()
+        states = query._db.select_all_inertial_states()
         if not states:
             pytest.skip("Recording has no states")
 
@@ -245,7 +234,7 @@ class TestPositionAggregates:
         """max_z() returns the highest z-coordinate across all frames."""
         query = RecordingQuery(step_recording)
 
-        states = query._db.select_all_states()
+        states = query._db.select_all_inertial_states()
         if not states:
             pytest.skip("Recording has no states")
 
@@ -262,7 +251,7 @@ class TestPositionAggregates:
         """max_speed() returns the highest speed across all frames."""
         query = RecordingQuery(step_recording)
 
-        states = query._db.select_all_states()
+        states = query._db.select_all_inertial_states()
         if not states:
             pytest.skip("Recording has no states")
 

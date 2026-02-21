@@ -7,10 +7,7 @@ Ticket: 0060b_recording_query_api
 import math
 from pathlib import Path
 
-try:
-    import msd_reader
-except ImportError:
-    msd_reader = None
+import msd_reader
 
 
 class RecordingQuery:
@@ -32,15 +29,7 @@ class RecordingQuery:
 
         Args:
             db_path: Path to the recording database (.db file)
-
-        Raises:
-            RuntimeError: If msd_reader module is not available
         """
-        if msd_reader is None:
-            raise RuntimeError(
-                "msd_reader module not available. "
-            )
-
         self._db = msd_reader.Database(str(db_path))
 
     # Frame queries
@@ -73,7 +62,7 @@ class RecordingQuery:
         Returns:
             List of (x, y, z) tuples, one per frame, ordered by frame ID
         """
-        states = self._db.select_all_states()
+        states = self._db.select_all_inertial_states()
         body_states = [s for s in states if s.body_id == body_id]
         body_states.sort(key=lambda s: s.frame_id)
         return [(s.position.x, s.position.y, s.position.z) for s in body_states]
@@ -87,7 +76,7 @@ class RecordingQuery:
         Returns:
             List of (vx, vy, vz) tuples, one per frame, ordered by frame ID
         """
-        states = self._db.select_all_states()
+        states = self._db.select_all_inertial_states()
         body_states = [s for s in states if s.body_id == body_id]
         body_states.sort(key=lambda s: s.frame_id)
         return [(s.velocity.x, s.velocity.y, s.velocity.z) for s in body_states]
@@ -121,7 +110,7 @@ class RecordingQuery:
         Raises:
             ValueError: If no state exists for the given body_id and frame_id
         """
-        states = self._db.select_all_states()
+        states = self._db.select_all_inertial_states()
         for s in states:
             if s.body_id == body_id and s.frame_id == frame_id:
                 return (s.position.x, s.position.y, s.position.z)

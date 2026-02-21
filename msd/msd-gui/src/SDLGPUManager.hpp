@@ -121,7 +121,8 @@ public:
 
     const SDL_GPUBufferCreateInfo uniformBufferCreateInfo = {
       .usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
-      .size = sizeof(Eigen::Matrix4f)};
+      .size = sizeof(Eigen::Matrix4f),
+      .props = 0};
 
     uniformBuffer_ =
       UniqueBuffer(SDL_CreateGPUBuffer(device_.get(), &uniformBufferCreateInfo),
@@ -134,32 +135,39 @@ public:
 
     // Create the pipelines
     const SDL_GPUColorTargetDescription colorTargetDesc = {
-      .format = SDL_GetGPUSwapchainTextureFormat(device_.get(), &window)};
+      .format = SDL_GetGPUSwapchainTextureFormat(device_.get(), &window),
+      .blend_state = {}};
 
     // Get vertex input state from shader policy
     const SDL_GPUVertexInputState vertexInputState =
       shaderPolicy_.getVertexInputState();
 
+    SDL_GPURasterizerState rasterizerState{};
+    rasterizerState.fill_mode = SDL_GPU_FILLMODE_FILL;
+    rasterizerState.cull_mode = SDL_GPU_CULLMODE_NONE;  // Disable backface culling
+
+    SDL_GPUDepthStencilState depthStencilState{};
+    depthStencilState.enable_depth_test = true;
+    depthStencilState.enable_depth_write = true;
+    depthStencilState.compare_op = SDL_GPU_COMPAREOP_LESS;  // Standard depth test
+
     SDL_GPUGraphicsPipelineCreateInfo pipelineCreateInfo = {
-      .vertex_input_state = vertexInputState,
-      .target_info =
-        {
-          .num_color_targets = 1,
-          .color_target_descriptions = &colorTargetDesc,
-          .has_depth_stencil_target = true,
-          .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
-        },
-      .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
       .vertex_shader = vertexShader.get(),
       .fragment_shader = fragmentShader.get(),
+      .vertex_input_state = vertexInputState,
+      .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+      .rasterizer_state = rasterizerState,
+      .multisample_state = {},
+      .depth_stencil_state = depthStencilState,
+      .target_info =
+        {
+          .color_target_descriptions = &colorTargetDesc,
+          .num_color_targets = 1,
+          .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+          .has_depth_stencil_target = true,
+        },
+      .props = 0,
     };
-    pipelineCreateInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-    pipelineCreateInfo.rasterizer_state.cull_mode =
-      SDL_GPU_CULLMODE_NONE;  // Disable backface culling
-    pipelineCreateInfo.depth_stencil_state.enable_depth_test = true;
-    pipelineCreateInfo.depth_stencil_state.enable_depth_write = true;
-    pipelineCreateInfo.depth_stencil_state.compare_op =
-      SDL_GPU_COMPAREOP_LESS;  // Standard depth test
 
     pipeline_ = UniquePipeline(
       SDL_CreateGPUGraphicsPipeline(device_.get(), &pipelineCreateInfo),
@@ -186,7 +194,8 @@ public:
     const SDL_GPUBufferCreateInfo vertexBufferCreateInfo = {
       .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
       .size = static_cast<uint32_t>(allVertices_.size() *
-                                    sizeof(msd_assets::Vertex))};
+                                    sizeof(msd_assets::Vertex)),
+      .props = 0};
 
     vertexBuffer_ =
       UniqueBuffer(SDL_CreateGPUBuffer(device_.get(), &vertexBufferCreateInfo),
@@ -200,7 +209,8 @@ public:
     // Upload unified vertex data to GPU
     const SDL_GPUTransferBufferCreateInfo vertexTransferCreateInfo = {
       .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-      .size = vertexBufferCreateInfo.size};
+      .size = vertexBufferCreateInfo.size,
+      .props = 0};
 
     SDL_GPUTransferBuffer* vertexTransferBuffer =
       SDL_CreateGPUTransferBuffer(device_.get(), &vertexTransferCreateInfo);
@@ -244,7 +254,8 @@ public:
     const SDL_GPUBufferCreateInfo instanceBufferCreateInfo = {
       .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
       .size = static_cast<uint32_t>(maxInstances *
-                                    shaderPolicy_.getInstanceDataSize())};
+                                    shaderPolicy_.getInstanceDataSize()),
+      .props = 0};
 
     instanceBuffer_ = UniqueBuffer(
       SDL_CreateGPUBuffer(device_.get(), &instanceBufferCreateInfo),
@@ -395,6 +406,8 @@ public:
         .height = height,
         .layer_count_or_depth = 1,
         .num_levels = 1,
+        .sample_count = SDL_GPU_SAMPLECOUNT_1,
+        .props = 0,
       };
       SDL_GPUTexture* depthTexture =
         SDL_CreateGPUTexture(device_.get(), &depthTextureInfo);

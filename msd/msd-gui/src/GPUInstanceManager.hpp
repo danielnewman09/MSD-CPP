@@ -193,7 +193,8 @@ public:
     const SDL_GPUTransferBufferCreateInfo transferCreateInfo = {
       .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
       .size =
-        static_cast<uint32_t>(instances_.size() * sizeof(InstanceDataType))};
+        static_cast<uint32_t>(instances_.size() * sizeof(InstanceDataType)),
+      .props = 0};
 
     SDL_GPUTransferBuffer* transferBuffer =
       SDL_CreateGPUTransferBuffer(&device, &transferCreateInfo);

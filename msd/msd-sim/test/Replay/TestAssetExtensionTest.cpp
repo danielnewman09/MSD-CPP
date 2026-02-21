@@ -125,7 +125,7 @@ TEST_F(ReplayEnabledTest, SpawnInertialWithVelocitySetsVelocity)
   // Spawn object with initial velocity
   const Coordinate velocity{5.0, 0.0, 0.0};
   const auto& asset = spawnInertialWithVelocity(
-    "unit_sphere", Coordinate{0, 0, 10}, velocity);
+    "unit_sphere", Coordinate{0, 0, 10}, AngularCoordinate{}, velocity);
 
   // Verify velocity was set
   const auto& state = asset.getInertialState();
@@ -144,6 +144,7 @@ TEST_F(ReplayEnabledTest, SpawnInertialWithVelocityAndCustomParameters)
 
   const auto& asset = spawnInertialWithVelocity("unit_sphere",
                                                 Coordinate{0, 0, 10},
+                                                AngularCoordinate{},
                                                 velocity,
                                                 customMass,
                                                 customRestitution,

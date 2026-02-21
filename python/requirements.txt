@@ -11,14 +11,14 @@
 #   - Documentation indexing (stdlib only, no deps)
 #
 # Install with: python/setup.sh
-# Or manually: python3 -m venv python/.venv && python/.venv/bin/pip install -r python/requirements.txt
+# Or manually: pip install -r python/requirements.txt
 
 # --- Traceability Indexing ---
-tree-sitter==0.21.3
-tree-sitter-cpp==0.22.0
+tree-sitter==0.23.2
+tree-sitter-cpp==0.23.4
 
 # --- MCP Servers ---
-fastmcp==3.0.0rc2
+fastmcp==3.0.0
 
 # --- Replay Server ---
 fastapi==0.129.0

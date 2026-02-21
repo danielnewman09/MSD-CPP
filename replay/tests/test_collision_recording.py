@@ -12,24 +12,7 @@ Ticket: 0060d_example_replay_tests
 import pytest
 import sqlite3
 from replay.testing.conftest import recording_for
-
-# Check if msd_reader is available - instantiation raises RuntimeError if not
-MSD_READER_AVAILABLE = False
-try:
-    from replay.testing import RecordingQuery
-    # Test instantiation to verify msd_reader is actually available
-    from pathlib import Path
-    test_path = Path("/dev/null")
-    try:
-        _ = RecordingQuery(test_path)
-    except FileNotFoundError:
-        # Expected - path doesn't exist, but msd_reader is available
-        MSD_READER_AVAILABLE = True
-    except RuntimeError:
-        # msd_reader not available
-        pass
-except (ImportError, RuntimeError):
-    pass
+from replay.testing import RecordingQuery
 
 def test_collision_has_contact_events():
     """Verify collision was detected and contact frames were recorded."""

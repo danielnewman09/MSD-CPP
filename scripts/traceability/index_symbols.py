@@ -36,7 +36,7 @@ except ImportError:
 def get_parser() -> "Parser":
     """Create and return a tree-sitter C++ parser."""
     cpp_language = Language(tscpp.language())
-    parser = Parser(cpp_language)
+    parser = Parser(language=cpp_language)
     return parser
 
 

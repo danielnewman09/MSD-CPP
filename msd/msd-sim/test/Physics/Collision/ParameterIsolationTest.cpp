@@ -760,7 +760,7 @@ TEST_F(ReplayEnabledTest, ParameterIsolation_H8_TiltedCube_FeedbackLoop)
     }
 
     AngularVelocity omega = state.getAngularVelocity();
-    double angVelMag = Eigen::Vector3d{omega.x(), omega.y(), omega.z()}.norm();
+    double angVelMag = Eigen::Vector3d(omega.x(), omega.y(), omega.z()).norm();
 
     maxAngVel = std::max(maxAngVel, angVelMag);
 

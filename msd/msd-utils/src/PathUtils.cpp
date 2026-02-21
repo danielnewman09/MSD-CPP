@@ -1,15 +1,15 @@
 #include "msd-utils/src/PathUtils.hpp"
+#include <cstdint>
 #include <filesystem>
 #include <string>
-#include <sys/syslimits.h>
-#include <cstdint>
-#include <_stdlib.h>
 
 #ifdef _WIN32
 #include <windows.h>
 #elif defined(__APPLE__)
-#include <climits>
+#include <_stdlib.h>
 #include <mach-o/dyld.h>
+#include <sys/syslimits.h>
+#include <climits>
 #elif defined(__linux__)
 #include <limits.h>
 #include <unistd.h>

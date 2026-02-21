@@ -9,10 +9,7 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-try:
-    import msd_reader
-except ImportError:
-    msd_reader = None
+import msd_reader
 
 from ..models import (
     BodyMetadata,
@@ -37,11 +34,6 @@ class SimulationService:
 
     def __init__(self, db_path: Path):
         """Initialize service with database connection."""
-        if msd_reader is None:
-            raise RuntimeError(
-                "msd_reader module not available. "
-            )
-
         self.db_path = db_path
         self.db = msd_reader.Database(str(db_path))
 

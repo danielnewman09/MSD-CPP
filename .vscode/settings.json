@@ -141,6 +141,7 @@
         "cwd": "${workspaceFolder}"
     },
     "cmake.options.statusBarVisibility": "visible",
+    "cmake.ctest.testExplorerIntegrationEnabled": false,
     "files.associations": {
         "cctype": "cpp",
         "clocale": "cpp",
@@ -233,5 +234,18 @@
     "sonarlint.connectedMode.project": {
         "connectionId": "<default>",
         "projectKey": "msd-cpp"
+    },
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/build/Debug/debug"
+    ],
+    "python.defaultInterpreterPath": "${workspaceFolder}/python/.venv/bin/python",
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "--override-ini=pythonpath=${workspaceFolder}/build/Debug/debug",
+        "msd/msd-pybind/test",
+        "replay/tests"
+    ],
+    "cmake.environment": {
+        "PATH": "${workspaceFolder}/python/.venv/bin:${env:PATH}"
     }
 }

@@ -81,15 +81,16 @@ UniqueShader loadShader(const std::string& shaderFilename,
                             std::istreambuf_iterator<char>()};
 
   SDL_GPUShaderCreateInfo const shaderInfo = {
-    .code = code.data(),
     .code_size = code.size(),
+    .code = code.data(),
     .entrypoint = entrypoint.c_str(),
     .format = format,
     .stage = stage,
     .num_samplers = samplerCount,
-    .num_uniform_buffers = uniformBufferCount,
+    .num_storage_textures = storageTextureCount,
     .num_storage_buffers = storageBufferCount,
-    .num_storage_textures = storageTextureCount};
+    .num_uniform_buffers = uniformBufferCount,
+    .props = 0};
 
   auto shader = UniqueShader(SDL_CreateGPUShader(&device, &shaderInfo),
                              ShaderDeleter{&device});

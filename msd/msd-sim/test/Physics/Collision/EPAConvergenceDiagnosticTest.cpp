@@ -237,6 +237,7 @@ TEST_F(ReplayEnabledTest,
   // Spawn cubes at H6 positions
   const auto& cubeA =
     spawnInertialWithVelocity("unit_cube", Coordinate{0.0, 0.0, 0.0},
+                              AngularCoordinate{},
                               Coordinate{0.0, 0.0, 0.0},  // stationary
                               10.0,                        // mass
                               0.0,                         // restitution
@@ -245,6 +246,7 @@ TEST_F(ReplayEnabledTest,
 
   const auto& cubeB =
     spawnInertialWithVelocity("unit_cube", Coordinate{0.99, 0.0, 0.0},
+                              AngularCoordinate{},
                               Coordinate{0.0, 0.0, 0.0},  // stationary
                               10.0,                        // mass
                               0.0,                         // restitution
