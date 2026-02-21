@@ -5,6 +5,7 @@
 // Ticket: 0070_nlopt_convergence_energy_injection
 // Ticket: 0073_hybrid_pgs_large_islands
 // Ticket: 0071c_eigen_fixed_size_matrices
+// Ticket: 0071f_solver_workspace_reuse
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
@@ -217,6 +218,25 @@ private:
     size_t numBodies);
 
   /**
+   * @brief Populate flat_ workspace in-place (clears and refills without reallocation).
+   * Non-static variant used by solve() to reuse member vector buffers across frames.
+   * @ticket 0071f_solver_workspace_reuse
+   */
+  void populateFlatConstraints_(
+    const std::vector<Constraint*>& contactConstraints,
+    const std::vector<std::reference_wrapper<const InertialState>>& states);
+
+  /**
+   * @brief Populate flatEffectiveMass_ workspace in-place (resize-only semantics).
+   * Non-static variant used by solve() to reuse the matrix buffer across frames.
+   * @ticket 0071f_solver_workspace_reuse
+   */
+  void assembleFlatEffectiveMassInPlace_(
+    const std::vector<double>& inverseMasses,
+    const std::vector<Eigen::Matrix3d>& inverseInertias,
+    size_t numBodies);
+
+  /**
    * @brief Assemble RHS vector from flattened constraints
    */
   [[nodiscard]] static Eigen::VectorXd assembleFlatRHS(
@@ -253,6 +273,11 @@ private:
   Eigen::MatrixXd asmAw_;
   Eigen::VectorXd asmBw_;
   Eigen::VectorXd asmW_;
+
+  // Friction-path workspace — reused across calls to eliminate O(constraints) allocations
+  // Ticket: 0071f_solver_workspace_reuse
+  FlattenedConstraints flat_;        ///< Reused flat constraint representation
+  Eigen::MatrixXd flatEffectiveMass_;  ///< Reused (3C x 3C) effective mass matrix
 
   // Friction cone solver instance (Ticket: 0068c)
   NLoptFrictionSolver nloptSolver_;
