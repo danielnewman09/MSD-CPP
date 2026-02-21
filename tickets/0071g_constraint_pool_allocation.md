@@ -140,7 +140,7 @@ Focus solely on reducing per-pair vector allocations in the cache loop:
 - **Started**: 2026-02-21
 - **Completed**: 2026-02-21
 - **Branch**: `0071g-constraint-pool-allocation` (branched from `0071f-solver-workspace-reuse`)
-- **PR**: N/A (pending creation after commit)
+- **PR**: #93 (draft)
 - **Artifacts**:
   - `docs/designs/0071g_constraint_pool_allocation/design.md`
   - `docs/designs/0071g_constraint_pool_allocation/0071g_constraint_pool_allocation.puml`
