@@ -1,0 +1,151 @@
+@startuml 0071g_constraint_pool_allocation
+title Constraint Object Pool Allocation (0071g)
+
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam packageStyle rectangle
+skinparam arrowColor #444444
+skinparam classBackgroundColor #FAFAFA
+skinparam classBorderColor #888888
+
+package "Physics/Constraints" {
+
+  class ConstraintPool <<new>> {
+    -- backing storage --
+    - contactStorage_  : vector<ContactConstraint>
+    - frictionStorage_ : vector<FrictionConstraint>
+    - contactCount_    : size_t
+    - frictionCount_   : size_t
+    --
+    + allocateContact(bodyAIndex, bodyBIndex, ...) : ContactConstraint*
+    + allocateFriction(bodyAIndex, bodyBIndex, ...) : FrictionConstraint*
+    + reset() : void
+    + contactCount() : size_t
+    + frictionCount() : size_t
+    --
+    note: Zero allocations after first frame.\nreset() sets counts to 0,\nno deallocation.
+  }
+
+  abstract class Constraint {
+    + dimension() : int {abstract}
+    + evaluate(...) : VectorXd {abstract}
+    + jacobian(...) : MatrixXd {abstract}
+    + lambdaBounds() : LambdaBounds {abstract}
+    + bodyAIndex() : size_t
+    + bodyBIndex() : size_t
+    + bodyCount() : int
+    + recordState(...) : void {abstract}
+  }
+
+  class ContactConstraint {
+    - contact_normal_ : Coordinate
+    - lever_arm_a_ : Coordinate
+    - lever_arm_b_ : Coordinate
+    - penetration_depth_ : double
+    - restitution_ : double
+    - pre_impact_rel_vel_normal_ : double
+    --
+    + dimension() : int  ' = 1
+    + getLeverArmA() : Coordinate
+    + getLeverArmB() : Coordinate
+  }
+
+  class FrictionConstraint {
+    - contact_normal_ : Coordinate
+    - tangent1_ : Coordinate
+    - tangent2_ : Coordinate
+    - lever_arm_a_ : Coordinate
+    - lever_arm_b_ : Coordinate
+    - friction_coefficient_ : double
+    - normal_lambda_ : double
+    --
+    + dimension() : int  ' = 2
+    + setNormalLambda(lambda) : void
+    + setSlidingMode(dir) : void
+  }
+
+  Constraint <|-- ContactConstraint
+  Constraint <|-- FrictionConstraint
+
+  ConstraintPool "1" *-- "0..*" ContactConstraint : owns via vector
+  ConstraintPool "1" *-- "0..*" FrictionConstraint : owns via vector
+}
+
+package "Physics/Collision" {
+
+  class CollisionPipeline <<modified>> {
+    -- constraint pool (owner) --
+    - constraintPool_ : ConstraintPool
+    -- non-owning view (was unique_ptr) --
+    - allConstraints_ : vector<Constraint*>
+    -- workspace members (new) --
+    - solvedLambdas_ : vector<double>
+    - islandConstraintSet_ : unordered_set<Constraint*>
+    -- existing members --
+    - collisions_ : vector<CollisionPair>
+    - states_ : vector<ref<InertialState>>
+    - pairContactPoints_ : vector<vector<Coordinate>>
+    - pairRanges_ : vector<PairConstraintRange>
+    - contactCache_ : ContactCache
+    - constraintSolver_ : ConstraintSolver
+    - positionCorrector_ : PositionCorrector
+    --
+    + execute(...) : void
+    # createConstraints(...) : void
+    # solveConstraintsWithWarmStart(dt) : SolveResult
+    - clearEphemeralState() : void
+    - buildSolverView(interleaved) : vector<Constraint*>
+    - buildContactView() : vector<Constraint*>
+  }
+
+  CollisionPipeline "1" *-- "1" ConstraintPool : owns
+  CollisionPipeline "1" o-- "0..*" Constraint : allConstraints_\n(non-owning raw ptrs)
+}
+
+package "Physics/Constraints (solver, unchanged)" {
+
+  class ConstraintSolver {
+    + solve(constraints: vector<Constraint*>, ...) : SolveResult
+  }
+
+  class ProjectedGaussSeidel {
+    + solve(constraints: vector<Constraint*>, ...) : SolveResult
+  }
+
+  class PositionCorrector {
+    + correctPositions(constraints: vector<Constraint*>, ...) : void
+  }
+
+  class ConstraintIslandBuilder {
+    + {static} buildIslands(constraints: vector<Constraint*>, ...) : vector<Island>
+  }
+}
+
+CollisionPipeline --> ConstraintSolver : passes allConstraints_\n(vector<Constraint*>)
+CollisionPipeline --> PositionCorrector : passes contact view\n(vector<Constraint*>)
+CollisionPipeline --> ConstraintIslandBuilder : passes allConstraints_\n(vector<Constraint*>)
+
+note top of ConstraintPool
+  **Per-Frame Lifecycle**
+  Frame start: reset() → counts = 0, storage intact
+  createConstraints(): allocate*() fills slots 0..N-1
+  Solve/Correct/Record: read-only pointer usage
+  Next frame → repeat from reset()
+
+  **Steady-State**: No heap allocation
+  after first frame (high-water mark reached)
+end note
+
+note bottom of CollisionPipeline
+  **allConstraints_ type change**
+  Before: vector<unique_ptr<Constraint>>
+  After:  vector<Constraint*>  (non-owning)
+
+  **Eliminated per-frame allocations**
+  - make_unique<ContactConstraint> × 100
+  - make_unique<FrictionConstraint> × 100
+  - vector<double> solvedLambdas per pair
+  - unordered_set islandConstraintSet per island
+end note
+
+@enduml
