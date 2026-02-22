@@ -73,26 +73,37 @@ ContactConstraint (dimension = 1 or 3)
 - Sliding mode (ticket 0069 logic) adjusts tangent basis internally
 - `ContactCache` stores `Vec3 accumulatedImpulse` per contact point
 
-### Phase 2: Block PGS Solver
+### Phase 2: Two-Phase Block PGS Solver
 
-Replace the decoupled normal-then-friction solve with a per-contact 3x3 block solve:
+Replace the decoupled normal-then-friction solve with a two-phase per-contact block solver:
 
+**Phase A — Restitution Pre-Solve** (sequential, once per solve):
+For each contact:
+1. Skip if e == 0 (resting) or contact is separating (Jv_n >= 0)
+2. Compute bounce impulse: `lambda_bounce = max(0, -(1+e) * Jv_n / K_nn)`
+3. Update velocity residual (normal row only): `vRes += M^{-1} * J_n^T * lambda_bounce`
+
+This isolates `(1+e)` restitution from the friction cone constraint, preventing the DD-0070-H2 energy injection mechanism.
+
+**Phase B — Dissipative Block PGS Sweeps** (iterative):
 1. **Build effective mass**: K = J M^{-1} J^T (3x3 symmetric positive-definite per contact)
-2. **Add CFM regularization**: K_diag += epsilon (prevents singularity at extreme mass ratios)
+2. **Add CFM regularization**: K_diag += epsilon
 3. **Iteration loop** (per sweep, per contact):
-   a. Compute velocity error: v_err = J * v_current + bias
-   b. Solve unconstrained: delta_lambda = K^{-1} * (-v_err)
-   c. Accumulate: lambda_temp = lambda_acc + delta_lambda
-   d. **Project onto Coulomb cone**:
-      - If lambda_n < 0: set lambda = (0, 0, 0) — separating contact
-      - If ||lambda_t|| > mu * lambda_n: scale tangent to cone surface
-   e. Compute actual delta: delta = lambda_projected - lambda_acc
-   f. Apply velocity change: v += M^{-1} * J^T * delta
-   g. Update accumulator: lambda_acc = lambda_projected
+   a. Compute velocity error: `v_err = J_block * (v_pre + vRes)` — includes Phase A contribution
+   b. Solve unconstrained: `delta_lambda = K^{-1} * (-v_err)` — **no `(1+e)`, no bias vector**
+   c. Accumulate: `lambda_temp = lambda_acc + delta_lambda`
+   d. **Project onto Coulomb cone**
+   e. Compute actual delta: `delta = lambda_projected - lambda_acc`
+   f. Apply velocity change: `vRes += M^{-1} * J^T * delta`
+   g. Update accumulator: `lambda_acc = lambda_projected`
 
-### Why This Works Without Heuristics
+### Why This is Energy-Safe
 
-The off-diagonal terms K_nt in the 3x3 matrix capture the lever-arm coupling between friction and normal directions. When the block solve computes lambda_n, it inherently accounts for the effect that lambda_t will have on normal velocity — and vice versa. No artificial "friction anticipation bias" or "gravity floor" is needed. The math produces the correct coupled result.
+Phase A injects controlled restitution energy, bounded by `e` and `v_pre` — identical to the current ASM normal-only solve (proven energy-correct in DD-0070-H1). Phase B's RHS is `-v_err` for ALL rows. The unconstrained optimum targets zero constraint velocity (maximum dissipation). Coulomb cone projection can only reduce impulse magnitudes. Phase B is therefore provably dissipative. The `(1+e)` factor never enters the coupled 3x3 system, so the DD-0070-H2 energy injection mechanism cannot occur.
+
+### Why K_nt Coupling Still Helps
+
+The off-diagonal terms K_nt in the 3x3 matrix capture the lever-arm coupling between friction and normal directions. In Phase B, when the block solve computes lambda_n, it accounts for the effect that lambda_t has on normal velocity — and vice versa. This produces more accurate friction bounds and eliminates the warm-start lag from the decoupled approach.
 
 ### Phase 3 (if needed): Hold-and-Resolve Projection
 
@@ -117,12 +128,13 @@ Before implementation, measure the magnitude of the K_nt terms in existing recor
 
 ### I2: Energy Conservation Verification
 
-The previous coupled solve (NLopt QP, ticket 0070) caused energy injection. Verify that Block PGS with cone projection is energy-safe.
+The previous coupled solve (NLopt QP, ticket 0070) caused energy injection. Verify that two-phase Block PGS is energy-safe.
 
-**Method**: Analytical argument + prototype validation
-- The projection onto the Coulomb cone only reduces impulse magnitude — it never increases it
-- Normal clamping (lambda_n >= 0) prevents attractive forces
-- Combined: the projected impulse is always "inside" the unconstrained solution, so KE change is bounded
+**Method**: Analytical proof + prototype validation
+- **Phase A**: Normal-only restitution impulse with `lambda_bounce = -(1+e)*Jv_n/K_nn`. Energy change is `dKE = v^2/K_nn * (1+e) * (e-1)/2`. For e<=1, dKE<=0 (energy conserved or dissipated). Proven in DD-0070-H1.
+- **Phase B**: RHS is `-v_err` for all rows (no `(1+e)` factor). Unconstrained optimum targets zero constraint velocity. Cone projection only reduces impulse magnitudes. Therefore Phase B is provably dissipative.
+- **Combined**: Total energy change = restitution budget (Phase A) + dissipation (Phase B). DD-0070-H2 mechanism cannot occur because `(1+e)` is isolated from the friction cone.
+- **Prototype validation**: Run F4 tumbling case (0067 reproduction) and oblique impact test with per-frame energy delta logging.
 
 ### I3: Solver Convergence Comparison
 
@@ -170,8 +182,8 @@ Define concrete test scenarios to validate the fix:
 ## Risks
 
 ### R1: Energy Injection from Coupling
-**Risk**: The previous coupled solver (NLopt) injected energy. Could Block PGS do the same?
-**Mitigation**: Block PGS with cone projection is fundamentally different from the NLopt QP approach. The projection only reduces impulse magnitude. Validate with energy tracking in prototype.
+**Risk**: The previous coupled solver (NLopt QP) injected energy when `(1+e)` coupled through K_nt into the friction cone projection (DD-0070-H2).
+**Mitigation**: **Eliminated by design** via two-phase separation. Phase A applies restitution as a normal-only pre-solve impulse (no coupling to friction). Phase B runs purely dissipative Block PGS with `b = -v_err` (no `(1+e)` in any row). The cone projection operates only on dissipative impulses and cannot inject energy. See pre-implementation review: `docs/designs/0075_unified_contact_constraint/pre-implementation-review.md`.
 
 ### R2: Singularity at Extreme Mass Ratios
 **Risk**: The 3x3 K matrix may become ill-conditioned with large mass ratios or long lever arms.
@@ -226,3 +238,28 @@ Define concrete test scenarios to validate the fix:
   5. UnifiedContactConstraintRecord replaces separate ContactConstraintRecord + FrictionConstraintRecord
   6. ASM path for frictionless contacts left unchanged to minimize regression risk
   7. Three open design questions require human decision before implementation: transfer record migration strategy, NLopt removal timing, and ASM threshold units
+
+### Pre-Implementation Review
+- **Started**: 2026-02-22
+- **Completed**: 2026-02-22
+- **Reviewers**: Claude (traceability-assisted), Gemini Pro (independent cross-review)
+- **Artifacts**:
+  - `docs/designs/0075_unified_contact_constraint/pre-implementation-review.md`
+- **Critical Finding**: Both reviewers identified that embedding `(1+e)` restitution in the Block PGS RHS reproduces the DD-0070-H2 energy injection mechanism. Gemini proved mathematically that cone projection on a coupled 3x3 system containing `(1+e)` can inject energy when K_nt coupling is present.
+- **Resolution**: Design revised to two-phase approach (Phase A: restitution pre-solve, Phase B: dissipative Block PGS). Eliminates DD-0070-H2 regression risk by isolating `(1+e)` from the friction cone constraint.
+
+### Design Revision (Two-Phase Restitution Separation)
+- **Date**: 2026-02-22
+- **Files Modified**: `design.md` (BlockPGSSolver interface, algorithm, tests, risks), `0075_unified_contact_constraint.md` (this ticket)
+- **Changes**:
+  1. BlockPGSSolver algorithm split into Phase A (restitution pre-solve) and Phase B (dissipative block PGS)
+  2. Phase A: normal-only `lambda_bounce = -(1+e)*Jv_n/K_nn`, applied sequentially per contact
+  3. Phase B: RHS is always `-v_err` with no `(1+e)` factor — provably dissipative
+  4. `sweepOnce()` no longer takes a `b` bias vector parameter
+  5. New private methods: `applyRestitutionPreSolve()`, `updateVResNormalOnly()`, `computeBlockVelocityError()`
+  6. New workspace member: `bounceLambdas_` (Phase A impulse per contact)
+  7. Six new Phase A-specific unit tests added to test plan
+  8. Risk R1 updated from "validate with prototype" to "eliminated by design"
+  9. Three new risks added: R6 (Phase A multi-contact ordering), R7 (solver drift from constraint ordering), R8 (tangent basis instability)
+  10. Sliding mode question resolved: keep as safety net, measure activation frequency
+  11. NLopt kept behind runtime toggle (not `#ifdef`) for A/B comparison during validation

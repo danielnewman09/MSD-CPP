@@ -2,9 +2,12 @@
 
 ## Summary
 
-This design merges the separate `ContactConstraint` (dimension=1, normal) and `FrictionConstraint` (dimension=2, tangent) into a single unified `ContactConstraint` with dimension=3 when friction is present. It replaces the decoupled normal-then-friction solve (ticket 0070) and the NLopt SLSQP friction cone solver with a **Block Projected Gauss-Seidel (Block PGS)** algorithm that solves the full 3x3 effective mass matrix per contact, naturally coupling normal and friction impulses through their off-diagonal terms.
+This design merges the separate `ContactConstraint` (dimension=1, normal) and `FrictionConstraint` (dimension=2, tangent) into a single unified `ContactConstraint` with dimension=3 when friction is present. It replaces the decoupled normal-then-friction solve (ticket 0070) and the NLopt SLSQP friction cone solver with a **two-phase Block Projected Gauss-Seidel (Block PGS)** algorithm:
 
-The motivation is physical correctness: the current decoupled approach computes normal impulses without accounting for friction-induced torques (the K_nt coupling terms), causing underestimated normal forces during sliding, tight friction bounds, and warm-start lag at contact onset. The Block PGS solve eliminates these heuristics by computing the mathematically correct coupled solution.
+- **Phase A (Restitution Pre-Solve)**: Applies normal-only restitution impulses per contact, sequentially updating velocities. This isolates the `(1+e)` restitution factor from the friction cone constraint.
+- **Phase B (Dissipative Block PGS)**: Solves the full 3x3 effective mass matrix per contact with Coulomb cone projection, using a purely dissipative RHS (`b = -Jv`, no restitution term). This phase can only remove kinetic energy, never inject it.
+
+The motivation is physical correctness: the current decoupled approach computes normal impulses without accounting for friction-induced torques (the K_nt coupling terms), causing underestimated normal forces during sliding, tight friction bounds, and warm-start lag at contact onset. The Block PGS solve captures the K_nt coupling, while the two-phase structure prevents the energy injection mechanism identified in DD-0070-H2 (where coupling `(1+e)` restitution with the friction cone constraint caused spurious energy gain).
 
 ## Architecture Changes
 
@@ -18,7 +21,7 @@ See: `./0075_unified_contact_constraint.puml`
 
 #### `BlockPGSSolver`
 
-- **Purpose**: Per-contact 3x3 block PGS solve coupling normal and friction impulses through the full effective mass matrix, with Coulomb cone projection after each block step.
+- **Purpose**: Two-phase contact solver. Phase A applies normal-only restitution impulses (isolating `(1+e)` from friction). Phase B runs purely dissipative per-contact 3x3 block PGS sweeps with Coulomb cone projection, coupling normal and friction through the full effective mass matrix without risk of energy injection.
 - **Header location**: `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.hpp`
 - **Source location**: `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.cpp`
 - **Key interfaces**:
@@ -76,6 +79,36 @@ See: `./0075_unified_contact_constraint.puml`
     [[nodiscard]] static Eigen::Vector3d projectCoulombCone(
       const Eigen::Vector3d& lambda_block, double mu);
 
+    // --- Phase A: Restitution Pre-Solve ---
+    // Apply normal-only restitution impulse for each bouncing contact.
+    // Iterates contacts sequentially, updating vRes_ after each so that
+    // subsequent contacts see post-bounce velocities.
+    // Returns per-contact bounce lambda (for accumulation into final result).
+    [[nodiscard]] std::vector<double> applyRestitutionPreSolve(
+      const std::vector<ContactConstraint*>& contacts,
+      const std::vector<Eigen::Matrix3d>& blockK,
+      const std::vector<std::reference_wrapper<const InertialState>>& states,
+      const std::vector<double>& inverseMasses,
+      const std::vector<Eigen::Matrix3d>& inverseInertias);
+
+    // Update vRes_ for normal row only (Phase A)
+    void updateVResNormalOnly(
+      const ContactConstraint& c,
+      double deltaLambdaNormal,
+      const std::vector<double>& inverseMasses,
+      const std::vector<Eigen::Matrix3d>& inverseInertias);
+
+    // --- Phase B: Dissipative Block PGS ---
+    // Execute one block sweep over all contacts.
+    // RHS is always -v_err (no restitution term). Purely dissipative.
+    double sweepOnce(
+      const std::vector<ContactConstraint*>& contacts,
+      const std::vector<Eigen::Matrix3d>& blockK,
+      Eigen::VectorXd& lambda,
+      const std::vector<std::reference_wrapper<const InertialState>>& states,
+      const std::vector<double>& inverseMasses,
+      const std::vector<Eigen::Matrix3d>& inverseInertias);
+
     // Update velocity residual: vRes += M^{-1} * J_block^T * delta3
     void updateVRes3(
       const ContactConstraint& c,
@@ -83,31 +116,48 @@ See: `./0075_unified_contact_constraint.puml`
       const std::vector<double>& inverseMasses,
       const std::vector<Eigen::Matrix3d>& inverseInertias);
 
-    // Execute one block sweep over all contacts
-    double sweepOnce(
-      const std::vector<ContactConstraint*>& contacts,
-      const std::vector<Eigen::Matrix3d>& blockK,
-      const Eigen::VectorXd& b,
-      Eigen::VectorXd& lambda,
-      const std::vector<double>& inverseMasses,
-      const std::vector<Eigen::Matrix3d>& inverseInertias);
+    // Compute v_err = J_block * (v_pre + vRes_[bodyA, bodyB])
+    [[nodiscard]] Eigen::Vector3d computeBlockVelocityError(
+      const ContactConstraint& c,
+      const std::vector<std::reference_wrapper<const InertialState>>& states) const;
 
     int maxSweeps_{50};
     double convergenceTolerance_{1e-6};
     static constexpr double kCFMEpsilon{1e-8};  // CFM regularization on K diagonal
 
-    Eigen::VectorXd vRes_;  // 6*numBodies velocity residual workspace
+    Eigen::VectorXd vRes_;                // 6*numBodies velocity residual workspace
+    std::vector<double> bounceLambdas_;   // Phase A bounce impulse per contact
   };
   ```
 
-- **Algorithm (per sweep, per contact)**:
-  1. Compute velocity error: `v_err = J_block * vRes_[bodyA, bodyB]` (offset from RHS)
-  2. Solve unconstrained 3x3 system: `delta_lambda = K_inv * (-v_err - b_portion)`
+- **Algorithm (Two-Phase)**:
+
+  **Phase A — Restitution Pre-Solve** (sequential, once per solve):
+
+  For each contact `c` (sequentially):
+  1. Skip if `e == 0` (rest velocity threshold already zeroed restitution upstream)
+  2. Compute normal constraint velocity: `Jv_n = J_n * (v_pre + vRes_[bodyA, bodyB])`
+  3. Skip if `Jv_n >= 0` (already separating, no bounce needed)
+  4. Compute bounce impulse: `lambda_bounce = max(0, -(1+e) * Jv_n / K_nn)` where `K_nn = K_block(0,0)`
+  5. Update velocity residual (normal only): `vRes_ += M^{-1} * J_n^T * lambda_bounce`
+  6. Store `bounceLambdas_[c] = lambda_bounce`
+
+  Phase A is sequential so that each contact's bounce updates the velocity state seen by subsequent contacts. For resting contacts (e=0, the common case for persistent contact), this loop is a no-op.
+
+  **Phase B — Dissipative Block PGS Sweeps** (iterative):
+
+  For each sweep, for each contact:
+  1. Compute velocity error: `v_err = J_block * (v_pre + vRes_[bodyA, bodyB])`
+  2. Solve unconstrained 3x3 system: `delta_lambda = K_inv * (-v_err)` — **no restitution term, no bias vector**
   3. Accumulate: `lambda_temp = lambda_acc + delta_lambda`
   4. Project onto Coulomb cone (normal floor + tangent scale)
   5. Compute actual delta: `delta = lambda_projected - lambda_acc`
   6. Update velocity residual: `vRes_ += M^{-1} * J_block^T * delta`
   7. Update accumulator: `lambda_acc = lambda_projected`
+
+  **Final**: Add `bounceLambdas_[c]` to `lambda[c](0)` for each contact to produce the total normal impulse in the output.
+
+- **Energy safety proof**: Phase A injects controlled restitution energy, bounded by `e` and `v_pre` — identical to the current ASM normal-only solve proven energy-correct in DD-0070-H1. Phase B's RHS is `-v_err` for ALL rows (normal and tangent). The unconstrained optimum targets zero constraint velocity (maximum dissipation). The Coulomb cone projection can only reduce impulse magnitudes. Therefore Phase B is provably dissipative — it can never inject energy. Combined: total energy change equals restitution budget plus dissipation. The DD-0070-H2 energy injection mechanism is eliminated because `(1+e)` never enters the coupled 3x3 system or interacts with the cone projection.
 
 - **CFM regularization**: `K_diag += kCFMEpsilon` prevents singularity at extreme mass ratios. The 3x3 system is solved via `Eigen::Matrix3d::ldlt()` (Cholesky for SPD matrices; falls back to LU if conditioning is poor).
 
@@ -229,7 +279,7 @@ See: `./0075_unified_contact_constraint.puml`
   3. Detect friction by iterating constraints and checking `ContactConstraint::hasFriction()` (replaces `dynamic_cast<FrictionConstraint*>`)
   4. Remove or deprecate `flattenConstraints()`, `buildFrictionSpec()` helpers (no longer needed)
   5. Remove `NLoptFrictionSolver` dependency once Block PGS is validated (transition period: keep behind `#ifdef USE_NLOPT_SOLVER` flag)
-  6. Add `assembleBlock3Jacobians()`, `assembleBlock3RHS()` helpers for block assembly
+  6. Remove `assembleBlock3RHS()` — no longer needed since Phase B uses `-v_err` directly (no pre-assembled bias vector)
   7. Update `kASMThreshold` comment: ASM used only for frictionless contacts (no change to threshold value)
 
 - **Dispatch table**:
@@ -267,7 +317,15 @@ See: `./0075_unified_contact_constraint.puml`
   5. `BlockPGSSolver::solve()` converts warm-start `vector<Vec3>` to flat `VectorXd` internally
   6. Sliding mode fields (`slidingDirection`, `slidingFrameCount`) unchanged
 
-- **Key insight**: The cache now stores the full 3-component impulse per contact point, which is exactly what the Block PGS warm-start needs. Previously, the warm-start vector interleaved `[n_0, t1_0, t2_0, n_1, t1_1, t2_1, ...]` scalars; the new format stores them as structured `Vec3` values for clarity.
+- **Key insight**: The cache stores the **total** 3-component impulse per contact point (Phase A bounce + Phase B correction combined), which is exactly what the Block PGS warm-start needs. Previously, the warm-start vector interleaved `[n_0, t1_0, t2_0, n_1, t1_1, t2_1, ...]` scalars; the new format stores them as structured `Vec3` values for clarity.
+
+- **Two-phase interaction with warm-start**:
+  1. Warm-start initializes `vRes_` from cached impulses: `vRes_ = M^{-1} * J^T * lambda_warm`
+  2. Phase A computes restitution impulse from current `v_pre + vRes_` and adds to `vRes_`
+  3. Phase B iterates with the warm-started + bounced velocity state
+  4. After convergence, the total impulse (Phase A bounce + Phase B correction) is stored in cache
+  5. Phase A bounce is **not** cached separately — it is re-derived each frame from the current velocity state
+  6. For resting contacts (e=0, typical for persistent contacts), Phase A is a no-op and warm-start flows directly into Phase B
 
 #### `ConstraintRecordVisitor`
 
@@ -354,13 +412,20 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
 | `ContactConstraint` | `UnifiedDimension_WithFriction` | `dimension()` == 3, `hasFriction()` == true when mu>0 |
 | `ContactConstraint` | `Jacobian3x12_Shape` | Friction Jacobian is 3x12, rows match n/t1/t2 directions |
 | `ContactConstraint` | `SlidingModeIntegrated` | `setSlidingMode()` updates tangent basis correctly |
+| `BlockPGSSolver` | `RestitutionPreSolve_BounceCorrect` | Phase A: single bouncing contact produces correct post-bounce velocity matching `v_target = -e * v_pre` |
+| `BlockPGSSolver` | `RestitutionPreSolve_RestingSkipped` | Phase A: contact with e=0 produces zero bounce impulse |
+| `BlockPGSSolver` | `RestitutionPreSolve_SeparatingSkipped` | Phase A: already-separating contact (Jv_n >= 0) gets no impulse |
+| `BlockPGSSolver` | `RestitutionPreSolve_MultiContact` | Phase A: sequential application handles cross-body coupling correctly for 4-point manifold |
+| `BlockPGSSolver` | `PhaseBNoBounce` | Phase B RHS is always `-v_err` with no `(1+e)` factor for any row |
+| `BlockPGSSolver` | `TwoPhaseEnergyBound` | Total energy after solve bounded by restitution budget: for e=1 dKE=0, for e<1 dKE<0 |
 | `BlockPGSSolver` | `CoulombConeProjection_Separating` | lambda_n < 0 projects to (0,0,0) |
 | `BlockPGSSolver` | `CoulombConeProjection_Static` | Static contact (||t|| < mu*n) untouched |
 | `BlockPGSSolver` | `CoulombConeProjection_Sliding` | Sliding contact scales tangent to cone surface |
 | `BlockPGSSolver` | `SingleContact_RampSlide` | Box on 30-degree ramp with mu=0.3: steady-state lambda_n = mg*cos(30)*dt ± 5% |
 | `BlockPGSSolver` | `WarmStart_Convergence` | Warm-started solve converges in < 5 iterations for persistent contact |
-| `BlockPGSSolver` | `EnergyConservation` | No energy injected over 60 frames of resting contact |
+| `BlockPGSSolver` | `EnergyConservation_PhaseB` | Phase B: no energy injected over 60 frames of resting contact (Phase A is no-op since e=0 for resting) |
 | `BlockPGSSolver` | `ExtremeMassRatio` | 1000:1 mass ratio converges without NaN |
+| `BlockPGSSolver` | `ObliqueImpact_HighKnt` | Phase A + B: high rotational inertia body hitting at shallow angle with high friction; rebound KE does not exceed pre-impact KE |
 | `ContactCache` | `Vec3ImpulseRoundTrip` | Store and retrieve `Vec3` warm-start correctly |
 | `ContactConstraintFactory` | `CreateUnifiedWithFriction` | Factory creates single `ContactConstraint` per contact (not CC+FC pair) |
 
@@ -425,15 +490,19 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
 
 1. **K_nt Coupling Magnitude** (Investigation I1): Before committing to full implementation, measure K_nt/K_nn ratios in existing sliding recordings to confirm the coupling terms are significant. Target: K_nt/K_nn > 5% for the observed instability cases.
 
-2. **Block PGS Convergence vs NLopt**: Run the ramp-slide and F4 tumbling test cases through a standalone Block PGS prototype to confirm convergence in < 50 sweeps with warm-starting. Compare lambda_n to analytical expectation.
+2. **Two-Phase Block PGS Convergence vs NLopt**: Run the ramp-slide and F4 tumbling test cases through a standalone two-phase Block PGS prototype to confirm convergence in < 50 sweeps with warm-starting. Compare lambda_n to analytical expectation. Verify Phase A produces correct bounce velocity before Phase B begins.
 
-3. **Energy Injection Test**: Prototype the cone projection and verify that the accumulated kinetic energy does not increase over a 60-frame resting contact sequence.
+3. **Energy Injection Test**: Prototype the two-phase solver and verify that: (a) Phase A energy injection matches restitution budget exactly, (b) Phase B accumulated kinetic energy does not increase over a 60-frame resting contact sequence, (c) combined solve on F4 tumbling case shows no net energy injection beyond restitution.
+
+4. **K_block Condition Number Analysis**: Beyond K_nt/K_nn ratio, measure condition number of the full 3x3 K_block matrices in existing recordings. If condition number > 1e6, verify CFM regularization (1e-8) is sufficient.
 
 ### Requirements Clarification
 
 1. **ASM Threshold for Block PGS**: The current `kASMThreshold = 20` refers to total Jacobian rows. For Block PGS, the equivalent is 20/3 ≈ 7 contacts with friction. Should the threshold be expressed in contacts (more intuitive) or rows (consistent with existing code)?
 
-2. **Sliding Mode Handling in Block PGS**: In the current decoupled solver, sliding mode sets a unilateral lower bound on `lambda_t1`. In Block PGS with Coulomb cone projection, friction direction is naturally determined by the impulse direction relative to the cone. Does the `setSlidingMode()` tangent basis rotation still provide value, or does Block PGS make it unnecessary?
+2. **Sliding Mode Handling in Block PGS**: **Resolution**: Keep `setSlidingMode()` as a safety net during prototype validation. Phase B's tangent bias is `-Jv_t` which naturally handles friction direction. However, `setSlidingMode()` aligns the tangent basis with the sliding direction, which may improve convergence for sustained sliding. Add telemetry to measure activation frequency. Remove only if Block PGS produces zero activations across all test scenarios.
+
+3. **Phase A Iteration Count**: Should Phase A iterate multiple passes over contacts (improving multi-contact bounce accuracy) or is a single pass sufficient? **Recommendation**: Single pass. Multi-contact bounce accuracy is secondary to energy stability, and Phase B will correct any residual normal velocity anyway. Multiple Phase A passes risk over-estimating bounce for tightly coupled contact manifolds.
 
 ---
 
@@ -453,12 +522,13 @@ The following phased order minimizes risk and enables incremental validation:
 **Validation gate**: Build without errors. Existing tests pass (friction behavior may regress temporarily as NLopt no longer receives correct input — accept this during Phase 1).
 
 ### Phase 2: Block PGS Solver
-1. Implement `BlockPGSSolver` with `projectCoulombCone()`, `buildBlockK()`, `sweepOnce()`
-2. Wire `BlockPGSSolver` into `ConstraintSolver::solve()` for the friction dispatch path
-3. Remove `FrictionConstraint` class and all references
-4. Run investigation I1 (K_nt analysis) on existing recordings to validate coupling assumption
-5. Run integration tests (ramp slide, energy conservation)
-6. Profile against `ClusterDrop32` benchmark baseline
+1. Implement `BlockPGSSolver` with two-phase structure: `applyRestitutionPreSolve()` (Phase A) + `sweepOnce()` (Phase B)
+2. Implement `projectCoulombCone()`, `buildBlockK()`, `updateVResNormalOnly()`, `computeBlockVelocityError()`
+3. Wire `BlockPGSSolver` into `ConstraintSolver::solve()` for the friction dispatch path
+4. Remove `FrictionConstraint` class and all references
+5. Run investigation I1 (K_nt analysis) on existing recordings to validate coupling assumption
+6. Run integration tests (ramp slide, energy conservation, Phase A isolation tests)
+7. Profile against `ClusterDrop32` benchmark baseline
 
 ### Phase 3: Cleanup
 1. Remove `NLoptFrictionSolver` once Block PGS passes all tests
@@ -471,11 +541,14 @@ The following phased order minimizes risk and enables incremental validation:
 
 | Risk | Mitigation |
 |------|------------|
-| R1: Energy injection from Block PGS | Prototype energy tracking over 60-frame rest sequence before full implementation |
-| R2: K matrix singularity at extreme mass ratios | CFM regularization (`kCFMEpsilon = 1e-8`) on K diagonal; fallback to lambda=0 if LDLT fails |
+| R1: Energy injection from Block PGS | **Eliminated by design**: Phase A injects controlled restitution energy bounded by `e` and `v_pre` (identical to current ASM normal solve, proven energy-correct in DD-0070-H1). Phase B with `b = -v_err` and cone projection is provably dissipative. The `(1+e)` factor never enters the coupled 3x3 system. DD-0070-H2 mechanism cannot occur. Validated by `TwoPhaseEnergyBound` and `EnergyConservation_PhaseB` tests. |
+| R2: K matrix singularity at extreme mass ratios | CFM regularization (`kCFMEpsilon = 1e-8`) on K diagonal; fallback to lambda=0 if LDLT fails. Validate K_block condition numbers in prototype. |
 | R3: Warm-start basis rotation kick | Project cached `Vec3` impulse onto new contact frame before use; invalidate if normal rotated > 15° (already handled by `ContactCache::kNormalThreshold`) |
-| R4: Resting contact regression | Run `StackCollapse4` and `StackCollapse16` benchmarks; keep NLopt behind flag during validation |
+| R4: Resting contact regression | Run `StackCollapse4` and `StackCollapse16` benchmarks; keep NLopt behind runtime toggle (not `#ifdef`) during validation for A/B comparison |
 | R5: Investigation I1 shows K_nt is negligible | If K_nt/K_nn < 1% across all sliding cases, reconsider whether Block PGS complexity is justified for the observed instability |
+| R6: Phase A ordering in multi-contact | Sequential Gauss-Seidel-style velocity update in Phase A handles cross-body coupling. Validated by `RestitutionPreSolve_MultiContact` test. For resting contacts (e=0, the common persistent contact case), Phase A is a no-op. |
+| R7: Solver drift from fixed constraint ordering | Block PGS (Gauss-Seidel variant) is sensitive to constraint processing order. Mitigate by alternating sweep direction (forward/backward) on successive iterations. |
+| R8: Tangent basis instability near zero sliding velocity | When relative tangential velocity is near zero (static friction), the tangent basis can spin between frames. Mitigate by locking tangent basis at timestep start and holding fixed through all sweeps. |
 
 ---
 
