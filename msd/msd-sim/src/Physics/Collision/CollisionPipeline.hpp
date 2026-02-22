@@ -1,5 +1,7 @@
 // Ticket: 0044_collision_pipeline_integration
+// Ticket: 0071g_constraint_pool_allocation
 // Design: docs/designs/0044_collision_pipeline_integration/design.md
+// Design: docs/designs/0071g_constraint_pool_allocation/design.md
 
 #ifndef MSD_SIM_PHYSICS_COLLISION_PIPELINE_HPP
 #define MSD_SIM_PHYSICS_COLLISION_PIPELINE_HPP
@@ -7,8 +9,8 @@
 #include <Eigen/Dense>
 
 #include <cstdint>
-#include <memory>
 #include <span>
+#include <unordered_set>
 #include <vector>
 
 #include "msd-sim/src/Physics/Collision/CollisionHandler.hpp"
@@ -16,6 +18,7 @@
 #include "msd-sim/src/Physics/Constraints/ContactCache.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintIslandBuilder.hpp"
+#include "msd-sim/src/Physics/Constraints/ConstraintPool.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
@@ -401,7 +404,12 @@ private:
 
   // Ephemeral solver state (cleared at end of execute to prevent dangling refs)
   // Ticket: 0058_constraint_ownership_cleanup
-  std::vector<std::unique_ptr<Constraint>> allConstraints_;  // Single owning container
+  // Ticket: 0071g_constraint_pool_allocation
+  //
+  // constraintPool_ must be declared BEFORE allConstraints_ to ensure the pool
+  // outlives the non-owning pointer view during destruction.
+  ConstraintPool constraintPool_;                  // Owns constraint objects (pooled)
+  std::vector<Constraint*> allConstraints_;        // Non-owning view into pool
   std::vector<std::reference_wrapper<const InertialState>> states_;
   std::vector<double> inverseMasses_;
   std::vector<Eigen::Matrix3d> inverseInertias_;
@@ -428,6 +436,13 @@ private:
   // both the warm-start query and the cache-update loop, eliminating
   // one extractContactPoints() call per pair per frame.
   std::vector<std::vector<Coordinate>> pairContactPoints_;
+
+  // Ticket: 0071g_constraint_pool_allocation
+  // Member workspaces to eliminate per-frame local vector allocations.
+  // solvedLambdas_: reused in the cache-update loop (replaces local variable)
+  // islandConstraintSet_: reused per island in warm-start (replaces local variable)
+  std::vector<double> solvedLambdas_;
+  std::unordered_set<const Constraint*> islandConstraintSet_;
 
   // Friend declarations for unit testing
   friend class CollisionPipelineTest;

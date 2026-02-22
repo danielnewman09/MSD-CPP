@@ -1,4 +1,5 @@
 // Ticket: 0073_hybrid_pgs_large_islands
+// Ticket: 0071f_solver_workspace_reuse
 // Design: docs/designs/0073_hybrid_pgs_large_islands/design.md
 
 #include "msd-sim/src/Physics/Constraints/ProjectedGaussSeidel.hpp"
@@ -53,11 +54,14 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
   // R3 from design review: replicate the flattenConstraints() logic using our
   // internal FlatRow type (avoids circular include with ConstraintSolver.hpp).
   // Order: [CC, FC, CC, FC, ...] -> [n_0, t1_0, t2_0, n_1, t1_1, t2_1, ...]
-  std::vector<FlatRow> rows;
-  rows.reserve(constraints.size() * 3);  // Upper bound: 3 rows per constraint
+  //
+  // Ticket 0071f: rows_ and muPerContact_ are member workspaces — cleared and
+  // reused each solve() to avoid O(islands) heap allocations per frame.
+  rows_.clear();
+  rows_.reserve(constraints.size() * 3);  // Upper bound: 3 rows per constraint
 
   // Per-contact friction coefficients, indexed by contact (Normal row) order
-  std::vector<double> muPerContact;
+  muPerContact_.clear();
 
   for (const auto* constraint : constraints)
   {
@@ -87,16 +91,16 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
         flatRow.restitution = 0.0;
       }
 
-      rows.push_back(flatRow);
+      rows_.push_back(flatRow);
     }
 
     if (fc != nullptr)
     {
-      muPerContact.push_back(fc->getFrictionCoefficient());
+      muPerContact_.push_back(fc->getFrictionCoefficient());
     }
   }
 
-  const auto numRows = static_cast<Eigen::Index>(rows.size());
+  const auto numRows = static_cast<Eigen::Index>(rows_.size());
   if (numRows == 0)
   {
     result.converged = true;
@@ -108,10 +112,13 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
 
   // ===== Assemble diagonal effective-mass elements A_ii =====
   // A_ii = J_i * M^{-1} * J_i^T + regularization
-  Eigen::VectorXd diag(numRows);
+  //
+  // Ticket 0071f: diag_ is a member workspace — resize() reuses existing buffer
+  // when the size is unchanged (Eigen does not reallocate for same-or-smaller resize).
+  diag_.resize(numRows);
   for (Eigen::Index i = 0; i < numRows; ++i)
   {
-    const FlatRow& row = rows[static_cast<size_t>(i)];
+    const FlatRow& row = rows_[static_cast<size_t>(i)];
     size_t const bodyA = row.bodyAIndex;
     size_t const bodyB = row.bodyBIndex;
 
@@ -128,16 +135,18 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
     aii += (jB.template rightCols<kAngularDof>() * inverseInertias[bodyB] *
             jB.template rightCols<kAngularDof>().transpose())(0);
 
-    diag(i) = aii + kRegularizationEpsilon;
+    diag_(i) = aii + kRegularizationEpsilon;
   }
 
   // ===== Assemble RHS b_i =====
   // Normal rows: b_i = -(1+e) * J_i * v
   // Tangent rows: b_i = -J_i * v
-  Eigen::VectorXd b(numRows);
+  //
+  // Ticket 0071f: b_ is a member workspace — resize() reuses existing buffer.
+  b_.resize(numRows);
   for (Eigen::Index i = 0; i < numRows; ++i)
   {
-    const FlatRow& row = rows[static_cast<size_t>(i)];
+    const FlatRow& row = rows_[static_cast<size_t>(i)];
     size_t const bodyA = row.bodyAIndex;
     size_t const bodyB = row.bodyBIndex;
 
@@ -160,25 +169,28 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
 
     if (row.rowType == RowType::Normal)
     {
-      b(i) = -(1.0 + row.restitution) * jv;
+      b_(i) = -(1.0 + row.restitution) * jv;
     }
     else
     {
-      b(i) = -jv;
+      b_(i) = -jv;
     }
   }
 
   // ===== Initialize lambda =====
-  Eigen::VectorXd lambda = Eigen::VectorXd::Zero(numRows);
+  // Ticket 0071f: lambda_ is a member workspace — resize() reuses buffer, then
+  // setZero() initializes; no heap allocation when size is unchanged or smaller.
+  lambda_.resize(numRows);
+  lambda_.setZero();
   if (initialLambda.has_value() && initialLambda->size() == numRows)
   {
-    lambda = *initialLambda;
+    lambda_ = *initialLambda;
     // Clamp warm-start normals >= 0 (unilateral)
     for (Eigen::Index i = 0; i < numRows; ++i)
     {
-      if (rows[static_cast<size_t>(i)].rowType == RowType::Normal)
+      if (rows_[static_cast<size_t>(i)].rowType == RowType::Normal)
       {
-        lambda(i) = std::max(0.0, lambda(i));
+        lambda_(i) = std::max(0.0, lambda_(i));
       }
     }
   }
@@ -186,14 +198,14 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
   // ===== Initialize velocity residual vRes_ =====
   // vRes_[kBodyDof*k .. kBodyDof*k+5] = M^{-1} * J^T * lambda, accumulated
   // over all rows. Layout: [vLin_k(3), omega_k(3)] for body k.
-  vRes_ = Eigen::VectorXd::Zero(
-    static_cast<Eigen::Index>(kBodyDof * numBodies));
+  vRes_.resize(static_cast<Eigen::Index>(kBodyDof * numBodies));
+  vRes_.setZero();
 
   for (Eigen::Index i = 0; i < numRows; ++i)
   {
-    if (lambda(i) != 0.0)
+    if (lambda_(i) != 0.0)
     {
-      updateVRes(rows, static_cast<size_t>(i), lambda(i), inverseMasses,
+      updateVRes(rows_, static_cast<size_t>(i), lambda_(i), inverseMasses,
                  inverseInertias);
     }
   }
@@ -206,7 +218,7 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
   for (sweep = 0; sweep < maxSweeps_; ++sweep)
   {
     lastMaxDelta = sweepOnce(
-      rows, muPerContact, diag, b, lambda, inverseMasses, inverseInertias);
+      rows_, muPerContact_, diag_, b_, lambda_, inverseMasses, inverseInertias);
 
     if (lastMaxDelta < convergenceTolerance_)
     {
@@ -220,7 +232,7 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
   // No negative lambda skip — friction forces can be negative.
   for (size_t i = 0; i < static_cast<size_t>(numRows); ++i)
   {
-    const FlatRow& row = rows[i];
+    const FlatRow& row = rows_[i];
     size_t const bodyA = row.bodyAIndex;
     size_t const bodyB = row.bodyBIndex;
 
@@ -228,7 +240,7 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
       row.jacobianRow.template leftCols<kBodyDof>();
     Eigen::Matrix<double, 1, kBodyDof> jB =
       row.jacobianRow.template rightCols<kBodyDof>();
-    double const lam = lambda(static_cast<Eigen::Index>(i));
+    double const lam = lambda_(static_cast<Eigen::Index>(i));
 
     Eigen::Matrix<double, kBodyDof, 1> forceA = jA.transpose() * lam / dt;
     Eigen::Matrix<double, kBodyDof, 1> forceB = jB.transpose() * lam / dt;
@@ -244,7 +256,7 @@ ProjectedGaussSeidel::SolveResult ProjectedGaussSeidel::solve(
       TorqueVector{forceB(3), forceB(4), forceB(5)};
   }
 
-  result.lambdas = lambda;
+  result.lambdas = lambda_;
   result.converged = converged;
   result.iterations = sweep;
   result.residual = lastMaxDelta;

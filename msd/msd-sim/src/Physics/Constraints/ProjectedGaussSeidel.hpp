@@ -1,4 +1,5 @@
 // Ticket: 0073_hybrid_pgs_large_islands
+// Ticket: 0071f_solver_workspace_reuse
 // Design: docs/designs/0073_hybrid_pgs_large_islands/design.md
 
 #ifndef MSD_SIM_PHYSICS_CONSTRAINTS_PROJECTED_GAUSS_SEIDEL_HPP
@@ -133,10 +134,10 @@ public:
 
 private:
   // Velocity-level DOF layout constants for two-body constraints
-  static constexpr size_t kLinearDof = 3;   ///< Linear velocity components per body
-  static constexpr size_t kAngularDof = 3;  ///< Angular velocity components per body
-  static constexpr size_t kBodyDof = kLinearDof + kAngularDof;  ///< DOF per body (6)
-  static constexpr size_t kTwoBodyDof = 2 * kBodyDof;          ///< DOF per two-body constraint (12)
+  static constexpr Eigen::Index kLinearDof = 3;   ///< Linear velocity components per body
+  static constexpr Eigen::Index kAngularDof = 3;  ///< Angular velocity components per body
+  static constexpr Eigen::Index kBodyDof = kLinearDof + kAngularDof;  ///< DOF per body (6)
+  static constexpr Eigen::Index kTwoBodyDof = 2 * kBodyDof;          ///< DOF per two-body constraint (12)
 
   // Regularization epsilon added to diagonal (matches ConstraintSolver pattern)
   static constexpr double kRegularizationEpsilon = 1e-8;
@@ -197,9 +198,28 @@ private:
   int maxSweeps_{50};
   double convergenceTolerance_{1e-6};
 
+  // ===== Per-solve workspace members — reused across calls to avoid heap allocation =====
+  // Ticket: 0071f_solver_workspace_reuse
+
   /// Velocity residual workspace: v_res[kBodyDof*k .. kBodyDof*k+5] = accumulated
   /// M^{-1} * J^T * lambda for body k. Resized per solve() call.
   Eigen::VectorXd vRes_;
+
+  /// Flattened per-row data for PGS sweep. Cleared and refilled each solve().
+  std::vector<FlatRow> rows_;
+
+  /// Friction coefficient per contact (indexed by Normal row order).
+  /// Cleared and refilled each solve().
+  std::vector<double> muPerContact_;
+
+  /// Diagonal effective-mass elements A_ii. Resized each solve().
+  Eigen::VectorXd diag_;
+
+  /// RHS vector b. Resized each solve().
+  Eigen::VectorXd b_;
+
+  /// Constraint multiplier vector. Resized each solve().
+  Eigen::VectorXd lambda_;
 };
 
 }  // namespace msd_sim

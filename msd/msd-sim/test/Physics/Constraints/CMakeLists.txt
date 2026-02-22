@@ -10,6 +10,7 @@
 # Ticket: 0068b_nlopt_friction_solver_class
 # Ticket: 0068c_constraint_solver_integration
 # Ticket: 0071a_constraint_solver_scalability
+# Ticket: 0071g_constraint_pool_allocation
 # Ticket: 0073_hybrid_pgs_large_islands
 
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
@@ -27,4 +28,5 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/NLoptFrictionSolverTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintIslandBuilderTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ProjectedGaussSeidelTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintPoolTest.cpp
 )

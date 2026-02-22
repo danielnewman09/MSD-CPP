@@ -2,9 +2,11 @@
 // Ticket: 0052d_solver_integration_ecos_removal
 // Ticket: 0071a_constraint_solver_scalability
 // Ticket: 0071e_trivial_allocation_elimination
+// Ticket: 0071g_constraint_pool_allocation
 // Design: docs/designs/0044_collision_pipeline_integration/design.md
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
 // Design: docs/designs/0071a_constraint_solver_scalability/design.md
+// Design: docs/designs/0071g_constraint_pool_allocation/design.md
 
 #include "msd-sim/src/Physics/Collision/CollisionPipeline.hpp"
 #include <algorithm>
@@ -12,7 +14,6 @@
 #include <cstdint>
 #include <functional>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -245,6 +246,11 @@ void CollisionPipeline::createConstraints(
   std::span<const AssetEnvironment> environmentalAssets,
   double /* dt */)
 {
+  // Ticket: 0071g_constraint_pool_allocation
+  // Pool is reset at the start of each frame in clearEphemeralState().
+  // Pre-reserve allConstraints_ view vector. The pool's backing vectors
+  // grow on demand and retain capacity across frames.
+
   const size_t numInertial = inertialAssets.size();
 
   // Ticket 0052d: Determine if ANY collision pair has non-zero friction.
@@ -260,18 +266,30 @@ void CollisionPipeline::createConstraints(
     }
   }
 
+  // Ticket: 0071g_constraint_pool_allocation — Pointer stability guarantee:
+  // Pre-reserve pool capacity before any allocations begin. Up to 4 contact
+  // points per collision pair. After reserve(), emplace_back() will not
+  // reallocate the backing vectors, so all pointers returned this frame
+  // remain valid until the next reset().
+  const size_t maxContacts = collisions_.size() * 4;
+  constraintPool_.reserveContacts(maxContacts);
+  if (anyFriction)
+  {
+    constraintPool_.reserveFriction(maxContacts);
+  }
+
   // Ticket: 0071e_trivial_allocation_elimination
   // Worst case: 1 contact + 1 friction constraint per collision pair.
-  // Each CollisionResult may have up to 4 contact points, so the actual
-  // bound is collisions_.size() * 4 * (anyFriction ? 2 : 1).
-  // Use a conservative estimate of 2 constraints per pair (1 contact point
-  // is most common) to avoid excessive over-reservation.
   allConstraints_.reserve(collisions_.size() * 2 * (anyFriction ? 2 : 1));
   pairRanges_.reserve(collisions_.size());
 
   // Ticket: 0058_constraint_ownership_cleanup
+  // Ticket: 0071g_constraint_pool_allocation
   // Store all constraints in allConstraints_ with interleaved pattern when
   // friction is active: [CC_0, FC_0, CC_1, FC_1, ...]
+  // Constraints are allocated from constraintPool_ (pool owns; allConstraints_
+  // is a non-owning view). Factory logic inlined here (Approach 2 from design):
+  // single call site, zero intermediate unique_ptr allocations.
   for (size_t p = 0; p < collisions_.size(); ++p)
   {
     const auto& pair = collisions_[p];
@@ -291,37 +309,54 @@ void CollisionPipeline::createConstraints(
     const Coordinate& comA = stateA.position;
     const Coordinate& comB = stateB.position;
 
-    // Create normal constraints via factory
-    auto contactConstraints =
-      contact_constraint_factory::createFromCollision(pair.bodyAIndex,
-                                                      pair.bodyBIndex,
-                                                      pair.result,
-                                                      stateA,
-                                                      stateB,
-                                                      comA,
-                                                      comB,
-                                                      pair.restitution);
-
-    for (size_t ci = 0; ci < contactConstraints.size(); ++ci)
+    // Inlined factory logic from contact_constraint_factory::createFromCollision().
+    // Utility functions (computeRelativeNormalVelocity, combineRestitution) are kept.
+    // Allocates directly into pool — zero intermediate unique_ptr.
+    size_t contactsCreated = 0;
+    for (size_t ci = 0; ci < pair.result.contactCount; ++ci)
     {
-      // Capture lever arms BEFORE moving the constraint (avoid use-after-move)
-      const auto leverArmA = contactConstraints[ci]->getLeverArmA();
-      const auto leverArmB = contactConstraints[ci]->getLeverArmB();
+      const auto& contactPair = pair.result.contacts[ci];
 
-      // Store ContactConstraint in allConstraints_
-      allConstraints_.push_back(std::move(contactConstraints[ci]));
+      Coordinate const leverArmA = contactPair.pointA - comA;
+      Coordinate const leverArmB = contactPair.pointB - comB;
+
+      double const relVelNormal =
+        contact_constraint_factory::computeRelativeNormalVelocity(
+          stateA, stateB, leverArmA, leverArmB, pair.result.normal);
+
+      double effectiveRestitution = pair.restitution;
+      if (std::abs(relVelNormal) <
+          contact_constraint_factory::kRestVelocityThreshold)
+      {
+        effectiveRestitution = 0.0;
+      }
+
+      // Pool allocation: constructs ContactConstraint in-place, returns pointer.
+      ContactConstraint* cc = constraintPool_.allocateContact(
+        pair.bodyAIndex,
+        pair.bodyBIndex,
+        pair.result.normal,
+        contactPair.pointA,
+        contactPair.pointB,
+        contactPair.depth,
+        comA,
+        comB,
+        effectiveRestitution,
+        relVelNormal);
+
+      allConstraints_.push_back(cc);
+      ++contactsCreated;
 
       if (anyFriction)
       {
         // Create matching FrictionConstraint with same contact geometry.
         // Store immediately after its ContactConstraint for interleaved pattern.
-        // Uses per-pair friction coefficient (may be 0 for frictionless pairs).
-        auto fc = std::make_unique<FrictionConstraint>(
+        FrictionConstraint* fc = constraintPool_.allocateFriction(
           pair.bodyAIndex,
           pair.bodyBIndex,
           pair.result.normal,
-          comA + leverArmA,   // contactPointA = comA + leverArmA
-          comB + leverArmB,   // contactPointB = comB + leverArmB
+          comA + cc->getLeverArmA(),  // contactPointA = comA + leverArmA
+          comB + cc->getLeverArmB(),  // contactPointB = comB + leverArmB
           comA,
           comB,
           pair.frictionCoefficient);
@@ -334,13 +369,12 @@ void CollisionPipeline::createConstraints(
           fc->setSlidingMode(*slidingDir);
         }
 
-        allConstraints_.push_back(std::move(fc));
+        allConstraints_.push_back(fc);
       }
     }
 
     // Track constraint range (number of ContactConstraints for this pair)
-    size_t const numContacts = contactConstraints.size();
-    pairRanges_.push_back({rangeStart, numContacts, p});
+    pairRanges_.push_back({rangeStart, contactsCreated, p});
   }
 }
 
@@ -378,13 +412,14 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
 {
   // Ticket: 0058_constraint_ownership_cleanup
   // Ticket: 0071a_constraint_solver_scalability — island decomposition
+  // Ticket: 0071g_constraint_pool_allocation — allConstraints_ is vector<Constraint*>
   //
   // Determine friction mode based on constraint types in allConstraints_.
   // This is a global flag: if any pair has friction, all pairs have FCs.
   bool hasFriction = false;
-  for (const auto& c : allConstraints_)
+  for (Constraint* c : allConstraints_)
   {
-    if (dynamic_cast<FrictionConstraint*>(c.get()))
+    if (dynamic_cast<FrictionConstraint*>(c))
     {
       hasFriction = true;
       break;
@@ -411,7 +446,7 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     for (size_t ci = 0; ci < range.count; ++ci)
     {
       const size_t idx = range.startIdx + ci * s;
-      auto* contact = dynamic_cast<ContactConstraint*>(allConstraints_[idx].get());
+      auto* contact = dynamic_cast<ContactConstraint*>(allConstraints_[idx]);
       if (!contact)
       {
         continue;
@@ -482,7 +517,7 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     size_t globalGroup = 0;
     for (size_t i = 0; i < allConstraints_.size(); i += stride)
     {
-      constraintToGlobalGroup[allConstraints_[i].get()] = globalGroup;
+      constraintToGlobalGroup[allConstraints_[i]] = globalGroup;
       ++globalGroup;
     }
   }
@@ -539,9 +574,11 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     Eigen::VectorXd islandLambda =
       Eigen::VectorXd::Zero(static_cast<Eigen::Index>(islandRows));
 
-    // Build a lookup set of constraint pointers in this island for O(1) membership test
-    std::unordered_set<const Constraint*> islandConstraintSet(
-      islandConstraints.begin(), islandConstraints.end());
+    // Ticket: 0071g_constraint_pool_allocation
+    // Build a lookup set of constraint pointers in this island for O(1) membership test.
+    // Use member workspace islandConstraintSet_ to avoid per-island heap allocation.
+    islandConstraintSet_.clear();
+    islandConstraintSet_.insert(islandConstraints.begin(), islandConstraints.end());
 
     // Island-local contact group index counter
     size_t islandGroupOffset = 0;
@@ -549,8 +586,9 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
     for (const auto& range : pairRanges_)
     {
       // Check if this pair's first ContactConstraint is in this island
-      const Constraint* firstCC = allConstraints_[range.startIdx].get();
-      if (islandConstraintSet.find(firstCC) == islandConstraintSet.end())
+      // Ticket: 0071g_constraint_pool_allocation — allConstraints_ is vector<Constraint*>
+      const Constraint* firstCC = allConstraints_[range.startIdx];
+      if (islandConstraintSet_.find(firstCC) == islandConstraintSet_.end())
       {
         continue;  // This pair belongs to a different island
       }
@@ -643,8 +681,11 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
   {
     const auto& pair = collisions_[range.pairIdx];
 
-    std::vector<double> solvedLambdas;
-    solvedLambdas.reserve(range.count * lambdasPerContact);
+    // Ticket: 0071g_constraint_pool_allocation
+    // Use member workspace solvedLambdas_ to avoid per-pair heap allocation.
+    // clear() preserves capacity; after the first frame, no allocation occurs.
+    solvedLambdas_.clear();
+    solvedLambdas_.reserve(range.count * lambdasPerContact);
     for (size_t ci = 0; ci < range.count; ++ci)
     {
       auto const contactGroupIdx = range.startIdx / stride + ci;
@@ -652,7 +693,7 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
         contactGroupIdx * lambdasPerContact);
       for (size_t k = 0; k < lambdasPerContact; ++k)
       {
-        solvedLambdas.push_back(
+        solvedLambdas_.push_back(
           globalResult.lambdas(flatBase + static_cast<Eigen::Index>(k)));
       }
     }
@@ -667,7 +708,7 @@ CollisionPipeline::solveConstraintsWithWarmStart(double dt)
                              pair.result.normal.y(),
                              pair.result.normal.z()};
     contactCache_.update(
-      pair.bodyAId, pair.bodyBId, normalVec, solvedLambdas, contactPoints);
+      pair.bodyAId, pair.bodyBId, normalVec, solvedLambdas_, contactPoints);
 
     // Ticket 0069: Update sliding state based on tangent velocity
     if (!contactPoints.empty() && hasFriction)
@@ -804,11 +845,12 @@ void CollisionPipeline::correctPositions(
 void CollisionPipeline::propagateSolvedLambdas(
   const ConstraintSolver::SolveResult& solveResult)
 {
+  // Ticket: 0071g_constraint_pool_allocation — allConstraints_ is vector<Constraint*>
   // Detect friction presence and stride
   bool hasFriction = false;
-  for (const auto& c : allConstraints_)
+  for (Constraint* c : allConstraints_)
   {
-    if (dynamic_cast<FrictionConstraint*>(c.get()))
+    if (dynamic_cast<FrictionConstraint*>(c))
     {
       hasFriction = true;
       break;
@@ -828,7 +870,7 @@ void CollisionPipeline::propagateSolvedLambdas(
 
   for (size_t i = 1; i < allConstraints_.size(); i += stride)
   {
-    auto* fc = dynamic_cast<FrictionConstraint*>(allConstraints_[i].get());
+    auto* fc = dynamic_cast<FrictionConstraint*>(allConstraints_[i]);
     if (!fc)
     {
       continue;
@@ -853,7 +895,11 @@ void CollisionPipeline::clearEphemeralState()
   // Does NOT clear collisions_ or solverData_ — those are value types owned
   // by the pipeline, safe to read between frames via getCollisions()/getSolverData().
   // Ticket: 0058_constraint_ownership_cleanup
+  // Ticket: 0071g_constraint_pool_allocation
+  // allConstraints_ (non-owning view) must be cleared before constraintPool_.reset()
+  // so no dangling pointers exist during the pool's clear().
   allConstraints_.clear();
+  constraintPool_.reset();  // Destructs constraint objects, preserves capacity
   states_.clear();
   inverseMasses_.clear();
   inverseInertias_.clear();
@@ -862,44 +908,28 @@ void CollisionPipeline::clearEphemeralState()
 }
 
 std::vector<Constraint*>
-CollisionPipeline::buildSolverView(bool interleaved) const
+CollisionPipeline::buildSolverView(bool /* interleaved */) const
 {
-  std::vector<Constraint*> view;
-
-  if (!interleaved)
-  {
-    // No friction: return all constraints in storage order
-    view.reserve(allConstraints_.size());
-    for (const auto& c : allConstraints_)
-    {
-      view.push_back(c.get());
-    }
-  }
-  else
-  {
-    // Friction active: return interleaved [CC_0, FC_0, CC_1, FC_1, ...]
-    // Relies on constraint storage pattern: ContactConstraint followed by
-    // its matching FrictionConstraint (established in createConstraints)
-    view.reserve(allConstraints_.size());
-    for (const auto& c : allConstraints_)
-    {
-      view.push_back(c.get());
-    }
-  }
-
-  return view;
+  // Ticket: 0071g_constraint_pool_allocation
+  // allConstraints_ is already vector<Constraint*> — return a copy directly.
+  // Both interleaved and non-interleaved paths produce the same result since
+  // the storage pattern (CC then FC per contact) is already encoded in the
+  // order of allConstraints_ by createConstraints().
+  return allConstraints_;
 }
 
 std::vector<Constraint*> CollisionPipeline::buildContactView() const
 {
+  // Ticket: 0071g_constraint_pool_allocation
+  // allConstraints_ is vector<Constraint*> — no .get() needed.
   std::vector<Constraint*> view;
   view.reserve(allConstraints_.size() / 2);  // Rough estimate
 
-  for (const auto& c : allConstraints_)
+  for (Constraint* c : allConstraints_)
   {
-    if (dynamic_cast<ContactConstraint*>(c.get()))
+    if (dynamic_cast<ContactConstraint*>(c))
     {
-      view.push_back(c.get());
+      view.push_back(c);
     }
   }
 
@@ -927,12 +957,13 @@ void CollisionPipeline::recordConstraints(DataRecorder& recorder, uint32_t frame
 
 size_t CollisionPipeline::findPairIndexForConstraint(size_t constraintIdx) const
 {
+  // Ticket: 0071g_constraint_pool_allocation — allConstraints_ is vector<Constraint*>
   // Detect interleaved layout: [CC, FC, CC, FC, ...] when friction is active.
   // Stride is 2 (CC+FC per contact) with friction, 1 (CC only) without.
   bool hasFriction = false;
-  for (const auto& c : allConstraints_)
+  for (Constraint* c : allConstraints_)
   {
-    if (dynamic_cast<FrictionConstraint*>(c.get()))
+    if (dynamic_cast<FrictionConstraint*>(c))
     {
       hasFriction = true;
       break;
