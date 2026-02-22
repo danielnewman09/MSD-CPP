@@ -6,6 +6,7 @@
 // Ticket: 0070_nlopt_convergence_energy_injection
 // Ticket: 0073_hybrid_pgs_large_islands
 // Ticket: 0071c_eigen_fixed_size_matrices
+// Ticket: 0071e_trivial_allocation_elimination
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0045_constraint_solver_unification/design.md
@@ -679,6 +680,20 @@ ConstraintSolver::FlattenedConstraints ConstraintSolver::flattenConstraints(
 {
   FlattenedConstraints flat;
   int numContacts = 0;
+
+  // Ticket: 0071e_trivial_allocation_elimination
+  // Compute total row count before the loop so all 5 FlattenedConstraints
+  // vectors can be reserved up-front, eliminating reallocation growth.
+  size_t totalRows = 0;
+  for (const auto* constraint : contactConstraints)
+  {
+    totalRows += static_cast<size_t>(constraint->dimension());
+  }
+  flat.jacobianRows.reserve(totalRows);
+  flat.bodyAIndices.reserve(totalRows);
+  flat.bodyBIndices.reserve(totalRows);
+  flat.rowTypes.reserve(totalRows);
+  flat.restitutions.reserve(totalRows);
 
   for (const auto* constraint : contactConstraints)
   {
