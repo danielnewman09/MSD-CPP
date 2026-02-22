@@ -3,11 +3,11 @@
 ## Status
 - [x] Draft
 - [x] Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Implementation
-- [ ] Implementation Complete
+- [x] Design Approved — Ready for Implementation
+- [x] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Design Complete — Awaiting Review
+**Current Phase**: Implementation Complete
 **Type**: Performance
 **Priority**: Low
 **Created**: 2026-02-21
@@ -155,3 +155,20 @@ Focus solely on reducing per-pair vector allocations in the cache loop:
     - Factory bypass: inline `createFromCollision()` logic directly into `createConstraints()` (single call site)
     - `solvedLambdas_` and `islandConstraintSet_` promoted to member workspaces
     - Pointer stability guaranteed by pre-`resize()` before allocation batch within each frame
+
+### Implementation Phase
+- **Started**: 2026-02-22
+- **Completed**: 2026-02-22
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintPool.hpp`
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintPool.cpp`
+  - `msd/msd-sim/test/Physics/Constraints/ConstraintPoolTest.cpp`
+  - `docs/designs/0071g_constraint_pool_allocation/iteration-log.md`
+  - `docs/designs/0071g_constraint_pool_allocation/implementation-notes.md`
+- **Notes**:
+  - Used `reserve() + emplace_back() + clear()` instead of `resize()` as specified in design review (N1) — `ContactConstraint`/`FrictionConstraint` have no default constructors
+  - Pointer stability fix required: pre-`reserveContacts(collisions_.size() * 4)` and `reserveFriction(...)` before the allocation loop (discovered via segfault in iteration 1)
+  - `allConstraints_` changed from `vector<unique_ptr<Constraint>>` to `vector<Constraint*>` — all `.get()` calls removed throughout `CollisionPipeline.cpp`
+  - `ContactConstraintFactory::createFromCollision()` inlined into `createConstraints()`
+  - `solvedLambdas_` and `islandConstraintSet_` promoted to member workspaces
+  - 732/732 tests pass (15 new ConstraintPoolTest + 717 pre-existing)
