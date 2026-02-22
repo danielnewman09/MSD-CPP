@@ -76,14 +76,14 @@ TEST_F(FrictionConeSolverTest, SlidingCubeOnFloor_FrictionSaturatesAtConeLimit)
   const double vyFinal = stateFinal.velocity.y();
 
   std::cout << "\n=== Friction Cone Solver Diagnostic ===\n";
-  std::cout << "After " << totalFrames << " frames ("
-            << totalFrames * dt << "s):\n";
+  std::cout << "After " << totalFrames << " frames (" << totalFrames * dt
+            << "s):\n";
   std::cout << "  vx = " << vxFinal << " m/s\n";
   std::cout << "  vy = " << vyFinal << " m/s\n";
   std::cout << "  vz = " << stateFinal.velocity.z() << " m/s\n";
   std::cout << "  position = (" << stateFinal.position.x() << ", "
-            << stateFinal.position.y() << ", "
-            << stateFinal.position.z() << ")\n";
+            << stateFinal.position.y() << ", " << stateFinal.position.z()
+            << ")\n";
   std::cout << "  omega = (" << stateFinal.getAngularVelocity().x() << ", "
             << stateFinal.getAngularVelocity().y() << ", "
             << stateFinal.getAngularVelocity().z() << ")\n";
@@ -95,8 +95,8 @@ TEST_F(FrictionConeSolverTest, SlidingCubeOnFloor_FrictionSaturatesAtConeLimit)
 
   // Cube should come to rest or near rest by frame 50
   const double speed = std::sqrt(vxFinal * vxFinal + vyFinal * vyFinal);
-  EXPECT_LT(speed, 0.5)
-    << "Cube should be near rest after " << totalFrames << " frames";
+  EXPECT_LT(speed, 0.5) << "Cube should be near rest after " << totalFrames
+                        << " frames";
 
   // No lateral drift
   EXPECT_NEAR(vyFinal, 0.0, 0.1) << "No lateral velocity expected";
@@ -108,34 +108,34 @@ TEST_F(FrictionConeSolverTest, SlidingCubeOnFloor_FrictionSaturatesAtConeLimit)
   std::cout << "      get_contacts_for_body(1, <frame>)\n";
 }
 
-TEST_F(FrictionConeSolverTest, test)
-{
-  // Setup: floor at z=-50 (surface at z=0), cube resting on floor
-  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+// TEST_F(FrictionConeSolverTest, test)
+// {
+//   // Setup: floor at z=-50 (surface at z=0), cube resting on floor
+//   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  // Cube at z=0.5 (bottom face at z=0, touching floor)
-  // Horizontal velocity of 2 m/s in x-direction
-  // e=0.0 to avoid any bounce complications
-  // mu=0.5 for clear friction behavior
-  constexpr double mass = 1.0;
-  constexpr double restitution = 0.0;
-  constexpr double friction = 0.5;
-  constexpr double initialVelocityX = 5.0;
+//   // Cube at z=0.5 (bottom face at z=0, touching floor)
+//   // Horizontal velocity of 2 m/s in x-direction
+//   // e=0.0 to avoid any bounce complications
+//   // mu=0.5 for clear friction behavior
+//   constexpr double mass = 1.0;
+//   constexpr double restitution = 0.0;
+//   constexpr double friction = 0.5;
+//   constexpr double initialVelocityX = 5.0;
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.64},
-                              AngularCoordinate{},
-                              Coordinate{initialVelocityX, 0.0, 0.0},
-                              mass,
-                              restitution,
-                              friction);
+//   const auto& cube =
+//     spawnInertialWithVelocity("unit_cube",
+//                               Coordinate{0.0, 0.0, 0.64},
+//                               AngularCoordinate{},
+//                               Coordinate{initialVelocityX, 0.0, 0.0},
+//                               mass,
+//                               restitution,
+//                               friction);
 
-  // Physics constants
-  constexpr double g = 9.81;
-  constexpr double dt = 0.016;
-  constexpr double muG = friction * g;  // 4.905 m/s²
+//   // Physics constants
+//   constexpr double g = 9.81;
+//   constexpr double dt = 0.016;
+//   constexpr double muG = friction * g;  // 4.905 m/s²
 
-  // Continue to frame 30 to observe full sliding behavior
-  step(250);  // Total: 30 frames
-}
+//   // Continue to frame 30 to observe full sliding behavior
+//   step(250);  // Total: 30 frames
+// }
