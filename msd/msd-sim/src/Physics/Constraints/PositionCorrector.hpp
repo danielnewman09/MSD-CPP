@@ -79,12 +79,6 @@ public:
                         double dt,
                         const Config& config);
 
-  // Rule of Five
-  PositionCorrector(const PositionCorrector&) = default;
-  PositionCorrector& operator=(const PositionCorrector&) = default;
-  PositionCorrector(PositionCorrector&&) noexcept = default;
-  PositionCorrector& operator=(PositionCorrector&&) noexcept = default;
-
 private:
   static constexpr double kRegularizationEpsilon = 1e-8;
 
