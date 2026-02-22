@@ -175,6 +175,16 @@
             ]
         },
         {
+            "name": "release-replay-tools",
+            "displayName": "Build replay tools (Release)",
+            "configurePreset": "conan-release",
+            "jobs": 11,
+            "targets": [
+                "generate_test_recording",
+                "generate_multibody_recording"
+            ]
+        },
+        {
             "name": "debug-tests-only",
             "displayName": "Build all tests (Debug)",
             "configurePreset": "conan-debug",
@@ -255,6 +265,7 @@
                 "generate_assets",
                 "generate_test_assets",
                 "generate_test_recording",
+                "generate_multibody_recording",
                 "msd_reader",
                 "codebase-db",
                 "traceability"

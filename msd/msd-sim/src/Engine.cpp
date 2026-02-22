@@ -32,7 +32,7 @@ std::vector<Coordinate> createCubeVertices(double size)
 Engine::Engine(const std::string& dbPath)
   : assetRegistry_{dbPath}, floorHull_{createCubeVertices(100.0)}
 {
-  // Spawn floor environment object at origin
+  // Spawn floor environment object (100m cube at z=-60, top face at z=-10)
   const ReferenceFrame floorFrame{Coordinate{0.0, 0.0, -60.0}};
   worldModel_.spawnEnvironmentObject(0, floorHull_, floorFrame);
 }

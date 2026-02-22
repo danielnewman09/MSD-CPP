@@ -34,3 +34,14 @@ add_custom_command(
   VERBATIM
 )
 add_custom_target(test_assets_db ALL DEPENDS "${TEST_ASSETS_DB}")
+
+# Ticket: 0075-unified-contact-constraint
+# Multi-body collision recording generator for replay analysis
+
+add_executable(generate_multibody_recording generate_multibody_recording.cpp)
+
+target_link_libraries(generate_multibody_recording PRIVATE msd_sim)
+
+set_target_properties(generate_multibody_recording PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/debug"
+)
