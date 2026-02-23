@@ -467,7 +467,7 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
 | `BlockPGSSolver` | `CoulombConeProjection_Separating` | lambda_n < 0 projects to (0,0,0) |
 | `BlockPGSSolver` | `CoulombConeProjection_Static` | Static contact (||t|| < mu*n) untouched |
 | `BlockPGSSolver` | `CoulombConeProjection_Sliding` | Sliding contact scales tangent to cone surface |
-| `BlockPGSSolver` | `SingleContact_RampSlide` | Box on 30-degree ramp with mu=0.3: steady-state lambda_n = mg*cos(30)*dt ± 5% |
+| `BlockPGSSolver` | `SingleContact_RampSlide` | Box on 30-degree ramp with mu=0.3: steady-state lambda_n = mg*cos(30)*dt ± 5%. **Note**: Requires adding a 30-degree ramp asset to `generate_test_assets` executable and regenerating the test `assets.db`. |
 | `BlockPGSSolver` | `WarmStart_Convergence` | Warm-started solve converges in < 5 iterations for persistent contact |
 | `BlockPGSSolver` | `EnergyConservation_PhaseB` | Phase B: no energy injected over 60 frames of resting contact (Phase A is no-op since e=0 for resting) |
 | `BlockPGSSolver` | `ExtremeMassRatio` | 1000:1 mass ratio converges without NaN |
@@ -477,6 +477,8 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
 
 #### Integration Tests
 
+**All integration tests below must be replay-enabled** (recording to `.db` via `DataRecorder`) so that results can be independently verified through the replay server and are not spuriously passing. Assertions should be strict and thorough — validate per-frame impulse magnitudes, energy deltas, and convergence metrics, not just final-state pass/fail.
+
 | Test Case | Components Involved | What It Validates |
 |-----------|---------------------|-------------------|
 | `RampSlide_StableNormalImpulse` | `CollisionPipeline`, `BlockPGSSolver`, `ContactConstraint` | Normal impulse within 5% of `mg*cos(theta)*dt` during steady sliding |
@@ -484,14 +486,6 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
 | `TumblingSlide_EnergyConservation` | `WorldModel`, `EnergyTracker`, `BlockPGSSolver` | Zero energy injection during sliding contact episodes (F4 variant) |
 | `StackCollapse4_NoRegression` | `CollisionPipeline`, `BlockPGSSolver` | 4-box stack stable at rest; lambda_n converges in < 5 iterations warm |
 | `StackCollapse16_NoRegression` | `CollisionPipeline`, `BlockPGSSolver` | 16-box stack stable; Block PGS handles multi-island case |
-
-#### Benchmark Tests
-
-| Component | Benchmark Case | What It Measures | Baseline Expectation |
-|-----------|----------------|------------------|----------------------|
-| `BlockPGSSolver` | `ClusterDrop32_BlockPGS` | Solver throughput for 32 objects with friction | No regression vs NLopt (target: equal or faster) |
-| `BlockPGSSolver` | `SingleContact_SweepCount` | Average sweeps per solve (warm-started) | < 5 sweeps for resting contact |
-| `CollisionPipeline` | `ConstraintCreation_Unified` | Time to create constraints (no separate FC allocation) | Faster than paired CC+FC allocation |
 
 ---
 
@@ -506,7 +500,7 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
    - Option A: Schema migration — Add migration script that combines existing tables into unified table on load. Pros: Historical recordings readable. Cons: Migration complexity.
    - Option B: Version flag — `DataRecorder` uses old schema when replaying old recordings; new schema for new recordings. Pros: Clean separation. Cons: Two code paths.
    - Option C: Break compatibility — New recordings use new schema; old recordings incompatible. Pros: Cleanest code. Cons: Historical replay broken.
-   - **Recommendation**: Option C for development speed. Replay tooling is already tied to the code version.
+   - **Resolution**: Option C. Replay tooling is already tied to the code version. **Note**: This will break compatibility with existing replay server queries against old recordings. The replay server's generated models (Pydantic) and record bindings (pybind11) must be updated to use `UnifiedContactConstraintRecord` in place of the old `ContactConstraintRecord` and `FrictionConstraintRecord` tables.
 
 2. **NLopt Removal Timing**
 
@@ -514,7 +508,7 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
 
    - Option A: Keep NLopt behind `#ifdef USE_NLOPT_SOLVER` during development and prototype validation, remove in a follow-on ticket.
    - Option B: Remove immediately, trusting the Block PGS implementation and prototype validation.
-   - **Recommendation**: Option A during implementation phase; delete in a follow-on cleanup ticket once integration tests pass.
+   - **Resolution**: Option A. Keep NLopt behind runtime toggle during implementation phase; delete in follow-on ticket [0075c](../../tickets/0075c_nlopt_removal.md) once integration tests pass.
 
 3. **ASM Path for Frictionless Contacts**
 
@@ -522,7 +516,7 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
 
    - Option A: Keep ASM for frictionless (current behavior, no regression risk). Block PGS adds overhead for contacts that already work well.
    - Option B: Unify everything under Block PGS with `dim=1` contacts treated as degenerate 3x3 blocks. Simpler solver dispatch.
-   - **Recommendation**: Option A. The ASM path is well-validated and performant; mixing frictionless contacts into Block PGS would be unnecessary churn.
+   - **Resolution**: Option A. The ASM path is well-validated and performant; mixing frictionless contacts into Block PGS would be unnecessary churn.
 
 4. **Per-Contact `accumulatedImpulse_` Ownership**
 
@@ -530,7 +524,7 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
 
    - Option A: `ContactConstraint` stores `Vec3 accumulatedImpulse_` as a staging area that `BlockPGSSolver` reads/writes during the solve. After solve, `CollisionPipeline` reads it and calls `ContactCache::update3()`. Constraint destroyed after `clearEphemeralState()`.
    - Option B: `BlockPGSSolver` maintains its own `vector<Vec3>` indexed to constraint order. After solve, `CollisionPipeline` extracts these for cache update.
-   - **Recommendation**: Option B. Keeps solver state in the solver; constraints remain data-only. Avoids mutable non-const methods on the constraint.
+   - **Resolution**: Option B. Keeps solver state in the solver; constraints remain data-only. Avoids mutable non-const methods on the constraint.
 
 ### Prototype Required
 
@@ -544,9 +538,9 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
 
 ### Requirements Clarification
 
-1. **ASM Threshold for Block PGS**: The current `kASMThreshold = 20` refers to total Jacobian rows. For Block PGS, the equivalent is 20/3 ≈ 7 contacts with friction. Should the threshold be expressed in contacts (more intuitive) or rows (consistent with existing code)?
+1. **ASM Threshold for Block PGS**: The current `kASMThreshold = 20` refers to total Jacobian rows. For Block PGS, the equivalent is 20/3 ≈ 7 contacts with friction. Should the threshold be expressed in contacts (more intuitive) or rows (consistent with existing code)? **Resolution**: Express in rows for consistency with existing code.
 
-2. **Sliding Mode Handling in Block PGS**: **Resolution**: Keep `setSlidingMode()` as a safety net during prototype validation. Phase B's tangent bias is `-Jv_t` which naturally handles friction direction. However, `setSlidingMode()` aligns the tangent basis with the sliding direction, which may improve convergence for sustained sliding. Add telemetry to measure activation frequency. Remove only if Block PGS produces zero activations across all test scenarios.
+2. **Sliding Mode Handling in Block PGS** *(Design Decision — DD-0075-H1)*: **Resolution**: Keep `setSlidingMode()` as a safety net during prototype validation. Phase B's tangent bias is `-Jv_t` which naturally handles friction direction. However, `setSlidingMode()` aligns the tangent basis with the sliding direction, which may improve convergence for sustained sliding. Add telemetry to measure activation frequency. Remove only if Block PGS produces zero activations across all test scenarios. **Rationale**: The coupled 3x3 solve should theoretically produce correct friction direction without basis alignment, but removing the safety net before empirical validation introduces unnecessary risk. Cost of keeping it is minimal (one branch per contact per frame).
 
 3. **Phase A Iteration Count**: Should Phase A iterate multiple passes over contacts (improving multi-contact bounce accuracy) or is a single pass sufficient? **Recommendation**: Single pass. Multi-contact bounce accuracy is secondary to energy stability, and Phase B will correct any residual normal velocity anyway. Multiple Phase A passes risk over-estimating bounce for tightly coupled contact manifolds.
 
@@ -556,7 +550,7 @@ This is a secondary refinement and is **out of scope for Phase 1/2 implementatio
 
 The following phased order minimizes risk and enables incremental validation:
 
-### Phase 1: Data Structure Unification
+### Phase 1: Data Structure Unification — [Subticket 0075a](../../tickets/0075a_unified_constraint_data_structure.md)
 1. Create `UnifiedContactConstraintRecord` in `msd-transfer`
 2. Update `ConstraintRecordVisitor` to use new record type
 3. Extend `ContactConstraint` with friction fields (constructor, dimension, jacobian, accessors)
@@ -567,16 +561,15 @@ The following phased order minimizes risk and enables incremental validation:
 
 **Validation gate**: Build without errors. Existing tests pass (friction behavior may regress temporarily as NLopt no longer receives correct input — accept this during Phase 1).
 
-### Phase 2: Block PGS Solver
+### Phase 2: Block PGS Solver — [Subticket 0075b](../../tickets/0075b_block_pgs_solver.md)
 1. Implement `BlockPGSSolver` with two-phase structure: `applyRestitutionPreSolve()` (Phase A) + `sweepOnce()` (Phase B)
 2. Implement `projectCoulombCone()`, `buildBlockK()`, `updateVResNormalOnly()`, `computeBlockVelocityError()`
 3. Wire `BlockPGSSolver` into `ConstraintSolver::solve()` for the friction dispatch path
 4. Remove `FrictionConstraint` class and all references
 5. Run investigation I1 (K_nt analysis) on existing recordings to validate coupling assumption
 6. Run integration tests (ramp slide, energy conservation, Phase A isolation tests)
-7. Profile against `ClusterDrop32` benchmark baseline
 
-### Phase 3: Cleanup
+### Phase 3: Cleanup — [Subticket 0075c](../../tickets/0075c_nlopt_removal.md)
 1. Remove `NLoptFrictionSolver` once Block PGS passes all tests
 2. Delete `FrictionConstraintRecord`, `ContactConstraintRecord` (superseded by `UnifiedContactConstraintRecord`)
 3. Update `CLAUDE.md` and diagrams in `docs/msd/`

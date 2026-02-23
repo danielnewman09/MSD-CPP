@@ -14,6 +14,7 @@
 **Created**: 2026-02-21
 **Generate Tutorial**: No
 **Parent Ticket**: None
+**Subtickets**: [0075a](0075a_unified_constraint_data_structure.md) (Phase 1: data structure), [0075b](0075b_block_pgs_solver.md) (Phase 2: Block PGS solver), [0075c](0075c_nlopt_removal.md) (Phase 3: NLopt removal)
 **Related Tickets**: [0032](0032_contact_constraint_refactor.md) (contact constraint), [0035a](0035a_tangent_basis_and_friction_constraint.md) (friction constraint), [0043](0043_constraint_hierarchy_refactor.md) (constraint hierarchy), [0067](0067_contact_phase_energy_injection.md) (energy injection), [0069](0069_friction_velocity_reversal.md) (sliding mode), [0070](0070_nlopt_convergence_energy_injection.md) (decoupled solve), [0073](0073_hybrid_pgs_large_islands.md) (hybrid PGS)
 
 ---
