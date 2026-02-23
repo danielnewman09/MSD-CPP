@@ -1,0 +1,243 @@
+@startuml 0075_unified_contact_constraint
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<removed>> LightCoral
+}
+
+title 0075: Unified Contact Constraint (Block PGS)
+
+' ========== BASE CONSTRAINT ==========
+
+abstract class Constraint {
+    +{abstract} dimension(): int
+    +{abstract} evaluate(stateA, stateB, t): VectorXd
+    +{abstract} jacobian(stateA, stateB, t): MatrixXd
+    +{abstract} lambdaBounds(): LambdaBounds
+    +{abstract} recordState(visitor, idA, idB): void
+    +bodyAIndex(): size_t
+    +bodyBIndex(): size_t
+    +bodyCount(): int
+}
+
+' ========== NEW / MODIFIED CLASSES ==========
+
+class ContactConstraint <<modified>> {
+    -- Existing Fields (unchanged) --
+    -contact_normal_: Coordinate
+    -lever_arm_a_: Coordinate
+    -lever_arm_b_: Coordinate
+    -penetration_depth_: double
+    -restitution_: double
+    -pre_impact_rel_vel_normal_: double
+    -- NEW Fields (Phase 1) --
+    -tangent1_: Coordinate
+    -tangent2_: Coordinate
+    -friction_coefficient_: double
+    -accumulated_impulse_: Vec3 {0,0,0}
+    -is_sliding_mode_: bool
+    -- Existing Interface (unchanged) --
+    +dimension(): int {1 or 3}
+    +evaluate(...): VectorXd
+    +jacobian(...): MatrixXd
+    +lambdaBounds(): LambdaBounds
+    -- NEW Interface (Phase 1) --
+    +hasFriction(): bool
+    +getFrictionCoefficient(): double
+    +getTangent1(): Coordinate
+    +getTangent2(): Coordinate
+    +getAccumulatedImpulse(): Vec3
+    +setAccumulatedImpulse(Vec3): void
+    +setSlidingMode(dir: Vector3D): void
+    +isSlidingMode(): bool
+    +setTangentLambdas(t1, t2): void
+}
+
+class FrictionConstraint <<removed>> {
+    ' DELETED — merged into ContactConstraint
+    ' All fields moved to ContactConstraint
+}
+
+class BlockPGSSolver <<new>> {
+    -- Configuration --
+    -maxSweeps_: int {50}
+    -convergenceTolerance_: double {1e-6}
+    -- Workspace --
+    -vRes_: VectorXd {6*numBodies velocity residual}
+    -bounceLambdas_: vector<double> {Phase A impulses}
+    -- Public Interface --
+    +solve(constraints, states, invMasses,\n  invInertias, numBodies, dt, warmStart): SolveResult
+    +setMaxSweeps(n): void
+    +setConvergenceTolerance(tol): void
+    -- Phase A: Restitution Pre-Solve --
+    -applyRestitutionPreSolve(contacts, blockK,\n  states, invMasses, invInertias): vector<double>
+    -updateVResNormalOnly(contact, deltaLambdaN,\n  invMasses, invInertias): void
+    -- Phase B: Dissipative Block PGS --
+    -sweepOnce(contacts, blockK, lambda,\n  states, invMasses, invInertias): double
+    -computeBlockVelocityError(contact, states): Vec3
+    -- Shared --
+    -buildBlockK(contact, invMasses, invInertias): Matrix3d
+    -{static} projectCoulombCone(lambda_block, mu): Vec3
+    -updateVRes3(contact, delta3, invMasses,\n  invInertias): void
+    .. SolveResult ..
+    +bodyForces: vector<BodyForces>
+    +lambdas: VectorXd
+    +converged: bool
+    +iterations: int
+    +residual: double
+}
+
+class ProjectedGaussSeidel <<modified>> {
+    ' Retains scalar PGS for ASM-path fallback
+    ' and backward compatibility during transition
+    ' No new fields or methods added
+}
+
+class ConstraintSolver <<modified>> {
+    -- Dispatch Logic Changed --
+    ' hasFriction detection: checks ContactConstraint.hasFriction()
+    ' instead of dynamic_cast<FrictionConstraint*>
+    ' flattenConstraints: removed (no more interleaving)
+    -- Threshold Updated --
+    +kASMThreshold: size_t {20} ' unchanged value
+    -- Solver Instances --
+    -blockPgsSolver_: BlockPGSSolver {new}
+    -pgsSolver_: ProjectedGaussSeidel  {existing}
+    -nloptSolver_: NLoptFrictionSolver {existing, to be removed later}
+    -- Helpers Removed --
+    ' flattenConstraints() — no longer needed
+    ' buildFrictionSpec() — no longer needed
+    ' assembleBlock3RHS() — not needed (Phase B uses -v_err directly)
+}
+
+class ContactConstraintFactory <<modified>> {
+    ' createFromCollision() now creates unified ContactConstraint
+    ' with tangent basis when frictionCoefficient > 0
+    ' No separate FrictionConstraint creation step needed
+    +createFromCollision(bodyAIdx, bodyBIdx,\n  result, stateA, stateB,\n  comA, comB,\n  restitution, frictionCoefficient): vector<unique_ptr<ContactConstraint>>
+}
+
+class CollisionPipeline <<modified>> {
+    ' allConstraints_ now holds only ContactConstraint (no FrictionConstraint)
+    -- Removed --
+    ' buildSolverView(interleaved): removed interleaving logic
+    ' buildContactView(): dynamic_cast<FrictionConstraint*> → removed
+    ' propagateSolvedLambdas(): removed (no cross-wiring needed)
+    -- Simplified --
+    +buildSolverView(): vector<Constraint*>
+    +buildContactView(): vector<Constraint*>
+    -- createConstraints() simplified --
+    ' Single factory call per contact point
+    ' No paired CC+FC creation
+}
+
+class ContactCache <<modified>> {
+    -- Changed --
+    ' lambdas: vector<double> → accumulatedImpulse: Vec3
+    ' One Vec3 per contact point (was 3 scalars: n, t1, t2 scattered)
+    -- Updated Methods --
+    +getWarmStart3(bodyA, bodyB, normal, points): vector<Vec3>
+    +update3(bodyA, bodyB, normal, impulses, points): void
+    -- Sliding State (unchanged) --
+    +updateSlidingState(...)
+    +getSlidingState(...)
+}
+
+class CachedContact <<modified>> {
+    -- Changed --
+    ' lambdas: vector<double> replaced with:
+    -impulses_: vector<Vec3> {one per contact point}
+    ' normal, points, age, slidingDirection unchanged
+}
+
+' ========== TRANSFER RECORDS ==========
+
+class UnifiedContactConstraintRecord <<new>> {
+    -- Contact Geometry (from ContactConstraintRecord) --
+    +body_a_id: uint32_t
+    +body_b_id: uint32_t
+    +normal: Vector3DRecord
+    +lever_arm_a: Vector3DRecord
+    +lever_arm_b: Vector3DRecord
+    +penetration_depth: double
+    +restitution: double
+    +pre_impact_rel_vel_normal: double
+    -- Friction Fields (from FrictionConstraintRecord) --
+    +tangent1: Vector3DRecord
+    +tangent2: Vector3DRecord
+    +friction_coefficient: double
+    +normal_lambda: double
+    +tangent1_lambda: double
+    +tangent2_lambda: double
+    +frame: ForeignKey<SimulationFrameRecord>
+}
+
+class ContactConstraintRecord <<removed>> {
+    ' Superseded by UnifiedContactConstraintRecord
+}
+
+class FrictionConstraintRecord <<removed>> {
+    ' Superseded by UnifiedContactConstraintRecord
+}
+
+class ConstraintRecordVisitor <<modified>> {
+    ' visit(ContactConstraintRecord) — removed
+    ' visit(FrictionConstraintRecord) — removed
+    +visit(UnifiedContactConstraintRecord): void {new}
+}
+
+' ========== EXISTING UNCHANGED CLASSES ==========
+
+class TangentBasis {
+    +computeTangentBasis(normal): {t1, t2}
+}
+
+class NLoptFrictionSolver {
+    ' Existing; retained temporarily
+    ' Will be removed after Block PGS validation
+}
+
+' ========== RELATIONSHIPS ==========
+
+Constraint <|-- ContactConstraint : extends
+Constraint <|-- FrictionConstraint : extends (REMOVED)
+
+ContactConstraint ..> TangentBasis : uses (computes basis at construction)
+ContactConstraint ..> UnifiedContactConstraintRecord : builds (via recordState)
+ContactConstraintFactory ..> ContactConstraint : creates
+CollisionPipeline *-- "0..*" ContactConstraint : owns via allConstraints_
+CollisionPipeline --> ConstraintSolver : delegates solve
+ConstraintSolver *-- BlockPGSSolver : owns (new solver)
+ConstraintSolver *-- ProjectedGaussSeidel : owns (existing)
+ConstraintSolver *-- NLoptFrictionSolver : owns (transitional)
+ContactCache o-- CachedContact : stores
+CollisionPipeline --> ContactCache : updates warm-start
+ConstraintRecordVisitor ..> UnifiedContactConstraintRecord : visits
+
+' Legend
+note top of ContactConstraint
+  dimension() returns 1 (mu=0) or 3 (mu>0).
+  Owns complete contact frame (normal + tangents).
+  Replaces separate ContactConstraint+FrictionConstraint pair.
+  Sliding mode logic integrated (ticket 0069).
+end note
+
+note top of BlockPGSSolver
+  Two-phase solver:
+  Phase A: Normal-only restitution pre-solve
+    (isolates (1+e) from friction cone).
+  Phase B: Purely dissipative 3x3 block PGS
+    (RHS = -v_err, no restitution term).
+  Couples normal and friction via K_nt terms.
+  Coulomb cone projection after each block step.
+  Replaces NLopt SLSQP and decoupled scalar solve.
+end note
+
+note right of ConstraintSolver
+  ASM path (numRows <= 20): Contact-only constraints
+    use existing ActiveSet method (unchanged).
+  Block PGS path (numRows > 20 OR friction):
+    Uses BlockPGSSolver with 3x3 per-contact blocks.
+end note
+
+@enduml
