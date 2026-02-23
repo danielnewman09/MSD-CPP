@@ -1,10 +1,12 @@
 #pragma once
 
+// Ticket: 0075a_unified_constraint_data_structure
+// Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 1)
+
 namespace msd_transfer {
 
 // Forward declarations
-struct ContactConstraintRecord;
-struct FrictionConstraintRecord;
+struct UnifiedContactConstraintRecord;
 
 /**
  * @brief Visitor interface for type-safe constraint record dispatching
@@ -19,22 +21,21 @@ struct FrictionConstraintRecord;
  * 3. The constraint calls visitor.visit(record) in its recordState() method
  *
  * Compiler will catch missing visit() implementations at build time.
+ *
+ * @ticket 0075a_unified_constraint_data_structure
  */
 class ConstraintRecordVisitor {
 public:
   virtual ~ConstraintRecordVisitor() = default;
 
   /**
-   * @brief Visit a contact constraint record
-   * @param record The contact constraint state to process
+   * @brief Visit a unified contact constraint record
+   *
+   * Handles both frictionless (tangent fields zeroed) and frictional contacts.
+   *
+   * @param record The unified contact constraint state to process
    */
-  virtual void visit(const ContactConstraintRecord& record) = 0;
-
-  /**
-   * @brief Visit a friction constraint record
-   * @param record The friction constraint state to process
-   */
-  virtual void visit(const FrictionConstraintRecord& record) = 0;
+  virtual void visit(const UnifiedContactConstraintRecord& record) = 0;
 };
 
 }  // namespace msd_transfer

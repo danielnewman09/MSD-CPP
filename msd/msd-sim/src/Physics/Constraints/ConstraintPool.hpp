@@ -1,5 +1,7 @@
 // Ticket: 0071g_constraint_pool_allocation
+// Ticket: 0075a_unified_constraint_data_structure
 // Design: docs/designs/0071g_constraint_pool_allocation/design.md
+// Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 1)
 
 #ifndef MSD_SIM_PHYSICS_CONSTRAINT_POOL_HPP
 #define MSD_SIM_PHYSICS_CONSTRAINT_POOL_HPP
@@ -67,6 +69,14 @@ public:
    * @return Pointer to the constructed ContactConstraint.
    *         Valid until next reset().
    */
+  /**
+   * @brief Construct a unified ContactConstraint in-pool and return a pointer.
+   *
+   * @param frictionCoefficient Combined friction coefficient μ [0, ∞)
+   *        Default 0.0 → frictionless (dimension=1, backward-compatible)
+   *
+   * @ticket 0075a_unified_constraint_data_structure
+   */
   ContactConstraint* allocateContact(size_t bodyAIndex,
                                      size_t bodyBIndex,
                                      const Coordinate& normal,
@@ -76,10 +86,16 @@ public:
                                      const Coordinate& comA,
                                      const Coordinate& comB,
                                      double restitution,
-                                     double preImpactRelVelNormal);
+                                     double preImpactRelVelNormal,
+                                     double frictionCoefficient = 0.0);
 
   /**
    * @brief Construct a FrictionConstraint in-pool and return a pointer.
+   *
+   * @deprecated As of ticket 0075a_unified_constraint_data_structure,
+   *   friction data is embedded in ContactConstraint. This method is
+   *   retained for backward compatibility but should not be called
+   *   from new code. Will be removed in a future cleanup ticket.
    *
    * Grows the backing vector on first call or when capacity is exceeded.
    * After the first frame, capacity is sufficient and no allocation occurs.
@@ -131,7 +147,12 @@ public:
   /** @return Number of active ContactConstraints in the pool. */
   [[nodiscard]] size_t contactCount() const;
 
-  /** @return Number of active FrictionConstraints in the pool. */
+  /**
+   * @brief Number of active FrictionConstraints in the pool.
+   *
+   * @deprecated As of ticket 0075a, friction is embedded in ContactConstraint.
+   *   This always returns 0 in normal operation.
+   */
   [[nodiscard]] size_t frictionCount() const;
 
   // Rule of Zero: compiler-generated copy/move are correct.

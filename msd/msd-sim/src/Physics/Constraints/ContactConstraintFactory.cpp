@@ -1,5 +1,7 @@
 // Ticket: 0032_contact_constraint_refactor
+// Ticket: 0075a_unified_constraint_data_structure
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
+// Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 1)
 
 #include <cmath>
 
@@ -15,7 +17,8 @@ std::vector<std::unique_ptr<ContactConstraint>> createFromCollision(
   const InertialState& stateB,
   const Coordinate& comA,
   const Coordinate& comB,
-  double restitution)
+  double restitution,
+  double frictionCoefficient)
 {
   std::vector<std::unique_ptr<ContactConstraint>> constraints;
 
@@ -45,8 +48,9 @@ std::vector<std::unique_ptr<ContactConstraint>> createFromCollision(
       effectiveRestitution = 0.0;
     }
 
-    // Create contact constraint
+    // Create unified contact constraint
     // Ticket: 0040a — use per-contact depth instead of shared penetrationDepth
+    // Ticket: 0075a — pass frictionCoefficient for unified data structure
     constraints.push_back(
       std::make_unique<ContactConstraint>(bodyAIndex,
                                           bodyBIndex,
@@ -57,7 +61,8 @@ std::vector<std::unique_ptr<ContactConstraint>> createFromCollision(
                                           comA,
                                           comB,
                                           effectiveRestitution,
-                                          relVelNormal));
+                                          relVelNormal,
+                                          frictionCoefficient));
   }
 
   return constraints;

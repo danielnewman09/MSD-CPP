@@ -1,5 +1,7 @@
 // Ticket: 0071g_constraint_pool_allocation
+// Ticket: 0075a_unified_constraint_data_structure
 // Design: docs/designs/0071g_constraint_pool_allocation/design.md
+// Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 1)
 
 #include "msd-sim/src/Physics/Constraints/ConstraintPool.hpp"
 
@@ -16,8 +18,10 @@ ContactConstraint* ConstraintPool::allocateContact(
   const Coordinate& comA,
   const Coordinate& comB,
   double restitution,
-  double preImpactRelVelNormal)
+  double preImpactRelVelNormal,
+  double frictionCoefficient)
 {
+  // Ticket: 0075a — pass frictionCoefficient to unified ContactConstraint
   contactStorage_.emplace_back(bodyAIndex,
                                 bodyBIndex,
                                 normal,
@@ -27,7 +31,8 @@ ContactConstraint* ConstraintPool::allocateContact(
                                 comA,
                                 comB,
                                 restitution,
-                                preImpactRelVelNormal);
+                                preImpactRelVelNormal,
+                                frictionCoefficient);
   return &contactStorage_.back();
 }
 

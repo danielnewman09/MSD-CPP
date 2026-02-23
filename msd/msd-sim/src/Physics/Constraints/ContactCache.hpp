@@ -1,9 +1,11 @@
 // Ticket: 0040d_contact_persistence_warm_starting
 // Ticket: 0069_friction_velocity_reversal
+// Ticket: 0075a_unified_constraint_data_structure
 
 #ifndef MSD_SIM_PHYSICS_CONTACT_CACHE_HPP
 #define MSD_SIM_PHYSICS_CONTACT_CACHE_HPP
 
+#include <Eigen/Dense>
 #include <cstdint>
 #include <optional>
 #include <unordered_map>
@@ -19,23 +21,28 @@ namespace msd_sim
 /**
  * @brief Cached contact data for a single body pair
  *
- * Stores the solved lambda values, contact normal, and contact point
+ * Stores the solved impulse values, contact normal, and contact point
  * locations from the previous frame. Used for warm-starting the
  * Active Set Method solver.
+ *
+ * Impulses are stored as Eigen::Vector3d per contact point, encoding
+ * {lambda_n, lambda_t1, lambda_t2}. For frictionless contacts, only
+ * the x-component (lambda_n) is non-zero; t1 and t2 remain at 0.0.
  *
  * Extended to track sliding contact state for friction direction alignment.
  *
  * @ticket 0040d_contact_persistence_warm_starting
  * @ticket 0069_friction_velocity_reversal
+ * @ticket 0075a_unified_constraint_data_structure
  */
 struct CachedContact
 {
   uint32_t bodyA_id;
   uint32_t bodyB_id;
-  Vector3D normal;                    // Previous frame contact normal
-  std::vector<double> lambdas;        // Previous frame solved lambda values
-  std::vector<Coordinate> points;     // Previous frame contact midpoints
-  uint32_t age{0};                    // Frames since last refresh
+  Vector3D normal;                            // Previous frame contact normal
+  std::vector<Eigen::Vector3d> impulses;      // Per-contact impulse: {lambda_n, lambda_t1, lambda_t2}
+  std::vector<Coordinate> points;             // Previous frame contact midpoints
+  uint32_t age{0};                            // Frames since last refresh
 
   // Sliding friction state (ticket 0069)
   std::optional<Vector3D> slidingDirection;  // Normalized sliding direction (world frame), nullopt if not sliding
@@ -66,11 +73,14 @@ public:
   ContactCache() = default;
 
   /**
-   * @brief Look up cached lambdas for a body pair
+   * @brief Look up cached impulses for a body pair (Vec3 per contact)
    *
    * Matches current contact points to cached contact points by proximity
-   * (nearest-neighbor within threshold). Returns reordered lambdas matching
-   * current contact ordering. Unmatched contacts get lambda = 0.
+   * (nearest-neighbor within threshold). Returns reordered impulse vectors
+   * matching current contact ordering. Unmatched contacts get impulse = {0,0,0}.
+   *
+   * Each returned Eigen::Vector3d encodes {lambda_n, lambda_t1, lambda_t2}.
+   * For frictionless contacts, lambda_t1 and lambda_t2 are 0.0.
    *
    * Invalidates cache entry if contact normal changed >15 degrees.
    *
@@ -78,32 +88,38 @@ public:
    * @param bodyB Body B identifier
    * @param currentNormal Current frame contact normal
    * @param currentPoints Current frame contact midpoints
-   * @return Cached lambdas reordered to match current contacts, or empty if
-   *         no valid cache entry exists
+   * @return Cached impulses reordered to match current contacts, or empty if
+   *         no valid cache entry exists. Size equals currentPoints.size().
+   *
+   * @ticket 0075a_unified_constraint_data_structure
    */
-  [[nodiscard]] std::vector<double> getWarmStart(
+  [[nodiscard]] std::vector<Eigen::Vector3d> getWarmStart3(
     uint32_t bodyA,
     uint32_t bodyB,
     const Vector3D& currentNormal,
     const std::vector<Coordinate>& currentPoints) const;
 
   /**
-   * @brief Store solved lambdas for a body pair
+   * @brief Store solved impulses for a body pair (Vec3 per contact)
    *
    * Overwrites any existing entry for this body pair.
    * Resets age to 0 (freshly updated).
    *
+   * Each impulse Eigen::Vector3d encodes {lambda_n, lambda_t1, lambda_t2}.
+   *
    * @param bodyA Body A identifier
    * @param bodyB Body B identifier
    * @param normal Contact normal for this frame
-   * @param lambdas Solved lambda values
+   * @param impulses Solved impulse vectors (one per contact point)
    * @param points Contact midpoints for this frame
+   *
+   * @ticket 0075a_unified_constraint_data_structure
    */
-  void update(uint32_t bodyA,
-              uint32_t bodyB,
-              const Vector3D& normal,
-              const std::vector<double>& lambdas,
-              const std::vector<Coordinate>& points);
+  void update3(uint32_t bodyA,
+               uint32_t bodyB,
+               const Vector3D& normal,
+               const std::vector<Eigen::Vector3d>& impulses,
+               const std::vector<Coordinate>& points);
 
   /**
    * @brief Remove entries older than maxAge frames

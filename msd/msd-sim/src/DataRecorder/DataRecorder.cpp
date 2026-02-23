@@ -17,14 +17,15 @@
 #include "msd-transfer/src/AssetPhysicalDynamicRecord.hpp"
 #include "msd-transfer/src/AssetPhysicalStaticRecord.hpp"
 #include "msd-transfer/src/CollisionResultRecord.hpp"
-#include "msd-transfer/src/ContactConstraintRecord.hpp"
 #include "msd-transfer/src/ContactPointRecord.hpp"
 #include "msd-transfer/src/CoordinateRecord.hpp"
 #include "msd-transfer/src/EnergyRecord.hpp"
 #include "msd-transfer/src/ExternalForceRecord.hpp"
 #include "msd-transfer/src/ForceVectorRecord.hpp"
-#include "msd-transfer/src/FrictionConstraintRecord.hpp"
 #include "msd-transfer/src/InertialStateRecord.hpp"
+// Ticket: 0075a_unified_constraint_data_structure
+// UnifiedContactConstraintRecord replaces ContactConstraintRecord + FrictionConstraintRecord
+#include "msd-transfer/src/UnifiedContactConstraintRecord.hpp"
 #include "msd-transfer/src/QuaternionDRecord.hpp"
 #include "msd-transfer/src/SimulationFrameRecord.hpp"
 #include "msd-transfer/src/SolverDiagnosticRecord.hpp"
@@ -78,9 +79,10 @@ DataRecorder::DataRecorder(const Config& config)
   database_->getDAO<msd_transfer::AssetPhysicalDynamicRecord>();
   database_->getDAO<msd_transfer::AssetDynamicStateRecord>();
 
-  // Constraint state records (ticket 0057_contact_tangent_recording)
-  database_->getDAO<msd_transfer::ContactConstraintRecord>();
-  database_->getDAO<msd_transfer::FrictionConstraintRecord>();
+  // Constraint state records
+  // Ticket: 0057_contact_tangent_recording
+  // Ticket: 0075a_unified_constraint_data_structure — unified record replaces both
+  database_->getDAO<msd_transfer::UnifiedContactConstraintRecord>();
 
   // Start recorder thread (daoCreationOrder_ is now fully populated)
   recorderThread_ = std::jthread{[this](std::stop_token st)
@@ -209,11 +211,9 @@ template cpp_sqlite::DataAccessObject<msd_transfer::AssetDynamicStateRecord>&
 DataRecorder::getDAO<msd_transfer::AssetDynamicStateRecord>();
 
 // Ticket: 0057_contact_tangent_recording
-template cpp_sqlite::DataAccessObject<msd_transfer::ContactConstraintRecord>&
-DataRecorder::getDAO<msd_transfer::ContactConstraintRecord>();
-
-template cpp_sqlite::DataAccessObject<msd_transfer::FrictionConstraintRecord>&
-DataRecorder::getDAO<msd_transfer::FrictionConstraintRecord>();
+// Ticket: 0075a_unified_constraint_data_structure — unified record replaces both
+template cpp_sqlite::DataAccessObject<msd_transfer::UnifiedContactConstraintRecord>&
+DataRecorder::getDAO<msd_transfer::UnifiedContactConstraintRecord>();
 
 // ========== Domain-Aware Recording Methods ==========
 // Ticket: 0056j_domain_aware_data_recorder
