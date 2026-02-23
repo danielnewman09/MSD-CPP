@@ -65,7 +65,7 @@ Full design: [`docs/designs/0075_unified_contact_constraint/design.md`](../docs/
 - **Started**: 2026-02-22
 - **Completed**: 2026-02-23
 - **Branch**: `0075-unified-contact-constraint`
-- **PR**: Pending
+- **PR**: #96 (draft)
 - **Artifacts**:
   - `msd/msd-transfer/src/UnifiedContactConstraintRecord.hpp` (new)
   - `msd/msd-transfer/src/ConstraintRecordVisitor.hpp`
