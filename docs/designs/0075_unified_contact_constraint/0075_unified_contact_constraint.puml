@@ -62,15 +62,22 @@ class BlockPGSSolver <<new>> {
     -- Configuration --
     -maxSweeps_: int {50}
     -convergenceTolerance_: double {1e-6}
-    -vRes_: VectorXd
-    -- Interface --
+    -- Workspace --
+    -vRes_: VectorXd {6*numBodies velocity residual}
+    -bounceLambdas_: vector<double> {Phase A impulses}
+    -- Public Interface --
     +solve(constraints, states, invMasses,\n  invInertias, numBodies, dt, warmStart): SolveResult
     +setMaxSweeps(n): void
     +setConvergenceTolerance(tol): void
-    -- Block Solve Core --
-    -solveBlockOnce(contacts, diag3, b,\n  lambda, invMasses, invInertias): double
-    -buildBlockDiag(contact, invMasses, invInertias): Matrix3d
-    -projectCoulombCone(lambda_n, lambda_t1, lambda_t2,\n  mu): Vec3
+    -- Phase A: Restitution Pre-Solve --
+    -applyRestitutionPreSolve(contacts, blockK,\n  states, invMasses, invInertias): vector<double>
+    -updateVResNormalOnly(contact, deltaLambdaN,\n  invMasses, invInertias): void
+    -- Phase B: Dissipative Block PGS --
+    -sweepOnce(contacts, blockK, lambda,\n  states, invMasses, invInertias): double
+    -computeBlockVelocityError(contact, states): Vec3
+    -- Shared --
+    -buildBlockK(contact, invMasses, invInertias): Matrix3d
+    -{static} projectCoulombCone(lambda_block, mu): Vec3
     -updateVRes3(contact, delta3, invMasses,\n  invInertias): void
     .. SolveResult ..
     +bodyForces: vector<BodyForces>
@@ -100,10 +107,7 @@ class ConstraintSolver <<modified>> {
     -- Helpers Removed --
     ' flattenConstraints() — no longer needed
     ' buildFrictionSpec() — no longer needed
-    -- Helpers Added --
-    -assembleBlock3Jacobians(): vector<Matrix<3,12>>
-    -assembleBlock3EffectiveMass(): MatrixXd
-    -assembleBlock3RHS(): VectorXd
+    ' assembleBlock3RHS() — not needed (Phase B uses -v_err directly)
 }
 
 class ContactConstraintFactory <<modified>> {
@@ -219,8 +223,12 @@ note top of ContactConstraint
 end note
 
 note top of BlockPGSSolver
-  Per-contact 3x3 block PGS solve.
-  Couples normal and friction directions.
+  Two-phase solver:
+  Phase A: Normal-only restitution pre-solve
+    (isolates (1+e) from friction cone).
+  Phase B: Purely dissipative 3x3 block PGS
+    (RHS = -v_err, no restitution term).
+  Couples normal and friction via K_nt terms.
   Coulomb cone projection after each block step.
   Replaces NLopt SLSQP and decoupled scalar solve.
 end note

@@ -22,9 +22,30 @@ See: `./0075_unified_contact_constraint.puml`
 #### `BlockPGSSolver`
 
 - **Purpose**: Two-phase contact solver. Phase A applies normal-only restitution impulses (isolating `(1+e)` from friction). Phase B runs purely dissipative per-contact 3x3 block PGS sweeps with Coulomb cone projection, coupling normal and friction through the full effective mass matrix without risk of energy injection.
+
+- **Physical meaning of the 3x3 effective mass matrix**: Each contact point generates three constraint directions: one normal (n) and two tangent (t1, t2). The 3x3 matrix `K = J_block * M^{-1} * J_block^T` is the **effective mass** seen by the constraint in these three directions. Its entries have the following physical interpretation:
+
+  | Entry | Physical Meaning |
+  |-------|-----------------|
+  | `K_nn` (diagonal) | How much a unit normal impulse changes the normal relative velocity. Depends on both bodies' inverse masses and how the lever arms project onto the normal direction. |
+  | `K_t1t1`, `K_t2t2` (diagonal) | How much a unit tangent impulse changes the tangent relative velocity. Larger when lever arms are long (rotational coupling amplifies tangent response). |
+  | `K_nt1`, `K_nt2` (off-diagonal) | **The coupling terms.** How much a unit friction impulse along t1 or t2 changes the *normal* relative velocity (and vice versa). These are non-zero when the lever arm `r × n` has components along the tangent directions — i.e., when friction torques tilt the body toward or away from the contact surface. This is the effect the decoupled solve ignores. |
+  | `K_t1t2` (off-diagonal) | Cross-coupling between the two tangent directions. Non-zero when lever arms create asymmetric rotational response. |
+
+  Concretely, for body A with inverse mass `w_A` and inverse inertia `I_A^{-1}`, and lever arm `r_A` from CoM to contact point:
+  ```
+  K = w_A * n⊗n + (r_A×n)^T * I_A^{-1} * (r_A×n)    [normal-normal block]
+    + w_A * t1⊗t1 + (r_A×t1)^T * I_A^{-1} * (r_A×t1)  [tangent-tangent block]
+    + cross terms from n⊗t1, n⊗t2, t1⊗t2               [off-diagonal coupling]
+    + (same structure for body B)
+  ```
+
+  When K_nt is large relative to K_nn (e.g., long lever arms, tumbling contact), ignoring the coupling causes the normal solve to underestimate the impulse needed to prevent penetration during sliding.
 - **Header location**: `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.hpp`
 - **Source location**: `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.cpp`
 - **Key interfaces**:
+
+  > **Investigation: Template on contact count.** The current interface uses heap-allocated `std::vector` and `Eigen::VectorXd` for per-solve results. As an initial step toward eliminating heap allocations in the solver hot path, investigate making `BlockPGSSolver` a class template parameterized on the number of contacts (known at island-decomposition time). This would allow `SolveResult::lambdas` to use `Eigen::Vector<double, 3*N>` and `bodyForces` to use `std::array<BodyForces, M>`, keeping all solver workspace on the stack for small islands. This is out of scope for the initial implementation but should be designed with this evolution in mind (e.g., avoid baking `VectorXd` into public APIs that would be hard to templatize later).
 
   ```cpp
   class BlockPGSSolver
@@ -45,13 +66,8 @@ See: `./0075_unified_contact_constraint.puml`
       double residual{std::numeric_limits<double>::quiet_NaN()};
     };
 
-    BlockPGSSolver() = default;
-    ~BlockPGSSolver() = default;
-
-    BlockPGSSolver(const BlockPGSSolver&) = default;
-    BlockPGSSolver& operator=(const BlockPGSSolver&) = default;
-    BlockPGSSolver(BlockPGSSolver&&) noexcept = default;
-    BlockPGSSolver& operator=(BlockPGSSolver&&) noexcept = default;
+    // Rule of Zero: all members are value types or containers with correct
+    // copy/move semantics. No custom special member functions needed.
 
     [[nodiscard]] SolveResult solve(
       const std::vector<Constraint*>& constraints,
@@ -99,8 +115,30 @@ See: `./0075_unified_contact_constraint.puml`
       const std::vector<Eigen::Matrix3d>& inverseInertias);
 
     // --- Phase B: Dissipative Block PGS ---
-    // Execute one block sweep over all contacts.
-    // RHS is always -v_err (no restitution term). Purely dissipative.
+    // Execute one complete sweep over all contacts, returning the maximum
+    // impulse change (convergence metric). Each contact is processed as a
+    // 3x3 block:
+    //
+    // For each contact c:
+    //   1. Read current constraint-space velocity:
+    //      v_err = J_block * (v_pre[bodyA,bodyB] + vRes_[bodyA,bodyB])
+    //      This is a Vec3: (v_normal, v_tangent1, v_tangent2)
+    //
+    //   2. Compute unconstrained impulse correction:
+    //      delta_lambda = K_inv * (-v_err)
+    //      K_inv is the pre-inverted 3x3 effective mass for this contact.
+    //      The target is to drive v_err to zero (purely dissipative).
+    //
+    //   3. Accumulate and project onto Coulomb cone:
+    //      lambda_temp = lambda_acc[c] + delta_lambda
+    //      lambda_proj = projectCoulombCone(lambda_temp, mu)
+    //
+    //   4. Apply actual change to velocity state:
+    //      delta = lambda_proj - lambda_acc[c]
+    //      vRes_ += M^{-1} * J_block^T * delta
+    //      lambda_acc[c] = lambda_proj
+    //
+    // Returns max(||delta||) across all contacts for convergence check.
     double sweepOnce(
       const std::vector<ContactConstraint*>& contacts,
       const std::vector<Eigen::Matrix3d>& blockK,
@@ -129,6 +167,14 @@ See: `./0075_unified_contact_constraint.puml`
     std::vector<double> bounceLambdas_;   // Phase A bounce impulse per contact
   };
   ```
+
+- **Physical meaning of `vRes_` (velocity residual)**: `vRes_` is a 6N vector (3 linear + 3 angular per body) that accumulates the **change in velocity** caused by all constraint impulses applied so far. It represents `M^{-1} * J^T * lambda_accumulated` — the total velocity correction from constraints, expressed in world-frame linear and angular velocity for each body.
+
+  At any point during the solve, the actual velocity of body `i` is `v_pre[i] + vRes_[6i : 6i+6]`, where `v_pre` is the unconstrained velocity (after gravity and external forces, before any contact impulse). The solver never modifies `v_pre` directly; instead it builds up `vRes_` incrementally:
+  - Phase A adds restitution bounce contributions (normal direction only)
+  - Phase B adds non-penetration and friction corrections (all 3 directions per contact)
+
+  After convergence, the final body forces are extracted as `F_body = J^T * lambda_total / dt`, which is equivalent to `M * vRes_ / dt`.
 
 - **Algorithm (Two-Phase)**:
 
