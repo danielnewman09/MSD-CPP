@@ -35,6 +35,7 @@
 #include "msd-transfer/src/TorqueVectorRecord.hpp"
 #include "msd-transfer/src/Vector3DRecord.hpp"
 #include "msd-transfer/src/VelocityRecord.hpp"
+#include "msd-transfer/src/UnifiedContactConstraintRecord.hpp"
 #include "msd-transfer/src/Vector4DRecord.hpp"
 
 namespace msd_transfer

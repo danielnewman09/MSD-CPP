@@ -2,13 +2,13 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Design
-- [ ] Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Implementation
-- [ ] Implementation Complete
+- [x] Ready for Design
+- [x] Design Complete — Awaiting Review
+- [x] Design Approved — Ready for Implementation
+- [x] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Draft
+**Current Phase**: Implementation Complete
 **Type**: Implementation
 **Priority**: High
 **Created**: 2026-02-22
@@ -60,3 +60,26 @@ Full design: [`docs/designs/0075_unified_contact_constraint/design.md`](../docs/
 ### Draft
 - **Date**: 2026-02-22
 - **Notes**: Split from parent ticket 0075 per PR #94 review feedback.
+
+### Implementation Phase
+- **Started**: 2026-02-22
+- **Completed**: 2026-02-23
+- **Branch**: `0075-unified-contact-constraint`
+- **PR**: #96 (draft)
+- **Artifacts**:
+  - `msd/msd-transfer/src/UnifiedContactConstraintRecord.hpp` (new)
+  - `msd/msd-transfer/src/ConstraintRecordVisitor.hpp`
+  - `msd/msd-transfer/src/Records.hpp`
+  - `msd/msd-sim/src/Physics/Constraints/ContactConstraint.hpp/.cpp`
+  - `msd/msd-sim/src/Physics/Constraints/ContactConstraintFactory.hpp/.cpp`
+  - `msd/msd-sim/src/Physics/Constraints/ContactCache.hpp/.cpp`
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintPool.hpp/.cpp`
+  - `msd/msd-sim/src/Physics/Constraints/FrictionConstraint.cpp`
+  - `msd/msd-sim/src/Physics/Collision/CollisionPipeline.hpp/.cpp`
+  - `msd/msd-sim/src/DataRecorder/DataRecorder.cpp`
+  - `msd/msd-sim/src/DataRecorder/DataRecorderVisitor.hpp/.cpp`
+  - `msd/msd-pybind/src/record_bindings.cpp`
+  - `replay/replay/generated_models.py`
+  - `msd/msd-sim/test/Physics/Constraints/ContactCacheTest.cpp`
+  - `docs/designs/0075_unified_contact_constraint/iteration-log.md`
+- **Notes**: Build successful. 729/733 tests pass. 4 friction-behavior tests regress as expected per Phase 1 design spec (see iteration-log.md). Validation gate condition "friction behavior may regress in Phase 1" is satisfied. Phase 2 (Block PGS, ticket 0075b) will resolve the regressions.

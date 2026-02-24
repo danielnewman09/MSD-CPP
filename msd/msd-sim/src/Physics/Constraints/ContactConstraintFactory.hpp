@@ -1,5 +1,7 @@
 // Ticket: 0032_contact_constraint_refactor
+// Ticket: 0075a_unified_constraint_data_structure
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
+// Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 1)
 
 #ifndef MSD_SIM_PHYSICS_CONTACT_CONSTRAINT_FACTORY_HPP
 #define MSD_SIM_PHYSICS_CONTACT_CONSTRAINT_FACTORY_HPP
@@ -73,7 +75,10 @@ constexpr double kEnvironmentRestitution = 0.5;
  * @param comA Center of mass of body A (world space) [m]
  * @param comB Center of mass of body B (world space) [m]
  * @param restitution Combined coefficient of restitution [0, 1]
- * @return Vector of contact constraints (one per contact point)
+ * @param frictionCoefficient Combined friction coefficient μ [0, ∞) (default 0.0)
+ * @return Vector of unified contact constraints (one per contact point)
+ *
+ * @ticket 0075a_unified_constraint_data_structure
  */
 std::vector<std::unique_ptr<ContactConstraint>> createFromCollision(
   size_t bodyAIndex,
@@ -83,7 +88,8 @@ std::vector<std::unique_ptr<ContactConstraint>> createFromCollision(
   const InertialState& stateB,
   const Coordinate& comA,
   const Coordinate& comB,
-  double restitution);
+  double restitution,
+  double frictionCoefficient = 0.0);
 
 /**
  * @brief Combine two coefficients of restitution using geometric mean

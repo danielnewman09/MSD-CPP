@@ -1,7 +1,9 @@
 // Ticket: 0044_collision_pipeline_integration
 // Ticket: 0071g_constraint_pool_allocation
+// Ticket: 0075a_unified_constraint_data_structure
 // Design: docs/designs/0044_collision_pipeline_integration/design.md
 // Design: docs/designs/0071g_constraint_pool_allocation/design.md
+// Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 1)
 
 #ifndef MSD_SIM_PHYSICS_COLLISION_PIPELINE_HPP
 #define MSD_SIM_PHYSICS_COLLISION_PIPELINE_HPP
@@ -21,7 +23,6 @@
 #include "msd-sim/src/Physics/Constraints/ConstraintPool.hpp"
 #include "msd-sim/src/Physics/Constraints/ConstraintSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ContactConstraint.hpp"
-#include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
 #include "msd-sim/src/Physics/Constraints/PositionCorrector.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetEnvironment.hpp"
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
@@ -192,13 +193,13 @@ public:
   /**
    * @brief Record constraint states to DataRecorder
    *
-   * Iterates all constraints (both ContactConstraint and FrictionConstraint),
+   * Iterates all constraints (all ContactConstraint as of 0075a),
    * calls constraint->recordState() with a DataRecorderVisitor, and buffers
    * the typed records to the appropriate DAOs.
    *
    * Uses visitor pattern for type-safe dispatching without dynamic_cast.
-   * Each constraint builds its specific record (ContactConstraintRecord or
-   * FrictionConstraintRecord) and dispatches to visitor.visit(record).
+   * Each constraint builds a UnifiedContactConstraintRecord (0075a) and
+   * dispatches to visitor.visit(record).
    *
    * Must be called AFTER execute() and BEFORE clearEphemeralState() to ensure
    * constraints are still alive.
@@ -212,6 +213,7 @@ public:
    * @see DataRecorderVisitor
    * @see Constraint::recordState()
    * @ticket 0057_contact_tangent_recording
+   * @ticket 0075a_unified_constraint_data_structure
    */
   void recordConstraints(class DataRecorder& recorder, uint32_t frameId) const;
 
@@ -335,13 +337,14 @@ private:
   void clearEphemeralState();
 
   /**
-   * @brief Propagate solved normal lambdas to FrictionConstraints.
+   * @brief Propagate solved lambdas to ContactConstraints for recording.
    *
-   * After the solver runs, each FrictionConstraint needs the corresponding
-   * ContactConstraint's solved lambda so that recordState() can write the
-   * actual normal force value (in Newtons) for visualization.
+   * After the solver runs, sets normal_lambda, tangent1_lambda, tangent2_lambda
+   * on each unified ContactConstraint so that recordState() can write the
+   * actual force values (in Newtons) for visualization.
    *
    * Ticket: 0057_contact_tangent_recording
+   * Ticket: 0075a_unified_constraint_data_structure
    */
   void propagateSolvedLambdas(const ConstraintSolver::SolveResult& solveResult);
 
@@ -352,11 +355,14 @@ private:
    * The view is temporary (not stored) and valid only within the calling
    * scope.
    *
-   * @param interleaved If true (friction active), returns [CC_0, FC_0, CC_1,
-   * FC_1, ...]. If false, returns all constraints in storage order.
+   * As of 0075a, all constraints in allConstraints_ are ContactConstraint
+   * instances (no separate FrictionConstraint objects). The parameter is kept
+   * for API compatibility but has no effect.
+   *
    * @return Vector of non-owning Constraint* pointers
    *
    * Ticket: 0058_constraint_ownership_cleanup
+   * Ticket: 0075a_unified_constraint_data_structure
    */
   std::vector<Constraint*> buildSolverView(bool interleaved) const;
 
@@ -439,9 +445,11 @@ private:
 
   // Ticket: 0071g_constraint_pool_allocation
   // Member workspaces to eliminate per-frame local vector allocations.
-  // solvedLambdas_: reused in the cache-update loop (replaces local variable)
+  // solvedImpulses_: reused in the cache-update loop (replaces local variable)
+  //   Each entry is {lambda_n, lambda_t1, lambda_t2} per contact point.
+  //   Ticket: 0075a_unified_constraint_data_structure
   // islandConstraintSet_: reused per island in warm-start (replaces local variable)
-  std::vector<double> solvedLambdas_;
+  std::vector<Eigen::Vector3d> solvedImpulses_;
   std::unordered_set<const Constraint*> islandConstraintSet_;
 
   // Friend declarations for unit testing

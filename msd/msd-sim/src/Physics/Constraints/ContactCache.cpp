@@ -1,6 +1,7 @@
 // Ticket: 0040d_contact_persistence_warm_starting
 // Ticket: 0052d_solver_integration_ecos_removal
 // Ticket: 0069_friction_velocity_reversal
+// Ticket: 0075a_unified_constraint_data_structure
 
 #include "msd-sim/src/Physics/Constraints/ContactCache.hpp"
 
@@ -12,7 +13,7 @@
 namespace msd_sim
 {
 
-std::vector<double> ContactCache::getWarmStart(
+std::vector<Eigen::Vector3d> ContactCache::getWarmStart(
   uint32_t bodyA,
   uint32_t bodyB,
   const Vector3D& currentNormal,
@@ -38,18 +39,14 @@ std::vector<double> ContactCache::getWarmStart(
   const size_t numCurrent = currentPoints.size();
   const size_t numCached = cached.points.size();
 
-  if (numCurrent == 0 || numCached == 0)
+  if (numCurrent == 0 || numCached == 0 || cached.impulses.empty())
   {
     return {};
   }
 
-  // Ticket 0052d: Determine if cache stores 3 lambdas per contact (friction)
-  // or 1 lambda per contact (no friction / legacy)
-  const bool hasFrictionLambdas = (cached.lambdas.size() == numCached * 3);
-  const size_t lambdasPerContact = hasFrictionLambdas ? 3 : 1;
-
-  // Return vector: lambdasPerContact values per current contact
-  std::vector<double> warmLambdas(numCurrent * lambdasPerContact, 0.0);
+  // Return vector: one Eigen::Vector3d {lambda_n, lambda_t1, lambda_t2} per
+  // current contact. Unmatched contacts receive zero impulse.
+  std::vector<Eigen::Vector3d> warmImpulses(numCurrent, Eigen::Vector3d::Zero());
 
   // Track which cached points have been matched (prevent double-matching)
   std::vector<bool> cachedUsed(numCached, false);
@@ -74,27 +71,22 @@ std::vector<double> ContactCache::getWarmStart(
       }
     }
 
-    if (bestIdx && bestDist < kPointMatchRadius)
+    if (bestIdx && bestDist < kPointMatchRadius && *bestIdx < cached.impulses.size())
     {
-      // Copy lambdasPerContact values for the matched contact
-      for (size_t k = 0; k < lambdasPerContact; ++k)
-      {
-        warmLambdas[i * lambdasPerContact + k] =
-          cached.lambdas[*bestIdx * lambdasPerContact + k];
-      }
+      warmImpulses[i] = cached.impulses[*bestIdx];
       cachedUsed[*bestIdx] = true;
     }
-    // Unmatched points keep lambda = 0
+    // Unmatched points keep impulse = {0, 0, 0}
   }
 
-  return warmLambdas;
+  return warmImpulses;
 }
 
 void ContactCache::update(uint32_t bodyA,
-                           uint32_t bodyB,
-                           const Vector3D& normal,
-                           const std::vector<double>& lambdas,
-                           const std::vector<Coordinate>& points)
+                            uint32_t bodyB,
+                            const Vector3D& normal,
+                            const std::vector<Eigen::Vector3d>& impulses,
+                            const std::vector<Coordinate>& points)
 {
   auto key = makeKey(bodyA, bodyB);
   auto it = cache_.find(key);
@@ -102,7 +94,7 @@ void ContactCache::update(uint32_t bodyA,
   {
     // Preserve sliding state across updates (ticket 0069)
     it->second.normal = normal;
-    it->second.lambdas = lambdas;
+    it->second.impulses = impulses;
     it->second.points = points;
     it->second.age = 0;
   }
@@ -112,7 +104,7 @@ void ContactCache::update(uint32_t bodyA,
       .bodyA_id = std::min(bodyA, bodyB),
       .bodyB_id = std::max(bodyA, bodyB),
       .normal = normal,
-      .lambdas = lambdas,
+      .impulses = impulses,
       .points = points,
       .age = 0};
   }

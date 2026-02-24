@@ -1,11 +1,17 @@
 // Ticket: 0035a_tangent_basis_and_friction_constraint
 // Design: docs/designs/0035a_tangent_basis_and_friction_constraint/design.md
+// Ticket: 0075a_unified_constraint_data_structure
+// Note: FrictionConstraint is deprecated as of 0075a. Friction data is now
+// embedded in ContactConstraint. This class and its header will be deleted
+// in ticket 0075c (NLopt removal and cleanup). Retained here only because
+// ConstraintPool::allocateFriction() references it for backward compatibility.
 
 #include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
 #include "msd-transfer/src/ConstraintRecordVisitor.hpp"
-#include "msd-transfer/src/FrictionConstraintRecord.hpp"
+#include "msd-transfer/src/UnifiedContactConstraintRecord.hpp"
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <stdexcept>
 
@@ -196,24 +202,37 @@ void FrictionConstraint::recordState(msd_transfer::ConstraintRecordVisitor& visi
                                       uint32_t bodyAId,
                                       uint32_t bodyBId) const
 {
-  msd_transfer::FrictionConstraintRecord record;
+  // Ticket: 0075a_unified_constraint_data_structure
+  // FrictionConstraint is deprecated — friction is now embedded in
+  // ContactConstraint. This recordState() builds a UnifiedContactConstraintRecord
+  // using only the friction fields available here; contact-specific fields
+  // (penetration_depth, restitution, pre_impact_rel_vel_normal) are NaN because
+  // FrictionConstraint does not store them.
+  //
+  // This method should not be called during normal operation (the pipeline no
+  // longer creates FrictionConstraint instances as of 0075a).
+  constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+
+  msd_transfer::UnifiedContactConstraintRecord record;
   record.body_a_id = bodyAId;
   record.body_b_id = bodyBId;
 
-  // Serialize geometry (convert Coordinate to Vector3D to avoid point semantics)
   record.normal = Vector3D{contact_normal_.x(), contact_normal_.y(), contact_normal_.z()}.toRecord();
-  record.tangent1 = Vector3D{tangent1_.x(), tangent1_.y(), tangent1_.z()}.toRecord();
-  record.tangent2 = Vector3D{tangent2_.x(), tangent2_.y(), tangent2_.z()}.toRecord();
   record.lever_arm_a = Vector3D{lever_arm_a_.x(), lever_arm_a_.y(), lever_arm_a_.z()}.toRecord();
   record.lever_arm_b = Vector3D{lever_arm_b_.x(), lever_arm_b_.y(), lever_arm_b_.z()}.toRecord();
 
-  // Serialize parameters
+  // Contact-only fields not available in FrictionConstraint
+  record.penetration_depth = kNaN;
+  record.restitution = kNaN;
+  record.pre_impact_rel_vel_normal = kNaN;
+
+  record.tangent1 = Vector3D{tangent1_.x(), tangent1_.y(), tangent1_.z()}.toRecord();
+  record.tangent2 = Vector3D{tangent2_.x(), tangent2_.y(), tangent2_.z()}.toRecord();
   record.friction_coefficient = friction_coefficient_;
   record.normal_lambda = normal_lambda_;
   record.tangent1_lambda = tangent1_lambda_;
   record.tangent2_lambda = tangent2_lambda_;
 
-  // Dispatch to visitor via overload resolution
   visitor.visit(record);
 }
 

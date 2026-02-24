@@ -1,8 +1,11 @@
-#pragma once
+#ifndef MSD_SIM_DATA_RECORDER_VISITOR_HPP
+#define MSD_SIM_DATA_RECORDER_VISITOR_HPP
+
+// Ticket: 0075a_unified_constraint_data_structure
+// Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 1)
 
 #include "msd-transfer/src/ConstraintRecordVisitor.hpp"
-#include "msd-transfer/src/ContactConstraintRecord.hpp"
-#include "msd-transfer/src/FrictionConstraintRecord.hpp"
+#include "msd-transfer/src/UnifiedContactConstraintRecord.hpp"
 
 namespace msd_sim {
 
@@ -17,10 +20,14 @@ class DataRecorder;
  * receives a typed constraint record, sets the frame FK, and buffers it to the
  * appropriate DAO.
  *
+ * As of ticket 0075a, the unified ContactConstraint dispatches a single
+ * UnifiedContactConstraintRecord instead of separate ContactConstraintRecord
+ * and FrictionConstraintRecord records.
+ *
  * Usage:
  * ```cpp
  * DataRecorderVisitor visitor{recorder, frameId};
- * constraint->recordState(visitor, bodyAId, bodyBId);  // Dispatches to appropriate visit()
+ * constraint->recordState(visitor, bodyAId, bodyBId);  // Dispatches to visit()
  * ```
  *
  * Thread safety: Not thread-safe (caller must ensure DataRecorder thread safety)
@@ -28,6 +35,7 @@ class DataRecorder;
  *
  * @see msd_transfer::ConstraintRecordVisitor
  * @see DataRecorder
+ * @ticket 0075a_unified_constraint_data_structure
  */
 class DataRecorderVisitor : public msd_transfer::ConstraintRecordVisitor {
 public:
@@ -40,22 +48,15 @@ public:
   DataRecorderVisitor(DataRecorder& recorder, uint32_t frameId);
 
   /**
-   * @brief Visit contact constraint record
+   * @brief Visit unified contact constraint record
    *
-   * Sets frame FK and buffers record to ContactConstraintRecord DAO.
+   * Sets frame FK and buffers record to UnifiedContactConstraintRecord DAO.
+   * Handles both frictionless contacts (tangent fields zeroed) and frictional
+   * contacts (full tangent basis and impulse components).
    *
-   * @param record Contact constraint state to buffer
+   * @param record Unified contact constraint state to buffer
    */
-  void visit(const msd_transfer::ContactConstraintRecord& record) override;
-
-  /**
-   * @brief Visit friction constraint record
-   *
-   * Sets frame FK and buffers record to FrictionConstraintRecord DAO.
-   *
-   * @param record Friction constraint state to buffer
-   */
-  void visit(const msd_transfer::FrictionConstraintRecord& record) override;
+  void visit(const msd_transfer::UnifiedContactConstraintRecord& record) override;
 
 private:
   DataRecorder& recorder_;
@@ -63,3 +64,5 @@ private:
 };
 
 }  // namespace msd_sim
+
+#endif  // MSD_SIM_DATA_RECORDER_VISITOR_HPP
