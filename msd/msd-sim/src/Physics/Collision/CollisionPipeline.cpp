@@ -274,7 +274,7 @@ void CollisionPipeline::createConstraints(
   // Ticket: 0058_constraint_ownership_cleanup
   // Ticket: 0071g_constraint_pool_allocation
   // Ticket: 0075a_unified_constraint_data_structure
-  // Store unified ContactConstraints in allConstraints_ (stride = 1, no FC).
+  // Store unified ContactConstraints in allConstraints_ (no separate FC).
   // Constraints are allocated from constraintPool_ (pool owns; allConstraints_
   // is a non-owning view). Factory logic inlined here (Approach 2 from design):
   // single call site, zero intermediate unique_ptr allocations.
@@ -397,6 +397,9 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
   // Determine friction mode: check if any ContactConstraint has friction.
   // Lambdas per contact: 3 with friction (n, t1, t2), 1 without.
   // All constraints in allConstraints_ are ContactConstraint instances now.
+  // TODO(0075c): allConstraints_ stores Constraint* but all entries are
+  // ContactConstraint. Consider storing vector<ContactConstraint*> directly
+  // to eliminate these static_casts. Tracked in cleanup ticket 0075c.
   bool hasFriction = false;
   for (Constraint* c : allConstraints_)
   {
@@ -411,12 +414,8 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
   // Lambdas per contact: 3 with friction (n, t1, t2), 1 without.
   const size_t lambdasPerContact = hasFriction ? 3 : 1;
 
-  // Stride is always 1: no interleaving, all entries are ContactConstraints.
-  const size_t stride = 1;
-
   // Helper: extract contact world-space points for a collision pair's range.
   // Contact point = comA + leverArmA.
-  // Ticket: 0075a — stride is always 1; all constraints are ContactConstraints.
   auto extractContactPoints =
     [this](const PairConstraintRange& range,
            const CollisionPair& pair) -> std::vector<Coordinate>
@@ -496,7 +495,7 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
   std::unordered_map<const Constraint*, size_t> constraintToGlobalGroup;
   {
     size_t globalGroup = 0;
-    for (size_t i = 0; i < allConstraints_.size(); i += stride)
+    for (size_t i = 0; i < allConstraints_.size(); ++i)
     {
       constraintToGlobalGroup[allConstraints_[i]] = globalGroup;
       ++globalGroup;
@@ -516,7 +515,7 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
   // globalLambdas: flattened lambda vector for all contacts (global ordering).
   // After all islands are solved, this is used by propagateSolvedLambdas()
   // and the cache update path.
-  size_t const totalContacts = constraintPtrs.size() / stride;
+  size_t const totalContacts = constraintPtrs.size();
   Eigen::VectorXd globalLambdas = Eigen::VectorXd::Zero(
     static_cast<Eigen::Index>(totalContacts * lambdasPerContact));
 
@@ -527,7 +526,6 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
     const auto& islandConstraints = island.constraints;
 
     // Count ContactConstraints in this island.
-    // Ticket: 0075a — stride is always 1; all constraints are ContactConstraints.
     const size_t islandContactCount = islandConstraints.size();
 
     const size_t islandRows = islandContactCount * lambdasPerContact;
@@ -569,7 +567,7 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
       Vector3D const normalVec{
         pair.result.normal.x(), pair.result.normal.y(), pair.result.normal.z()};
       // Ticket: 0075a — use Vec3 impulse warm-start (one Vec3 per contact point)
-      auto cachedImpulses = contactCache_.getWarmStart3(
+      auto cachedImpulses = contactCache_.getWarmStart(
         pair.bodyAId, pair.bodyBId, normalVec, currentPoints);
 
       if (!cachedImpulses.empty() && cachedImpulses.size() == range.count)
@@ -622,7 +620,7 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
     // Iterate the island's CC list in order to determine island-local group
     // offsets.
     size_t islandLocalGroup = 0;
-    for (size_t i = 0; i < islandConstraints.size(); i += stride)
+    for (size_t i = 0; i < islandConstraints.size(); ++i)
     {
       const Constraint* cc = islandConstraints[i];
       auto it = constraintToGlobalGroup.find(cc);
@@ -671,7 +669,7 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
     solvedImpulses_.reserve(range.count);
     for (size_t ci = 0; ci < range.count; ++ci)
     {
-      auto const contactGroupIdx = range.startIdx / stride + ci;
+      auto const contactGroupIdx = range.startIdx + ci;
       auto const flatBase =
         static_cast<Eigen::Index>(contactGroupIdx * lambdasPerContact);
 
@@ -696,8 +694,8 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
 
     Vector3D const normalVec{
       pair.result.normal.x(), pair.result.normal.y(), pair.result.normal.z()};
-    // Ticket: 0075a — use update3() with Vec3 impulse storage
-    contactCache_.update3(
+    // Ticket: 0075a — use update() with Vec3 impulse storage
+    contactCache_.update(
       pair.bodyAId, pair.bodyBId, normalVec, solvedImpulses_, contactPoints);
 
     // Ticket 0069: Update sliding state based on tangent velocity
@@ -945,7 +943,7 @@ size_t CollisionPipeline::findPairIndexForConstraint(size_t constraintIdx) const
 {
   // Ticket: 0071g_constraint_pool_allocation — allConstraints_ is
   // vector<Constraint*>
-  // Ticket: 0075a — stride is always 1; all entries are ContactConstraints.
+  // Ticket: 0075a — all entries are ContactConstraints.
   // range.count is the number of ContactConstraints; span = [startIdx,
   // startIdx + count).
   for (const auto& range : pairRanges_)

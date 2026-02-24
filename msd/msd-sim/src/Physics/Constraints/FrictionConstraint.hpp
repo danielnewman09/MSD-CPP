@@ -1,6 +1,7 @@
 // Ticket: 0035a_tangent_basis_and_friction_constraint
 // Ticket: 0069_friction_velocity_reversal
 // Design: docs/designs/0035a_tangent_basis_and_friction_constraint/design.md
+// DEPRECATED: Will be deleted in ticket 0075c. Friction is now in ContactConstraint.
 
 #ifndef MSD_SIM_PHYSICS_FRICTION_CONSTRAINT_HPP
 #define MSD_SIM_PHYSICS_FRICTION_CONSTRAINT_HPP

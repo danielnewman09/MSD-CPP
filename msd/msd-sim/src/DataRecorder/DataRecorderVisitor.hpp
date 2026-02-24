@@ -1,4 +1,5 @@
-#pragma once
+#ifndef MSD_SIM_DATA_RECORDER_VISITOR_HPP
+#define MSD_SIM_DATA_RECORDER_VISITOR_HPP
 
 // Ticket: 0075a_unified_constraint_data_structure
 // Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 1)
@@ -63,3 +64,5 @@ private:
 };
 
 }  // namespace msd_sim
+
+#endif  // MSD_SIM_DATA_RECORDER_VISITOR_HPP

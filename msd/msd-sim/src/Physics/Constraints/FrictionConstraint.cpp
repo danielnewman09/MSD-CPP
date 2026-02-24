@@ -2,9 +2,9 @@
 // Design: docs/designs/0035a_tangent_basis_and_friction_constraint/design.md
 // Ticket: 0075a_unified_constraint_data_structure
 // Note: FrictionConstraint is deprecated as of 0075a. Friction data is now
-// embedded in ContactConstraint. This class is retained to avoid breaking
-// ConstraintPool::allocateFriction() which exists for backward compatibility
-// but is no longer called by the pipeline.
+// embedded in ContactConstraint. This class and its header will be deleted
+// in ticket 0075c (NLopt removal and cleanup). Retained here only because
+// ConstraintPool::allocateFriction() references it for backward compatibility.
 
 #include "msd-sim/src/Physics/Constraints/FrictionConstraint.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"

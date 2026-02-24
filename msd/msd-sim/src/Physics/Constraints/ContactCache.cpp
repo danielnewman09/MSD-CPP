@@ -13,7 +13,7 @@
 namespace msd_sim
 {
 
-std::vector<Eigen::Vector3d> ContactCache::getWarmStart3(
+std::vector<Eigen::Vector3d> ContactCache::getWarmStart(
   uint32_t bodyA,
   uint32_t bodyB,
   const Vector3D& currentNormal,
@@ -82,7 +82,7 @@ std::vector<Eigen::Vector3d> ContactCache::getWarmStart3(
   return warmImpulses;
 }
 
-void ContactCache::update3(uint32_t bodyA,
+void ContactCache::update(uint32_t bodyA,
                             uint32_t bodyB,
                             const Vector3D& normal,
                             const std::vector<Eigen::Vector3d>& impulses,

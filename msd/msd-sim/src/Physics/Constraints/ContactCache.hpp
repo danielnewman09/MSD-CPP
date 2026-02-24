@@ -93,7 +93,7 @@ public:
    *
    * @ticket 0075a_unified_constraint_data_structure
    */
-  [[nodiscard]] std::vector<Eigen::Vector3d> getWarmStart3(
+  [[nodiscard]] std::vector<Eigen::Vector3d> getWarmStart(
     uint32_t bodyA,
     uint32_t bodyB,
     const Vector3D& currentNormal,
@@ -115,7 +115,7 @@ public:
    *
    * @ticket 0075a_unified_constraint_data_structure
    */
-  void update3(uint32_t bodyA,
+  void update(uint32_t bodyA,
                uint32_t bodyB,
                const Vector3D& normal,
                const std::vector<Eigen::Vector3d>& impulses,

@@ -95,7 +95,7 @@ public:
    * @deprecated As of ticket 0075a_unified_constraint_data_structure,
    *   friction data is embedded in ContactConstraint. This method is
    *   retained for backward compatibility but should not be called
-   *   from new code. Will be removed in a future cleanup ticket.
+   *   from new code. Will be removed in ticket 0075c.
    *
    * Grows the backing vector on first call or when capacity is exceeded.
    * After the first frame, capacity is sufficient and no allocation occurs.
@@ -151,7 +151,7 @@ public:
    * @brief Number of active FrictionConstraints in the pool.
    *
    * @deprecated As of ticket 0075a, friction is embedded in ContactConstraint.
-   *   This always returns 0 in normal operation.
+   *   This always returns 0 in normal operation. Will be removed in ticket 0075c.
    */
   [[nodiscard]] size_t frictionCount() const;
 
