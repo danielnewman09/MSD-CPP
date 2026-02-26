@@ -154,7 +154,7 @@ rules:
       - type-safety
       - arithmetic
 
-  - rule_id: TIDY-bugprone-assert-side-effects
+  - rule_id: TIDY-bugprone-assert-side-effect
     category: Bugprone Checks
     source: clang_tidy
     severity: required
@@ -1064,32 +1064,33 @@ rules:
       - const-correctness
       - safety
 
-  - rule_id: TIDY-misc-unused-parameters
+  - rule_id: TIDY-misc-unused-using-decls
     category: Misc Checks
     source: clang_tidy
     severity: advisory
-    title: Remove or name-suppress unused function parameters
+    title: Remove unused using-declarations
     rationale: >
-      Unused parameters may indicate a logic error (the parameter was meant to
-      be used but was forgotten), a stale API (the parameter is no longer needed),
-      or an intentionally unused parameter in an interface implementation. In the
-      last case, suppress the warning by omitting the parameter name (leaving
-      only the type) rather than leaving a named but unused variable.
+      Unused using-declarations (e.g., `using std::string;` where std::string is
+      never referenced) add noise to the file, can mislead readers into thinking
+      the imported name is used, and may introduce ambiguity if future code adds
+      a conflicting name. Keeping the using-declaration list minimal ensures each
+      import serves a purpose.
     enforcement_notes: >
-      Flags named function parameters that are never referenced in the function
-      body. Either use the parameter, remove it from the signature if no longer
-      needed, or suppress by removing the name (leave only the type in the
-      declaration).
+      Flags using-declarations whose imported name is never referenced in the
+      enclosing scope. Remove the unused declaration or replace with a scoped
+      using inside the function that actually needs it.
     enforcement_check: misc-unused-using-decls
     good_example: |
-      // Parameter intentionally unused — name omitted to suppress warning
-      void onEvent(EventType /*type*/, int /*unused*/) {
-        processEvent();
-      }
+      #include <string>
+      #include <vector>
+      using std::vector;  // Used below
+      vector<int> data{1, 2, 3};
     bad_example: |
-      void onEvent(EventType type, int unused) {
-        processEvent();  // type and unused are never referenced
-      }
+      #include <string>
+      #include <vector>
+      using std::string;  // Never referenced — remove this
+      using std::vector;
+      vector<int> data{1, 2, 3};
     tags:
       - readability
       - maintenance
