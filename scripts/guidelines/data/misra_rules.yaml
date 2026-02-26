@@ -1,9 +1,9 @@
-# Ticket: 0078_cpp_guidelines_mcp_server
+# Ticket: 0078c_misra_rules_population
 # Design: docs/designs/0078_cpp_guidelines_mcp_server/design.md
 #
-# MISRA C++ rules stub.
-# Populate incrementally in follow-up ticket 0078c.
-# Start with memory management and initialization categories.
+# MISRA C++ rules — memory management and initialization categories.
+# Populated in follow-up ticket 0078c.
+# See: MISRA C++:2023 and MISRA C++:2008 standard documentation.
 #
 # Schema:
 #   rule_id:           MISRA-{rule}  (e.g., MISRA-6.2)
@@ -20,6 +20,681 @@
 #   tags:              List of cross-cutting concern labels
 #   cross_refs:        List of {to_rule_id, relationship} objects
 
-rules: []
-# TODO (0078c): Populate with memory and initialization rules from MISRA C++.
-# See: MISRA C++:2023 standard documentation.
+rules:
+
+  # ---------------------------------------------------------------------------
+  # Memory Management
+  # ---------------------------------------------------------------------------
+
+  - rule_id: MISRA-18.5
+    category: Memory Management
+    source: misra
+    severity: required
+    title: Do not use more than two levels of pointer indirection
+    rationale: >
+      Multiple levels of pointer indirection (e.g., int**) increase code complexity
+      and error-proneness. Each level adds an opportunity for a null dereference or
+      dangling pointer. In safety-critical systems, pointer indirection beyond two
+      levels is typically a design smell indicating that a data structure redesign
+      would improve clarity and safety.
+    enforcement_notes: >
+      Flag declarations of pointers-to-pointers beyond two levels (T***). Review any
+      function or data structure using triple or deeper indirection. For arrays of
+      pointers, consider std::vector<std::unique_ptr<T>> or a container of containers
+      instead of raw pointer arrays.
+    bad_example: |
+      int*** triplePtr;  // Three levels of indirection — prohibited
+      void process(char*** argv);  // Too deep — restructure
+    tags:
+      - memory
+      - safety
+      - pointers
+    cross_refs:
+      - to_rule_id: MSD-RES-002
+        relationship: related
+      - to_rule_id: CPP-R.3
+        relationship: related
+
+  - rule_id: MISRA-18.6
+    category: Memory Management
+    source: misra
+    severity: required
+    title: The address of an object with automatic storage shall not outlive its scope
+    rationale: >
+      Taking the address of a local (automatic) variable and storing it beyond the
+      scope of that variable creates a dangling pointer. When the variable goes out
+      of scope, the memory is reclaimed by the stack, but any stored pointer now
+      refers to invalid memory. This is undefined behavior and a common source of
+      subtle, hard-to-reproduce bugs in safety-critical systems.
+    enforcement_notes: >
+      Flag assignments of `&local_var` to a pointer or reference that outlives the
+      current scope: returning local address, storing local address in a member
+      variable, or storing in a container. Cppcheck dangling-pointer and
+      clang-tidy's clang-analyzer-core.StackAddressEscape checks detect many
+      of these patterns.
+    enforcement_check: clang-analyzer-core.StackAddressEscape
+    good_example: |
+      // Return by value — no dangling reference
+      std::string buildMessage(const std::string& prefix) {
+        std::string msg = prefix + ": OK";
+        return msg;  // Returned by value, not by address
+      }
+    bad_example: |
+      const char* buildMessage(const std::string& prefix) {
+        std::string msg = prefix + ": OK";
+        return msg.c_str();  // Dangling pointer: msg destroyed on return
+      }
+    tags:
+      - memory
+      - safety
+      - pointers
+      - undefined-behavior
+    cross_refs:
+      - to_rule_id: MSD-RES-002
+        relationship: related
+      - to_rule_id: CPP-R.3
+        relationship: related
+
+  - rule_id: MISRA-18.7
+    category: Memory Management
+    source: misra
+    severity: required
+    title: Flexible array members shall not be declared
+    rationale: >
+      Flexible array members (a C99 feature, e.g., `int data[];` as the last member
+      of a struct) are not standard C++ and produce implementation-defined behavior.
+      Their size is not captured in sizeof, making them incompatible with type-safe
+      allocation and standard containers. In a C++ codebase, std::vector or
+      std::span should be used instead to provide bounds-safe, size-aware sequences.
+    enforcement_notes: >
+      Flag struct/class declarations ending with an array member declared without a
+      size (`int arr[];` or `char buf[1]` used as a flexible array idiom). Replace
+      with std::vector<int> or std::span<int> as appropriate.
+    bad_example: |
+      struct Packet {
+        uint32_t header;
+        uint8_t  data[];  // Flexible array — not standard C++
+      };
+    good_example: |
+      struct Packet {
+        uint32_t             header;
+        std::vector<uint8_t> data;  // Size-safe, standard C++
+      };
+    tags:
+      - memory
+      - safety
+      - language-features
+
+  - rule_id: MISRA-21.3
+    category: Memory Management
+    source: misra
+    severity: required
+    title: Do not use the memory allocation and deallocation functions of <cstdlib>
+    rationale: >
+      The C memory allocation functions malloc, calloc, realloc, and free are not
+      type-safe and do not invoke constructors or destructors. Using them in C++ code
+      bypasses RAII and the type system, making resource management error-prone.
+      Exceptions thrown between malloc and free will leak the allocation. C++ provides
+      new/delete and RAII smart pointers (unique_ptr, shared_ptr) as type-safe
+      replacements that integrate with the language's lifetime management.
+    enforcement_notes: >
+      Flag any call to malloc, calloc, realloc, free, or their <cstdlib> equivalents.
+      Replace with std::unique_ptr, std::vector, or other RAII containers. In
+      performance-critical custom allocators, document the exception thoroughly.
+    good_example: |
+      // Type-safe, exception-safe allocation via RAII
+      auto buffer = std::make_unique<uint8_t[]>(size);
+      // Or use a container
+      std::vector<uint8_t> buffer(size);
+    bad_example: |
+      uint8_t* buffer = static_cast<uint8_t*>(malloc(size));
+      process(buffer);
+      free(buffer);  // Leaked if process() throws
+    tags:
+      - memory
+      - safety
+      - raii
+      - resource-management
+    cross_refs:
+      - to_rule_id: CPP-R.1
+        relationship: related
+      - to_rule_id: MSD-RES-001
+        relationship: related
+
+  - rule_id: MISRA-21.6
+    category: Memory Management
+    source: misra
+    severity: required
+    title: Do not use standard library memory functions for non-trivial types
+    rationale: >
+      Functions such as memcpy, memmove, and memset operate on raw bytes and are
+      unaware of C++ object semantics. Using them on objects with constructors,
+      destructors, or virtual functions bypasses the type system and can silently
+      produce object-slicing, incorrect vtable pointers, or partially-constructed
+      objects. Use assignment operators, copy constructors, or std::copy for
+      C++ objects.
+    enforcement_notes: >
+      Flag calls to memcpy/memmove/memset on objects of non-trivially copyable
+      type. Safe to use on trivially copyable types (POD, plain arrays of scalars).
+      Clang-tidy's bugprone-undefined-memory-manipulation catches common violations.
+    enforcement_check: bugprone-undefined-memory-manipulation
+    good_example: |
+      // Safe: std::copy respects object semantics
+      std::vector<Sensor> dst(src.size());
+      std::copy(src.begin(), src.end(), dst.begin());
+    bad_example: |
+      // Dangerous: bypasses copy constructor — undefined for non-trivial types
+      Sensor sensors[10];
+      memcpy(sensors, source, sizeof(sensors));
+    tags:
+      - memory
+      - safety
+      - undefined-behavior
+    cross_refs:
+      - to_rule_id: CPP-R.1
+        relationship: related
+
+  - rule_id: MISRA-21.17
+    category: Memory Management
+    source: misra
+    severity: required
+    title: Byte string functions shall only be invoked with a valid memory range
+    rationale: >
+      String and memory manipulation functions (strcpy, strcat, sprintf, memcpy) rely
+      on the caller to supply correct buffer sizes. Supplying an incorrect size or a
+      buffer that is too small produces a buffer overflow, which is undefined behavior
+      and a common safety and security vulnerability. Prefer std::string and std::vector
+      which manage their own sizes, or use the explicit-size variants (strncpy,
+      snprintf) with careful size tracking.
+    enforcement_notes: >
+      Flag calls to unbounded string functions: strcpy, strcat, gets, sprintf.
+      Require explicit size arguments. Better: replace with std::string operations,
+      std::format (C++20), or snprintf with size verification.
+    good_example: |
+      // std::string handles size automatically
+      std::string result = prefix + suffix;
+
+      // If C API required, use snprintf with size check
+      char buf[64];
+      int written = snprintf(buf, sizeof(buf), "%s: %d", label, value);
+      assert(written >= 0 && written < static_cast<int>(sizeof(buf)));
+    bad_example: |
+      char buf[32];
+      strcpy(buf, userInput);  // Buffer overflow if userInput > 31 chars
+      strcat(buf, suffix);     // No bounds check
+    tags:
+      - memory
+      - safety
+      - buffer-overflow
+
+  - rule_id: MISRA-21.18
+    category: Memory Management
+    source: misra
+    severity: required
+    title: The size argument to string and memory functions shall have an appropriate value
+    rationale: >
+      Passing a size argument of zero, or a size larger than the actual buffer, to
+      functions like memcpy, memmove, or strncpy causes undefined behavior or silent
+      data corruption. Zero-length copies are often the result of an off-by-one
+      error or an uninitialized size variable. Safety-critical code must verify that
+      size arguments are positive and do not exceed the bounds of the target buffer.
+    enforcement_notes: >
+      Review calls to memcpy, memmove, strncpy, and similar functions. Verify size
+      argument is non-zero and derived from the actual allocated size (sizeof or
+      container.size()). Cppcheck's bufferAccessOutOfBounds and clang-tidy
+      clang-analyzer-security.insecureAPI checks help detect common violations.
+    good_example: |
+      // Size derived from destination array — safe
+      char dst[64];
+      strncpy(dst, src, sizeof(dst) - 1);
+      dst[sizeof(dst) - 1] = '\0';
+    bad_example: |
+      char dst[64];
+      // n computed separately — easy to mismatch with actual buffer size
+      size_t n = computeSize();
+      memcpy(dst, src, n);  // What if n > 64?
+    tags:
+      - memory
+      - safety
+      - buffer-overflow
+
+  - rule_id: MISRA-11.5
+    category: Memory Management
+    source: misra
+    severity: recommended
+    title: Avoid converting void pointer to object pointer type
+    rationale: >
+      Casting a void* to a typed pointer (T*) is inherently unsafe: the compiler
+      cannot verify that the pointed-to memory actually contains an object of type T,
+      nor that alignment requirements are satisfied. Such casts frequently arise from
+      C-style APIs that pass generic buffers. In C++, type-safe alternatives (templates,
+      std::any, std::variant) should be preferred. Where void* must be used for C
+      interoperability, document the precondition and alignment assumptions.
+    enforcement_notes: >
+      Flag static_cast<T*>(void*) expressions outside of clearly documented C
+      interoperability boundaries. Flag C-style casts involving void*. clang-tidy's
+      cppcoreguidelines-pro-type-reinterpret-cast and -pro-type-cstyle-cast checks
+      catch many of these patterns.
+    enforcement_check: cppcoreguidelines-pro-type-cstyle-cast
+    good_example: |
+      // Type-safe generic storage via template or std::any
+      template<typename T>
+      void storeValue(std::any& container, T value) {
+        container = value;
+      }
+    bad_example: |
+      // Unsafe void* roundtrip — alignment and type correctness unchecked
+      void* ptr = allocate(sizeof(Sensor));
+      Sensor* s = static_cast<Sensor*>(ptr);  // Was ptr really a Sensor?
+    tags:
+      - memory
+      - safety
+      - type-safety
+      - pointers
+    cross_refs:
+      - to_rule_id: CPP-R.3
+        relationship: related
+
+  - rule_id: MISRA-18.1
+    category: Memory Management
+    source: misra
+    severity: required
+    title: A pointer resulting from arithmetic shall address an element of the same array
+    rationale: >
+      Pointer arithmetic is only defined when the result remains within the bounds of
+      the original array (or one past the last element). Arithmetic that takes a
+      pointer outside these bounds produces undefined behavior, even if the resulting
+      pointer is never dereferenced. This is a common source of buffer overreads in
+      safety-critical systems. Prefer std::span or iterators which carry bounds
+      information.
+    enforcement_notes: >
+      Review pointer arithmetic expressions (p + n, p - n, p++, --p). Verify that
+      the result stays within the bounds of the original array. Prefer std::span<T>
+      for array-sized operations and range-based for loops to eliminate raw pointer
+      arithmetic entirely.
+    good_example: |
+      // std::span carries size — arithmetic is bounds-checked in debug builds
+      void processBuffer(std::span<const float> data) {
+        for (const float& sample : data) {
+          process(sample);
+        }
+      }
+    bad_example: |
+      void processBuffer(const float* data, int count) {
+        const float* end = data + count;  // OK: one-past-end
+        const float* ptr = data - 1;      // UB: before start of array
+      }
+    tags:
+      - memory
+      - safety
+      - pointers
+      - undefined-behavior
+    cross_refs:
+      - to_rule_id: CPP-R.2
+        relationship: related
+      - to_rule_id: MSD-RES-002
+        relationship: related
+
+  - rule_id: MISRA-18.3
+    category: Memory Management
+    source: misra
+    severity: required
+    title: Do not compare pointers that point to different objects
+    rationale: >
+      Comparing pointers to different objects with relational operators (<, <=, >, >=)
+      is undefined behavior in C++. Only equality comparison (==, !=) is defined for
+      pointers to different objects. This commonly arises when trying to check whether
+      a pointer is within a buffer without using std::span or explicit bounds variables.
+      Use std::span or std::distance with verified iterators for bounds checking.
+    enforcement_notes: >
+      Flag relational pointer comparisons where the two pointers are not demonstrably
+      from the same array allocation. clang-analyzer-alpha.cplusplus.PointerSorting
+      detects some of these patterns. Use std::span for array range operations to
+      avoid the need for raw pointer comparisons entirely.
+    good_example: |
+      // Safe: compare using iterators/indices within the same container
+      std::span<const float> buf = getBuffer();
+      for (std::size_t i = 0; i < buf.size(); ++i) {
+        process(buf[i]);
+      }
+    bad_example: |
+      const float* a = arrayA;
+      const float* b = arrayB;
+      if (a < b) { /* UB: a and b point to different objects */ }
+    tags:
+      - memory
+      - safety
+      - pointers
+      - undefined-behavior
+
+  # ---------------------------------------------------------------------------
+  # Initialization
+  # ---------------------------------------------------------------------------
+
+  - rule_id: MISRA-8.1
+    category: Initialization
+    source: misra
+    severity: required
+    title: Types shall be explicitly specified
+    rationale: >
+      Implicit type deduction from context (e.g., omitting the type of a variable in
+      older C code) reduces readability and can hide type truncation bugs. In C++,
+      while `auto` is a controlled form of type deduction, every variable should have
+      a clear and reviewable type. Explicit types make code review and static analysis
+      more tractable in safety-critical systems.
+    enforcement_notes: >
+      In C++ contexts, `auto` is acceptable when the type is obvious from the
+      right-hand side (e.g., `auto x = std::make_unique<Widget>()`). Flag variables
+      where the type cannot be determined by reading the declaration alone. Flag
+      implicit int (omitted type specifier) left over from C.
+    good_example: |
+      // Explicit type specifier
+      float velocity{0.0f};
+      std::int32_t count{0};
+      auto widget = std::make_unique<Widget>();  // Type clear from RHS
+    bad_example: |
+      auto x = getValue();  // What type does getValue() return? Not obvious
+      // In C-style code:
+      extern foo(int);      // Implicit int return — prohibited
+    tags:
+      - initialization
+      - type-safety
+      - readability
+
+  - rule_id: MISRA-8.4
+    category: Initialization
+    source: misra
+    severity: required
+    title: A compatible declaration shall be visible when an object or function is defined
+    rationale: >
+      Defining a function or variable without a visible prior declaration (e.g., a
+      header-file declaration) means the compiler cannot verify that the definition
+      matches the declaration used by other translation units. Mismatches in type or
+      linkage produce undefined behavior at link time. All public definitions must
+      be preceded by a declaration in a shared header.
+    enforcement_notes: >
+      Flag definitions of non-static functions or variables that do not have a
+      matching declaration in an included header. Enforce this via include-what-you-use
+      analysis and by requiring header files for all public symbols.
+    good_example: |
+      // physics.hpp
+      float computeKineticEnergy(float mass, float velocity);
+
+      // physics.cpp
+      #include "physics.hpp"  // Visible declaration before definition
+      float computeKineticEnergy(float mass, float velocity) {
+        return 0.5f * mass * velocity * velocity;
+      }
+    bad_example: |
+      // physics.cpp — no matching header included
+      float computeKineticEnergy(float mass, float velocity) {
+        return 0.5f * mass * velocity * velocity;
+        // Other TUs may call with wrong signature — ODR violation risk
+      }
+    tags:
+      - initialization
+      - linkage
+      - declarations
+
+  - rule_id: MISRA-8.8
+    category: Initialization
+    source: misra
+    severity: required
+    title: The static storage class specifier shall be used in all declarations of objects and functions with internal linkage
+    rationale: >
+      Omitting the `static` keyword from definitions that are intended to have
+      internal linkage can accidentally expose the symbol with external linkage,
+      creating multiple-definition errors when other translation units define the same
+      name, or inadvertently making private implementation details part of the
+      public ABI. Explicit `static` (or anonymous namespaces in C++) makes linkage
+      intent clear and prevents accidental external visibility.
+    enforcement_notes: >
+      Prefer anonymous namespaces over `static` for internal-linkage definitions
+      in C++ (the idiomatic C++ approach). Flag free functions and variables in .cpp
+      files that are not in an anonymous namespace and not declared `static`, unless
+      they are explicitly declared in a header for external use.
+    good_example: |
+      // physics.cpp — internal helper: not visible outside TU
+      namespace {
+        float clampAngle(float angle) {
+          return std::fmod(angle, 2.0f * std::numbers::pi_v<float>);
+        }
+      }  // anonymous namespace
+    bad_example: |
+      // physics.cpp — accidentally external linkage
+      float clampAngle(float angle) {  // No static, no anon namespace
+        return std::fmod(angle, 2.0f * std::numbers::pi_v<float>);
+      }
+      // Now clampAngle is visible to the linker — ODR violation risk
+    tags:
+      - initialization
+      - linkage
+      - organization
+
+  - rule_id: MISRA-8.9
+    category: Initialization
+    source: misra
+    severity: advisory
+    title: An object should be defined at block scope if its identifier is only accessible from within a single function
+    rationale: >
+      File-scope variables with broader lifetime than needed consume memory for the
+      entire program duration and introduce implicit state that makes functions harder
+      to reason about, test, and parallelize. Limiting variable scope to the minimum
+      necessary block keeps data dependencies local and enables the compiler to
+      optimize more aggressively.
+    enforcement_notes: >
+      Review file-scope (global) and namespace-scope non-const variables. If the
+      variable is only read or written inside a single function, move it to that
+      function's local scope. const or constexpr globals that serve as named
+      constants are acceptable.
+    good_example: |
+      void updateSimulation(float dt) {
+        // State local to this function — not shared global state
+        static float accumulatedTime{0.0f};
+        accumulatedTime += dt;
+        if (accumulatedTime >= kFixedStep) {
+          step();
+          accumulatedTime -= kFixedStep;
+        }
+      }
+    bad_example: |
+      float g_accumulatedTime{0.0f};  // File scope — accessible everywhere
+
+      void updateSimulation(float dt) {
+        g_accumulatedTime += dt;
+        // ...
+      }
+    tags:
+      - initialization
+      - scope
+      - state-management
+
+  - rule_id: MISRA-8.10
+    category: Initialization
+    source: misra
+    severity: required
+    title: An inline function shall be declared in the header file in which it is defined
+    rationale: >
+      An inline function defined in a .cpp file is not visible to other translation
+      units. The compiler may or may not inline the call; if the function is referenced
+      from multiple TUs via a shared declaration, multiple-definition errors result.
+      Inline functions must be defined in headers so every translation unit that uses
+      them has the same definition, satisfying the One Definition Rule (ODR).
+    enforcement_notes: >
+      Flag `inline` function definitions in .cpp files unless they are in an anonymous
+      namespace (internal linkage, no ODR issue). Any `inline` function intended for
+      use across TUs must appear in a header.
+    good_example: |
+      // utils.hpp
+      inline float toDegrees(float radians) {
+        return radians * (180.0f / std::numbers::pi_v<float>);
+      }
+    bad_example: |
+      // utils.cpp — inline in .cpp is useless/dangerous if declared in header
+      inline float toDegrees(float radians) {
+        return radians * (180.0f / std::numbers::pi_v<float>);
+      }
+    tags:
+      - initialization
+      - linkage
+      - inline
+
+  - rule_id: MISRA-9.1
+    category: Initialization
+    source: misra
+    severity: required
+    title: The value of an object with automatic storage duration shall not be read before it has been set
+    rationale: >
+      Reading an uninitialized local variable is undefined behavior. The variable
+      may contain stack garbage, which produces non-deterministic behavior and
+      intermittent failures that are extremely difficult to diagnose. In a simulation
+      context, uninitialized state variables can produce physically impossible outputs
+      without assertion failures, silently corrupting results. Always initialize
+      variables at the point of declaration.
+    enforcement_notes: >
+      Flag variable declarations that are not initialized at the point of declaration.
+      Require explicit initialization for all local variables. Clang-tidy's
+      cppcoreguidelines-init-variables and clang-analyzer-core.UndefinedBinaryOperatorResult
+      detect many patterns. Use NaN for floating-point locals to make uninitialized
+      reads detectable via NaN propagation.
+    enforcement_check: cppcoreguidelines-init-variables
+    good_example: |
+      // Always initialize at declaration
+      float velocity{0.0f};
+      float mass{std::numeric_limits<float>::quiet_NaN()};  // Will be set before use
+
+      // Or use a structured binding to ensure initialization
+      auto [x, y, z] = body.getPosition();
+    bad_example: |
+      float velocity;    // Uninitialized — UB if read before assignment
+      float mass;
+      if (condition) {
+        mass = body.getMass();
+      }
+      float ke = 0.5f * mass * velocity * velocity;  // UB if condition was false
+    tags:
+      - initialization
+      - safety
+      - undefined-behavior
+    cross_refs:
+      - to_rule_id: MSD-INIT-001
+        relationship: related
+      - to_rule_id: CPP-ES.20
+        relationship: related
+
+  - rule_id: MISRA-9.3
+    category: Initialization
+    source: misra
+    severity: required
+    title: Arrays shall not be partially initialized
+    rationale: >
+      Partial initialization of an array leaves the remaining elements with
+      indeterminate (zero for static-duration, garbage for automatic-duration) values.
+      In safety-critical code this is a source of subtle bugs when the programmer
+      assumes all elements have been explicitly set but some have been silently
+      defaulted. Explicitly initialize all elements, or use aggregate initialization
+      with a complete initializer list.
+    enforcement_notes: >
+      Flag array initializer lists that are shorter than the array size unless the
+      array has static/global storage duration (where zero-fill is guaranteed by the
+      standard). For automatic-duration arrays, require full initialization or use
+      std::array with aggregate initialization.
+    good_example: |
+      // Fully initialized — all three elements explicit
+      std::array<float, 3> position{1.0f, 2.0f, 3.0f};
+
+      // Or use value-initialization to zero all elements
+      std::array<float, 128> buffer{};
+    bad_example: |
+      float position[3] = {1.0f, 2.0f};  // Third element implicitly 0.0f — surprising
+      float buffer[128] = {0.0f};         // Only first element explicit — relying on implicit zero-fill
+    tags:
+      - initialization
+      - safety
+      - arrays
+    cross_refs:
+      - to_rule_id: MSD-INIT-001
+        relationship: related
+      - to_rule_id: CPP-ES.20
+        relationship: related
+
+  - rule_id: MISRA-9.4
+    category: Initialization
+    source: misra
+    severity: required
+    title: An element of an object shall not be initialized more than once
+    rationale: >
+      Re-initializing the same element in a constructor initializer list or aggregate
+      initializer more than once is undefined behavior (in some contexts) and a clear
+      logic error. In a constructor initializer list, initializing a member twice
+      means one of the initializations is silently ignored, which is confusing and
+      error-prone. Each member should appear exactly once in any initialization list.
+    enforcement_notes: >
+      Flag constructor member initializer lists that name the same member more than
+      once. Flag designated initializers that name the same field multiple times.
+      GCC and Clang both warn on these patterns with -Wduplicate-decl-specifier and
+      related warnings. Enable -Wall to catch them.
+    good_example: |
+      class Sensor {
+      public:
+        // Each member initialized exactly once
+        explicit Sensor(float rate, float noise)
+          : sampleRate_{rate}, noiseFloor_{noise} {}
+      private:
+        float sampleRate_;
+        float noiseFloor_;
+      };
+    bad_example: |
+      class Sensor {
+      public:
+        explicit Sensor(float rate, float noise)
+          : sampleRate_{rate}, noiseFloor_{noise},
+            sampleRate_{rate * 2.0f}  // Error: sampleRate_ initialized twice
+        {}
+      private:
+        float sampleRate_;
+        float noiseFloor_;
+      };
+    tags:
+      - initialization
+      - safety
+      - constructors
+    cross_refs:
+      - to_rule_id: MSD-INIT-002
+        relationship: related
+      - to_rule_id: CPP-C.45
+        relationship: related
+
+  - rule_id: MISRA-14.4
+    category: Initialization
+    source: misra
+    severity: required
+    title: The controlling expression of an if statement and iteration statement shall be essentially Boolean
+    rationale: >
+      Using non-Boolean expressions as conditions (e.g., integers, pointers, or
+      floats) in if-statements and loops can silently hide initialization bugs and
+      type errors. In particular, comparing floating-point values directly to zero
+      (which is an implicit Boolean conversion of a float) can produce incorrect
+      results due to floating-point representation. Explicit Boolean expressions
+      make the intent clear and prevent accidental use of uninitialized numeric values
+      as truthy/falsy.
+    enforcement_notes: >
+      Flag if/while/for conditions that are not explicitly Boolean: integer conditions
+      used as flags (if (count)), pointer null checks (if (ptr)), float conditions
+      (if (value)). Use explicit comparisons: if (count != 0), if (ptr != nullptr),
+      if (std::abs(value) > kEpsilon).
+    good_example: |
+      if (ptr != nullptr) { /* explicit null check */ }
+      if (count != 0) { /* explicit zero check */ }
+      if (std::isfinite(velocity)) { /* explicit float validity check */ }
+    bad_example: |
+      if (ptr) { }        // Implicit pointer-to-bool
+      if (count) { }      // Implicit int-to-bool
+      if (velocity) { }   // Implicit float-to-bool — may mask NaN or initialization bug
+    tags:
+      - initialization
+      - safety
+      - boolean
+    cross_refs:
+      - to_rule_id: MSD-INIT-001
+        relationship: related
