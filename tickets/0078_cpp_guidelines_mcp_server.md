@@ -4,10 +4,10 @@
 - [x] Draft
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Implementation
-- [ ] Implementation Complete
+- [x] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Design Approved — Ready for Implementation
+**Current Phase**: Implementation Complete — Awaiting Quality Gate
 **Type**: Tooling / Infrastructure
 **Priority**: Medium
 **Created**: 2026-02-26
@@ -191,3 +191,19 @@ scripts/guidelines/
 - **Artifacts**:
   - `docs/designs/0078_cpp_guidelines_mcp_server/design.md` (review appended)
 - **Notes**: Design approved with 4 non-blocking notes. Status: APPROVED WITH NOTES. Key notes for implementer: (N1) define `get_rule` not-found contract in tool docstring; (N2) add `pyyaml` with pinned version to `python/requirements.txt`; (N3) no automated pytest required for this ticket; (N4) mark `enforcement_check` as optional in YAML schema with explanatory comment. No risks require prototype validation. Proceed directly to implementation.
+
+### Implementation Phase
+- **Started**: 2026-02-26 16:00
+- **Completed**: 2026-02-26 17:00
+- **Branch**: `0078-cpp-guidelines-mcp-server`
+- **PR**: #98 (ready for review)
+- **Artifacts**:
+  - `scripts/guidelines/guidelines_schema.py`
+  - `scripts/guidelines/seed_guidelines.py`
+  - `scripts/guidelines/guidelines_server.py`
+  - `scripts/guidelines/data/project_rules.yaml`
+  - `scripts/guidelines/data/cpp_core_guidelines.yaml`
+  - `scripts/guidelines/data/misra_rules.yaml`
+  - `docs/designs/0078_cpp_guidelines_mcp_server/implementation-notes.md`
+  - `docs/designs/0078_cpp_guidelines_mcp_server/iteration-log.md`
+- **Notes**: All 4 implementation phases completed in a single iteration. All 8 acceptance criteria pass (CLI smoke tests). All 4 design review notes (N1–N4) incorporated. No deviations from design. FTS5 porter stemming verified. CMake target `guidelines-seed` and preset `debug-guidelines` added. Server registered in `.mcp.json` and enabled in `settings.local.json`. PR #98 marked ready for review.
