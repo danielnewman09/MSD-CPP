@@ -6,10 +6,10 @@
 - [ ] Design Approved — Ready for Implementation
 - [x] Implementation Complete
 - [x] Quality Gate Passed — Awaiting Review
-- [ ] Approved — Ready to Merge
-- [ ] Merged / Complete
+- [x] Approved — Ready to Merge
+- [x] Merged / Complete
 
-**Current Phase**: Approved — Ready to Merge
+**Current Phase**: Merged / Complete
 **Type**: Tooling / Infrastructure
 **Priority**: Low
 **Created**: 2026-02-26
@@ -113,3 +113,12 @@ Add `rule_cross_refs` entries where MISRA rules overlap with project or C++ Core
     10 MSD) with no errors. CLI smoke tests passed: search, get_rule with cross-refs,
     and list_categories all return correct results. Skipped design/review phases per
     ticket instructions — this is a pure data population task with no new code.
+
+### Documentation Phase
+- **Started**: 2026-02-26 00:00
+- **Completed**: 2026-02-26 00:00
+- **Branch**: 0078c-misra-rules-population
+- **PR**: #101
+- **Artifacts**:
+  - `CLAUDE.md`
+- **Notes**: Updated CLAUDE.md Guidelines MCP Server section — replaced "populated in follow-up 0078c" placeholder with the actual count (19 rules, Memory Management and Initialization categories) and a link to this ticket. Pattern matches the 0078b update. Generate Tutorial: No — skipping tutorial phase. Workflow complete.

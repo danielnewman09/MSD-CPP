@@ -335,7 +335,7 @@ Database is generated at `build/Debug/docs/guidelines.db` (gitignored, fully reb
 **Rule ID Conventions**:
 - Project rules: `MSD-{CATEGORY}-{NNN}` (e.g., `MSD-INIT-001`, `MSD-RES-002`)
 - C++ Core Guidelines: `CPP-{section}.{number}` (e.g., `CPP-R.11`) — 57 rules across R, C, and ES sections ([Ticket: 0078b](tickets/0078b_cpp_core_guidelines_population.md))
-- MISRA: `MISRA-{rule}` — populated in follow-up 0078c
+- MISRA: `MISRA-{rule}` (e.g., `MISRA-21.3`) — 19 rules across Memory Management and Initialization categories ([Ticket: 0078c](tickets/0078c_misra_rules_population.md))
 
 **Source files**: `scripts/guidelines/` — see `guidelines_schema.py` (schema), `seed_guidelines.py` (YAML→SQLite indexer), `guidelines_server.py` (FastMCP server + CLI)
 
