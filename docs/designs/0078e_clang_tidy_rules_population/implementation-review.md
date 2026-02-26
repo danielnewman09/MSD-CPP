@@ -2,7 +2,18 @@
 
 **Date**: 2026-02-26
 **Reviewer**: Implementation Review Agent
-**Status**: CHANGES REQUESTED
+**Status**: APPROVED
+
+---
+
+## Re-Review Context
+
+This is a re-review following CHANGES REQUESTED from the initial review. The two required changes were addressed in commit `fc2223e`:
+
+- **C1 (Critical)**: `TIDY-misc-unused-parameters` repurposed to `TIDY-misc-unused-using-decls` with correct title, rationale, examples, and `enforcement_check: misc-unused-using-decls`.
+- **m2 (Minor)**: `TIDY-bugprone-assert-side-effects` renamed to `TIDY-bugprone-assert-side-effect` (singular) to match canonical clang-tidy check name. `enforcement_check` already read `bugprone-assert-side-effect`; now `rule_id` matches.
+
+Database re-seeded successfully (127 rules, exit 0). Both fixed rules verified via `get_rule` smoke tests.
 
 ---
 
@@ -31,18 +42,18 @@
 
 | Deviation | Justified | Design Intent Preserved | Approved |
 |-----------|-----------|------------------------|----------|
-| 30 active + 11 deprecated (not 31/10 as stated in workflow log) | ✓ | ✓ | N/A — documentation-only discrepancy |
+| 30 active + 11 deprecated (not 31/10 as stated in original workflow log) | ✓ | ✓ | N/A — documentation-only discrepancy, corrected in ticket |
 | `TIDY-readability-braces-around-statements` uses google variant in enforcement_check | ✓ | ✓ | ✓ — correctly categorized under Readability with enforcement pointing to Google variant |
 
 **Conformance Status**: PASS
 
-All specified components are present, in the correct locations, with correct interfaces. The schema change is backward compatible. The active/deprecated count discrepancy (30/11 vs logged 31/10) is a workflow log annotation error only — the actual YAML content is correct and fully verified by the quality gate.
+All specified components are present, in the correct locations, with correct interfaces. The schema change is backward compatible. The active/deprecated count discrepancy (30/11 vs logged 31/10) was corrected in the ticket workflow log.
 
 ---
 
 ## Prototype Learning Application
 
-No prototype phase was run for this ticket (data-population-only, as noted in ticket). Not applicable.
+No prototype phase was run for this ticket (data-population-only, as noted in ticket).
 
 **Prototype Application Status**: N/A
 
@@ -85,7 +96,7 @@ No prototype phase was run for this ticket (data-population-only, as noted in ti
 
 **Code Quality Status**: PASS
 
-The Python changes are minimal, correct, and backward compatible. The YAML content is well-structured. One content accuracy defect was found (see Issues Found below).
+The Python changes are minimal, correct, and backward compatible. The YAML content is well-structured. The previously identified content accuracy defect (C1) has been resolved.
 
 ---
 
@@ -93,18 +104,22 @@ The Python changes are minimal, correct, and backward compatible. The YAML conte
 
 ### Required Tests
 
-This is a data-population ticket with no new C++ test targets specified in the design. Acceptance criteria testing is performed via CLI smoke tests documented in the quality gate report. All smoke tests passed.
+This is a data-population ticket with no new C++ test targets specified in the design. Acceptance criteria testing is performed via CLI smoke tests documented in the quality gate report. All smoke tests passed both at quality gate time and in this re-review.
 
 | Test | Exists | Passes | Quality |
 |------|--------|--------|---------|
-| `search_guidelines("use after move")` | ✓ | ✓ | Good |
-| `search_guidelines("naming convention")` | ✓ | ✓ | Good |
-| `get_rule("TIDY-modernize-use-override")` | ✓ | ✓ | Good |
-| `list_categories` (18 categories) | ✓ | ✓ | Good |
-| YAML Pydantic validation (all 127 rules) | ✓ | ✓ | Good |
-| Cross-reference integrity (14 refs) | ✓ | ✓ | Good |
+| `search_guidelines("use after move")` returns `TIDY-bugprone-use-after-move` | ✓ | ✓ | Good |
+| `search_guidelines("naming convention")` returns relevant rules | ✓ | ✓ | Good |
+| `get_rule("TIDY-modernize-use-override")` returns full rule with enforcement_check | ✓ | ✓ | Good |
+| `list_categories` returns 18 categories | ✓ | ✓ | Good |
+| YAML Pydantic validation (all 127 rules) — exit 0 | ✓ | ✓ | Good |
+| Cross-reference integrity (14 refs resolve) | ✓ | ✓ | Good |
 | Deprecated check accuracy (11 rules vs .clang-tidy) | ✓ | ✓ | Good |
 | Backward compatibility (existing 86 rules unchanged) | ✓ | ✓ | Good |
+| `get_rule("TIDY-misc-unused-using-decls")` returns correct rule (new — re-review) | ✓ | ✓ | Good |
+| `get_rule("TIDY-bugprone-assert-side-effect")` returns singular form (new — re-review) | ✓ | ✓ | Good |
+| `get_rule("TIDY-misc-unused-parameters")` returns "Rule not found" (old ID gone) | ✓ | ✓ | Good |
+| `get_rule("TIDY-bugprone-assert-side-effects")` returns "Rule not found" (old ID gone) | ✓ | ✓ | Good |
 
 ### Test Quality
 
@@ -124,44 +139,27 @@ This is a data-population ticket with no new C++ test targets specified in the d
 
 ### Critical (Must Fix)
 
-| ID | Location | Issue | Recommendation |
-|----|----------|-------|----------------|
-| C1 | `scripts/guidelines/data/clang_tidy_rules.yaml` line 1083 | `TIDY-misc-unused-parameters` has `enforcement_check: misc-unused-using-decls`, which is the wrong clang-tidy check. `misc-unused-using-decls` flags unused `using` declarations (e.g., `using std::string;` that is never referenced), not unused function parameters. Unused function parameters are flagged by the compiler warning `-Wunused-parameter`, not by a `misc-*` clang-tidy check. The rule description and `enforcement_check` are mismatched. | Either: (a) change the rule to document `misc-unused-using-decls` correctly (unused using-declarations), with corrected title, rationale, and examples; or (b) remove the `enforcement_check` field and document this as a manual convention (unused parameters suppress via name omission) without a direct clang-tidy check mapping. Option (a) is preferred as it adds genuine value. |
+No critical issues.
 
 ### Major (Should Fix)
 
-No major issues found.
+No major issues.
 
 ### Minor (Consider)
 
-| ID | Location | Issue | Recommendation |
-|----|----------|-------|----------------|
-| m1 | `scripts/guidelines/data/clang_tidy_rules.yaml` line 135–136 (workflow log) | Workflow log states "31 active + 10 deprecated" but actual is 30 + 11. | Update the implementation phase workflow log count in `tickets/0078e_clang_tidy_rules_population.md` to reflect the correct 30/11 split. The quality gate already documents this accurately. |
-| m2 | `scripts/guidelines/data/clang_tidy_rules.yaml` — `TIDY-bugprone-assert-side-effects` | Rule ID suffix is `assert-side-effects` but the `enforcement_check` is `bugprone-assert-side-effect` (singular, no 's'). The rule_id `TIDY-bugprone-assert-side-effects` does not match the canonical check name. This is a cosmetic inconsistency that does not affect function but breaks the naming convention `TIDY-{check-name}` = `{enforcement_check}`. | Rename rule_id to `TIDY-bugprone-assert-side-effect` to match the canonical clang-tidy check name exactly. |
-
----
-
-## Required Changes (if CHANGES REQUESTED)
-
-Priority order:
-
-1. **[C1] Fix `TIDY-misc-unused-parameters` enforcement_check mismatch** — The `enforcement_check: misc-unused-using-decls` does not match the rule's description of unused function parameters. Preferred fix: repurpose the rule to document `misc-unused-using-decls` (unused using-declarations) with correct title, rationale, good/bad examples, and enforcement_check. This preserves the 41-rule total and adds a genuinely useful rule about using-declarations. Alternatively, change `enforcement_check` to `null` and update the title/rationale to make clear this is a manual convention enforced by compiler warnings, not a clang-tidy check.
-
-2. **[m2] Rename rule_id to match canonical check name** — Change `TIDY-bugprone-assert-side-effects` to `TIDY-bugprone-assert-side-effect` (drop trailing 's') to match the `enforcement_check` value. Update any cross-references if needed (none found).
-
-3. **[m1] Correct workflow log count** — Update the implementation phase workflow log entry in `tickets/0078e_clang_tidy_rules_population.md` to state "30 active + 11 deprecated" instead of "31 active + 10 deprecated".
+No minor issues.
 
 ---
 
 ## Summary
 
-**Overall Status**: CHANGES REQUESTED
+**Overall Status**: APPROVED
 
-**Summary**: The implementation successfully populates 41 clang-tidy rules across 9 categories with high-quality rationale, examples, and enforcement_check mappings. The schema extension is backward compatible and well-engineered. One critical content accuracy defect was found: `TIDY-misc-unused-parameters` maps `enforcement_check` to `misc-unused-using-decls`, which is a different clang-tidy check covering unused using-declarations — not unused function parameters. This mismatch would cause agents querying the guidelines DB to receive incorrect enforcement guidance. Two minor issues (rule_id naming inconsistency and workflow log count) were also noted.
+**Summary**: The fixes from the CHANGES REQUESTED review have been correctly applied. `TIDY-misc-unused-using-decls` now accurately documents the `misc-unused-using-decls` clang-tidy check (unused using-declarations) with correct title, rationale, good/bad examples, and a matching `enforcement_check`. `TIDY-bugprone-assert-side-effect` (singular) now has a `rule_id` that matches the canonical clang-tidy check name. The database re-seeds cleanly to 127 rules and all smoke tests pass.
 
-**Design Conformance**: PASS — All specified components present and correct.
+**Design Conformance**: PASS — All specified components present, correct, and in correct locations.
 **Prototype Application**: N/A — Data-population ticket, no prototype phase.
 **Code Quality**: PASS — Python changes are minimal, backward-compatible, and well-structured.
-**Test Coverage**: PASS — All 8 quality gate sub-checks passed; smoke tests verify acceptance criteria.
+**Test Coverage**: PASS — All 8 quality gate sub-checks plus 4 re-review-specific checks passed.
 
-**Next Steps**: Implementer should fix the enforcement_check mismatch on `TIDY-misc-unused-parameters` (C1) and optionally address the two minor issues (m1, m2). After fixes, re-run the seeder and smoke tests, then return for re-review.
+**Next Steps**: Advance ticket to "Approved — Ready to Merge". Execute docs-updater. Tutorial generation not required (Generate Tutorial: No).
