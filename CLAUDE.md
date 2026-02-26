@@ -339,6 +339,17 @@ Database is generated at `build/Debug/docs/guidelines.db` (gitignored, fully reb
 
 **Source files**: `scripts/guidelines/` — see `guidelines_schema.py` (schema), `seed_guidelines.py` (YAML→SQLite indexer), `guidelines_server.py` (FastMCP server + CLI)
 
+**Agent Integration**: The following agents query the guidelines server during their workflows ([Ticket: 0078a](tickets/0078a_agent_prompt_guidelines_integration.md)):
+
+| Agent | Integration Point | Tools Used |
+|-------|-------------------|------------|
+| `cpp-architect` | Before finalizing design decisions | `search_guidelines`, `get_rule`, `list_categories`, `get_category` |
+| `design-reviewer` | Step 1 of review process | `search_guidelines`, `get_rule` |
+| `cpp-code-reviewer` | Before and during code review | `search_guidelines`, `get_rule` |
+| `implementation-reviewer` | Phase 2.5 between prototype and code quality phases | `search_guidelines`, `get_rule` |
+
+All agents include the constraint: **Only cite rules returned by `search_guidelines`. Do not invent rule IDs.**
+
 **Ticket**: [0078_cpp_guidelines_mcp_server](tickets/0078_cpp_guidelines_mcp_server.md)
 
 ---

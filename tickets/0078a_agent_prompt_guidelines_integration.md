@@ -7,9 +7,9 @@
 - [x] Implementation Complete
 - [x] Quality Gate Passed — Awaiting Review
 - [x] Approved — Ready to Merge
-- [ ] Merged / Complete
+- [x] Merged / Complete
 
-**Current Phase**: Approved — Ready to Merge
+**Current Phase**: Merged / Complete
 **Type**: Tooling / Infrastructure
 **Priority**: Medium
 **Created**: 2026-02-26
@@ -116,6 +116,16 @@ When reviewing/designing C++ code, query the guidelines MCP server to retrieve a
 - **Artifacts**:
   - `docs/designs/0078a_agent_prompt_guidelines_integration/quality-gate-report.md`
 - **Notes**: No C++ code to build or test — gate is structural/content verification of the four agent markdown files. All seven gates PASSED: (1) all four files modified in commit 74df861, (2) `search_guidelines` present in all four agents, (3) `get_rule` present in all four agents, (4) "Do not invent rule IDs" constraint in all four agents, (5) no broken markdown (all code fences balanced, YAML front-matter intact), (6) all automatable acceptance criteria met, (7) directive placement verified at correct workflow entry points. AC6 (live test interaction) remains manual verification for the implementation reviewer.
+
+### Documentation Phase
+- **Started**: 2026-02-26 12:00
+- **Completed**: 2026-02-26 12:00
+- **Branch**: 0078a-agent-prompt-guidelines-integration
+- **PR**: #99
+- **Artifacts**:
+  - `CLAUDE.md` — Added "Agent Integration" subsection to Guidelines MCP Server section documenting all four integrated agents, their integration points, tools used, and the hallucination-guard constraint
+  - `docs/designs/0078a_agent_prompt_guidelines_integration/doc-sync-summary.md`
+- **Notes**: No C++ library code or PlantUML diagrams involved — tooling-only ticket. Record layer sync skipped (msd-transfer not touched). Generate Tutorial: No — advancing directly to Merged / Complete.
 
 ### Implementation Review Phase
 - **Started**: 2026-02-26 11:00
