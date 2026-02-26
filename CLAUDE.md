@@ -191,7 +191,7 @@ This creates `python/.venv` and installs all dependencies from `python/requireme
 ### What's Included
 
 - **Traceability indexing:** tree-sitter, tree-sitter-cpp
-- **MCP servers:** fastmcp (for codebase and traceability servers)
+- **MCP servers:** fastmcp (for codebase, traceability, and guidelines servers); pyyaml (for guidelines seeder)
 - **Replay server:** fastapi, uvicorn, pydantic
 - **Testing:** pytest, httpx
 - **Replay package:** Installed in editable mode
@@ -303,6 +303,43 @@ Database is generated at `build/{build_type}/docs/traceability.db` (gitignored, 
 Automates generation of pybind11 bindings and Pydantic leaf models from msd-transfer C++ record headers. Use the `/sync-records` skill after modifying transfer records, or run `python scripts/generate_record_layers.py` directly.
 
 **Full documentation**: [`msd/msd-pybind/CLAUDE.md`](msd/msd-pybind/CLAUDE.md)
+
+### Guidelines MCP Server
+
+Stores structured C++ coding guidelines (project conventions, C++ Core Guidelines, MISRA) in a SQLite + FTS5 database and exposes them via a FastMCP server. AI agents query it during design and code review to retrieve rationale-backed recommendations with traceable rule IDs. This is a lightweight RAG system: FTS5 handles retrieval, MCP handles augmentation, and the AI handles generation.
+
+```bash
+# Seed the guidelines database from YAML source files
+cmake --build --preset debug-guidelines
+
+# Or directly
+python scripts/guidelines/seed_guidelines.py --db build/Debug/docs/guidelines.db
+
+# CLI smoke test
+python scripts/guidelines/guidelines_server.py build/Debug/docs/guidelines.db search_guidelines "brace initialization"
+python scripts/guidelines/guidelines_server.py build/Debug/docs/guidelines.db get_rule MSD-RES-001
+python scripts/guidelines/guidelines_server.py build/Debug/docs/guidelines.db list_categories
+```
+
+Database is generated at `build/Debug/docs/guidelines.db` (gitignored, fully rebuildable from YAML seed files in `scripts/guidelines/data/`).
+
+**MCP Tools** (available when server is registered in `.mcp.json`):
+| Tool | Description |
+|------|-------------|
+| `search_guidelines` | FTS5 full-text search with porter stemming (BM25 ranking) |
+| `get_rule` | Full rule details including rationale, examples, tags, and cross-references |
+| `list_categories` | All categories with total and active rule counts |
+| `get_category` | Rules in a category — summary mode (default) or detailed |
+| `get_rules_by_tag` | All rules with a given tag (e.g., "safety", "ownership") |
+
+**Rule ID Conventions**:
+- Project rules: `MSD-{CATEGORY}-{NNN}` (e.g., `MSD-INIT-001`, `MSD-RES-002`)
+- C++ Core Guidelines: `CPP-{section}.{number}` (e.g., `CPP-R.11`) — populated in follow-up 0078b
+- MISRA: `MISRA-{rule}` — populated in follow-up 0078c
+
+**Source files**: `scripts/guidelines/` — see `guidelines_schema.py` (schema), `seed_guidelines.py` (YAML→SQLite indexer), `guidelines_server.py` (FastMCP server + CLI)
+
+**Ticket**: [0078_cpp_guidelines_mcp_server](tickets/0078_cpp_guidelines_mcp_server.md)
 
 ---
 
