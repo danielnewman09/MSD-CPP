@@ -84,6 +84,30 @@ Before evaluating code quality, query the guidelines MCP server for rules applic
 - Use `get_rule` to retrieve full rationale for any rule you plan to cite in your review
 - When a code quality finding corresponds to a project convention, include the rule ID (e.g., `MSD-RES-001`) in the Issues Found table so the implementer can trace the requirement
 
+#### Severity Enforcement Policy
+
+Guidelines have three severity levels. Map them to finding severity as follows:
+
+| Guideline Severity | Minimum Finding Severity | Review Impact |
+|--------------------|--------------------------|---------------|
+| `required`         | BLOCKING                 | Cannot approve with open violations |
+| `recommended`      | MAJOR                    | Should fix before merge; document if deferred |
+| `advisory`         | MINOR or NIT             | Discretionary; cite for awareness |
+
+When citing a rule, always include its severity. Example:
+"Violates MSD-INIT-001 (required): Use NaN for uninitialized floating-point members → BLOCKING"
+
+#### Required Rules Compliance Check
+
+Before finalizing your review verdict:
+1. Identify the categories relevant to this implementation (e.g., Resource Management, Initialization, Naming)
+2. For each relevant category, query `get_category(name, detailed=True)`
+3. Filter for rules with `severity: required`
+4. Verify the implementation complies with each required rule
+5. Any required-rule violation that is not addressed is a BLOCKING finding
+
+This is a systematic sweep — do not rely only on pattern-matched `search_guidelines` queries.
+
 ### Phase 3: Code Quality
 
 **Resource Management**:

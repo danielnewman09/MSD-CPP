@@ -210,6 +210,27 @@ When designing C++ interfaces and components, query the guidelines MCP server to
 
 When the design document references a project coding convention, include the rule ID so reviewers and implementers can trace the rationale.
 
+### Severity Enforcement Policy
+
+Guidelines have three severity levels. Map them to finding severity as follows:
+
+| Guideline Severity | Minimum Finding Severity | Review Impact |
+|--------------------|--------------------------|---------------|
+| `required`         | BLOCKING                 | Cannot approve with open violations |
+| `recommended`      | MAJOR                    | Should fix before merge; document if deferred |
+| `advisory`         | MINOR or NIT             | Discretionary; cite for awareness |
+
+When citing a rule, always include its severity. Example:
+"Violates MSD-INIT-001 (required): Use NaN for uninitialized floating-point members → BLOCKING"
+
+### Required Rules Discovery
+
+When starting a design:
+1. Identify categories relevant to your design (e.g., Resource Management, Initialization)
+2. Query `search_guidelines` with `severity=required` for each relevant category
+3. List the required rules as design constraints in the "Constraints" section of the design document
+4. Ensure the proposed design satisfies all listed required rules
+
 ## Coding Standards to Apply
 When designing interfaces, follow these project conventions:
 

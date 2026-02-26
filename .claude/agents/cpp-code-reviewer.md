@@ -101,6 +101,26 @@ When reviewing C++ code, query the guidelines MCP server to retrieve applicable 
 
 When issuing a BLOCKING or MAJOR finding that relates to a project convention, include the rule ID in the feedback so developers can trace the requirement back to its rationale.
 
+### Severity Enforcement Policy
+
+Guidelines have three severity levels. Map them to finding severity as follows:
+
+| Guideline Severity | Minimum Finding Severity | Review Impact |
+|--------------------|--------------------------|---------------|
+| `required`         | BLOCKING                 | Cannot approve with open violations |
+| `recommended`      | MAJOR                    | Should fix before merge; document if deferred |
+| `advisory`         | MINOR or NIT             | Discretionary; cite for awareness |
+
+When citing a rule, always include its severity. Example:
+"Violates MSD-INIT-001 (required): Use NaN for uninitialized floating-point members → BLOCKING"
+
+### Required Rules Sweep
+
+After your pattern-based review, perform a targeted sweep:
+1. Query `search_guidelines(query="", severity="required")` for the categories touched by the diff
+2. For each required rule in those categories, check if the diff introduces a violation
+3. Any new violation of a required rule is a BLOCKING finding
+
 ## Your Review Process
 
 Follow this structured approach for every review:
