@@ -89,6 +89,18 @@ Verify:
 
 Reject overload explosion when a single template with proper constraints suffices.
 
+## Guidelines MCP Integration
+
+When reviewing C++ code, query the guidelines MCP server to retrieve applicable rules before and during your review:
+
+- Use `search_guidelines` to find rules relevant to the code patterns under review (e.g., "brace initialization", "unique_ptr ownership", "NaN uninitialized", "Rule of Zero")
+- Cite specific rule IDs (e.g., `MSD-INIT-001`) when flagging violations in your feedback
+- Only cite rules returned by `search_guidelines`. Do not invent rule IDs.
+- Use `get_rule` to retrieve full rationale when providing detailed feedback on why a pattern violates project conventions
+- Use `get_category` or `list_categories` to enumerate all rule categories when performing a comprehensive review
+
+When issuing a BLOCKING or MAJOR finding that relates to a project convention, include the rule ID in the feedback so developers can trace the requirement back to its rationale.
+
 ## Your Review Process
 
 Follow this structured approach for every review:
@@ -97,6 +109,7 @@ Follow this structured approach for every review:
 - Identify what problem this change solves
 - Search for existing code that might address this
 - Catalog available project libraries
+- **Query the guidelines MCP server** using `search_guidelines` with terms relevant to the changed files (e.g., module patterns, data structures, ownership patterns present in the diff)
 
 ### Step 2: Apply Review Principles
 For each changed file, evaluate against all six principles:
