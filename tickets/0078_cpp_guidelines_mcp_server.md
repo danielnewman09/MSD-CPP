@@ -176,7 +176,7 @@ scripts/guidelines/
 - **Started**: 2026-02-26 00:00
 - **Completed**: 2026-02-26 00:00
 - **Branch**: `0078-cpp-guidelines-mcp-server`
-- **PR**: N/A (pending push)
+- **PR**: #98 (draft)
 - **Artifacts**:
   - `docs/designs/0078_cpp_guidelines_mcp_server/design.md`
   - `docs/designs/0078_cpp_guidelines_mcp_server/0078_cpp_guidelines_mcp_server.puml`
