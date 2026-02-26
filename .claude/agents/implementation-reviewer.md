@@ -75,6 +75,15 @@ For each technical decision from prototype results:
 - Decision is reflected in implementation
 - Prototype learnings about gotchas/pitfalls addressed
 
+### Phase 2.5: Guidelines MCP Lookup
+
+Before evaluating code quality, query the guidelines MCP server for rules applicable to the implementation:
+
+- Use `search_guidelines` with terms matching the implementation's key patterns (e.g., "memory ownership", "brace initialization", "NaN", "Rule of Zero", "const reference")
+- Only cite rules returned by `search_guidelines`. Do not invent rule IDs.
+- Use `get_rule` to retrieve full rationale for any rule you plan to cite in your review
+- When a code quality finding corresponds to a project convention, include the rule ID (e.g., `MSD-RES-001`) in the Issues Found table so the implementer can trace the requirement
+
 ### Phase 3: Code Quality
 
 **Resource Management**:

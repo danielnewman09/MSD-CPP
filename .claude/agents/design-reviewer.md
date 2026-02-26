@@ -36,8 +36,13 @@ Before reviewing, you must:
 1. Read the design document at `docs/designs/{feature-name}/design.md`
 2. Examine the PlantUML diagram at `docs/designs/{feature-name}/{feature-name}.puml`
 3. Review relevant sections of CLAUDE.md for project coding standards
-4. Explore the existing codebase to understand current patterns and conventions
-5. Note any human feedback or decisions on Open Questions from the design phase
+4. **Query the guidelines MCP server** for rules applicable to the design patterns present:
+   - Use `search_guidelines` with terms matching the design's key patterns (e.g., "memory ownership", "initialization", "RAII")
+   - Use `get_rule` to retrieve full rationale for rules you plan to cite in your review
+   - Only cite rules returned by `search_guidelines`. Do not invent rule IDs.
+   - When flagging a standards violation in the design, include the rule ID (e.g., `MSD-INIT-001`) so the architect can trace the requirement
+5. Explore the existing codebase to understand current patterns and conventions
+6. Note any human feedback or decisions on Open Questions from the design phase
 
 ### Step 2: Evaluate Against Criteria
 
