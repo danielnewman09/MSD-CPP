@@ -287,3 +287,81 @@ The 4 phases from the ticket map directly to implementation:
 - **0078b**: Populate C++ Core Guidelines rules (R, C, ES sections) with enforcement_check clang-tidy mappings.
 - **0078c**: Populate MISRA rules (memory and initialization categories).
 - **0078d**: Migrate CLAUDE.md coding standards section to a pointer — replace prose with directive to query the guidelines MCP server (DD-0078-004).
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-26
+**Status**: APPROVED WITH NOTES
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | `GuidelinesServer` class, `create_mcp_server` factory, `search_guidelines` / `get_rule` tool names — all match existing codebase pattern from `mcp_codebase_server.py` / `traceability_server.py` |
+| Module organization | ✓ | New `scripts/guidelines/` subdirectory mirrors `scripts/traceability/` — consistent with project layout |
+| File structure | ✓ | `guidelines_schema.py`, `seed_guidelines.py`, `guidelines_server.py`, `data/*.yaml` — well-separated responsibilities, no module coupling issues |
+| Dependency direction | ✓ | `seed_guidelines.py` and `guidelines_server.py` both import `guidelines_schema.py`; no circular imports; no dependency on msd-sim C++ code (correctly isolated) |
+| Pattern reuse | ✓ | Explicitly follows `mcp_codebase_server.py` class+factory pattern. `traceability_schema.py` used as schema module precedent. Both patterns are well-established in codebase. |
+
+#### Python Design Quality (adapted from C++ criteria)
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Resource management | ✓ | `sqlite3.connect` stored on `self.conn`; `close()` method follows existing pattern. No context-manager idiom used (consistent with `CodebaseServer` and `TraceabilityServer` — acceptable for long-lived server connections). |
+| Type annotations | ✓ | All signatures show type hints (`str \| None`, `list[dict]`, `bool`) consistent with existing servers. |
+| Pydantic validation | ✓ | `RuleModel` with `Literal` types for `source`, `severity`, `status` gives strong validation before DB write. All-or-nothing abort on `ValidationError` is the correct pattern. |
+| FTS5 usage | ✓ | Porter tokenizer specified, BM25 ranking via `bm25(rules_fts)` — matches FTS5 best practice. The design correctly notes FTS5 is SQLite built-in (no external dependency). |
+| Idempotency | ✓ | `seed_guidelines.py` uses DROP+CREATE (fully idempotent). Server startup does not reseed — correct separation of concerns. |
+| Error handling | ✓ | Pydantic aborts before writing. Server `get_rule` should return empty/error if rule not found — design specifies `dict` return type; implementation should handle the not-found case (see Note N1). |
+| CLI mode | ✓ | CLI smoke-test mode follows `traceability_server.py` pattern — enables verification without an MCP client. |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Python dependencies | ✓ | `pyyaml` is the only new dependency; `pydantic` and `fastmcp` already in `python/requirements.txt` |
+| SQLite FTS5 availability | ✓ | FTS5 is compiled into SQLite by default on macOS and most Linux distributions. No additional linking required. |
+| Build integration | ✓ | `guidelines-seed` CMake custom target follows `trace-git` pattern exactly. `debug-guidelines` preset follows `debug-traceability` pattern. No C++ rebuild required. |
+| MCP registration | ✓ | `.mcp.json` additive entry and `.claude/settings.local.json` `enabledMcpjsonServers` extension follow established pattern. DB path `build/Debug/docs/guidelines.db` is consistent with `codebase.db` and `traceability.db` co-location. |
+| Database rebuild path | ✓ | Fully rebuildable from YAML seed files via `cmake --build --preset debug-guidelines`. Gitignored DB is the correct choice (parallel to other generated DBs). |
+| `pyyaml` missing from requirements | NOTE | The design states "Add `pyyaml` to `python/requirements.txt`" and lists it as a dependency, but `python/requirements.txt` does not currently contain `pyyaml`. Implementation must add it. See Note N2. |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Schema module isolation | ✓ | `guidelines_schema.py` imported by both seed and server — single source of truth, independently testable |
+| GuidelinesServer isolation | ✓ | Takes `db_path: str`; can be instantiated against an in-memory `:memory:` DB for unit testing |
+| Seed script isolation | ✓ | `--db` and `--data-dir` CLI flags allow independent invocation against test paths |
+| Mockable dependencies | ✓ | No global state; no singletons; no process-level side effects outside the SQLite file |
+| CLI smoke tests specified | ✓ | Phase 4 verification table provides 7 concrete CLI commands with expected outcomes. FTS stemming verification table adds 3 more query/match pairs. |
+| No automated pytest suite | NOTE | CLI smoke tests are manual verification steps, not automated. This is acceptable for a tooling component, but see Note N3. |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | `get_rule` return type is `dict` but behavior on missing rule_id is unspecified | Feasibility | Med | Low | Implementer should return `{"error": "rule not found", "rule_id": rule_id}` or raise a descriptive exception; not silently return empty dict | No |
+| R2 | FTS5 porter stemmer may not be compiled into the macOS system SQLite | Feasibility | Low | Low | If `CREATE VIRTUAL TABLE ... USING fts5(tokenize="porter")` fails, fall back to default tokenizer. Verify in Phase 4 smoke test. | No |
+| R3 | YAML data files growing large could slow seed script on every `cmake --build --preset debug-guidelines` invocation | Performance | Low | Low | Fully acceptable for Phase 1 (10 rules). Design correctly scopes CppCoreGuidelines and MISRA as follow-up tickets. | No |
+| R4 | `get_category` with `detailed=True` for a large category (100+ CPP rules) could return a very large MCP response | Performance | Low | Med | Already mitigated by DD-0078-005 (default summary mode). Agents should prefer summary mode and call `get_rule` for specific rules. | No |
+
+### Notes (Non-Blocking)
+
+**N1 — `get_rule` not-found behavior**: The design specifies `get_rule(rule_id: str) -> dict` but does not specify the behavior when `rule_id` does not exist in the database. The implementer should define a consistent contract: either return a dict with an `"error"` key, raise a `ValueError`, or return `{}`. The MCP tool docstring should document this. This does not block implementation but should be decided upfront.
+
+**N2 — `pyyaml` not yet in `python/requirements.txt`**: The current `python/requirements.txt` does not contain `pyyaml`. The implementation steps correctly identify this as a change to make (Phase 1, step 5). The implementer must add `pyyaml` (with a pinned version matching the project's pinning convention) before seeding will work. This is a known gap correctly captured in the implementation plan, not a design flaw.
+
+**N3 — No automated pytest suite for the server**: The design scopes Phase 4 as manual CLI smoke tests. This is pragmatic for a tooling component. A future follow-up could add pytest tests that seed an in-memory DB and assert tool outputs. Not required for this ticket.
+
+**N4 — `enforcement_check` column sparsely populated initially**: All 10 initial MSD rules will have `enforcement_check = NULL`. This is correct per DD-0078-003 (nullable, populated incrementally). The YAML schema should make this an optional field with a clear comment in the seed data explaining the future intent.
+
+### Summary
+
+The design is well-specified, internally consistent, and follows established project patterns for MCP servers and SQLite-backed tooling. All five design decisions (DD-0078-001 through DD-0078-005) are sound and well-reasoned. The schema covers the necessary axes (full-text search, category browse, tag cross-cutting, rule lifecycle) without over-engineering. The phased implementation order (schema → seed → server → registration → verification) is logical and each phase is independently testable. The four notes are non-blocking implementation guidance items. The design is approved to proceed to implementation.
