@@ -77,6 +77,9 @@ rules:
     tags:
       - initialization
       - syntax
+    cross_refs:
+      - to_rule_id: CPP-ES.23
+        relationship: derived_from
 
   - rule_id: MSD-RES-001
     category: Resource Management
@@ -143,6 +146,8 @@ rules:
     cross_refs:
       - to_rule_id: MSD-RES-002
         relationship: related
+      - to_rule_id: CPP-C.21
+        relationship: derived_from
 
   - rule_id: MSD-RES-002
     category: Resource Management
@@ -189,6 +194,8 @@ rules:
         relationship: related
       - to_rule_id: MSD-RES-003
         relationship: related
+      - to_rule_id: CPP-R.11
+        relationship: derived_from
 
   - rule_id: MSD-RES-003
     category: Resource Management
