@@ -336,6 +336,9 @@ Database is generated at `build/Debug/docs/guidelines.db` (gitignored, fully reb
 - Project rules: `MSD-{CATEGORY}-{NNN}` (e.g., `MSD-INIT-001`, `MSD-RES-002`)
 - C++ Core Guidelines: `CPP-{section}.{number}` (e.g., `CPP-R.11`) — 57 rules across R, C, and ES sections ([Ticket: 0078b](tickets/0078b_cpp_core_guidelines_population.md))
 - MISRA: `MISRA-{rule}` (e.g., `MISRA-21.3`) — 19 rules across Memory Management and Initialization categories ([Ticket: 0078c](tickets/0078c_misra_rules_population.md))
+- Clang-tidy: `TIDY-{group}-{check}` (e.g., `TIDY-bugprone-use-after-move`, `TIDY-modernize-use-override`) — 41 rules (30 active + 11 deprecated) across 9 check groups, with `enforcement_check` mappings and CheckOptions documentation ([Ticket: 0078e](tickets/0078e_clang_tidy_rules_population.md))
+
+**Total rules**: 127 across 18 categories (10 MSD-*, 57 CPP-*, 19 MISRA-*, 41 TIDY-*)
 
 **Source files**: `scripts/guidelines/` — see `guidelines_schema.py` (schema), `seed_guidelines.py` (YAML→SQLite indexer), `guidelines_server.py` (FastMCP server + CLI)
 
