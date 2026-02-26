@@ -27,7 +27,7 @@ _CREATE_RULES = """
 CREATE TABLE IF NOT EXISTS rules (
     rule_id            TEXT PRIMARY KEY,
     category_id        INTEGER NOT NULL REFERENCES categories(id),
-    source             TEXT NOT NULL CHECK(source IN ('project', 'cpp_core_guidelines', 'misra')),
+    source             TEXT NOT NULL CHECK(source IN ('project', 'cpp_core_guidelines', 'misra', 'clang_tidy')),
     severity           TEXT NOT NULL CHECK(severity IN ('required', 'recommended', 'advisory')),
     status             TEXT NOT NULL DEFAULT 'active'
                            CHECK(status IN ('proposed', 'active', 'deprecated')),
