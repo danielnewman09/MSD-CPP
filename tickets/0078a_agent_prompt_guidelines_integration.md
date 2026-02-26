@@ -100,7 +100,7 @@ When reviewing/designing C++ code, query the guidelines MCP server to retrieve a
 - **Started**: 2026-02-26 00:00
 - **Completed**: 2026-02-26 00:00
 - **Branch**: 0078a-agent-prompt-guidelines-integration
-- **PR**: N/A (pending creation)
+- **PR**: #99 (draft)
 - **Artifacts**:
   - `.claude/agents/cpp-architect.md` — Added "Guidelines MCP Integration" section before "Coding Standards to Apply"
   - `.claude/agents/design-reviewer.md` — Embedded guidelines query directive in Step 1 of Review Process
