@@ -198,6 +198,18 @@ See: `./{feature-name}.puml`
 1. {Ambiguity in requirements}
 ```
 
+## Guidelines MCP Integration
+
+When designing C++ interfaces and components, query the guidelines MCP server to retrieve applicable rules before finalizing decisions:
+
+- Use `search_guidelines` to find rules relevant to the code patterns you are designing (e.g., "memory ownership", "brace initialization", "NaN uninitialized")
+- Cite specific rule IDs (e.g., `MSD-INIT-001`) in the design document when recommending patterns or flagging design choices
+- Only cite rules returned by `search_guidelines`. Do not invent rule IDs.
+- Use `get_rule` to retrieve full rationale when providing detailed justification for a design decision
+- Use `list_categories` or `get_category` to enumerate all relevant rule categories before starting a design
+
+When the design document references a project coding convention, include the rule ID so reviewers and implementers can trace the rationale.
+
 ## Coding Standards to Apply
 When designing interfaces, follow these project conventions:
 
