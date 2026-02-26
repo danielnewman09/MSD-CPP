@@ -7,9 +7,9 @@
 - [x] Implementation Complete
 - [x] Quality Gate Passed — Awaiting Review
 - [x] Approved — Ready to Merge
-- [ ] Merged / Complete
+- [x] Merged / Complete
 
-**Current Phase**: Approved — Ready to Merge
+**Current Phase**: Merged / Complete
 **Type**: Tooling / Infrastructure
 **Priority**: Medium
 **Created**: 2026-02-26
@@ -188,3 +188,16 @@ For each explicitly disabled check, add a rule entry with `status: deprecated` a
   - Old rule IDs (`TIDY-misc-unused-parameters`, `TIDY-bugprone-assert-side-effects`) confirmed absent from DB.
   - Database re-seeds cleanly to 127 rules (exit 0). All 12 smoke tests pass including 4 new re-review-specific checks.
   - No new issues found. All three previously requested changes resolved.
+
+### Documentation Phase
+- **Started**: 2026-02-26 00:00
+- **Completed**: 2026-02-26 00:00
+- **Branch**: 0078e-clang-tidy-rules-population
+- **PR**: #102
+- **Artifacts**:
+  - `CLAUDE.md` — Added `TIDY-{group}-{check}` rule ID convention to Guidelines MCP Server section; added "Total rules: 127" summary line
+  - `docs/designs/0078e_clang_tidy_rules_population/doc-sync-summary.md` — Documentation sync summary
+- **Notes**:
+  - Data-population-only ticket; no PlantUML diagrams or library design documents to sync.
+  - `Generate Tutorial: No` — tutorial phase skipped; workflow advances directly to Merged / Complete.
+  - msd-transfer not touched; record layer sync not required.
