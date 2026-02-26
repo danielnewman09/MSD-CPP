@@ -1,0 +1,1232 @@
+# Ticket: 0078e_clang_tidy_rules_population
+# Design: docs/designs/0078_cpp_guidelines_mcp_server/design.md
+#
+# Clang-tidy check rules derived from the project's .clang-tidy configuration.
+# Each rule maps to an enabled or explicitly disabled clang-tidy check.
+# Disabled checks include status: disabled with rationale for exclusion.
+#
+# Rule ID convention: TIDY-{group}-{check}
+# Source: clang_tidy
+#
+# CheckOptions from .clang-tidy are documented in enforcement_notes on the
+# relevant rules (readability-identifier-naming, modernize-loop-convert, etc.)
+#
+# Schema:
+#   rule_id:           TIDY-{group}-{check}
+#   category:          Category name (string)
+#   source:            clang_tidy
+#   severity:          required | recommended | advisory
+#   status:            proposed | active | deprecated (default: active)
+#                      Use 'deprecated' to represent disabled checks
+#   title:             One-line summary
+#   rationale:         Why the check is enabled (or why it was disabled)
+#   enforcement_notes: How the check works, any relevant CheckOptions
+#   enforcement_check: Exact clang-tidy check name
+#   good_example:      (optional) Code snippet showing correct usage
+#   bad_example:       (optional) Code snippet showing violation
+#   tags:              List of cross-cutting concern labels
+#   cross_refs:        List of {to_rule_id, relationship} objects
+
+rules:
+
+  # ---------------------------------------------------------------------------
+  # Bugprone Checks — Common bug patterns detected by clang-tidy
+  # ---------------------------------------------------------------------------
+
+  - rule_id: TIDY-bugprone-use-after-move
+    category: Bugprone Checks
+    source: clang_tidy
+    severity: required
+    title: Do not use a moved-from object
+    rationale: >
+      After an object has been moved from (via std::move), it is left in a
+      valid but unspecified state. Reading or using such an object — other than
+      re-assigning it or calling its destructor — produces undefined or
+      implementation-defined behavior. This is a common source of subtle bugs
+      when callers assume the moved-from variable retains its original value.
+    enforcement_notes: >
+      The check flags any use of a variable after it has been moved from in the
+      same scope, unless an intervening assignment or destruction resets the
+      object first. Re-assign or declare a new object rather than reusing a
+      moved-from variable.
+    enforcement_check: bugprone-use-after-move
+    good_example: |
+      std::string name = computeName();
+      storeResult(std::move(name));
+      // name is moved-from here — do not use it again
+      name = computeFallback();  // OK: re-assigned before next use
+    bad_example: |
+      std::string name = computeName();
+      storeResult(std::move(name));
+      log(name);  // Bug: name is moved-from, content is unspecified
+    tags:
+      - safety
+      - move-semantics
+      - undefined-behavior
+    cross_refs:
+      - to_rule_id: MSD-RES-002
+        relationship: related
+
+  - rule_id: TIDY-bugprone-undefined-memory-manipulation
+    category: Bugprone Checks
+    source: clang_tidy
+    severity: required
+    title: Do not use raw memory functions on non-trivially copyable types
+    rationale: >
+      memcpy, memmove, and memset operate on raw bytes and bypass C++ object
+      semantics. Applying them to objects with constructors, destructors, or
+      virtual functions can corrupt vtable pointers, leave objects partially
+      constructed, and produce undefined behavior. Use copy constructors,
+      assignment operators, or std::copy instead.
+    enforcement_notes: >
+      Flags calls to memcpy/memmove/memset on objects of non-trivially copyable
+      type. Safe to use only on trivially copyable types (POD structs, plain
+      scalar arrays). For copying C++ objects, prefer std::copy or structured
+      assignments.
+    enforcement_check: bugprone-undefined-memory-manipulation
+    good_example: |
+      // Safe: std::copy respects object semantics
+      std::vector<Sensor> dst(src.size());
+      std::copy(src.begin(), src.end(), dst.begin());
+    bad_example: |
+      Sensor sensors[10];
+      memcpy(sensors, source, sizeof(sensors));  // UB: bypasses copy constructors
+    tags:
+      - memory
+      - safety
+      - undefined-behavior
+    cross_refs:
+      - to_rule_id: MISRA-21.6
+        relationship: related
+
+  - rule_id: TIDY-bugprone-integer-division
+    category: Bugprone Checks
+    source: clang_tidy
+    severity: recommended
+    title: Avoid unintended integer truncation in division
+    rationale: >
+      Integer division truncates toward zero. When the intent is floating-point
+      division (e.g., computing a ratio or average), accidentally using integer
+      operands silently produces a truncated result. This is a frequent source
+      of off-by-one errors in numerical code and simulation timestep calculations.
+    enforcement_notes: >
+      Flags integer division expressions that are assigned to or compared with
+      floating-point values. Cast at least one operand to float/double explicitly
+      when floating-point division is intended.
+    enforcement_check: bugprone-integer-division
+    good_example: |
+      float ratio = static_cast<float>(count) / static_cast<float>(total);
+      float dt = static_cast<float>(elapsedMs) / 1000.0f;
+    bad_example: |
+      float ratio = count / total;    // Integer division — truncates to 0 or 1
+      float dt = elapsedMs / 1000;    // Integer 1000 causes truncation
+    tags:
+      - safety
+      - arithmetic
+      - numeric
+
+  - rule_id: TIDY-bugprone-narrowing-conversions
+    category: Bugprone Checks
+    source: clang_tidy
+    severity: required
+    title: Avoid implicit narrowing conversions that truncate values
+    rationale: >
+      Implicit conversions from a wider type to a narrower type (e.g., double to
+      float, int64_t to int32_t) silently lose precision or overflow. In simulation
+      code this can produce physically impossible values — an altitude becoming
+      negative due to int overflow, or a timestep losing precision due to float
+      truncation. Use explicit casts to make the narrowing intentional and reviewable.
+    enforcement_notes: >
+      Flags implicit narrowing conversions in assignments, function arguments, and
+      initializations. Use explicit static_cast<T> to document that the narrowing
+      is intentional and the value is known to fit. Prefer types that match the
+      intended precision (float vs. double) throughout a computation to avoid
+      cross-boundary narrowing.
+    enforcement_check: bugprone-narrowing-conversions
+    good_example: |
+      double precise = computePreciseValue();
+      float compact = static_cast<float>(precise);  // Explicit: narrowing is intentional
+    bad_example: |
+      double precise = computePreciseValue();
+      float compact = precise;  // Silent narrowing — potential precision loss
+    tags:
+      - safety
+      - type-safety
+      - arithmetic
+
+  - rule_id: TIDY-bugprone-assert-side-effects
+    category: Bugprone Checks
+    source: clang_tidy
+    severity: required
+    title: Avoid side effects inside assert() expressions
+    rationale: >
+      assert() is disabled in release builds (when NDEBUG is defined). Any
+      side effects inside the assert expression — function calls that modify
+      state, increments, file I/O — are silently removed in release builds,
+      creating a debug/release behavioral difference that is extremely hard to
+      diagnose. Keep assert expressions side-effect-free.
+    enforcement_notes: >
+      Flags assert() calls whose condition contains expressions with side effects
+      (assignments, increment/decrement operators, function calls on mutable
+      objects). Move the expression before the assert and test the result.
+    enforcement_check: bugprone-assert-side-effect
+    good_example: |
+      bool ok = processData(data);
+      assert(ok);  // Side effect (processData) is separated from the assert
+    bad_example: |
+      assert(processData(data));  // processData not called in release builds!
+    tags:
+      - safety
+      - testing
+      - debug
+
+  - rule_id: TIDY-bugprone-easily-swappable-parameters
+    category: Bugprone Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Avoid functions with multiple consecutive same-type parameters (disabled)
+    rationale: >
+      This check flags functions with two or more consecutive parameters of the
+      same type, which can be accidentally swapped at the call site without a
+      compiler warning. While the concern is valid, the check produces excessive
+      noise in simulation code where multiple scalar parameters of the same type
+      (mass, velocity, acceleration) are idiomatic and well-documented by context.
+      The team relies on named parameter conventions and documentation instead.
+    enforcement_notes: >
+      DISABLED in this project. The check was excluded via
+      -bugprone-easily-swappable-parameters in .clang-tidy because it generates
+      too many false positives for legitimate numerical APIs. Mitigation: use
+      strong typedefs (e.g., Velocity, Mass) to distinguish same-type parameters
+      where call-site confusion is a real risk.
+    enforcement_check: bugprone-easily-swappable-parameters
+    tags:
+      - safety
+      - api-design
+      - disabled
+
+  - rule_id: TIDY-bugprone-exception-escape
+    category: Bugprone Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Avoid exceptions escaping from noexcept functions (disabled)
+    rationale: >
+      This check warns when an exception might propagate out of a function marked
+      noexcept, which would call std::terminate(). While important, the check
+      requires exception analysis that is not yet reliable across the full codebase,
+      producing false positives for functions that call third-party code with opaque
+      exception specifications. This check is deferred until exception analysis
+      tooling matures.
+    enforcement_notes: >
+      DISABLED in this project via -bugprone-exception-escape. Mitigation: review
+      noexcept functions manually and wrap third-party calls with try/catch where
+      needed. The project primarily uses noexcept on move constructors and
+      destructors where exception-safety is well understood.
+    enforcement_check: bugprone-exception-escape
+    tags:
+      - safety
+      - exceptions
+      - disabled
+
+  # ---------------------------------------------------------------------------
+  # Cert Checks — CERT C++ Secure Coding
+  # ---------------------------------------------------------------------------
+
+  - rule_id: TIDY-cert-err52-cpp
+    category: Cert Checks
+    source: clang_tidy
+    severity: required
+    title: Do not use setjmp/longjmp
+    rationale: >
+      setjmp/longjmp bypass C++ destructors and exception handling, skipping
+      RAII cleanup for any objects in scope between the setjmp and longjmp call
+      sites. This is incompatible with C++ resource management and produces
+      resource leaks and dangling references. Use C++ exceptions or error return
+      codes instead.
+    enforcement_notes: >
+      Flags any calls to setjmp or longjmp. Replace with C++ exceptions for
+      error propagation across function boundaries, or return codes for simple
+      error signaling.
+    enforcement_check: cert-err52-cpp
+    bad_example: |
+      jmp_buf env;
+      if (setjmp(env)) {
+        // Error recovery — destructors were NOT called
+      }
+      processData();
+      longjmp(env, 1);  // Bypasses destructors
+    tags:
+      - safety
+      - exceptions
+      - resource-management
+
+  - rule_id: TIDY-cert-err60-cpp
+    category: Cert Checks
+    source: clang_tidy
+    severity: required
+    title: Exceptions should be nothrow copy constructible
+    rationale: >
+      If the copy constructor of an exception type throws during throw propagation,
+      std::terminate() is called. Exception types must be nothrow-copy-constructible
+      to ensure safe propagation. Custom exception classes should inherit from
+      std::exception and use std::string or std::string_view for messages rather
+      than types with throwing copy constructors.
+    enforcement_notes: >
+      Flags exception types whose copy constructor is not marked noexcept or may
+      throw. Derive exception classes from std::runtime_error or std::logic_error
+      which already satisfy this requirement.
+    enforcement_check: cert-err60-cpp
+    good_example: |
+      class SimulationError : public std::runtime_error {
+      public:
+        explicit SimulationError(const std::string& msg)
+          : std::runtime_error{msg} {}
+      };
+    tags:
+      - safety
+      - exceptions
+      - resource-management
+
+  - rule_id: TIDY-cert-dcl16-c
+    category: Cert Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Use L suffix for long integer literals (disabled)
+    rationale: >
+      This CERT C rule requires the L suffix on long integer literals to make
+      their type explicit. In modern C++, the project prefers stdint.h types
+      (int32_t, int64_t) and explicit casts over suffix-based type disambiguation.
+      The check generates noise without adding safety in a C++-first codebase.
+    enforcement_notes: >
+      DISABLED in this project via -cert-dcl16-c. Mitigation: use explicit
+      integer types (int64_t, uint32_t) from <cstdint> rather than relying on
+      suffix conventions.
+    enforcement_check: cert-dcl16-c
+    tags:
+      - readability
+      - type-safety
+      - disabled
+
+  - rule_id: TIDY-cert-dcl50-cpp
+    category: Cert Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Do not define C-style variadic functions (disabled)
+    rationale: >
+      C-style variadic functions (va_list) are not type-safe. The check flags their
+      definition. This check is disabled because the project has no C-style variadic
+      functions and the check is redundant with cppcoreguidelines-pro-type-vararg.
+    enforcement_notes: >
+      DISABLED in this project via -cert-dcl50-cpp (redundant with
+      cppcoreguidelines-pro-type-vararg which is also enabled). Use variadic
+      templates or std::initializer_list for type-safe variadic APIs.
+    enforcement_check: cert-dcl50-cpp
+    tags:
+      - type-safety
+      - disabled
+    cross_refs:
+      - to_rule_id: TIDY-cppcoreguidelines-pro-type-vararg
+        relationship: related
+
+  # ---------------------------------------------------------------------------
+  # Modernize Checks — C++11/14/17/20 modernization
+  # ---------------------------------------------------------------------------
+
+  - rule_id: TIDY-modernize-use-override
+    category: Modernize Checks
+    source: clang_tidy
+    severity: required
+    title: Use override and final on virtual function overrides
+    rationale: >
+      The override keyword makes it explicit that a virtual function is
+      overriding a base class method. Without it, a signature mismatch silently
+      creates a new virtual function rather than overriding the intended one,
+      leading to incorrect dispatch and hard-to-diagnose polymorphism bugs.
+      The final keyword prevents further overriding where the hierarchy should
+      terminate.
+    enforcement_notes: >
+      Flags virtual functions in derived classes that are missing the override
+      specifier. Apply override to all overriding virtual functions. Use final
+      on functions or classes that should not be further overridden.
+    enforcement_check: modernize-use-override
+    good_example: |
+      class DerivedRenderer : public BaseRenderer {
+      public:
+        void render(const Scene& scene) override;  // Explicitly overriding
+        void initialize() override final;           // Override + no further override
+      };
+    bad_example: |
+      class DerivedRenderer : public BaseRenderer {
+      public:
+        void render(const Scene& scene);   // Missing override — silent new virtual
+        void initialize();                 // Missing override
+      };
+    tags:
+      - modernization
+      - safety
+      - polymorphism
+
+  - rule_id: TIDY-modernize-use-nullptr
+    category: Modernize Checks
+    source: clang_tidy
+    severity: required
+    title: Use nullptr instead of NULL or 0 for null pointers
+    rationale: >
+      nullptr is type-safe and cannot be accidentally used as an integer value.
+      NULL is a macro that expands to 0 (an integer), causing ambiguous overload
+      resolution when both a pointer and integer overload exist. Using 0 for
+      null pointers conflates integers and pointers. nullptr produces clearer
+      code and avoids subtle overload resolution bugs.
+    enforcement_notes: >
+      Flags uses of NULL, 0, or (void*)0 in pointer contexts. Automatically
+      replaceable in most cases. Apply project-wide via clang-tidy --fix.
+    enforcement_check: modernize-use-nullptr
+    good_example: |
+      void process(Body* body = nullptr);
+      Body* ptr = nullptr;
+      if (ptr != nullptr) { /* explicit null check */ }
+    bad_example: |
+      void process(Body* body = NULL);
+      Body* ptr = 0;
+      if (ptr != NULL) { /* C-style null check */ }
+    tags:
+      - modernization
+      - type-safety
+      - pointers
+
+  - rule_id: TIDY-modernize-use-emplace
+    category: Modernize Checks
+    source: clang_tidy
+    severity: recommended
+    title: Prefer emplace_back over push_back with temporaries
+    rationale: >
+      emplace_back constructs elements in-place, avoiding a copy or move from
+      a temporary. push_back with a temporary constructs the object and then
+      moves it into the container, adding an extra move operation. For non-trivial
+      types, emplace_back is more efficient and often more readable.
+    enforcement_notes: >
+      Flags push_back calls with a temporary argument that could be replaced by
+      emplace_back with the constructor arguments. Not applicable when passing
+      an existing named object (no efficiency gain).
+    enforcement_check: modernize-use-emplace
+    good_example: |
+      std::vector<Body> bodies;
+      bodies.emplace_back(mass, position, velocity);  // Constructed in-place
+    bad_example: |
+      std::vector<Body> bodies;
+      bodies.push_back(Body{mass, position, velocity});  // Extra move construction
+    tags:
+      - modernization
+      - performance
+
+  - rule_id: TIDY-modernize-loop-convert
+    category: Modernize Checks
+    source: clang_tidy
+    severity: recommended
+    title: Prefer range-based for loops over index-based loops
+    rationale: >
+      Range-based for loops are more readable, less error-prone (no off-by-one
+      on bounds), and make the intent clear when iterating over all elements.
+      Index-based loops remain appropriate when the index is needed inside the
+      loop body. This project uses camelBack naming for range variables.
+    enforcement_notes: >
+      Flags index-based for loops that iterate over all elements of a container
+      without using the index for anything other than element access. The check
+      is configured with MinConfidence: reasonable (avoids conversions where
+      intent is ambiguous) and NamingStyle: camelBack (range variables in
+      camelBack case). MaxCopySize: 16 limits auto& promotion to elements
+      no larger than 16 bytes.
+      CheckOptions: modernize-loop-convert.MaxCopySize=16,
+      modernize-loop-convert.MinConfidence=reasonable,
+      modernize-loop-convert.NamingStyle=camelBack
+    enforcement_check: modernize-loop-convert
+    good_example: |
+      for (const auto& body : bodies) {
+        body.update(dt);
+      }
+    bad_example: |
+      for (std::size_t i = 0; i < bodies.size(); ++i) {
+        bodies[i].update(dt);  // Index only used for element access
+      }
+    tags:
+      - modernization
+      - readability
+
+  - rule_id: TIDY-modernize-use-default-member-init
+    category: Modernize Checks
+    source: clang_tidy
+    severity: recommended
+    title: Use default member initializers instead of constructor initializer lists
+    rationale: >
+      Default member initializers (defined at the point of declaration) provide
+      a single, canonical default value for each member that applies to all
+      constructors. Initializer lists in every constructor must be kept
+      synchronized, which is error-prone. Default member initializers follow
+      the Rule of Zero idiom.
+    enforcement_notes: >
+      Flags constructor initializer lists that set a member to the same constant
+      value across all constructors. The constant value can be moved to the
+      member declaration. Does not flag members initialized from constructor
+      parameters (those must stay in the initializer list).
+    enforcement_check: modernize-use-default-member-init
+    good_example: |
+      class Sensor {
+        float sampleRate_{100.0f};   // Default member init — applies to all ctors
+        bool enabled_{false};
+      };
+    bad_example: |
+      class Sensor {
+        float sampleRate_;
+        bool enabled_;
+      public:
+        Sensor() : sampleRate_{100.0f}, enabled_{false} {}
+        Sensor(float sr) : sampleRate_{sr}, enabled_{false} {}  // enabled_ must be repeated
+      };
+    tags:
+      - modernization
+      - initialization
+    cross_refs:
+      - to_rule_id: MSD-INIT-001
+        relationship: related
+
+  - rule_id: TIDY-modernize-avoid-c-arrays
+    category: Modernize Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Prefer std::array or std::vector over C-style arrays (disabled)
+    rationale: >
+      C-style arrays decay to pointers, losing size information and bounds-checking
+      capability. std::array provides the same stack-allocated fixed-size semantics
+      with full C++ container interface. However, this check is disabled because
+      the project interacts with C APIs and third-party libraries that use raw
+      arrays, and the modernize-avoid-c-arrays check is too aggressive in flagging
+      legitimate C-interop patterns.
+    enforcement_notes: >
+      DISABLED in this project via -modernize-avoid-c-arrays (also
+      -cppcoreguidelines-avoid-c-arrays). Use std::array<T, N> for fixed-size
+      stack arrays in new code. C-style arrays are acceptable for C API interop
+      boundaries that are well-encapsulated.
+    enforcement_check: modernize-avoid-c-arrays
+    tags:
+      - modernization
+      - safety
+      - disabled
+
+  - rule_id: TIDY-modernize-use-trailing-return-type
+    category: Modernize Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Use trailing return types for function declarations (disabled)
+    rationale: >
+      Trailing return types (auto f() -> ReturnType) are useful for templates
+      and lambdas but reduce readability for ordinary functions by separating
+      the return type from the function name in a non-idiomatic way. The project
+      style keeps traditional return types (ReturnType f()) for all non-lambda,
+      non-template functions. This check is disabled because it would require
+      a style change that reduces readability for the majority of functions.
+    enforcement_notes: >
+      DISABLED in this project via -modernize-use-trailing-return-type. Use
+      trailing return types only where they are genuinely necessary (lambdas,
+      complex template return types that depend on parameters).
+    enforcement_check: modernize-use-trailing-return-type
+    tags:
+      - modernization
+      - readability
+      - disabled
+
+  # ---------------------------------------------------------------------------
+  # Performance Checks — Performance anti-patterns
+  # ---------------------------------------------------------------------------
+
+  - rule_id: TIDY-performance-unnecessary-value-param
+    category: Performance Checks
+    source: clang_tidy
+    severity: recommended
+    title: Avoid passing by value when pass-by-const-ref is sufficient
+    rationale: >
+      Passing large objects by value incurs a copy construction that is
+      unnecessary when the function only reads the parameter. Pass by
+      const reference instead. This check allows std::function,
+      std::unique_ptr, and std::shared_ptr to be passed by value since
+      they have lightweight move semantics and value semantics are
+      idiomatic for those types.
+    enforcement_notes: >
+      Flags function parameters of non-trivial types passed by value when the
+      parameter is not moved from inside the function body. Configured via
+      CheckOptions to allow std::function, std::unique_ptr, std::shared_ptr
+      since these have value-semantic conventions.
+      CheckOptions: performance-unnecessary-value-param.AllowedTypes=
+      std::function;std::unique_ptr;std::shared_ptr
+    enforcement_check: performance-unnecessary-value-param
+    good_example: |
+      void render(const Scene& scene);       // const ref — no copy
+      void takeOwnership(std::unique_ptr<Body> body);  // value — intentional move
+    bad_example: |
+      void render(Scene scene);  // Unnecessary copy for read-only parameter
+    tags:
+      - performance
+      - api-design
+
+  - rule_id: TIDY-performance-move-const-arg
+    category: Performance Checks
+    source: clang_tidy
+    severity: recommended
+    title: Avoid std::move on const objects
+    rationale: >
+      std::move on a const object does not actually move — it produces a const
+      rvalue reference, which cannot bind to a non-const rvalue reference
+      parameter. The compiler silently falls back to copy construction. The
+      std::move call is misleading and should be removed; the copy is already
+      the correct behavior and const communicates that the object is read-only.
+    enforcement_notes: >
+      Flags std::move calls on const-qualified objects or expressions. Remove
+      the std::move call; it has no effect and misleads readers into thinking
+      a move occurs.
+    enforcement_check: performance-move-const-arg
+    bad_example: |
+      const std::string name = computeName();
+      storeResult(std::move(name));  // Does not move — const prevents it, copies instead
+    good_example: |
+      std::string name = computeName();
+      storeResult(std::move(name));  // OK: non-const, actually moves
+    tags:
+      - performance
+      - move-semantics
+
+  - rule_id: TIDY-performance-for-range-copy
+    category: Performance Checks
+    source: clang_tidy
+    severity: recommended
+    title: Avoid unnecessary copies in range-based for loops
+    rationale: >
+      Range-based for loops using auto (not auto&) copy each element from the
+      container on each iteration. For containers of non-trivial types this is
+      an avoidable O(n) allocation cost. Use const auto& for read-only iteration
+      and auto& for mutation.
+    enforcement_notes: >
+      Flags range-for loops where the loop variable is a copy of a non-trivial
+      element and the copy is never modified. Change to const auto& (or auto& if
+      mutation is intended).
+    enforcement_check: performance-for-range-copy
+    good_example: |
+      for (const auto& body : bodies) {   // No copy
+        body.computeEnergy();
+      }
+      for (auto& body : bodies) {         // Reference for mutation
+        body.update(dt);
+      }
+    bad_example: |
+      for (auto body : bodies) {  // Copies each Body — expensive if Body is large
+        body.computeEnergy();
+      }
+    tags:
+      - performance
+
+  - rule_id: TIDY-performance-avoid-endl
+    category: Performance Checks
+    source: clang_tidy
+    severity: advisory
+    title: Use '\n' instead of std::endl to avoid flushing
+    rationale: >
+      std::endl flushes the stream buffer after every newline, which is
+      significantly slower than '\n' alone. In tight loops or high-frequency
+      logging this can dominate I/O time. Use '\n' for normal output and
+      explicit flush() only when synchronization with external I/O is required.
+    enforcement_notes: >
+      Flags std::endl usage in stream output expressions. Replace with '\n'
+      unless an explicit flush is required. Use std::flush or stream.flush()
+      explicitly at synchronization points.
+    enforcement_check: performance-avoid-endl
+    good_example: |
+      std::cout << "Simulation step complete\n";   // No flush
+      std::cerr << "Fatal error\n" << std::flush;  // Explicit flush when needed
+    bad_example: |
+      std::cout << "Simulation step complete" << std::endl;  // Unnecessary flush
+    tags:
+      - performance
+      - io
+
+  # ---------------------------------------------------------------------------
+  # Readability Checks — Code readability and consistency
+  # ---------------------------------------------------------------------------
+
+  - rule_id: TIDY-readability-identifier-naming
+    category: Readability Checks
+    source: clang_tidy
+    severity: required
+    title: Follow project naming conventions for all identifiers
+    rationale: >
+      Consistent naming conventions reduce cognitive load during code review
+      and enable automated tooling. The project enforces: namespaces=lower_case,
+      classes/structs/templates=CamelCase, functions/variables=camelBack,
+      class members=camelBack_ (trailing underscore), enum constants=CamelCase,
+      global constants=kCamelCase, macros=UPPER_CASE.
+    enforcement_notes: >
+      Enforced by readability-identifier-naming with the following CheckOptions:
+        NamespaceCase: lower_case
+        ClassCase: CamelCase
+        StructCase: CamelCase
+        TemplateParameterCase: CamelCase
+        FunctionCase: camelBack
+        VariableCase: camelBack
+        ClassMemberCase: camelBack + ClassMemberSuffix: _
+        PrivateMemberSuffix: _
+        ProtectedMemberSuffix: _
+        EnumConstantCase: CamelCase
+        ConstantCase: camelBack
+        StaticConstantCase: camelBack
+        GlobalConstantCase: CamelCase + GlobalConstantPrefix: k
+        MacroDefinitionCase: UPPER_CASE
+      Single-letter static/global constants are exempt via IgnoredRegexp '^[A-Za-z]$'.
+    enforcement_check: readability-identifier-naming
+    good_example: |
+      namespace physics {
+        constexpr float kGravity{9.81f};
+
+        class RigidBody {
+        public:
+          float getMass() const;
+        private:
+          float mass_;
+          float velocity_;
+        };
+
+        enum class CollisionType { Elastic, Inelastic };
+      }
+    bad_example: |
+      namespace Physics {          // Should be lower_case
+        constexpr float gravity{9.81f};  // Global constant needs k prefix + CamelCase
+        class rigid_body {         // Should be CamelCase
+        public:
+          float GetMass() const;   // Should be camelBack
+        private:
+          float Mass;              // Should be camelBack with _ suffix
+        };
+      }
+    tags:
+      - readability
+      - naming
+      - style
+    cross_refs:
+      - to_rule_id: MSD-NAME-001
+        relationship: related
+
+  - rule_id: TIDY-readability-braces-around-statements
+    category: Readability Checks
+    source: clang_tidy
+    severity: recommended
+    title: Use braces around all control-flow statement bodies
+    rationale: >
+      Omitting braces from if/else/for/while bodies allows accidental dangling-else
+      bugs and makes future edits unsafe — adding a second statement to an unbraced
+      body silently falls outside the control flow. Braces make structure explicit
+      and prevent a class of refactoring errors. This check is enforced via the
+      google-readability-braces-around-statements variant.
+    enforcement_notes: >
+      Flags single-statement if/else/for/while bodies that lack braces, unless the
+      statement is on the same line as the condition (ShortStatementLines=1 allows
+      e.g. `if (done) return;`). The google variant adds the ShortStatementLines
+      option.
+      CheckOptions: google-readability-braces-around-statements.ShortStatementLines=1
+    enforcement_check: google-readability-braces-around-statements
+    good_example: |
+      if (body.isActive()) {
+        body.update(dt);
+      }
+      if (done) return;   // Short single-line body allowed (ShortStatementLines=1)
+    bad_example: |
+      if (body.isActive())
+        body.update(dt);   // No braces — unsafe to extend
+    tags:
+      - readability
+      - safety
+      - style
+    cross_refs:
+      - to_rule_id: MSD-NAME-002
+        relationship: related
+
+  - rule_id: TIDY-readability-const-return-type
+    category: Readability Checks
+    source: clang_tidy
+    severity: advisory
+    title: Do not return const-qualified values from functions
+    rationale: >
+      Returning a const value type (e.g., const int, const std::string) from a
+      function is useless — the caller can always assign the returned value to a
+      non-const variable. For class types, a const return type prevents the caller
+      from invoking non-const member functions or moving from the return value,
+      which is counterproductive. Return by value without const qualifiers.
+    enforcement_notes: >
+      Flags functions with const-qualified non-reference, non-pointer return types.
+      Remove the const qualifier from the return type; apply const to the local
+      variable at the call site if desired.
+    enforcement_check: readability-const-return-type
+    good_example: |
+      std::string buildName() const;   // Returns by value — caller decides const
+      float getEnergy() const;         // Returns float, not const float
+    bad_example: |
+      const std::string buildName() const;  // Useless const — prevents move
+      const float getEnergy() const;        // Useless const on scalar
+    tags:
+      - readability
+      - api-design
+
+  - rule_id: TIDY-readability-redundant-declaration
+    category: Readability Checks
+    source: clang_tidy
+    severity: advisory
+    title: Remove redundant declarations
+    rationale: >
+      Declaring the same entity more than once in the same scope (e.g., declaring
+      a function twice in a header) wastes maintenance effort and can lead to
+      inconsistencies if one declaration is updated and the other is not. Each
+      symbol should have exactly one declaration in any given scope.
+    enforcement_notes: >
+      Flags duplicate declarations of the same variable or function in the same
+      scope or header. Remove all but the canonical declaration (typically the one
+      in the authoritative header).
+    enforcement_check: readability-redundant-declaration
+    tags:
+      - readability
+      - maintenance
+
+  - rule_id: TIDY-readability-convert-member-functions-to-static
+    category: Readability Checks
+    source: clang_tidy
+    severity: advisory
+    title: Convert member functions that do not use this to static
+    rationale: >
+      A member function that does not access any instance members (does not use
+      this) is logically a static function. Leaving it as a non-static member
+      gives the caller a false impression that it depends on instance state, and
+      prevents calling it without an object. Marking it static clarifies the API.
+    enforcement_notes: >
+      Flags non-static non-virtual member functions that do not reference any
+      non-static data members or non-static member functions. Add the static
+      qualifier or move the function to namespace scope if it is a utility.
+    enforcement_check: readability-convert-member-functions-to-static
+    tags:
+      - readability
+      - api-design
+
+  - rule_id: TIDY-readability-magic-numbers
+    category: Readability Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Avoid magic numbers in source code (disabled)
+    rationale: >
+      Magic numbers in code obscure intent and make maintenance harder. However,
+      in numerical simulation code many constants (timesteps, tolerances, physical
+      constants) are legitimately context-specific and self-documenting at their
+      use site. The check was disabled because it produces excessive noise for
+      physics constants, unit conversion factors, and numerical tolerances that
+      are properly documented inline. The project uses named constants for shared
+      values but allows inline constants for localized, obvious uses.
+    enforcement_notes: >
+      DISABLED in this project via -readability-magic-numbers (also
+      -cppcoreguidelines-avoid-magic-numbers). Mitigation: use constexpr named
+      constants (kGravity, kMaxIterations) for values used in multiple places,
+      or add a comment explaining the constant's meaning for single-use values.
+    enforcement_check: readability-magic-numbers
+    tags:
+      - readability
+      - maintainability
+      - disabled
+
+  - rule_id: TIDY-readability-identifier-length
+    category: Readability Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Avoid excessively short identifier names (disabled)
+    rationale: >
+      Single-letter and very short identifiers (i, x, n) reduce readability in
+      general code. However, they are idiomatic in mathematical and scientific
+      contexts — loop indices (i, j, k), coordinate axes (x, y, z), and single-
+      letter physical variables (v for velocity, m for mass in local scope) are
+      conventional and clear to domain experts. The check was disabled to avoid
+      false positives in simulation and linear-algebra code.
+    enforcement_notes: >
+      DISABLED in this project via -readability-identifier-length. Mitigation:
+      use descriptive names outside of mathematical/scientific contexts and limit
+      short names to obviously-scoped mathematical contexts (loop variables, local
+      coordinates).
+    enforcement_check: readability-identifier-length
+    tags:
+      - readability
+      - naming
+      - disabled
+
+  # ---------------------------------------------------------------------------
+  # Cppcoreguidelines Checks (selected)
+  # ---------------------------------------------------------------------------
+
+  - rule_id: TIDY-cppcoreguidelines-special-member-functions
+    category: Cppcoreguidelines Checks
+    source: clang_tidy
+    severity: required
+    title: Implement all or none of the special member functions (Rule of Five/Zero)
+    rationale: >
+      If a class defines any of the destructor, copy constructor, copy assignment,
+      move constructor, or move assignment, it should define all five (Rule of Five)
+      or none of them (Rule of Zero). Partial implementations lead to
+      compiler-generated defaults that are semantically incorrect — e.g., a class
+      with a custom destructor gets a compiler-generated copy constructor that does
+      a shallow copy, risking double-free. This project uses AllowSoleDefaultDtor=true
+      to permit defaulting only the destructor in classes that use it for vtable
+      anchoring or API stability.
+    enforcement_notes: >
+      Flags classes that define some but not all of the five special members.
+      Either implement all five, or use RAII wrappers (unique_ptr, vector) to
+      let the compiler generate all five correctly.
+      CheckOptions: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor=true
+      (permits defining only the destructor for API/vtable reasons)
+    enforcement_check: cppcoreguidelines-special-member-functions
+    good_example: |
+      // Rule of Zero: RAII wrappers handle resource management
+      class SafeBody {
+        std::unique_ptr<PhysicsState> state_;
+        // Compiler generates correct copy/move/destructor from unique_ptr
+      };
+    bad_example: |
+      class Body {
+      public:
+        ~Body() { delete data_; }  // Custom dtor
+        // Missing copy/move special members — compiler generates shallow copies!
+      private:
+        float* data_;
+      };
+    tags:
+      - safety
+      - resource-management
+      - rule-of-five
+      - ownership
+    cross_refs:
+      - to_rule_id: MSD-RES-003
+        relationship: related
+      - to_rule_id: CPP-C.20
+        relationship: related
+      - to_rule_id: CPP-C.21
+        relationship: related
+
+  - rule_id: TIDY-cppcoreguidelines-init-variables
+    category: Cppcoreguidelines Checks
+    source: clang_tidy
+    severity: required
+    title: Initialize every variable at its point of declaration
+    rationale: >
+      Reading an uninitialized variable is undefined behavior. Variables with
+      automatic storage must be initialized at declaration to prevent reading
+      garbage stack values. In simulation code, uninitialized state can produce
+      physically impossible outputs without triggering any error, silently
+      corrupting results. Use NaN for floating-point locals that will be set
+      before use to make uninitialized access visible.
+    enforcement_notes: >
+      Flags variable declarations that lack an initializer. Initialize every
+      local variable at its declaration point. For floating-point variables
+      that will be set in all branches, use NaN as the initial value to make
+      any missed branch visible through NaN propagation.
+    enforcement_check: cppcoreguidelines-init-variables
+    good_example: |
+      float velocity{0.0f};
+      float mass{std::numeric_limits<float>::quiet_NaN()};
+    bad_example: |
+      float velocity;  // Uninitialized — UB if read before assignment
+      float mass;
+    tags:
+      - initialization
+      - safety
+      - undefined-behavior
+    cross_refs:
+      - to_rule_id: MSD-INIT-001
+        relationship: related
+      - to_rule_id: MISRA-9.1
+        relationship: related
+
+  - rule_id: TIDY-cppcoreguidelines-pro-type-cstyle-cast
+    category: Cppcoreguidelines Checks
+    source: clang_tidy
+    severity: required
+    title: Do not use C-style casts
+    rationale: >
+      C-style casts (T)(expr) silently perform any of const_cast, static_cast,
+      or reinterpret_cast depending on context, making the programmer's intent
+      opaque and bypassing safety checks. Named C++ casts (static_cast,
+      reinterpret_cast) make the kind of conversion explicit and are greppable.
+      const_cast and reinterpret_cast should be used rarely and with documented
+      justification.
+    enforcement_notes: >
+      Flags C-style cast expressions. Replace with the appropriate named cast:
+      static_cast for safe conversions, reinterpret_cast for type-punning
+      (document thoroughly), const_cast only at C API boundaries (document reason).
+    enforcement_check: cppcoreguidelines-pro-type-cstyle-cast
+    good_example: |
+      float f = static_cast<float>(intValue);           // Intent is clear
+      const char* c = reinterpret_cast<const char*>(ptr);  // Explicit type-pun
+    bad_example: |
+      float f = (float)intValue;           // C-style — ambiguous intent
+      const char* c = (const char*)ptr;    // C-style — hides reinterpret
+    tags:
+      - type-safety
+      - safety
+    cross_refs:
+      - to_rule_id: MISRA-11.5
+        relationship: related
+
+  - rule_id: TIDY-cppcoreguidelines-pro-type-vararg
+    category: Cppcoreguidelines Checks
+    source: clang_tidy
+    severity: required
+    title: Do not call C-style variadic functions
+    rationale: >
+      C-style variadic functions (printf, scanf, va_list) are not type-safe.
+      The compiler cannot verify that argument types match format specifiers,
+      producing undefined behavior for type mismatches. Use std::format (C++20),
+      std::string streams, or variadic templates for type-safe variadic APIs.
+    enforcement_notes: >
+      Flags calls to functions that use va_list (printf, scanf, and similar).
+      Use std::format or std::cout with type-safe stream operators. For logging
+      infrastructure, prefer structured logging APIs over format strings.
+    enforcement_check: cppcoreguidelines-pro-type-vararg
+    good_example: |
+      std::string msg = std::format("Body {} mass={:.3f}", id, mass);
+      std::cout << "Error: " << message << '\n';
+    bad_example: |
+      printf("Body %d mass=%f\n", id, mass);  // Type mismatch not caught at compile time
+    tags:
+      - type-safety
+      - safety
+
+  - rule_id: TIDY-cppcoreguidelines-avoid-const-or-ref-data-members
+    category: Cppcoreguidelines Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Avoid const or reference data members in classes (disabled)
+    rationale: >
+      const and reference data members prevent the compiler from generating
+      default copy/move assignment operators, which can be surprising. However,
+      the project explicitly uses reference member variables (const T&) for
+      non-owning access per MSD-RES-002, which is the preferred pattern for
+      service/dependency injection. This check conflicts with the established
+      reference-member pattern and was disabled accordingly.
+    enforcement_notes: >
+      DISABLED via -cppcoreguidelines-avoid-const-or-ref-data-members.
+      The project intentionally uses const reference members for non-owning
+      dependencies (see MSD-RES-002). Classes with reference members explicitly
+      implement or delete copy/move as needed (Rule of Five).
+    enforcement_check: cppcoreguidelines-avoid-const-or-ref-data-members
+    tags:
+      - ownership
+      - disabled
+    cross_refs:
+      - to_rule_id: MSD-RES-002
+        relationship: conflicts_with
+
+  # ---------------------------------------------------------------------------
+  # Misc Checks (selected)
+  # ---------------------------------------------------------------------------
+
+  - rule_id: TIDY-misc-const-correctness
+    category: Misc Checks
+    source: clang_tidy
+    severity: recommended
+    title: Mark variables and parameters const when not modified
+    rationale: >
+      const communicates that a variable or parameter is not modified after
+      initialization, helping readers reason about data flow and preventing
+      accidental mutation. It also enables compiler optimizations. Applying
+      const broadly reduces the surface area of mutable state.
+    enforcement_notes: >
+      Flags local variables and function parameters that are never modified
+      and could be declared const. Apply const-correctness top-down: mark
+      member functions, then parameters, then local variables.
+    enforcement_check: misc-const-correctness
+    good_example: |
+      void render(const Scene& scene) {
+        const auto& camera = scene.getActiveCamera();
+        const float fov = camera.getFieldOfView();
+        // fov and camera are never modified
+      }
+    bad_example: |
+      void render(Scene& scene) {  // scene is not modified — should be const&
+        auto& camera = scene.getActiveCamera();  // could be const&
+        float fov = camera.getFieldOfView();     // could be const
+      }
+    tags:
+      - readability
+      - const-correctness
+      - safety
+
+  - rule_id: TIDY-misc-unused-parameters
+    category: Misc Checks
+    source: clang_tidy
+    severity: advisory
+    title: Remove or name-suppress unused function parameters
+    rationale: >
+      Unused parameters may indicate a logic error (the parameter was meant to
+      be used but was forgotten), a stale API (the parameter is no longer needed),
+      or an intentionally unused parameter in an interface implementation. In the
+      last case, suppress the warning by omitting the parameter name (leaving
+      only the type) rather than leaving a named but unused variable.
+    enforcement_notes: >
+      Flags named function parameters that are never referenced in the function
+      body. Either use the parameter, remove it from the signature if no longer
+      needed, or suppress by removing the name (leave only the type in the
+      declaration).
+    enforcement_check: misc-unused-using-decls
+    good_example: |
+      // Parameter intentionally unused — name omitted to suppress warning
+      void onEvent(EventType /*type*/, int /*unused*/) {
+        processEvent();
+      }
+    bad_example: |
+      void onEvent(EventType type, int unused) {
+        processEvent();  // type and unused are never referenced
+      }
+    tags:
+      - readability
+      - maintenance
+
+  - rule_id: TIDY-misc-include-cleaner
+    category: Misc Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Include only what you use (disabled)
+    rationale: >
+      The include-cleaner check enforces that each translation unit includes
+      only the headers it directly uses and does not rely on transitive includes.
+      While this is a good practice for build hygiene, the check currently
+      produces false positives for macros, template instantiations, and headers
+      that provide platform abstractions where direct use is not visible in source.
+      Deferred until the check matures.
+    enforcement_notes: >
+      DISABLED in this project via -misc-include-cleaner. Mitigation: periodically
+      run include-what-you-use (IWYU) as a separate tool during refactors to
+      identify and remove unnecessary includes.
+    enforcement_check: misc-include-cleaner
+    tags:
+      - maintainability
+      - build-hygiene
+      - disabled
+
+  # ---------------------------------------------------------------------------
+  # Google Checks (selected)
+  # ---------------------------------------------------------------------------
+
+  - rule_id: TIDY-google-explicit-constructor
+    category: Google Checks
+    source: clang_tidy
+    severity: required
+    title: Mark single-parameter constructors explicit to prevent implicit conversions
+    rationale: >
+      A constructor that can be called with one argument acts as an implicit
+      conversion from that argument type unless marked explicit. Implicit
+      conversions are a common source of unexpected behavior — a function taking
+      a Container<int> can be accidentally called with a raw int if the constructor
+      Container(int) is not explicit. Mark all single-argument constructors explicit
+      unless implicit conversion is explicitly intended and documented.
+    enforcement_notes: >
+      Flags constructors with one non-default parameter (or multiple parameters
+      where all but the first have defaults) that are not marked explicit. Add
+      the explicit keyword. Only omit explicit when implicit conversion is a
+      deliberate design feature (e.g., a string-like type constructed from
+      const char*).
+    enforcement_check: google-explicit-constructor
+    good_example: |
+      class Sensor {
+      public:
+        explicit Sensor(float sampleRate);  // No implicit float → Sensor conversion
+      };
+    bad_example: |
+      class Sensor {
+      public:
+        Sensor(float sampleRate);  // Accidental implicit conversion from float
+      };
+    tags:
+      - type-safety
+      - safety
+      - api-design
+    cross_refs:
+      - to_rule_id: CPP-C.44
+        relationship: related
+
+  - rule_id: TIDY-google-readability-namespace-comments
+    category: Google Checks
+    source: clang_tidy
+    severity: advisory
+    title: Add closing comments on long namespaces
+    rationale: >
+      Long namespace definitions (more than 10 lines) should end with a comment
+      indicating which namespace is being closed. This improves readability in
+      files with deeply nested or long namespaces, where a bare closing brace
+      provides no context. The comment format is `}  // namespace foo`.
+    enforcement_notes: >
+      Flags namespace closing braces that are not followed by a comment when the
+      namespace body exceeds ShortNamespaceLines (10) lines.
+      CheckOptions: google-readability-namespace-comments.ShortNamespaceLines=10,
+      google-readability-namespace-comments.SpacesBeforeComments=2
+    enforcement_check: google-readability-namespace-comments
+    good_example: |
+      namespace physics {
+        // ... many lines of declarations ...
+      }  // namespace physics
+    bad_example: |
+      namespace physics {
+        // ... many lines of declarations ...
+      }  // Missing namespace comment
+    tags:
+      - readability
+      - style
+
+  - rule_id: TIDY-google-readability-todo
+    category: Google Checks
+    source: clang_tidy
+    severity: advisory
+    status: deprecated
+    title: Include username in TODO comments (disabled)
+    rationale: >
+      The Google style TODO format requires a username: `// TODO(username): ...`.
+      This check is disabled because the project does not enforce username-tagged
+      TODOs — they are tracked via tickets rather than inline comments. Free-form
+      TODO comments are acceptable; new TODOs should reference a ticket number.
+    enforcement_notes: >
+      DISABLED via -google-readability-todo. Convention: prefer
+      `// TODO(ticket-NNNN): description` over bare `// TODO: description`
+      to link deferred work to a trackable ticket.
+    enforcement_check: google-readability-todo
+    tags:
+      - readability
+      - maintenance
+      - disabled
+
+  # ---------------------------------------------------------------------------
+  # Portability Checks
+  # ---------------------------------------------------------------------------
+
+  - rule_id: TIDY-portability-simd-intrinsics
+    category: Portability Checks
+    source: clang_tidy
+    severity: advisory
+    title: Avoid platform-specific SIMD intrinsics without portable fallbacks
+    rationale: >
+      Direct SIMD intrinsics (SSE, AVX, NEON) are architecture-specific and
+      reduce portability. When SIMD optimization is needed, prefer std::experimental::simd
+      (C++23) or a portable SIMD abstraction library, or encapsulate intrinsics
+      behind compile-time guards with a portable fallback.
+    enforcement_notes: >
+      Flags uses of platform-specific SIMD intrinsics without compile-time
+      platform guards. Wrap intrinsics in #if defined(__SSE2__) blocks and
+      provide a portable scalar fallback. Document the performance rationale
+      for any intrinsic that cannot be eliminated.
+    enforcement_check: portability-simd-intrinsics
+    tags:
+      - portability
+      - performance
