@@ -12,6 +12,7 @@
 # Ticket: 0071a_constraint_solver_scalability
 # Ticket: 0071g_constraint_pool_allocation
 # Ticket: 0073_hybrid_pgs_large_islands
+# Ticket: 0082a_block_pgs_solver_unit_tests
 
 target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintTest.cpp
@@ -29,4 +30,5 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintIslandBuilderTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ProjectedGaussSeidelTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ConstraintPoolTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/BlockPGSSolverTest.cpp
 )
