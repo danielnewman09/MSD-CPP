@@ -342,16 +342,24 @@ Database is generated at `build/Debug/docs/guidelines.db` (gitignored, fully reb
 
 **Source files**: `scripts/guidelines/` — see `guidelines_schema.py` (schema), `seed_guidelines.py` (YAML→SQLite indexer), `guidelines_server.py` (FastMCP server + CLI)
 
-**Agent Integration**: The following agents query the guidelines server during their workflows ([Ticket: 0078a](tickets/0078a_agent_prompt_guidelines_integration.md)):
+**Agent Integration**: The following agents query the guidelines server during their workflows ([Ticket: 0078a](tickets/0078a_agent_prompt_guidelines_integration.md)) with severity-aware enforcement ([Ticket: 0078f](tickets/0078f_severity_aware_guideline_enforcement.md)):
 
-| Agent | Integration Point | Tools Used |
-|-------|-------------------|------------|
-| `cpp-architect` | Before finalizing design decisions | `search_guidelines`, `get_rule`, `list_categories`, `get_category` |
-| `design-reviewer` | Step 1 of review process | `search_guidelines`, `get_rule` |
-| `cpp-code-reviewer` | Before and during code review | `search_guidelines`, `get_rule` |
-| `implementation-reviewer` | Phase 2.5 between prototype and code quality phases | `search_guidelines`, `get_rule` |
+| Agent | Integration Point | Tools Used | Severity Enforcement |
+|-------|-------------------|------------|----------------------|
+| `cpp-architect` | Before finalizing design decisions; required-rules discovery at design start | `search_guidelines`, `get_rule`, `list_categories`, `get_category` | Lists `required` rules as design constraints; maps `required → BLOCKING` |
+| `design-reviewer` | Step 1 (context gathering) + Step 5 (required-rules compliance sweep before verdict) | `search_guidelines`, `get_rule`, `get_category` | Systematic sweep via `get_category(detailed=True)`; any `required` violation is BLOCKING |
+| `cpp-code-reviewer` | Before and during review; required-rules sweep after pattern-based review | `search_guidelines`, `get_rule`, `get_category` | Queries `search_guidelines(severity="required")`; any new violation is BLOCKING |
+| `implementation-reviewer` | Phase 2.5 (between prototype learning and code quality); required-rules compliance sweep | `search_guidelines`, `get_rule`, `get_category` | Systematic sweep via `get_category(detailed=True)`; any `required` violation is BLOCKING |
 
-All agents include the constraint: **Only cite rules returned by `search_guidelines`. Do not invent rule IDs.**
+**Severity enforcement policy** (applied by all four agents):
+
+| Guideline Severity | Minimum Finding Severity | Review Impact |
+|--------------------|--------------------------|---------------|
+| `required`         | BLOCKING                 | Cannot approve with open violations |
+| `recommended`      | MAJOR                    | Should fix before merge; document if deferred |
+| `advisory`         | MINOR or NIT             | Discretionary; cite for awareness |
+
+All agents include the constraints: **Only cite rules returned by `search_guidelines`. Do not invent rule IDs.** When citing a rule, always include its severity (e.g., `MSD-INIT-001 (required) → BLOCKING`).
 
 **Ticket**: [0078_cpp_guidelines_mcp_server](tickets/0078_cpp_guidelines_mcp_server.md)
 
