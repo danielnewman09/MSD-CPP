@@ -13,6 +13,9 @@
 # Install with: python/setup.sh
 # Or manually: pip install -r python/requirements.txt
 
+# --- Guidelines MCP Server (Ticket: 0078_cpp_guidelines_mcp_server) ---
+pyyaml==6.0.2
+
 # --- Traceability Indexing ---
 tree-sitter==0.23.2
 tree-sitter-cpp==0.23.4

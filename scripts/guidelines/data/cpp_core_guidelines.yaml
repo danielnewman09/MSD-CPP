@@ -1,0 +1,26 @@
+# Ticket: 0078_cpp_guidelines_mcp_server
+# Design: docs/designs/0078_cpp_guidelines_mcp_server/design.md
+#
+# C++ Core Guidelines rules stub.
+# Populate incrementally in follow-up ticket 0078b.
+# Start with R (Resource Management), C (Classes), and ES (Expressions and Statements) sections.
+#
+# Schema:
+#   rule_id:           CPP-{section}.{number}  (e.g., CPP-R.11)
+#   category:          Category name (string)
+#   source:            cpp_core_guidelines
+#   severity:          required | recommended | advisory
+#   status:            proposed | active | deprecated  (default: active)
+#   title:             One-line summary
+#   rationale:         Why the rule exists
+#   enforcement_notes: How to detect violations
+#   enforcement_check: (optional) clang-tidy / cppcheck check ID
+#   good_example:      (optional) Code snippet showing correct usage
+#   bad_example:       (optional) Code snippet showing violation
+#   tags:              List of cross-cutting concern labels
+#   cross_refs:        List of {to_rule_id, relationship} objects
+
+rules: []
+# TODO (0078b): Populate with R, C, ES sections from C++ Core Guidelines.
+# Include enforcement_check mappings to clang-tidy where applicable.
+# See: https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines

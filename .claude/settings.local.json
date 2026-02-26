@@ -53,13 +53,15 @@
       "Bash(awk:*)",
       "Bash(conan build:*)",
       "Bash(echo:*)",
-      "Bash(gh issue create:*)"
+      "Bash(gh issue create:*)",
+      "Bash(python/.venv/bin/python3:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "codebase",
     "traceability",
-    "replay"
+    "replay",
+    "guidelines"
   ]
 }

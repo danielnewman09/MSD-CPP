@@ -1,0 +1,25 @@
+# Ticket: 0078_cpp_guidelines_mcp_server
+# Design: docs/designs/0078_cpp_guidelines_mcp_server/design.md
+#
+# MISRA C++ rules stub.
+# Populate incrementally in follow-up ticket 0078c.
+# Start with memory management and initialization categories.
+#
+# Schema:
+#   rule_id:           MISRA-{rule}  (e.g., MISRA-6.2)
+#   category:          Category name (string)
+#   source:            misra
+#   severity:          required | recommended | advisory
+#   status:            proposed | active | deprecated  (default: active)
+#   title:             One-line summary
+#   rationale:         Why the rule exists
+#   enforcement_notes: How to detect violations
+#   enforcement_check: (optional) clang-tidy / cppcheck check ID
+#   good_example:      (optional) Code snippet showing correct usage
+#   bad_example:       (optional) Code snippet showing violation
+#   tags:              List of cross-cutting concern labels
+#   cross_refs:        List of {to_rule_id, relationship} objects
+
+rules: []
+# TODO (0078c): Populate with memory and initialization rules from MISRA C++.
+# See: MISRA C++:2023 standard documentation.

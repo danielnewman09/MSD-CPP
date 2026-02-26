@@ -265,6 +265,20 @@ add_custom_target(traceability
 
 message(STATUS "Traceability targets available: trace-git, trace-symbols, trace-decisions, trace-record-mappings, traceability")
 
+# Guidelines database target (Ticket: 0078_cpp_guidelines_mcp_server)
+set(GUIDELINES_DB ${CMAKE_BINARY_DIR}/docs/guidelines.db)
+
+add_custom_target(guidelines-seed
+  COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/guidelines/seed_guidelines.py
+          --db ${GUIDELINES_DB}
+          --data-dir ${CMAKE_SOURCE_DIR}/scripts/guidelines/data
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Seeding C++ guidelines database from YAML files"
+  VERBATIM
+)
+
+message(STATUS "Guidelines target available: guidelines-seed (output: ${GUIDELINES_DB})")
+
 # Always include the test directory first to define testing functions
 # This ensures the testing framework is available to all modules
 if(BUILD_TESTING)
