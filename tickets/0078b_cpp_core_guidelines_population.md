@@ -7,9 +7,9 @@
 - [x] Implementation Complete
 - [x] Quality Gate Passed — Awaiting Review
 - [x] Approved — Ready to Merge
-- [ ] Merged / Complete
+- [x] Merged / Complete
 
-**Current Phase**: Approved — Ready to Merge
+**Current Phase**: Merged / Complete
 **Type**: Tooling / Infrastructure
 **Priority**: Medium
 **Created**: 2026-02-26
@@ -103,6 +103,19 @@ Populate `enforcement_check` for rules that map to clang-tidy checks:
 ---
 
 ## Workflow Log
+
+### Documentation Phase
+- **Started**: 2026-02-26 00:00
+- **Completed**: 2026-02-26 00:00
+- **Branch**: 0078b-cpp-core-guidelines-population
+- **PR**: #100 (ready for review)
+- **Artifacts**:
+  - `CLAUDE.md` — updated Rule ID Conventions: replaced "populated in follow-up 0078b" with actual status (57 rules, ticket link)
+  - `docs/designs/0078b_cpp_core_guidelines_population/doc-sync-summary.md` — documentation sync summary
+- **Notes**: >
+    Data-only ticket — no PlantUML diagrams, no library documentation changes.
+    Single CLAUDE.md line updated to reflect 0078b completion. Tutorial skipped
+    (Generate Tutorial: No). Advancing directly to Merged / Complete.
 
 ### Implementation Review Phase
 - **Started**: 2026-02-26 00:00
