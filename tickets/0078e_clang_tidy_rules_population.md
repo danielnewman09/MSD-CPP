@@ -6,10 +6,10 @@
 - [ ] Design Approved — Ready for Implementation
 - [x] Implementation Complete
 - [x] Quality Gate Passed — Awaiting Review
-- [ ] Approved — Ready to Merge
+- [x] Approved — Ready to Merge
 - [ ] Merged / Complete
 
-**Current Phase**: Quality Gate Passed — Awaiting Review
+**Current Phase**: Approved — Ready to Merge
 **Type**: Tooling / Infrastructure
 **Priority**: Medium
 **Created**: 2026-02-26
@@ -138,7 +138,7 @@ For each explicitly disabled check, add a rule entry with `status: deprecated` a
   - Schema and Pydantic validator extended to support `clang_tidy` as a new source type. This is backward compatible — existing rules are unaffected.
   - All smoke tests pass: search_guidelines("use after move"), search_guidelines("naming convention"), get_rule("TIDY-modernize-use-override"), list_categories all return expected results.
   - Total database now contains 127 rules across 18 categories.
-  - Note: workflow log count was stated as "31 active + 10 deprecated" but actual YAML has 30 active + 11 deprecated (documentation-only discrepancy).
+  - Actual YAML has 30 active + 11 deprecated (corrected from initial log entry of "31 active + 10 deprecated" — documentation-only discrepancy).
 
 ### Quality Gate Phase
 - **Started**: 2026-02-26 12:00
@@ -172,3 +172,19 @@ For each explicitly disabled check, add a rule entry with `status: deprecated` a
   - m2 (Minor): `TIDY-bugprone-assert-side-effects` rule_id has trailing 's' but canonical clang-tidy check is `bugprone-assert-side-effect` (singular). Rename to match.
   - m1 (Minor): Workflow log count (31/10) corrected in ticket to reflect actual (30/11).
   - After fixes: re-seed DB, run smoke tests, return for re-review.
+
+### Implementation Review Phase (Re-Review)
+- **Started**: 2026-02-26 00:00
+- **Completed**: 2026-02-26 00:00
+- **Branch**: 0078e-clang-tidy-rules-population
+- **PR**: #102
+- **Artifacts**:
+  - `docs/designs/0078e_clang_tidy_rules_population/implementation-review.md` (updated to APPROVED)
+- **Status**: APPROVED
+- **Notes**:
+  - C1 fix verified: `TIDY-misc-unused-using-decls` correctly documents the `misc-unused-using-decls` check with accurate title, rationale, good/bad examples, and matching `enforcement_check`.
+  - m2 fix verified: `TIDY-bugprone-assert-side-effect` (singular) — `rule_id` now matches canonical clang-tidy check name exactly.
+  - m1 fix verified: Workflow log count corrected to "30 active + 11 deprecated".
+  - Old rule IDs (`TIDY-misc-unused-parameters`, `TIDY-bugprone-assert-side-effects`) confirmed absent from DB.
+  - Database re-seeds cleanly to 127 rules (exit 0). All 12 smoke tests pass including 4 new re-review-specific checks.
+  - No new issues found. All three previously requested changes resolved.
