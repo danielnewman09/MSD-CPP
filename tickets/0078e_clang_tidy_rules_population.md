@@ -138,6 +138,7 @@ For each explicitly disabled check, add a rule entry with `status: deprecated` a
   - Schema and Pydantic validator extended to support `clang_tidy` as a new source type. This is backward compatible — existing rules are unaffected.
   - All smoke tests pass: search_guidelines("use after move"), search_guidelines("naming convention"), get_rule("TIDY-modernize-use-override"), list_categories all return expected results.
   - Total database now contains 127 rules across 18 categories.
+  - Note: workflow log count was stated as "31 active + 10 deprecated" but actual YAML has 30 active + 11 deprecated (documentation-only discrepancy).
 
 ### Quality Gate Phase
 - **Started**: 2026-02-26 12:00
@@ -156,3 +157,18 @@ For each explicitly disabled check, add a rule entry with `status: deprecated` a
   - Cross-reference integrity: all 14 TIDY cross-refs resolve to existing rules
   - CheckOptions documented for 6 rules as required
   - Workflow log count discrepancy noted: actual YAML has 30 active + 11 deprecated (not 31/10 as logged in impl phase). All 11 deprecated rules confirmed to be checks actually disabled in .clang-tidy. This is a documentation-only discrepancy in the workflow log, not a defect.
+
+### Implementation Review Phase
+- **Started**: 2026-02-26 00:00
+- **Completed**: 2026-02-26 00:00
+- **Branch**: 0078e-clang-tidy-rules-population
+- **PR**: #102
+- **Artifacts**:
+  - `docs/designs/0078e_clang_tidy_rules_population/implementation-review.md`
+- **Status**: CHANGES REQUESTED
+- **Notes**:
+  - Design conformance: PASS. Code quality: PASS. Test coverage: PASS.
+  - C1 (Critical): `TIDY-misc-unused-parameters` has `enforcement_check: misc-unused-using-decls` — wrong check. `misc-unused-using-decls` flags unused using-declarations, not unused function parameters. Required fix: repurpose this rule entry to correctly document `misc-unused-using-decls` with updated title, rationale, and examples.
+  - m2 (Minor): `TIDY-bugprone-assert-side-effects` rule_id has trailing 's' but canonical clang-tidy check is `bugprone-assert-side-effect` (singular). Rename to match.
+  - m1 (Minor): Workflow log count (31/10) corrected in ticket to reflect actual (30/11).
+  - After fixes: re-seed DB, run smoke tests, return for re-review.
