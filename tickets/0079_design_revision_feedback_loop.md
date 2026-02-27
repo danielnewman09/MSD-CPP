@@ -129,7 +129,7 @@ The current escalation paths (quality gate 3rd failure, implementer circle detec
 - **Started**: 2026-02-26 00:00
 - **Completed**: 2026-02-26 00:00
 - **Branch**: 0079-design-revision-feedback-loop
-- **PR**: N/A (draft PR pending push)
+- **PR**: #106 (draft)
 - **Artifacts**:
   - `docs/designs/0079_design_revision_feedback_loop/design.md`
   - `docs/designs/0079_design_revision_feedback_loop/0079_design_revision_feedback_loop.puml`
