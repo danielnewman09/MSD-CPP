@@ -21,7 +21,8 @@
 //   4. At least one test validates energy dissipation over sustained sliding
 //   5. At least one test covers stick-to-slip transition
 //   6. All test names are descriptive without ticket references
-//   7. Migrated assertions from FrictionDirectionTest and FrictionConeSolverTest
+//   7. Migrated assertions from FrictionDirectionTest and
+//   FrictionConeSolverTest
 
 #include <gtest/gtest.h>
 
@@ -42,8 +43,8 @@ using namespace msd_sim;
 namespace
 {
 
-constexpr double kGravity = 9.81;    // m/s^2
-constexpr double kDt = 0.016;        // s (60 FPS)
+constexpr double kGravity = 9.81;  // m/s^2
+constexpr double kDt = 0.016;      // s (60 FPS)
 
 // Resting speed threshold for tangential (XY) velocity. The solver converges
 // tangential speeds to ~1e-8 m/s. The vertical (Z) component retains a
@@ -69,7 +70,8 @@ double totalEnergy(const AssetInertial& asset)
   Eigen::Vector3d omega{state.getAngularVelocity().x(),
                         state.getAngularVelocity().y(),
                         state.getAngularVelocity().z()};
-  const double rotKE = 0.5 * omega.transpose() * asset.getInertiaTensor() * omega;
+  const double rotKE =
+    0.5 * omega.transpose() * asset.getInertiaTensor() * omega;
 
   const double pe = mass * kGravity * state.position.z();
 
@@ -106,14 +108,13 @@ TEST_F(FrictionSlidingTest, SlidingCubeX_DeceleratesAndStops)
   constexpr double friction = 0.5;
   constexpr double initialVx = 2.0;
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{initialVx, 0.0, 0.0},
-                              mass,
-                              restitution,
-                              friction);
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{initialVx, 0.0, 0.0},
+                                               mass,
+                                               restitution,
+                                               friction);
 
   // Warmup: let contact establish
   step(10);
@@ -146,7 +147,8 @@ TEST_F(FrictionSlidingTest, SlidingCubeX_DeceleratesAndStops)
 
 // ---------------------------------------------------------------------------
 // Test 2: SlidingCubeY_DeceleratesAndStops
-// Same scenario but sliding in Y direction. Verifies friction is not axis-biased.
+// Same scenario but sliding in Y direction. Verifies friction is not
+// axis-biased.
 // ---------------------------------------------------------------------------
 TEST_F(FrictionSlidingTest, SlidingCubeY_DeceleratesAndStops)
 {
@@ -157,14 +159,13 @@ TEST_F(FrictionSlidingTest, SlidingCubeY_DeceleratesAndStops)
   constexpr double friction = 0.5;
   constexpr double initialVy = 2.0;
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{0.0, initialVy, 0.0},
-                              mass,
-                              restitution,
-                              friction);
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{0.0, initialVy, 0.0},
+                                               mass,
+                                               restitution,
+                                               friction);
 
   // Warmup
   step(10);
@@ -205,14 +206,13 @@ TEST_F(FrictionSlidingTest, SlidingCube_NoEnergyInjection)
   constexpr double friction = 0.5;
   constexpr double initialVx = 2.0;
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{initialVx, 0.0, 0.0},
-                              mass,
-                              0.0,  // restitution
-                              friction);
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{initialVx, 0.0, 0.0},
+                                               mass,
+                                               0.0,  // restitution
+                                               friction);
 
   // Warmup
   step(10);
@@ -257,27 +257,28 @@ TEST_F(FrictionSlidingTest, SlidingCube_NoEnergyInjection)
 // Strategy: Give cube a tiny vx (0.1 m/s) — static friction should arrest
 // it within a few frames. Then give cube a larger vx (1.5 m/s) — it slides.
 // ---------------------------------------------------------------------------
-TEST_F(FrictionSlidingTest, StickToSlip_SmallVelocityArrests_LargeVelocitySlides)
+TEST_F(FrictionSlidingTest,
+       StickToSlip_SmallVelocityArrests_LargeVelocitySlides)
 {
   // --- Case A: small initial velocity — static friction arrests quickly ---
   {
     spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-    const auto& cubeA =
-      spawnInertialWithVelocity("unit_cube",
-                                Coordinate{0.0, 0.0, 0.5},
-                                AngularCoordinate{},
-                                Coordinate{0.1, 0.0, 0.0},
-                                1.0,   // mass
-                                0.0,   // restitution
-                                0.5);  // friction
+    const auto& cubeA = spawnInertialWithVelocity("unit_cube",
+                                                  Coordinate{0.0, 0.0, 0.5},
+                                                  AngularCoordinate{},
+                                                  Coordinate{0.1, 0.0, 0.0},
+                                                  1.0,   // mass
+                                                  0.0,   // restitution
+                                                  0.5);  // friction
 
     // 15 frames (~0.24s): small v should be arrested by static friction
     step(15);
     const double speedA = tangentialSpeed(cubeA.getInertialState());
 
     EXPECT_LT(speedA, kRestingSpeed)
-      << "Cube with small initial velocity should be arrested by static friction. "
+      << "Cube with small initial velocity should be arrested by static "
+         "friction. "
       << "speed=" << speedA;
 
     // Displacement should be minimal in X, none in Y
@@ -297,14 +298,13 @@ TEST_F(FrictionSlidingTest, SlipToStick_SlidingCubeComesToRest)
 {
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{1.5, 0.0, 0.0},
-                              1.0,   // mass
-                              0.0,   // restitution
-                              0.5);  // friction
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{1.5, 0.0, 0.0},
+                                               1.0,   // mass
+                                               0.0,   // restitution
+                                               0.5);  // friction
 
   // Warmup
   step(5);
@@ -334,8 +334,8 @@ TEST_F(FrictionSlidingTest, SlipToStick_SlidingCubeComesToRest)
 
   // Friction should NOT cause direction reversal (kinetic friction stops,
   // not reverses)
-  EXPECT_FALSE(reversedDirection)
-    << "Friction should not cause direction reversal (slip-to-stick transition)";
+  EXPECT_FALSE(reversedDirection) << "Friction should not cause direction "
+                                     "reversal (slip-to-stick transition)";
 }
 
 // ============================================================================
@@ -353,20 +353,20 @@ TEST_F(FrictionSlidingTest, SlidingCube_KineticEnergyDecreases)
 
   constexpr double mass = 1.0;
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{2.0, 0.0, 0.0},
-                              mass,
-                              0.0,   // restitution
-                              0.5);  // friction
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{2.0, 0.0, 0.0},
+                                               mass,
+                                               0.0,   // restitution
+                                               0.5);  // friction
 
   // Warmup to steady-state sliding
   step(10);
 
   // Track KE (linear + rotational) over 60 frames of active sliding
-  const double initialKE = [&] {
+  const double initialKE = [&]
+  {
     const auto& s = cube.getInertialState();
     const double vSq = s.velocity.squaredNorm();
     Eigen::Vector3d omega{s.getAngularVelocity().x(),
@@ -389,9 +389,9 @@ TEST_F(FrictionSlidingTest, SlidingCube_KineticEnergyDecreases)
     Eigen::Vector3d omega{s.getAngularVelocity().x(),
                           s.getAngularVelocity().y(),
                           s.getAngularVelocity().z()};
-    const double currentKE =
-      0.5 * mass * vSq +
-      0.5 * omega.transpose() * cube.getInertiaTensor() * omega;
+    const double currentKE = 0.5 * mass * vSq + 0.5 * omega.transpose() *
+                                                  cube.getInertiaTensor() *
+                                                  omega;
 
     const double delta = currentKE - prevKE;
     // Small oscillations from semi-implicit Euler gravity residual (~0.01 J)
@@ -438,14 +438,13 @@ TEST_F(FrictionSlidingTest, SlidingCube_EnergyDissipationMatchesFrictionWork)
   constexpr double friction = 0.5;
   constexpr double initialVx = 2.0;
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{initialVx, 0.0, 0.0},
-                              mass,
-                              0.0,   // restitution
-                              friction);
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{initialVx, 0.0, 0.0},
+                                               mass,
+                                               0.0,  // restitution
+                                               friction);
 
   // Warmup (establish contact)
   step(5);
@@ -463,7 +462,8 @@ TEST_F(FrictionSlidingTest, SlidingCube_EnergyDissipationMatchesFrictionWork)
   const double slidingDistance = finalX - xAfterWarmup;
 
   // Expected friction work: mu * m * g * distance
-  const double expectedFrictionWork = friction * mass * kGravity * slidingDistance;
+  const double expectedFrictionWork =
+    friction * mass * kGravity * slidingDistance;
 
   // Measured energy dissipation from warmup state
   const double measuredDissipation = energyAfterWarmup - finalEnergy;
@@ -483,9 +483,12 @@ TEST_F(FrictionSlidingTest, SlidingCube_EnergyDissipationMatchesFrictionWork)
     << "Energy should be dissipated during sliding";
 
   // Dissipation should be within 50% of expected friction work.
-  // Tipping couples linear and rotational modes, so exact match is not expected.
-  EXPECT_NEAR(measuredDissipation, expectedFrictionWork, expectedFrictionWork * 0.5)
-    << "Measured dissipation should be within 50% of theoretical friction work. "
+  // Tipping couples linear and rotational modes, so exact match is not
+  // expected.
+  EXPECT_NEAR(
+    measuredDissipation, expectedFrictionWork, expectedFrictionWork * 0.5)
+    << "Measured dissipation should be within 50% of theoretical friction "
+       "work. "
     << "Expected=" << expectedFrictionWork
     << " Measured=" << measuredDissipation;
 
@@ -528,7 +531,7 @@ TEST_F(FrictionSlidingTest, SlidingCube_ConeCompliantEveryFrame)
                               AngularCoordinate{},
                               Coordinate{initialVx, 0.0, 0.0},
                               mass,
-                              0.0,   // restitution (no bounce energy budget)
+                              0.0,  // restitution (no bounce energy budget)
                               friction);
 
   // Warmup: let contact establish
@@ -572,6 +575,515 @@ TEST_F(FrictionSlidingTest, SlidingCube_ConeCompliantEveryFrame)
     << "speed=" << finalSpeed;
 }
 
+// ---------------------------------------------------------------------------
+// Test 8b: SlidingCube_ConeCompliantEveryFrame_HighSpeed
+// Same as Test 8 but with higher initial speed (6 m/s).
+// Higher speeds amplify solver artifacts — energy injection, oscillation,
+// and asymmetric friction response become more visible at speed.
+// ---------------------------------------------------------------------------
+TEST_F(FrictionSlidingTest, SlidingCube_ConeCompliantEveryFrame_HighSpeed)
+{
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+
+  constexpr double mass = 1.0;
+  constexpr double friction = 0.5;
+  constexpr double initialVx = 6.0;
+
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{initialVx, 0.0, 0.0},
+                                               mass,
+                                               0.0,
+                                               friction);
+
+  // Warmup: let contact establish
+  step(10);
+
+  const double energyAtStart = totalEnergy(cube);
+  double minEnergyObserved = energyAtStart;
+  double maxEnergyObserved = energyAtStart;
+
+  // Track energy over 120 frames (higher speed needs more time to stop).
+  // Also record energy at frame 30 to detect early-dissipation stalls.
+  constexpr int kEarlyCheckFrame = 30;
+  double energyAtEarlyCheck = energyAtStart;
+
+  for (int i = 0; i < 120; ++i)
+  {
+    step(1);
+    const double e = totalEnergy(cube);
+    minEnergyObserved = std::min(minEnergyObserved, e);
+    maxEnergyObserved = std::max(maxEnergyObserved, e);
+
+    if (i + 1 == kEarlyCheckFrame)
+      energyAtEarlyCheck = e;
+  }
+
+  const double finalSpeed = tangentialSpeed(cube.getInertialState());
+
+  std::cout << "\n=== Cone Compliance High Speed (6 m/s) ===\n";
+  std::cout << "Energy at start of sliding: " << energyAtStart << " J\n";
+  std::cout << "Energy at frame " << kEarlyCheckFrame << ": "
+            << energyAtEarlyCheck << " J\n";
+  std::cout << "Max energy observed: " << maxEnergyObserved << " J\n";
+  std::cout << "Min energy observed: " << minEnergyObserved << " J\n";
+  std::cout << "Final speed: " << finalSpeed << " m/s\n";
+
+  // CRITERION 1: Energy must have decreased overall (friction is dissipative)
+  EXPECT_LT(minEnergyObserved, energyAtStart)
+    << "Cone-compliant friction must dissipate energy. "
+    << "Energy should decrease during sliding.";
+
+  // CRITERION 2: Max energy must not significantly exceed start energy.
+  EXPECT_LT(maxEnergyObserved, energyAtStart * 1.02)
+    << "Energy should not significantly exceed initial value. "
+    << "maxE=" << maxEnergyObserved << " startE=" << energyAtStart;
+
+  // CRITERION 3: Cube must come to rest (dissipation is sustained)
+  EXPECT_LT(finalSpeed, kRestingSpeed)
+    << "Cone-compliant friction must eventually bring cube to rest. "
+    << "speed=" << finalSpeed;
+
+  // CRITERION 4: Friction must dissipate energy early — not stall for 30 frames
+  // then catch up later. At mu=0.5, the deceleration is ~4.9 m/s^2 so over 30
+  // frames (0.48s) the cube should lose substantial KE.
+  EXPECT_LT(energyAtEarlyCheck, energyAtStart * 0.95)
+    << "Friction must begin dissipating energy within the first "
+    << kEarlyCheckFrame << " frames. "
+    << "energyAtStart=" << energyAtStart << " energyAtFrame" << kEarlyCheckFrame
+    << "=" << energyAtEarlyCheck;
+}
+
+// ---------------------------------------------------------------------------
+// Test 8c-slow: SlidingCube_ConeCompliantEveryFrame_Oblique45_Slow
+// Gentle oblique sliding at 0.5 m/s. This is below the tipping threshold
+// so the cube should slide cleanly without tumbling. If even this fails,
+// the friction tangent basis is fundamentally broken for off-axis motion.
+// ---------------------------------------------------------------------------
+TEST_F(FrictionSlidingTest, SlidingCube_ConeCompliantEveryFrame_Oblique45_Slow)
+{
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+
+  constexpr double mass = 1.0;
+  constexpr double friction = 0.5;
+  constexpr double speed = 0.85;
+  const double component = speed / std::sqrt(2.0);
+
+  const auto& cube =
+    spawnInertialWithVelocity("unit_cube",
+                              Coordinate{0.0, 0.0, 0.5},
+                              AngularCoordinate{},
+                              Coordinate{component, component, 0.0},
+                              mass,
+                              0.0,
+                              friction);
+
+  // Validate initial state
+  {
+    const auto& s0 = cube.getInertialState();
+    EXPECT_NEAR(s0.velocity.z(), 0.0, 0.01) << "Initial Vz should be zero";
+  }
+
+  step(10);
+
+  {
+    const auto& sw = cube.getInertialState();
+    std::cout << "\n=== Oblique 45deg Slow (0.5 m/s): Post-Warmup ===\n";
+    std::cout << "Position: (" << sw.position.x() << ", " << sw.position.y()
+              << ", " << sw.position.z() << ")\n";
+    std::cout << "Velocity: (" << sw.velocity.x() << ", " << sw.velocity.y()
+              << ", " << sw.velocity.z() << ")\n";
+    std::cout << "Total energy: " << totalEnergy(cube) << " J\n";
+
+    EXPECT_NEAR(sw.position.z(), 0.5, 0.2)
+      << "Cube should remain near floor after warmup";
+    EXPECT_LT(std::abs(sw.velocity.z()), 2.0)
+      << "Vertical velocity should be small. Vz=" << sw.velocity.z();
+  }
+
+  const double energyAtStart = totalEnergy(cube);
+  double maxEnergyObserved = energyAtStart;
+
+  for (int i = 0; i < 60; ++i)
+  {
+    step(1);
+    const double e = totalEnergy(cube);
+    maxEnergyObserved = std::max(maxEnergyObserved, e);
+  }
+
+  const double finalSpeed = tangentialSpeed(cube.getInertialState());
+
+  std::cout << "Energy at start: " << energyAtStart << " J\n";
+  std::cout << "Max energy: " << maxEnergyObserved << " J\n";
+  std::cout << "Final speed: " << finalSpeed << " m/s\n";
+
+  EXPECT_LT(maxEnergyObserved, energyAtStart * 1.02)
+    << "No energy injection. maxE=" << maxEnergyObserved;
+  EXPECT_LT(finalSpeed, kRestingSpeed)
+    << "Slow oblique cube must come to rest. speed=" << finalSpeed;
+}
+
+
+// ---------------------------------------------------------------------------
+// Test 8c-slow: SlidingCube_ConeCompliantEveryFrame_Oblique45_Slow
+// Gentle oblique sliding at 0.5 m/s. This is below the tipping threshold
+// so the cube should slide cleanly without tumbling. If even this fails,
+// the friction tangent basis is fundamentally broken for off-axis motion.
+// ---------------------------------------------------------------------------
+TEST_F(FrictionSlidingTest,
+       SlidingCube_ConeCompliantEveryFrame_Oblique45_Slowest)
+{
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+
+  constexpr double mass = 1.0;
+  constexpr double friction = 0.5;
+  constexpr double speed = 0.8;
+  const double component = speed / std::sqrt(2.0);
+
+  const auto& cube =
+    spawnInertialWithVelocity("unit_cube",
+                              Coordinate{0.0, 0.0, 0.5},
+                              AngularCoordinate{},
+                              Coordinate{component, component, 0.0},
+                              mass,
+                              0.0,
+                              friction);
+
+  // Validate initial state
+  {
+    const auto& s0 = cube.getInertialState();
+    EXPECT_NEAR(s0.velocity.z(), 0.0, 0.01) << "Initial Vz should be zero";
+  }
+
+  step(10);
+
+  {
+    const auto& sw = cube.getInertialState();
+    std::cout << "\n=== Oblique 45deg Slow (0.5 m/s): Post-Warmup ===\n";
+    std::cout << "Position: (" << sw.position.x() << ", " << sw.position.y()
+              << ", " << sw.position.z() << ")\n";
+    std::cout << "Velocity: (" << sw.velocity.x() << ", " << sw.velocity.y()
+              << ", " << sw.velocity.z() << ")\n";
+    std::cout << "Total energy: " << totalEnergy(cube) << " J\n";
+
+    EXPECT_NEAR(sw.position.z(), 0.5, 0.2)
+      << "Cube should remain near floor after warmup";
+    EXPECT_LT(std::abs(sw.velocity.z()), 2.0)
+      << "Vertical velocity should be small. Vz=" << sw.velocity.z();
+  }
+
+  const double energyAtStart = totalEnergy(cube);
+  double maxEnergyObserved = energyAtStart;
+
+  for (int i = 0; i < 60; ++i)
+  {
+    step(1);
+    const double e = totalEnergy(cube);
+    maxEnergyObserved = std::max(maxEnergyObserved, e);
+  }
+
+  const double finalSpeed = tangentialSpeed(cube.getInertialState());
+
+  std::cout << "Energy at start: " << energyAtStart << " J\n";
+  std::cout << "Max energy: " << maxEnergyObserved << " J\n";
+  std::cout << "Final speed: " << finalSpeed << " m/s\n";
+
+  EXPECT_LT(maxEnergyObserved, energyAtStart * 1.02)
+    << "No energy injection. maxE=" << maxEnergyObserved;
+  EXPECT_LT(finalSpeed, kRestingSpeed)
+    << "Slow oblique cube must come to rest. speed=" << finalSpeed;
+}
+
+
+// ---------------------------------------------------------------------------
+// Test 8c-med: SlidingCube_ConeCompliantEveryFrame_Oblique45_Medium
+// Moderate oblique sliding at 1.5 m/s. Between the slow (no-tip) and fast
+// (violent launch) regimes — helps identify the speed threshold where the
+// solver begins misbehaving on oblique contacts.
+// ---------------------------------------------------------------------------
+TEST_F(FrictionSlidingTest,
+       SlidingCube_ConeCompliantEveryFrame_Oblique45_Medium)
+{
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+
+  constexpr double mass = 1.0;
+  constexpr double friction = 0.5;
+  constexpr double speed = 1.5;
+  const double component = speed / std::sqrt(2.0);
+
+  const auto& cube =
+    spawnInertialWithVelocity("unit_cube",
+                              Coordinate{0.0, 0.0, 0.5},
+                              AngularCoordinate{},
+                              Coordinate{component, component, 0.0},
+                              mass,
+                              0.0,
+                              friction);
+
+  {
+    const auto& s0 = cube.getInertialState();
+    EXPECT_NEAR(s0.velocity.z(), 0.0, 0.01) << "Initial Vz should be zero";
+  }
+
+  step(10);
+
+  {
+    const auto& sw = cube.getInertialState();
+    std::cout << "\n=== Oblique 45deg Medium (1.5 m/s): Post-Warmup ===\n";
+    std::cout << "Position: (" << sw.position.x() << ", " << sw.position.y()
+              << ", " << sw.position.z() << ")\n";
+    std::cout << "Velocity: (" << sw.velocity.x() << ", " << sw.velocity.y()
+              << ", " << sw.velocity.z() << ")\n";
+    std::cout << "Total energy: " << totalEnergy(cube) << " J\n";
+
+    EXPECT_NEAR(sw.position.z(), 0.5, 0.2)
+      << "Cube should remain near floor after warmup";
+    EXPECT_LT(std::abs(sw.velocity.z()), 2.0)
+      << "Vertical velocity should be small. Vz=" << sw.velocity.z();
+  }
+
+  const double energyAtStart = totalEnergy(cube);
+  double maxEnergyObserved = energyAtStart;
+
+  for (int i = 0; i < 80; ++i)
+  {
+    step(1);
+    const double e = totalEnergy(cube);
+    maxEnergyObserved = std::max(maxEnergyObserved, e);
+  }
+
+  const double finalSpeed = tangentialSpeed(cube.getInertialState());
+
+  std::cout << "Energy at start: " << energyAtStart << " J\n";
+  std::cout << "Max energy: " << maxEnergyObserved << " J\n";
+  std::cout << "Final speed: " << finalSpeed << " m/s\n";
+
+  EXPECT_LT(maxEnergyObserved, energyAtStart * 1.02)
+    << "No energy injection. maxE=" << maxEnergyObserved;
+  EXPECT_LT(finalSpeed, kRestingSpeed)
+    << "Medium oblique cube must come to rest. speed=" << finalSpeed;
+}
+
+// ---------------------------------------------------------------------------
+// Test 8c: SlidingCube_ConeCompliantEveryFrame_Oblique45
+// Initial velocity at 45 degrees in the XY plane (vx = vy = 3/sqrt(2)).
+// Oblique sliding exercises both friction tangent directions simultaneously,
+// exposing anisotropic solver errors and directional coupling artifacts.
+// ---------------------------------------------------------------------------
+TEST_F(FrictionSlidingTest, SlidingCube_ConeCompliantEveryFrame_Oblique45)
+{
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+
+  constexpr double mass = 1.0;
+  constexpr double friction = 0.5;
+  constexpr double speed = 3.0;
+  const double component = speed / std::sqrt(2.0);
+
+  const auto& cube =
+    spawnInertialWithVelocity("unit_cube",
+                              Coordinate{0.0, 0.0, 0.5},
+                              AngularCoordinate{},
+                              Coordinate{component, component, 0.0},
+                              mass,
+                              0.0,
+                              friction);
+
+  // --- Validate initial state (frame 0, before any stepping) ---
+  {
+    const auto& s0 = cube.getInertialState();
+    const double expectedKE = 0.5 * mass * speed * speed;
+    const double expectedPE = mass * kGravity * s0.position.z();
+    const double expectedTotal = expectedKE + expectedPE;
+    const double actualTotal = totalEnergy(cube);
+
+    std::cout << "\n=== Oblique 45deg: Initial State (frame 0) ===\n";
+    std::cout << "Position: (" << s0.position.x() << ", " << s0.position.y()
+              << ", " << s0.position.z() << ")\n";
+    std::cout << "Velocity: (" << s0.velocity.x() << ", " << s0.velocity.y()
+              << ", " << s0.velocity.z() << ")\n";
+    std::cout << "Expected total energy: " << expectedTotal
+              << " J  (KE=" << expectedKE << " PE=" << expectedPE << ")\n";
+    std::cout << "Actual total energy:   " << actualTotal << " J\n";
+
+    EXPECT_NEAR(s0.velocity.x(), component, 0.01)
+      << "Initial Vx should match requested value";
+    EXPECT_NEAR(s0.velocity.y(), component, 0.01)
+      << "Initial Vy should match requested value";
+    EXPECT_NEAR(s0.velocity.z(), 0.0, 0.01)
+      << "Initial Vz should be zero (no vertical launch)";
+    EXPECT_NEAR(s0.position.z(), 0.5, 0.01)
+      << "Initial Z position should be 0.5 (cube resting height)";
+    EXPECT_NEAR(actualTotal, expectedTotal, expectedTotal * 0.05)
+      << "Initial energy should match analytic expectation";
+  }
+
+  // Warmup: let contact establish
+  step(10);
+
+  // --- Validate post-warmup state ---
+  {
+    const auto& sw = cube.getInertialState();
+    std::cout << "\n=== Oblique 45deg: Post-Warmup (frame 10) ===\n";
+    std::cout << "Position: (" << sw.position.x() << ", " << sw.position.y()
+              << ", " << sw.position.z() << ")\n";
+    std::cout << "Velocity: (" << sw.velocity.x() << ", " << sw.velocity.y()
+              << ", " << sw.velocity.z() << ")\n";
+    std::cout << "Total energy: " << totalEnergy(cube) << " J\n";
+
+    EXPECT_NEAR(sw.position.z(), 0.5, 0.2)
+      << "Cube should remain near floor after warmup, not launched upward";
+    EXPECT_LT(std::abs(sw.velocity.z()), 2.0)
+      << "Vertical velocity should be small after warmup. "
+      << "Vz=" << sw.velocity.z();
+  }
+
+  const double energyAtStart = totalEnergy(cube);
+  double minEnergyObserved = energyAtStart;
+  double maxEnergyObserved = energyAtStart;
+
+  for (int i = 0; i < 80; ++i)
+  {
+    step(1);
+    const double e = totalEnergy(cube);
+    minEnergyObserved = std::min(minEnergyObserved, e);
+    maxEnergyObserved = std::max(maxEnergyObserved, e);
+  }
+
+  const double finalSpeed = tangentialSpeed(cube.getInertialState());
+
+  std::cout << "\n=== Cone Compliance Oblique 45deg (3 m/s) ===\n";
+  std::cout << "Energy at start of sliding: " << energyAtStart << " J\n";
+  std::cout << "Max energy observed: " << maxEnergyObserved << " J\n";
+  std::cout << "Min energy observed: " << minEnergyObserved << " J\n";
+  std::cout << "Final speed: " << finalSpeed << " m/s\n";
+
+  // CRITERION 1: Energy must have decreased
+  EXPECT_LT(minEnergyObserved, energyAtStart)
+    << "Oblique friction must dissipate energy.";
+
+  // CRITERION 2: No significant energy injection
+  EXPECT_LT(maxEnergyObserved, energyAtStart * 1.02)
+    << "Energy should not significantly exceed initial value. "
+    << "maxE=" << maxEnergyObserved << " startE=" << energyAtStart;
+
+  // CRITERION 3: Cube must come to rest
+  EXPECT_LT(finalSpeed, kRestingSpeed)
+    << "Oblique friction must eventually bring cube to rest. "
+    << "speed=" << finalSpeed;
+}
+
+// ---------------------------------------------------------------------------
+// Test 8d: SlidingCube_ConeCompliantEveryFrame_HighSpeedOblique
+// Combines high speed (6 m/s) with oblique angle (45 deg in XY plane).
+// This is the most demanding cone compliance test — high momentum with
+// multi-axis friction coupling. Most likely to reveal solver instabilities.
+// ---------------------------------------------------------------------------
+TEST_F(FrictionSlidingTest,
+       SlidingCube_ConeCompliantEveryFrame_HighSpeedOblique)
+{
+  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+
+  constexpr double mass = 1.0;
+  constexpr double friction = 0.5;
+  constexpr double speed = 6.0;
+  const double component = speed / std::sqrt(2.0);
+
+  const auto& cube =
+    spawnInertialWithVelocity("unit_cube",
+                              Coordinate{0.0, 0.0, 0.5},
+                              AngularCoordinate{},
+                              Coordinate{component, component, 0.0},
+                              mass,
+                              0.0,
+                              friction);
+
+  // --- Validate initial state (frame 0) ---
+  {
+    const auto& s0 = cube.getInertialState();
+    const double expectedKE = 0.5 * mass * speed * speed;
+    const double expectedPE = mass * kGravity * s0.position.z();
+    const double expectedTotal = expectedKE + expectedPE;
+    const double actualTotal = totalEnergy(cube);
+
+    std::cout
+      << "\n=== High Speed Oblique 45deg: Initial State (frame 0) ===\n";
+    std::cout << "Position: (" << s0.position.x() << ", " << s0.position.y()
+              << ", " << s0.position.z() << ")\n";
+    std::cout << "Velocity: (" << s0.velocity.x() << ", " << s0.velocity.y()
+              << ", " << s0.velocity.z() << ")\n";
+    std::cout << "Expected total energy: " << expectedTotal
+              << " J  (KE=" << expectedKE << " PE=" << expectedPE << ")\n";
+    std::cout << "Actual total energy:   " << actualTotal << " J\n";
+
+    EXPECT_NEAR(s0.velocity.x(), component, 0.01)
+      << "Initial Vx should match requested value";
+    EXPECT_NEAR(s0.velocity.y(), component, 0.01)
+      << "Initial Vy should match requested value";
+    EXPECT_NEAR(s0.velocity.z(), 0.0, 0.01)
+      << "Initial Vz should be zero (no vertical launch)";
+    EXPECT_NEAR(s0.position.z(), 0.5, 0.01)
+      << "Initial Z position should be 0.5 (cube resting height)";
+    EXPECT_NEAR(actualTotal, expectedTotal, expectedTotal * 0.05)
+      << "Initial energy should match analytic expectation";
+  }
+
+  // Warmup: let contact establish
+  step(10);
+
+  // --- Validate post-warmup state ---
+  {
+    const auto& sw = cube.getInertialState();
+    std::cout << "\n=== High Speed Oblique 45deg: Post-Warmup (frame 10) ===\n";
+    std::cout << "Position: (" << sw.position.x() << ", " << sw.position.y()
+              << ", " << sw.position.z() << ")\n";
+    std::cout << "Velocity: (" << sw.velocity.x() << ", " << sw.velocity.y()
+              << ", " << sw.velocity.z() << ")\n";
+    std::cout << "Total energy: " << totalEnergy(cube) << " J\n";
+
+    EXPECT_NEAR(sw.position.z(), 0.5, 0.2)
+      << "Cube should remain near floor after warmup, not launched upward";
+    EXPECT_LT(std::abs(sw.velocity.z()), 2.0)
+      << "Vertical velocity should be small after warmup. "
+      << "Vz=" << sw.velocity.z();
+  }
+
+  const double energyAtStart = totalEnergy(cube);
+  double minEnergyObserved = energyAtStart;
+  double maxEnergyObserved = energyAtStart;
+
+  // 120 frames for higher speed
+  for (int i = 0; i < 120; ++i)
+  {
+    step(1);
+    const double e = totalEnergy(cube);
+    minEnergyObserved = std::min(minEnergyObserved, e);
+    maxEnergyObserved = std::max(maxEnergyObserved, e);
+  }
+
+  const double finalSpeed = tangentialSpeed(cube.getInertialState());
+
+  std::cout << "\n=== Cone Compliance High Speed Oblique 45deg (6 m/s) ===\n";
+  std::cout << "Energy at start of sliding: " << energyAtStart << " J\n";
+  std::cout << "Max energy observed: " << maxEnergyObserved << " J\n";
+  std::cout << "Min energy observed: " << minEnergyObserved << " J\n";
+  std::cout << "Final speed: " << finalSpeed << " m/s\n";
+
+  // CRITERION 1: Energy must have decreased
+  EXPECT_LT(minEnergyObserved, energyAtStart)
+    << "High-speed oblique friction must dissipate energy.";
+
+  // CRITERION 2: No significant energy injection
+  EXPECT_LT(maxEnergyObserved, energyAtStart * 1.02)
+    << "Energy should not significantly exceed initial value. "
+    << "maxE=" << maxEnergyObserved << " startE=" << energyAtStart;
+
+  // CRITERION 3: Cube must come to rest
+  EXPECT_LT(finalSpeed, kRestingSpeed)
+    << "High-speed oblique friction must eventually bring cube to rest. "
+    << "speed=" << finalSpeed;
+}
+
 // ============================================================================
 // Friction + Rotation
 // ============================================================================
@@ -587,14 +1099,13 @@ TEST_F(FrictionSlidingTest, SlidingCube_FrictionProducesTippingTorque)
 {
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{2.0, 0.0, 0.0},
-                              1.0,   // mass
-                              0.0,   // restitution
-                              0.5);  // friction
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{2.0, 0.0, 0.0},
+                                               1.0,   // mass
+                                               0.0,   // restitution
+                                               0.5);  // friction
 
   // Warmup to establish contact and sliding
   step(5);
@@ -613,7 +1124,8 @@ TEST_F(FrictionSlidingTest, SlidingCube_FrictionProducesTippingTorque)
     << "Friction below COM should produce tipping torque (angular velocity). "
     << "omega=" << omegaNorm << " rad/s";
 
-  // Rotation should be predominantly around Y-axis (cube sliding in X tips around Y)
+  // Rotation should be predominantly around Y-axis (cube sliding in X tips
+  // around Y)
   EXPECT_GT(std::abs(omegaY), std::abs(omegaX))
     << "Tipping torque should be predominantly around Y-axis. "
     << "omegaX=" << omegaX << " omegaY=" << omegaY;
@@ -643,7 +1155,7 @@ TEST_F(FrictionSlidingTest, SphereDrop_FlatContact_MinimalTorque)
                               Coordinate{0.0, 0.0, 2.0},
                               AngularCoordinate{},
                               Coordinate{0.0, 0.0, 0.0},  // no initial velocity
-                              1.0,   // mass
+                              1.0,                        // mass
                               0.0,   // restitution (no bounce)
                               0.5);  // friction
 
@@ -682,14 +1194,13 @@ TEST_F(FrictionSlidingTest, ZeroFriction_NoDeceleration)
 
   constexpr double initialVx = 1.0;
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{initialVx, 0.0, 0.0},
-                              1.0,   // mass
-                              0.0,   // restitution
-                              0.0);  // mu = 0 (frictionless)
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{initialVx, 0.0, 0.0},
+                                               1.0,   // mass
+                                               0.0,   // restitution
+                                               0.0);  // mu = 0 (frictionless)
 
   // Warmup to establish contact
   step(5);
@@ -701,9 +1212,11 @@ TEST_F(FrictionSlidingTest, ZeroFriction_NoDeceleration)
 
   // Allow small tolerance for normal force coupling and numerical drift
   // (frictionless contact still has normal impulse which may shift position
-  // slightly due to tipping, but horizontal velocity should be largely preserved)
+  // slightly due to tipping, but horizontal velocity should be largely
+  // preserved)
   EXPECT_NEAR(vxFinal, vxWarmup, 0.05)
-    << "Zero friction: horizontal velocity should not decelerate significantly. "
+    << "Zero friction: horizontal velocity should not decelerate "
+       "significantly. "
     << "vxWarmup=" << vxWarmup << " vxFinal=" << vxFinal;
 
   // No significant deceleration
@@ -722,16 +1235,16 @@ TEST_F(FrictionSlidingTest, HighFriction_ImmediateStop)
 {
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  constexpr double initialVx = 0.3;  // Small velocity — static friction can absorb it
+  constexpr double initialVx =
+    0.3;  // Small velocity — static friction can absorb it
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{initialVx, 0.0, 0.0},
-                              1.0,   // mass
-                              0.0,   // restitution
-                              2.0);  // high friction mu=2.0
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{initialVx, 0.0, 0.0},
+                                               1.0,   // mass
+                                               0.0,   // restitution
+                                               2.0);  // high friction mu=2.0
 
   // High friction should arrest motion quickly — run 15 frames total
   step(5);
@@ -751,7 +1264,11 @@ TEST_F(FrictionSlidingTest, HighFriction_ImmediateStop)
 // the cube bounces multiple times while sliding horizontally. Friction acts
 // at each contact and decelerates the horizontal motion. After sufficient
 // time, both vertical bouncing and horizontal sliding damp out.
-// Verifies: friction and restitution work together correctly over many frames.
+//
+// Per-frame checks:
+//   (a) Energy must be non-increasing (no solver injection)
+//   (b) X-velocity must not reverse sign (friction opposes motion, not
+//   reverses) (c) Final state: cube at rest on floor
 // ---------------------------------------------------------------------------
 TEST_F(FrictionSlidingTest, FrictionWithRestitution_BounceThenSlide)
 {
@@ -766,52 +1283,120 @@ TEST_F(FrictionSlidingTest, FrictionWithRestitution_BounceThenSlide)
   // With e=0.5, each bounce loses 75% of vertical KE (e^2 = 0.25 reduction).
   // After ~5-8 bounces the vertical motion damps out. We run enough frames
   // for both bouncing and sliding to dissipate.
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 1.5},  // above floor
-                              AngularCoordinate{},
-                              Coordinate{initialVx, 0.0, -2.0},  // vx + vz downward
-                              mass,
-                              restitution,
-                              friction);
+  const auto& cube = spawnInertialWithVelocity(
+    "unit_cube",
+    Coordinate{0.0, 0.0, 1.5},  // above floor
+    AngularCoordinate{},
+    Coordinate{initialVx, 0.0, -2.0},  // vx + vz downward
+    mass,
+    restitution,
+    friction);
 
-  // Record initial horizontal KE
-  const double initialHorizontalKE =
-    0.5 * mass * (initialVx * initialVx);
+  // Let contact establish (first bounce)
+  step(10);
 
-  // Simulate for 400 frames (~6.7s): enough for e=0.5 to damp all bouncing
-  // and for friction to stop horizontal sliding.
-  step(400);
+  // --- Per-frame energy and direction tracking over 390 frames ---
+  double prevEnergy = totalEnergy(cube);
+  double maxEnergyInjection = 0.0;   // worst single-frame energy increase
+  double cumulativeInjection = 0.0;  // total energy injected across all frames
+  int energyInjectionFrames = 0;     // count of frames with energy increase
+  int worstInjectionFrame = -1;
 
-  const double finalSpeed = tangentialSpeed(cube.getInertialState());
-  const double finalZ = cube.getInertialState().position.z();
-  const double finalVz = cube.getInertialState().velocity.z();
+  bool xVelocityReversed = false;
+  int reversalFrame = -1;
 
-  std::cout << "\n=== Bounce Then Slide ===\n";
-  std::cout << "After 400 frames:\n";
-  std::cout << "  horizontal speed = " << finalSpeed << " m/s\n";
-  std::cout << "  vz = " << finalVz << " m/s\n";
-  std::cout << "  z = " << finalZ << " m\n";
+  constexpr int totalFrames = 390;
+  for (int i = 0; i < totalFrames; ++i)
+  {
+    const int frameNum = 10 + i + 1;  // actual frame number for diagnostics
 
-  // Cube should have settled on the floor (actual: ~0.482)
+    step(1);
+
+    const auto& state = cube.getInertialState();
+    const double energy = totalEnergy(cube);
+    const double deltaE = energy - prevEnergy;
+
+    // Track energy injection
+    if (deltaE > 0.0)
+    {
+      energyInjectionFrames++;
+      cumulativeInjection += deltaE;
+      if (deltaE > maxEnergyInjection)
+      {
+        maxEnergyInjection = deltaE;
+        worstInjectionFrame = frameNum;
+      }
+    }
+
+    // Track X-velocity reversal: cube starts with positive vx, friction
+    // should decelerate to zero but never drive it negative. A negative vx
+    // indicates the solver is pushing the cube backwards — non-physical.
+    if (state.velocity.x() < -0.1)
+    {
+      if (!xVelocityReversed)
+      {
+        xVelocityReversed = true;
+        reversalFrame = frameNum;
+      }
+    }
+
+    prevEnergy = energy;
+  }
+
+  const auto& finalState = cube.getInertialState();
+  const double finalSpeed = tangentialSpeed(finalState);
+  const double finalZ = finalState.position.z();
+
+  std::cout << "\n=== Bounce Then Slide (per-frame analysis) ===\n";
+  std::cout << "Energy injection frames: " << energyInjectionFrames << " / "
+            << totalFrames << "\n";
+  std::cout << "Max single-frame injection: " << maxEnergyInjection
+            << " J (frame " << worstInjectionFrame << ")\n";
+  std::cout << "Cumulative injection: " << cumulativeInjection << " J\n";
+  std::cout << "X-velocity reversed: " << (xVelocityReversed ? "YES" : "no")
+            << (xVelocityReversed
+                  ? " (frame " + std::to_string(reversalFrame) + ")"
+                  : "")
+            << "\n";
+  std::cout << "Final: speed=" << finalSpeed << " m/s, z=" << finalZ << " m\n";
+
+  // CRITERION 1: Energy should be non-increasing (dissipative solver).
+  // During bounce-then-slide, the solver should never inject more than a
+  // small tolerance per frame. The current solver injects ~0.16 J/frame
+  // during tumbling (frames 150-189), accumulating ~4 J total — this is
+  // a known physics bug.
+  EXPECT_LT(maxEnergyInjection, 0.05)
+    << "Per-frame energy injection should be bounded. "
+    << "Max injection=" << maxEnergyInjection << " J at frame "
+    << worstInjectionFrame;
+
+  EXPECT_LT(cumulativeInjection, 0.5)
+    << "Cumulative energy injection over the simulation should be small. "
+    << "Got " << cumulativeInjection << " J across " << energyInjectionFrames
+    << " frames";
+
+  // CRITERION 2: X-velocity should not reverse. The cube starts with
+  // positive vx; friction decelerates it toward zero. A reversal to
+  // negative vx means the solver is applying non-physical forces.
+  EXPECT_FALSE(xVelocityReversed)
+    << "X-velocity should not reverse direction under friction. "
+    << "Reversal detected at frame " << reversalFrame;
+
+  // CRITERION 3: Cube should settle on the floor
   EXPECT_NEAR(finalZ, 0.5, 0.05)
     << "Cube should settle near floor surface. z=" << finalZ;
 
-  // Cube should have come to rest after bounce + slide
+  // CRITERION 4: Cube should come to rest
   EXPECT_LT(finalSpeed, kRestingSpeed)
-    << "After bouncing and sliding, cube should come to rest. speed=" << finalSpeed;
-
-  // Total horizontal KE must have been reduced by friction
-  const double finalHorizontalKE =
-    0.5 * mass * cube.getInertialState().velocity.squaredNorm();
-  EXPECT_LT(finalHorizontalKE, initialHorizontalKE)
-    << "Friction should reduce horizontal KE over bounce-then-slide sequence";
+    << "After bouncing and sliding, cube should come to rest. speed="
+    << finalSpeed;
 }
 
 // ---------------------------------------------------------------------------
 // Test 14: SlidingCubeOnFloor_FrictionSaturatesAtConeLimit
 // (Migrated from FrictionConeSolverTest)
-// Cube with 2 m/s initial velocity decelerates and comes to rest within 50 frames.
+// Cube with 2 m/s initial velocity decelerates and comes to rest within 50
+// frames.
 // ---------------------------------------------------------------------------
 TEST_F(FrictionSlidingTest, SlidingCubeOnFloor_FrictionSaturatesAtConeLimit)
 {
@@ -822,14 +1407,13 @@ TEST_F(FrictionSlidingTest, SlidingCubeOnFloor_FrictionSaturatesAtConeLimit)
   constexpr double friction = 0.5;
   constexpr double initialVx = 2.0;
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{initialVx, 0.0, 0.0},
-                              mass,
-                              restitution,
-                              friction);
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{initialVx, 0.0, 0.0},
+                                               mass,
+                                               restitution,
+                                               friction);
 
   constexpr int totalFrames = 50;
   step(totalFrames);
@@ -867,14 +1451,13 @@ TEST_F(FrictionSlidingTest, SlidingCube_SymmetricFriction_NoLateralDrift)
 {
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
-  const auto& cube =
-    spawnInertialWithVelocity("unit_cube",
-                              Coordinate{0.0, 0.0, 0.5},
-                              AngularCoordinate{},
-                              Coordinate{2.0, 0.0, 0.0},
-                              1.0,   // mass
-                              0.0,   // restitution
-                              0.5);  // friction
+  const auto& cube = spawnInertialWithVelocity("unit_cube",
+                                               Coordinate{0.0, 0.0, 0.5},
+                                               AngularCoordinate{},
+                                               Coordinate{2.0, 0.0, 0.0},
+                                               1.0,   // mass
+                                               0.0,   // restitution
+                                               0.5);  // friction
 
   step(80);
 
