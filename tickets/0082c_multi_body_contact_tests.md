@@ -3,10 +3,10 @@
 ## Status
 - [x] Draft
 - [x] Ready for Implementation
-- [ ] Implementation Complete
+- [x] Implementation Complete
 - [ ] Merged / Complete
 
-**Current Phase**: Implementation
+**Current Phase**: Implementation Complete
 **Type**: Testing
 **Priority**: Medium
 **Created**: 2026-02-26
@@ -86,3 +86,22 @@ Multi-body scenarios stress:
 - Stack stability is sensitive to the gravity-timestep oscillation floor (~g*dt). The "stable" criterion should be drift < 0.05m, not zero drift.
 - Island decomposition for environment-connected bodies is already tested at the unit level (ConstraintIslandBuilderTest::environmentDoesNotConnect). These integration tests verify the full pipeline.
 - Pile tests with 5+ objects may require more than the default solver iteration count to converge. Tests should document expected iteration counts.
+
+---
+
+## Workflow Log
+
+### Implementation Phase
+- **Started**: 2026-02-26
+- **Completed**: 2026-02-26
+- **Branch**: `0082c-multi-body-contact-tests`
+- **PR**: #107 (draft, targeting `0082b-friction-sliding-tests`)
+- **Artifacts**:
+  - `msd/msd-sim/test/Physics/Collision/MultiBodyContactTest.cpp` (8 tests, 895 lines)
+  - `msd/msd-sim/test/Physics/Collision/CMakeLists.txt` (registered new test file)
+- **Notes**:
+  - All 8 acceptance criteria satisfied (>= 6 tests, 3-body stack, cascade, ReplayEnabledTest, descriptive names, unit_cube + floor_slab only).
+  - Key discovery: `const AssetInertial&` references returned by `spawnInertial()` are invalidated when subsequent objects are spawned (WorldModel container reallocation). Multi-body tests must capture `getInstanceId()` and access via `world().getObject(id)`.
+  - Stack building uses sequential settle pattern: each layer settles (80-100 frames) before the next is dropped. Simultaneous spawning overloads the solver with too many constraint pairs at once.
+  - `kFloorMin = -0.1m` threshold allows the Baumgarte penetration that occurs when stacked weight presses a resting box further into the floor.
+  - Full test suite: 771 passing / 8 pre-existing failures (unchanged). No regressions.
