@@ -45,13 +45,13 @@ class RuleModel(BaseModel):
     """A single coding guideline rule."""
     rule_id: str
     category: str
-    source: Literal["project", "cpp_core_guidelines", "misra"]
+    source: Literal["project", "cpp_core_guidelines", "misra", "clang_tidy"]
     severity: Literal["required", "recommended", "advisory"]
     status: Literal["proposed", "active", "deprecated"] = "active"
     title: str
     rationale: str
     enforcement_notes: str
-    # N4: enforcement_check is optional — populated incrementally in 0078b/0078c
+    # N4: enforcement_check is optional — populated incrementally in 0078b/0078c/0078e
     # via clang-tidy / cppcheck check IDs (e.g., "cppcoreguidelines-special-member-functions")
     enforcement_check: str | None = None
     good_example: str | None = None
@@ -63,10 +63,10 @@ class RuleModel(BaseModel):
     @classmethod
     def validate_rule_id_format(cls, v: str) -> str:
         """Loosely validate rule_id format."""
-        valid_prefixes = ("MSD-", "CPP-", "MISRA-")
+        valid_prefixes = ("MSD-", "CPP-", "MISRA-", "TIDY-")
         if not any(v.startswith(p) for p in valid_prefixes):
             raise ValueError(
-                f"rule_id '{v}' must start with MSD-, CPP-, or MISRA-"
+                f"rule_id '{v}' must start with MSD-, CPP-, MISRA-, or TIDY-"
             )
         return v
 
