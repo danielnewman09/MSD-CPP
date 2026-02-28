@@ -4,7 +4,7 @@
 - [x] Draft
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Prototype
+- [x] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
 - [ ] Implementation Blocked — Design Revision Needed
@@ -176,10 +176,14 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
   full implementation.
 
 ### Design Review Phase
-- **Started**:
-- **Completed**:
-- **Status**:
-- **Reviewer Notes**:
+- **Started**: 2026-02-28 13:00
+- **Completed**: 2026-02-28 13:30
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
+- **Status**: APPROVED WITH NOTES
+- **Artifacts**:
+  - `docs/designs/0084_block_pgs_solver_rework/design.md` (review appended)
+- **Reviewer Notes**: Root cause analysis accepted as rigorous and well-supported. Fix F1 (Phase B-only cache storage) is the correct surgical fix. Notes: (1) `warmStartLambdas` in `ConstraintSolver::SolveResult` should be defensively initialized to `lambdas` at top of solve() to cover all code paths; (2) Fix F3 comment update should be included in impl commit; (3) three-step implementation order is mandatory. Prototype P1 (warm-start disable diagnostic) must run before implementing Fix F1.
 
 ### Prototype Phase
 - **Started**:

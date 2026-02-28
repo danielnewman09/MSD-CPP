@@ -606,3 +606,115 @@ This design will be tracked in:
 
 The implementer should create this file and record each prototype/implementation iteration
 with findings.
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-28
+**Status**: APPROVED WITH NOTES
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | `phaseBLambdas`, `warmStartLambdas` follow project `camelCase` member naming. `SolveResult` structs follow `PascalCase`. |
+| Namespace organization | ✓ | All changes remain in `msd_sim` namespace. No new namespace introductions. |
+| File structure | ✓ | Three existing files modified (`BlockPGSSolver.hpp`, `BlockPGSSolver.cpp`, `CollisionPipeline.cpp`). One transitional file (`ConstraintSolver.hpp`) modified. No new files. |
+| Dependency direction | ✓ | No new dependencies introduced. Data flows in the existing direction: `BlockPGSSolver` → `ConstraintSolver` → `CollisionPipeline`. Adding a field to `SolveResult` does not alter dependency direction. |
+
+#### C++ Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | ✓ | `Eigen::VectorXd phaseBLambdas` is a value type — no raw resource management. |
+| Smart pointer appropriateness | ✓ | No new ownership introduced. Existing patterns unchanged. |
+| Value/reference semantics | ✓ | `phaseBLambdas` and `warmStartLambdas` are value members in `SolveResult` structs (moved/copied with the struct). Correct choice for result aggregates. |
+| Rule of 0/3/5 | ✓ | `BlockPGSSolver` and `ConstraintSolver` already satisfy Rule of Zero. Adding a `VectorXd` field to `SolveResult` preserves Rule of Zero (VectorXd has correct move semantics). |
+| Const correctness | ✓ | `phaseBLambdas` is populated in `solve()` and returned. No const violations identified. |
+| Exception safety | ✓ | `lambdaPhaseB` is already computed before the return path. Copying it into `phaseBLambdas` is the same cost as populating `result.lambdas`. No new exception risk. |
+| Initialization | N | `warmStartLambdas` field proposed for `ConstraintSolver::SolveResult` is not shown with a default initializer. `ConstraintSolver::SolveResult` currently initializes `residual` to `quiet_NaN()`. The `warmStartLambdas` field will default-construct to an empty `VectorXd`, which is well-defined but should be documented. See Note 1. |
+| Return values | ✓ | Design preserves the existing pattern of returning `SolveResult` by value. No output parameters introduced. |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | No new headers required. `Eigen::VectorXd` is already included in both solver headers. |
+| Template complexity | ✓ | No templates involved. |
+| Memory strategy | ✓ | `phaseBLambdas = lambdaPhaseB` is an O(3N) copy at solve completion — identical cost to the existing `result.lambdas` population loop. Since `lambdaPhaseB` is a member workspace, this is a copy from an already-computed vector. |
+| Thread safety | ✓ | `CollisionPipeline` is single-threaded by design. No new concurrency concern. |
+| Build integration | ✓ | Pure in-source change. No new compilation units, no new Conan dependencies. |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | `BlockPGSSolver` can be tested in isolation — the new `phaseBLambdas` field is accessible in `SolveResult`. A unit test can verify `phaseBLambdas(base) == lambdaPhaseB_n` and `phaseBLambdas(base) + bounceLambdas[ci] == lambdas(base)`. |
+| Observable state | ✓ | The split between `lambdas` (total) and `phaseBLambdas` (Phase B only) is directly inspectable in `SolveResult`. The diagnostic prototype (disable warm-start) confirms the hypothesis without modifying production code. |
+| No hidden global state | ✓ | `vRes_` and `bounceLambdas_` are per-instance workspace members. `BlockPGSSolver` is owned by `ConstraintSolver` by value. No singletons. |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | After Fix F1, oblique tests still fail due to K_nt coupling independent of warm-start | Technical | Low | Medium | Design specifies Fix F2 (setSlidingMode) as contingency; implement only if needed after prototype confirms F1 | Yes |
+| R2 | `warmStartLambdas` empty in ASM/PGS path causes a cache update of zeros | Technical | Low | Medium | Design specifies `warmStartLambdas = lambdas` for non-BlockPGS paths. Must not be forgotten in the `ConstraintSolver::solve()` implementation. | No |
+| R3 | Warm-start guard `maxCoeff() > 0.0` rejects valid all-zero warm-starts (first contact) | Technical | Low | Low | Correct by design — first contact has no cache entry. Design correctly notes this is not a bug. | No |
+| R4 | `phaseBLambdas` copy adds ~3N double allocations per solve call | Performance | Low | Low | Amortized by existing `result.lambdas` loop. For N=12 contacts, 36 doubles = 288 bytes. Negligible. | No |
+
+### Prototype Guidance
+
+#### Prototype P1: Warm-Start Disable Diagnostic
+
+**Risk addressed**: R1 (confirms warm-start is root cause before implementing F1)
+
+**Question to answer**: Does disabling warm-start entirely eliminate the Z-velocity injection in oblique sliding tests and restore correct restitution behavior?
+
+**Success criteria**:
+- `Oblique45` Z-velocity drops below 2.0 m/s threshold
+- `PerfectlyElastic_EnergyConserved` passes
+- `InelasticBounce_KEReducedByESquared` passes
+- At least 8 of 12 currently-failing tests pass with warm-start disabled
+
+**Prototype approach**:
+```
+Location: prototypes/0084_block_pgs_solver_rework/p1_warmstart_disable/
+Type: Source code patch (temporary flag in BlockPGSSolver.cpp)
+
+Steps:
+1. In BlockPGSSolver::solve(), add a constexpr bool kDisableWarmStart = true;
+2. Guard the hasWarmStart block: if (hasWarmStart && !kDisableWarmStart)
+3. Build debug-sim-only
+4. Run the 12 failing tests and record pass/fail for each
+5. If 8+ pass: warm-start hypothesis confirmed; proceed to Fix F1
+6. If < 8 pass: investigate alternative root causes before implementing F1
+7. Remove the diagnostic flag before committing
+```
+
+**Time box**: 30 minutes
+
+**If prototype fails** (< 8 tests pass with warm-start disabled):
+- Investigate `buildBlockK` for asymmetric lever arm errors
+- Inspect `computeBlockVelocityError` sign convention for oblique contacts
+- Use Replay MCP tools to inspect frame-by-frame lambda values
+
+### Notes
+
+**Note 1 — warmStartLambdas default initialization**: The proposed `ConstraintSolver::SolveResult` extension should explicitly document the default state of `warmStartLambdas`. An empty `VectorXd` (default-constructed) is the correct initial state (no warm-start available). The implementation must ensure that for all code paths through `ConstraintSolver::solve()` (ASM, PGS, and BlockPGS), `warmStartLambdas` is assigned before `CollisionPipeline` reads it. A defensive approach: initialize `warmStartLambdas = lambdas` at the top of `solve()` so that even an unexpected code path produces a valid (if non-optimal) value.
+
+**Note 2 — Fix F3 (warm-start guard comment)**: The design correctly concludes no code change is needed for Fix F3. The comment improvement (documenting what `initialLambda` contains after Fix F1) should be included in the implementation commit to prevent future confusion about the cache invariant.
+
+**Note 3 — Implementation order**: The three-step implementation order (add field → wire through → change cache write) is sound. Step 2 (wire `warmStartLambdas` through `ConstraintSolver`) must not be skipped even though it has no behavior change — it is necessary for the cache write change in Step 3 to be correct.
+
+**Note 4 — ASM path warm-start identity**: For the ASM and PGS paths, setting `warmStartLambdas = lambdas` is semantically correct. Those solvers have no Phase A split, so the full lambda vector is the appropriate warm-start seed.
+
+### Summary
+
+The root cause analysis is rigorous: Phase A bounce impulses contaminating the warm-start cache is a plausible and well-supported single explanation for all 12 failures. The fix is surgically minimal — three files changed, two `VectorXd` fields added to two result structs, and one cache write redirected. No architectural changes, no Phase A or Phase B internal logic changes, and no test assertion changes.
+
+The design should proceed to the prototype phase. The P1 diagnostic prototype (disable warm-start) should run first to confirm the hypothesis before implementing Fix F1. All acceptance criteria and design constraints from the ticket are satisfied by this approach.
