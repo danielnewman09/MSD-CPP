@@ -1,0 +1,224 @@
+@startuml
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<testonly>> LightBlue
+}
+
+skinparam package {
+    BackgroundColor White
+    BorderColor Gray
+}
+
+title 0087: Collision Solver Lambda Test Suite\nArchitecture Overview
+
+' ===================================================================
+' NEW: Test infrastructure (Stage A - 0087a)
+' ===================================================================
+
+package "msd-sim/test/Helpers (new)" {
+
+  class CollisionScenario <<new>> {
+    + inertials : std::vector<AssetInertial>
+    + environments : std::vector<AssetEnvironment>
+    + pipeline : CollisionPipeline
+    + dt : double
+    ..
+    + stepOnce() : ConstraintSolver::SolveResult
+    + stepOnceRaw() : ConstraintSolver::SolveResult
+    + getLastSolveResult() const : const ConstraintSolver::SolveResult&
+    + getInertialState(size_t idx) const : const InertialState&
+  }
+
+  class CollisionScenarioBuilder <<new>> {
+    {static} + sphereOnFloor(height, velocity, mass, restitution, friction) : CollisionScenario
+    {static} + cubeOnFloor(height, velocity, mass, restitution, friction) : CollisionScenario
+    {static} + twoSpheres(separation, velA, velB, massA, massB, restitution, friction) : CollisionScenario
+    {static} + overlappingCubes(overlap, velocity, mass, restitution, friction) : CollisionScenario
+    ..
+    ' Returns fully-constructed scenario owning all assets and a pipeline
+    ' ready for stepOnce() inspection
+  }
+
+  class LambdaAssertions <<new>> {
+    {static} + assertNormalLambda(result, contactIdx, expected, tol) : void
+    {static} + assertFrictionLambda(result, contactIdx, expectedT1, expectedT2, tol) : void
+    {static} + assertCoulombCone(result, frictionCoeff) : void
+    {static} + assertConverged(result) : void
+    {static} + assertBlockPGSLayout(result, numContacts) : void
+  }
+
+}
+
+' ===================================================================
+' EXISTING: Production code (not modified)
+' ===================================================================
+
+package "msd-sim/src" {
+
+  class CollisionPipeline <<modified>> {
+    + execute(inertials, environments, dt) : void
+    + hadCollisions() const : bool
+    + getSolverData() const : const SolverData&
+    + getCollisions() const : const vector<CollisionPair>&
+    ..
+    ' Protected sub-phases (already accessible via friend)
+    # detectCollisions(...)
+    # createConstraints(...)
+    # assembleSolverInput(...)
+    # solveConstraintsWithWarmStart(dt) : SolveResult
+    # applyForces(...)
+    # correctPositions(...)
+    ..
+    ' friend class CollisionPipelineTest (existing)
+    ' friend class SolverLambdaTestFixture (new - added here)
+  }
+
+  class ConstraintSolver {
+    + solve(constraints, states, masses, inertias, numBodies, dt, initLambda) : SolveResult
+    ..
+    struct SolveResult {
+      bodyForces : vector<BodyForces>
+      lambdas : Eigen::VectorXd
+      converged : bool
+      iterations : int
+      residual : double
+    }
+  }
+
+  class PositionCorrector {
+    + correctPositions(..., config) : void
+    ..
+    struct Config {
+      beta : double = 0.2
+      slop : double = 0.005
+      maxIterations : int = 4
+    }
+  }
+
+  class AssetInertial {
+    + getInertialState() : InertialState&
+    + setCoefficientOfRestitution(e) : void
+    + setFrictionCoefficient(mu) : void
+    + getMass() const : double
+  }
+
+  class AssetEnvironment {
+  }
+
+  class ConvexHull {
+  }
+
+  class ReferenceFrame {
+  }
+
+}
+
+' ===================================================================
+' NEW: Test files per stage
+' ===================================================================
+
+package "msd-sim/test/Physics/Collision (new test files)" {
+
+  class SolverLambdaTest <<testonly>> {
+    ' Stage B: Normal impulse lambda tests (0087b)
+    ' 6+ TEST_F cases
+    --
+    TEST_F NormalImpulse_PerfectlyInelastic_E0_ArrestsVelocity
+    TEST_F NormalImpulse_PartialRestitution_E07_ReversesFraction
+    TEST_F NormalImpulse_PerfectElastic_E1_FullReversal
+    TEST_F NormalImpulse_EqualMassElastic_ZeroGravity_VelocitySwap
+    TEST_F NormalImpulse_UnequalMassElastic_ConsistentWithFormula
+    TEST_F NormalImpulse_RestingContact_SupportsWeight
+    TEST_F NormalImpulse_ConvergedAndNonNegative
+  }
+
+  class FrictionLambdaTest <<testonly>> {
+    ' Stage C: Friction impulse lambda tests (0087c)
+    ' 6+ TEST_F cases
+    --
+    TEST_F FrictionLambda_Sliding_Mu05_SaturatesAtCone
+    TEST_F FrictionLambda_ZeroMu_TangentLambdaIsZero
+    TEST_F FrictionLambda_HighMu_StaticFrictionInsideCone
+    TEST_F FrictionLambda_ObliqueSiding_DirectionOpposesVelocity
+    TEST_F FrictionLambda_CoulombCone_AllContactsSatisfied
+    TEST_F FrictionLambda_BlockPGS_ThreeComponentStructure
+  }
+
+  class PositionCorrectionTest <<testonly>> {
+    ' Stage D: Position correction tests (0087d)
+    ' 6+ TEST_F cases
+    --
+    TEST_F PositionCorrection_ShallowPenetration_ReducesToSlop
+    TEST_F PositionCorrection_DeepPenetration_PartialCorrection
+    TEST_F PositionCorrection_ZeroPenetration_NoCorrection
+    TEST_F PositionCorrection_DoesNotInjectVelocity
+    TEST_F PositionCorrection_FlatContact_AllContactsConsistent
+    TEST_F PositionCorrection_Magnitude_MatchesBetaFormula
+  }
+
+  class PipelineIntegrationTest <<testonly>> {
+    ' Stage E: Single-frame pipeline integration tests (0087e)
+    ' 4+ TEST_F cases
+    --
+    TEST_F Pipeline_Drop_LambdaAndCorrectionAndState
+    TEST_F Pipeline_SlidingFriction_AllThreeOutputsConsistent
+    TEST_F Pipeline_BounceFrame_CorrectLambdaAndUpwardVelocity
+    TEST_F Pipeline_MultiFrameEnergy_DissipationMatchesKEChange
+  }
+
+}
+
+' ===================================================================
+' Relationships
+' ===================================================================
+
+CollisionScenarioBuilder ..> CollisionScenario : creates >
+CollisionScenario o--> CollisionPipeline : owns
+CollisionScenario o--> AssetInertial : owns
+CollisionScenario o--> AssetEnvironment : owns
+
+CollisionScenario ..> ConstraintSolver::SolveResult : returns from stepOnce()
+
+SolverLambdaTest ..|> CollisionScenarioBuilder : uses (static factories)
+SolverLambdaTest ..> LambdaAssertions : asserts via
+FrictionLambdaTest ..|> CollisionScenarioBuilder : uses
+FrictionLambdaTest ..> LambdaAssertions : asserts via
+PositionCorrectionTest ..|> CollisionScenarioBuilder : uses
+PipelineIntegrationTest ..|> CollisionScenarioBuilder : uses
+PipelineIntegrationTest ..> LambdaAssertions : asserts via
+
+CollisionPipeline ..> ConstraintSolver : invokes
+CollisionPipeline ..> PositionCorrector : invokes
+CollisionPipeline o--> AssetInertial : operates on
+CollisionPipeline o--> AssetEnvironment : operates on
+
+' CollisionScenario needs one friend declaration on CollisionPipeline
+' to call solveConstraintsWithWarmStart() and capture SolveResult.
+' Existing pattern: friend class CollisionPipelineTest already present.
+CollisionScenario ..> CollisionPipeline : friend access for SolveResult capture
+
+note bottom of CollisionScenario
+  stepOnce() calls:
+  1. pipeline.detectCollisions()
+  2. pipeline.createConstraints()
+  3. pipeline.assembleSolverInput()
+  4. solveResult = pipeline.solveConstraintsWithWarmStart(dt)
+  5. Stores solveResult_ for inspection
+  6. pipeline.applyForces() [optional]
+  7. pipeline.correctPositions() [optional]
+end note
+
+note right of CollisionPipeline
+  Only change: add
+  "friend class CollisionScenario"
+  to existing friend declarations.
+  No logic changes.
+end note
+
+note bottom of LambdaAssertions
+  Coulomb cone check (every friction test):
+  ||[lambda_t1, lambda_t2]|| <= mu * lambda_n
+end note
+
+@enduml
