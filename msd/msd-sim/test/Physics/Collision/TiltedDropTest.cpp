@@ -60,8 +60,11 @@ namespace
 {
 
 /// Threshold: cross-axis omega must be below this fraction of the dominant axis
-/// at the peak rotation frame (first bounce).
-constexpr double kCrossAxisRatio = 0.5;
+/// at the peak rotation frame (first bounce). For a pure single-axis tilt, the
+/// cross-axis component should be near zero (numerical noise only). A 5%
+/// threshold catches the uneven contact normal bug where asymmetric normal
+/// directions at first contact inject spurious cross-axis rotation.
+constexpr double kCrossAxisRatio = 0.05;
 
 /// Total number of frames to simulate (200 frames = ~3.3 s)
 constexpr int kSimFrames = 200;
@@ -106,16 +109,6 @@ struct PeakOmega
   double z{};
   double norm{};
   int frame{};
-};
-
-/// Track simulation for kSimFrames, return the peak angular velocity observed.
-/// Also checks for NaN and energy growth.
-struct SimResult
-{
-  PeakOmega peak{};
-  bool nanDetected{false};
-  double initialEnergy{};
-  double maxEnergy{};
 };
 
 }  // anonymous namespace
@@ -183,9 +176,9 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Small_DominantAxisX)
     }
   }
 
-  EXPECT_FALSE(nanDetected) << "NaN detected in position";
+  ASSERT_FALSE(nanDetected) << "NaN detected in position";
 
-  EXPECT_LE(maxEnergy, initialEnergy * 1.10)
+  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
     << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
     << " max=" << maxEnergy;
 
@@ -194,20 +187,19 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Small_DominantAxisX)
   std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
             << " (norm=" << peak.norm << ")\n";
 
-  if (!nanDetected && peak.norm > 1e-6)
-  {
-    EXPECT_GE(peak.x, peak.norm * kCrossAxisRatio)
-      << "X-tilt should produce dominant rotation about X axis at peak. "
-      << "omegaX=" << peak.x << " norm=" << peak.norm;
+  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
 
-    EXPECT_LE(peak.y, peak.norm * kCrossAxisRatio)
-      << "Spurious Y rotation should be subdominant for X-tilt. "
-      << "omegaY=" << peak.y << " norm=" << peak.norm;
+  EXPECT_GE(peak.x, peak.norm * kCrossAxisRatio)
+    << "X-tilt should produce dominant rotation about X axis at peak. "
+    << "omegaX=" << peak.x << " norm=" << peak.norm;
 
-    EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-      << "Spurious Z rotation should be subdominant for X-tilt. "
-      << "omegaZ=" << peak.z << " norm=" << peak.norm;
-  }
+  EXPECT_LE(peak.y, peak.norm * kCrossAxisRatio)
+    << "Spurious Y rotation should be subdominant for X-tilt. "
+    << "omegaY=" << peak.y << " norm=" << peak.norm;
+
+  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
+    << "Spurious Z rotation should be subdominant for X-tilt. "
+    << "omegaZ=" << peak.z << " norm=" << peak.norm;
 }
 
 // ---------------------------------------------------------------------------
@@ -260,9 +252,9 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Medium_DominantAxisX)
     }
   }
 
-  EXPECT_FALSE(nanDetected) << "NaN detected in position";
+  ASSERT_FALSE(nanDetected) << "NaN detected in position";
 
-  EXPECT_LE(maxEnergy, initialEnergy * 1.10)
+  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
     << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
     << " max=" << maxEnergy;
 
@@ -271,20 +263,19 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Medium_DominantAxisX)
   std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
             << " (norm=" << peak.norm << ")\n";
 
-  if (!nanDetected && peak.norm > 1e-6)
-  {
-    EXPECT_GE(peak.x, peak.norm * kCrossAxisRatio)
-      << "X-tilt should produce dominant rotation about X axis at peak. "
-      << "omegaX=" << peak.x << " norm=" << peak.norm;
+  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
 
-    EXPECT_LE(peak.y, peak.norm * kCrossAxisRatio)
-      << "Spurious Y rotation should be subdominant for X-tilt. "
-      << "omegaY=" << peak.y << " norm=" << peak.norm;
+  EXPECT_GE(peak.x, peak.norm * kCrossAxisRatio)
+    << "X-tilt should produce dominant rotation about X axis at peak. "
+    << "omegaX=" << peak.x << " norm=" << peak.norm;
 
-    EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-      << "Spurious Z rotation should be subdominant for X-tilt. "
-      << "omegaZ=" << peak.z << " norm=" << peak.norm;
-  }
+  EXPECT_LE(peak.y, peak.norm * kCrossAxisRatio)
+    << "Spurious Y rotation should be subdominant for X-tilt. "
+    << "omegaY=" << peak.y << " norm=" << peak.norm;
+
+  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
+    << "Spurious Z rotation should be subdominant for X-tilt. "
+    << "omegaZ=" << peak.z << " norm=" << peak.norm;
 }
 
 // ---------------------------------------------------------------------------
@@ -337,9 +328,9 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Large_DominantAxisX)
     }
   }
 
-  EXPECT_FALSE(nanDetected) << "NaN detected in position";
+  ASSERT_FALSE(nanDetected) << "NaN detected in position";
 
-  EXPECT_LE(maxEnergy, initialEnergy * 1.10)
+  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
     << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
     << " max=" << maxEnergy;
 
@@ -348,20 +339,19 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Large_DominantAxisX)
   std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
             << " (norm=" << peak.norm << ")\n";
 
-  if (!nanDetected && peak.norm > 1e-6)
-  {
-    EXPECT_GE(peak.x, peak.norm * kCrossAxisRatio)
-      << "X-tilt should produce dominant rotation about X axis at peak. "
-      << "omegaX=" << peak.x << " norm=" << peak.norm;
+  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
 
-    EXPECT_LE(peak.y, peak.norm * kCrossAxisRatio)
-      << "Spurious Y rotation should be subdominant for X-tilt. "
-      << "omegaY=" << peak.y << " norm=" << peak.norm;
+  EXPECT_GE(peak.x, peak.norm * kCrossAxisRatio)
+    << "X-tilt should produce dominant rotation about X axis at peak. "
+    << "omegaX=" << peak.x << " norm=" << peak.norm;
 
-    EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-      << "Spurious Z rotation should be subdominant for X-tilt. "
-      << "omegaZ=" << peak.z << " norm=" << peak.norm;
-  }
+  EXPECT_LE(peak.y, peak.norm * kCrossAxisRatio)
+    << "Spurious Y rotation should be subdominant for X-tilt. "
+    << "omegaY=" << peak.y << " norm=" << peak.norm;
+
+  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
+    << "Spurious Z rotation should be subdominant for X-tilt. "
+    << "omegaZ=" << peak.z << " norm=" << peak.norm;
 }
 
 // ============================================================================
@@ -419,9 +409,9 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Small_DominantAxisY)
     }
   }
 
-  EXPECT_FALSE(nanDetected) << "NaN detected in position";
+  ASSERT_FALSE(nanDetected) << "NaN detected in position";
 
-  EXPECT_LE(maxEnergy, initialEnergy * 1.10)
+  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
     << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
     << " max=" << maxEnergy;
 
@@ -430,20 +420,19 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Small_DominantAxisY)
   std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
             << " (norm=" << peak.norm << ")\n";
 
-  if (!nanDetected && peak.norm > 1e-6)
-  {
-    EXPECT_GE(peak.y, peak.norm * kCrossAxisRatio)
-      << "Y-tilt should produce dominant rotation about Y axis at peak. "
-      << "omegaY=" << peak.y << " norm=" << peak.norm;
+  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
 
-    EXPECT_LE(peak.x, peak.norm * kCrossAxisRatio)
-      << "Spurious X rotation should be subdominant for Y-tilt. "
-      << "omegaX=" << peak.x << " norm=" << peak.norm;
+  EXPECT_GE(peak.y, peak.norm * kCrossAxisRatio)
+    << "Y-tilt should produce dominant rotation about Y axis at peak. "
+    << "omegaY=" << peak.y << " norm=" << peak.norm;
 
-    EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-      << "Spurious Z rotation should be subdominant for Y-tilt. "
-      << "omegaZ=" << peak.z << " norm=" << peak.norm;
-  }
+  EXPECT_LE(peak.x, peak.norm * kCrossAxisRatio)
+    << "Spurious X rotation should be subdominant for Y-tilt. "
+    << "omegaX=" << peak.x << " norm=" << peak.norm;
+
+  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
+    << "Spurious Z rotation should be subdominant for Y-tilt. "
+    << "omegaZ=" << peak.z << " norm=" << peak.norm;
 }
 
 // ---------------------------------------------------------------------------
@@ -496,9 +485,9 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Medium_DominantAxisY)
     }
   }
 
-  EXPECT_FALSE(nanDetected) << "NaN detected in position";
+  ASSERT_FALSE(nanDetected) << "NaN detected in position";
 
-  EXPECT_LE(maxEnergy, initialEnergy * 1.10)
+  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
     << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
     << " max=" << maxEnergy;
 
@@ -507,20 +496,19 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Medium_DominantAxisY)
   std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
             << " (norm=" << peak.norm << ")\n";
 
-  if (!nanDetected && peak.norm > 1e-6)
-  {
-    EXPECT_GE(peak.y, peak.norm * kCrossAxisRatio)
-      << "Y-tilt should produce dominant rotation about Y axis at peak. "
-      << "omegaY=" << peak.y << " norm=" << peak.norm;
+  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
 
-    EXPECT_LE(peak.x, peak.norm * kCrossAxisRatio)
-      << "Spurious X rotation should be subdominant for Y-tilt. "
-      << "omegaX=" << peak.x << " norm=" << peak.norm;
+  EXPECT_GE(peak.y, peak.norm * kCrossAxisRatio)
+    << "Y-tilt should produce dominant rotation about Y axis at peak. "
+    << "omegaY=" << peak.y << " norm=" << peak.norm;
 
-    EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-      << "Spurious Z rotation should be subdominant for Y-tilt. "
-      << "omegaZ=" << peak.z << " norm=" << peak.norm;
-  }
+  EXPECT_LE(peak.x, peak.norm * kCrossAxisRatio)
+    << "Spurious X rotation should be subdominant for Y-tilt. "
+    << "omegaX=" << peak.x << " norm=" << peak.norm;
+
+  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
+    << "Spurious Z rotation should be subdominant for Y-tilt. "
+    << "omegaZ=" << peak.z << " norm=" << peak.norm;
 }
 
 // ---------------------------------------------------------------------------
@@ -573,9 +561,9 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Large_DominantAxisY)
     }
   }
 
-  EXPECT_FALSE(nanDetected) << "NaN detected in position";
+  ASSERT_FALSE(nanDetected) << "NaN detected in position";
 
-  EXPECT_LE(maxEnergy, initialEnergy * 1.10)
+  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
     << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
     << " max=" << maxEnergy;
 
@@ -584,20 +572,19 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Large_DominantAxisY)
   std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
             << " (norm=" << peak.norm << ")\n";
 
-  if (!nanDetected && peak.norm > 1e-6)
-  {
-    EXPECT_GE(peak.y, peak.norm * kCrossAxisRatio)
-      << "Y-tilt should produce dominant rotation about Y axis at peak. "
-      << "omegaY=" << peak.y << " norm=" << peak.norm;
+  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
 
-    EXPECT_LE(peak.x, peak.norm * kCrossAxisRatio)
-      << "Spurious X rotation should be subdominant for Y-tilt. "
-      << "omegaX=" << peak.x << " norm=" << peak.norm;
+  EXPECT_GE(peak.y, peak.norm * kCrossAxisRatio)
+    << "Y-tilt should produce dominant rotation about Y axis at peak. "
+    << "omegaY=" << peak.y << " norm=" << peak.norm;
 
-    EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-      << "Spurious Z rotation should be subdominant for Y-tilt. "
-      << "omegaZ=" << peak.z << " norm=" << peak.norm;
-  }
+  EXPECT_LE(peak.x, peak.norm * kCrossAxisRatio)
+    << "Spurious X rotation should be subdominant for Y-tilt. "
+    << "omegaX=" << peak.x << " norm=" << peak.norm;
+
+  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
+    << "Spurious Z rotation should be subdominant for Y-tilt. "
+    << "omegaZ=" << peak.z << " norm=" << peak.norm;
 }
 
 // ============================================================================
@@ -659,9 +646,9 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Small_BothAxesActive)
     }
   }
 
-  EXPECT_FALSE(nanDetected) << "NaN detected in position";
+  ASSERT_FALSE(nanDetected) << "NaN detected in position";
 
-  EXPECT_LE(maxEnergy, initialEnergy * 1.10)
+  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
     << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
     << " max=" << maxEnergy;
 
@@ -670,23 +657,22 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Small_BothAxesActive)
   std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
             << " (norm=" << peak.norm << ")\n";
 
-  if (!nanDetected && peak.norm > 1e-6)
-  {
-    // Both X and Y should be active (each >= 10% of total norm)
-    constexpr double kBothActiveRatio = 0.10;
-    EXPECT_GE(peak.x, peak.norm * kBothActiveRatio)
-      << "Combined X+Y tilt should produce X-axis rotation at peak. "
-      << "omegaX=" << peak.x << " norm=" << peak.norm;
+  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
 
-    EXPECT_GE(peak.y, peak.norm * kBothActiveRatio)
-      << "Combined X+Y tilt should produce Y-axis rotation at peak. "
-      << "omegaY=" << peak.y << " norm=" << peak.norm;
+  // Both X and Y should be active (each >= 10% of total norm)
+  constexpr double kBothActiveRatio = 0.10;
+  EXPECT_GE(peak.x, peak.norm * kBothActiveRatio)
+    << "Combined X+Y tilt should produce X-axis rotation at peak. "
+    << "omegaX=" << peak.x << " norm=" << peak.norm;
 
-    // Spurious Z rotation should be subdominant
-    EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-      << "Spurious Z rotation should be subdominant for X+Y tilt. "
-      << "omegaZ=" << peak.z << " norm=" << peak.norm;
-  }
+  EXPECT_GE(peak.y, peak.norm * kBothActiveRatio)
+    << "Combined X+Y tilt should produce Y-axis rotation at peak. "
+    << "omegaY=" << peak.y << " norm=" << peak.norm;
+
+  // Spurious Z rotation should be subdominant
+  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
+    << "Spurious Z rotation should be subdominant for X+Y tilt. "
+    << "omegaZ=" << peak.z << " norm=" << peak.norm;
 }
 
 // ---------------------------------------------------------------------------
@@ -742,9 +728,9 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Medium_BothAxesActive)
     }
   }
 
-  EXPECT_FALSE(nanDetected) << "NaN detected in position";
+  ASSERT_FALSE(nanDetected) << "NaN detected in position";
 
-  EXPECT_LE(maxEnergy, initialEnergy * 1.10)
+  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
     << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
     << " max=" << maxEnergy;
 
@@ -823,9 +809,9 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Large_BothAxesActive)
     }
   }
 
-  EXPECT_FALSE(nanDetected) << "NaN detected in position";
+  ASSERT_FALSE(nanDetected) << "NaN detected in position";
 
-  EXPECT_LE(maxEnergy, initialEnergy * 1.10)
+  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
     << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
     << " max=" << maxEnergy;
 
