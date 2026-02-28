@@ -38,12 +38,16 @@
 
 #include <cmath>
 #include <iostream>
+#include <memory>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
 #include "msd-sim/src/DataTypes/AngularVelocity.hpp"
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
+#include "msd-sim/src/Diagnostics/EnergyTracker.hpp"
+#include "msd-sim/src/Physics/PotentialEnergy/GravityPotential.hpp"
+#include "msd-sim/src/Physics/PotentialEnergy/PotentialEnergy.hpp"
 #include "msd-sim/test/Replay/ReplayEnabledTest.hpp"
 
 using namespace msd_sim;
@@ -54,8 +58,6 @@ using namespace msd_sim;
 
 namespace
 {
-
-constexpr double kGravity = 9.81;  // m/s^2
 
 /// Threshold: cross-axis omega must be below this fraction of the dominant axis
 /// at the peak rotation frame (first bounce).
@@ -69,24 +71,16 @@ constexpr int kSimFrames = 200;
 /// elevated by this amount so it falls and builds angular momentum at contact.
 constexpr double kDropHeight = 4.0;  // meters above floor surface
 
-/// Total mechanical energy: KE_linear + KE_rotational + PE_gravity
-double totalEnergy(const AssetInertial& asset)
+/// Compute total system energy using EnergyTracker with gravity potential
+double computeSystemEnergy(const WorldModel& world)
 {
-  const auto& state = asset.getInertialState();
-  const double mass = asset.getMass();
+  std::vector<std::unique_ptr<PotentialEnergy>> potentials;
+  potentials.push_back(
+    std::make_unique<GravityPotential>(Coordinate{0.0, 0.0, -9.81}));
 
-  const double vSq = state.velocity.squaredNorm();
-  const double linearKE = 0.5 * mass * vSq;
-
-  Eigen::Vector3d omega{state.getAngularVelocity().x(),
-                        state.getAngularVelocity().y(),
-                        state.getAngularVelocity().z()};
-  const double rotKE =
-    0.5 * omega.transpose() * asset.getInertiaTensor() * omega;
-
-  const double pe = mass * kGravity * state.position.z();
-
-  return linearKE + rotKE + pe;
+  auto sysEnergy = EnergyTracker::computeSystemEnergy(
+    world.getInertialAssets(), potentials);
+  return sysEnergy.total();
 }
 
 /// Z-center for a unit cube tilted by theta about a single axis (X or Y),
@@ -161,7 +155,7 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Small_DominantAxisX)
   const uint32_t cubeId = cube.getInstanceId();
   world().getObject(cubeId).getInertialState().orientation = q;
 
-  const double initialEnergy = totalEnergy(cube);
+  const double initialEnergy = computeSystemEnergy(world());
   double maxEnergy = initialEnergy;
   PeakOmega peak{};
   bool nanDetected = false;
@@ -177,7 +171,7 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Small_DominantAxisX)
       break;
     }
 
-    maxEnergy = std::max(maxEnergy, totalEnergy(cube));
+    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
 
     const double ox = std::abs(state.getAngularVelocity().x());
     const double oy = std::abs(state.getAngularVelocity().y());
@@ -238,7 +232,7 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Medium_DominantAxisX)
   const uint32_t cubeId = cube.getInstanceId();
   world().getObject(cubeId).getInertialState().orientation = q;
 
-  const double initialEnergy = totalEnergy(cube);
+  const double initialEnergy = computeSystemEnergy(world());
   double maxEnergy = initialEnergy;
   PeakOmega peak{};
   bool nanDetected = false;
@@ -254,7 +248,7 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Medium_DominantAxisX)
       break;
     }
 
-    maxEnergy = std::max(maxEnergy, totalEnergy(cube));
+    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
 
     const double ox = std::abs(state.getAngularVelocity().x());
     const double oy = std::abs(state.getAngularVelocity().y());
@@ -315,7 +309,7 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Large_DominantAxisX)
   const uint32_t cubeId = cube.getInstanceId();
   world().getObject(cubeId).getInertialState().orientation = q;
 
-  const double initialEnergy = totalEnergy(cube);
+  const double initialEnergy = computeSystemEnergy(world());
   double maxEnergy = initialEnergy;
   PeakOmega peak{};
   bool nanDetected = false;
@@ -331,7 +325,7 @@ TEST_F(TiltedDropTest, TiltedDrop_X_Large_DominantAxisX)
       break;
     }
 
-    maxEnergy = std::max(maxEnergy, totalEnergy(cube));
+    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
 
     const double ox = std::abs(state.getAngularVelocity().x());
     const double oy = std::abs(state.getAngularVelocity().y());
@@ -397,7 +391,7 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Small_DominantAxisY)
   const uint32_t cubeId = cube.getInstanceId();
   world().getObject(cubeId).getInertialState().orientation = q;
 
-  const double initialEnergy = totalEnergy(cube);
+  const double initialEnergy = computeSystemEnergy(world());
   double maxEnergy = initialEnergy;
   PeakOmega peak{};
   bool nanDetected = false;
@@ -413,7 +407,7 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Small_DominantAxisY)
       break;
     }
 
-    maxEnergy = std::max(maxEnergy, totalEnergy(cube));
+    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
 
     const double ox = std::abs(state.getAngularVelocity().x());
     const double oy = std::abs(state.getAngularVelocity().y());
@@ -474,7 +468,7 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Medium_DominantAxisY)
   const uint32_t cubeId = cube.getInstanceId();
   world().getObject(cubeId).getInertialState().orientation = q;
 
-  const double initialEnergy = totalEnergy(cube);
+  const double initialEnergy = computeSystemEnergy(world());
   double maxEnergy = initialEnergy;
   PeakOmega peak{};
   bool nanDetected = false;
@@ -490,7 +484,7 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Medium_DominantAxisY)
       break;
     }
 
-    maxEnergy = std::max(maxEnergy, totalEnergy(cube));
+    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
 
     const double ox = std::abs(state.getAngularVelocity().x());
     const double oy = std::abs(state.getAngularVelocity().y());
@@ -551,7 +545,7 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Large_DominantAxisY)
   const uint32_t cubeId = cube.getInstanceId();
   world().getObject(cubeId).getInertialState().orientation = q;
 
-  const double initialEnergy = totalEnergy(cube);
+  const double initialEnergy = computeSystemEnergy(world());
   double maxEnergy = initialEnergy;
   PeakOmega peak{};
   bool nanDetected = false;
@@ -567,7 +561,7 @@ TEST_F(TiltedDropTest, TiltedDrop_Y_Large_DominantAxisY)
       break;
     }
 
-    maxEnergy = std::max(maxEnergy, totalEnergy(cube));
+    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
 
     const double ox = std::abs(state.getAngularVelocity().x());
     const double oy = std::abs(state.getAngularVelocity().y());
@@ -637,7 +631,7 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Small_BothAxesActive)
   const uint32_t cubeId = cube.getInstanceId();
   world().getObject(cubeId).getInertialState().orientation = q;
 
-  const double initialEnergy = totalEnergy(cube);
+  const double initialEnergy = computeSystemEnergy(world());
   double maxEnergy = initialEnergy;
   PeakOmega peak{};
   bool nanDetected = false;
@@ -653,7 +647,7 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Small_BothAxesActive)
       break;
     }
 
-    maxEnergy = std::max(maxEnergy, totalEnergy(cube));
+    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
 
     const double ox = std::abs(state.getAngularVelocity().x());
     const double oy = std::abs(state.getAngularVelocity().y());
@@ -720,7 +714,7 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Medium_BothAxesActive)
   const uint32_t cubeId = cube.getInstanceId();
   world().getObject(cubeId).getInertialState().orientation = q;
 
-  const double initialEnergy = totalEnergy(cube);
+  const double initialEnergy = computeSystemEnergy(world());
   double maxEnergy = initialEnergy;
   PeakOmega peak{};
   bool nanDetected = false;
@@ -736,7 +730,7 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Medium_BothAxesActive)
       break;
     }
 
-    maxEnergy = std::max(maxEnergy, totalEnergy(cube));
+    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
 
     const double ox = std::abs(state.getAngularVelocity().x());
     const double oy = std::abs(state.getAngularVelocity().y());
@@ -801,7 +795,7 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Large_BothAxesActive)
   const uint32_t cubeId = cube.getInstanceId();
   world().getObject(cubeId).getInertialState().orientation = q;
 
-  const double initialEnergy = totalEnergy(cube);
+  const double initialEnergy = computeSystemEnergy(world());
   double maxEnergy = initialEnergy;
   PeakOmega peak{};
   bool nanDetected = false;
@@ -817,7 +811,7 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Large_BothAxesActive)
       break;
     }
 
-    maxEnergy = std::max(maxEnergy, totalEnergy(cube));
+    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
 
     const double ox = std::abs(state.getAngularVelocity().x());
     const double oy = std::abs(state.getAngularVelocity().y());
