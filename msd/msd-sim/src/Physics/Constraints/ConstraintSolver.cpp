@@ -8,6 +8,7 @@
 // Ticket: 0071c_eigen_fixed_size_matrices
 // Ticket: 0071e_trivial_allocation_elimination
 // Ticket: 0071f_solver_workspace_reuse
+// Ticket: 0075b_block_pgs_solver
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0045_constraint_solver_unification/design.md
@@ -102,11 +103,15 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
     }
   }
 
-  // Ticket 0052d: Detect friction constraints via lambdaBounds()
+  // Ticket 0075b: Detect friction contacts via ContactConstraint::hasFriction().
+  // As of Phase 1 (0075a), all constraints in the friction path are unified
+  // ContactConstraints with hasFriction() == true. lambdaBounds() is always
+  // unilateral() for ContactConstraint (block PGS handles cone projection internally).
   bool hasFriction = false;
   for (const auto* constraint : contactConstraints)
   {
-    if (constraint->lambdaBounds().isBoxConstrained())
+    const auto* cc = dynamic_cast<const ContactConstraint*>(constraint);
+    if (cc != nullptr && cc->hasFriction())
     {
       hasFriction = true;
       break;
@@ -115,172 +120,36 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
 
   if (hasFriction)
   {
-    // ===== Decoupled normal-then-friction solver =====
-    // Ticket: 0070_nlopt_convergence_energy_injection
+    // ===== Block PGS Solver — Ticket 0075b_block_pgs_solver =====
     //
-    // Split solve eliminates energy injection by isolating restitution bounce
-    // from friction cone constraint:
-    // 1. Solve normals with ASM (energy-safe by construction)
-    // 2. Update velocities with normal impulse
-    // 3. Solve friction per-contact with analytic ball projection
+    // Two-phase solve eliminates energy injection (DD-0070-H2 mechanism):
+    //   Phase A: Restitution bounce (normal-only, sequential, provably energy-correct)
+    //   Phase B: Dissipative 3x3 block PGS with Coulomb cone projection
+    //            (RHS = -v_err, provably dissipative)
     //
-    // This prevents the friction cone from distorting the restitution impulse.
+    // Replaces the decoupled normal-then-friction approach (ticket 0070).
+    // The 3x3 block captures K_nt coupling that the decoupled solver ignores.
 
-    // Step 1: Flatten constraints into per-row entries
-    // Ticket 0071f: populateFlatConstraints_() writes into flat_ member workspace,
-    // clearing and refilling without reallocating the underlying vector buffers.
-    populateFlatConstraints_(contactConstraints, states);
+    auto blockResult = blockPgsSolver_.solve(
+      contactConstraints, states, inverseMasses, inverseInertias, numBodies,
+      dt, initialLambda);
 
-    // Step 2: Assemble 3C x 3C effective mass matrix
-    // Ticket 0071f: assembleFlatEffectiveMassInPlace_() writes into flatEffectiveMass_
-    // member workspace, using resize()-only semantics to avoid per-solve allocation.
-    assembleFlatEffectiveMassInPlace_(inverseMasses, inverseInertias, numBodies);
-
-    // Step 3: Assemble 3C x 1 RHS vector
-    auto b = assembleFlatRHS(flat_, states);
-
-    // Step 4: Extract normal-only subproblem
-    std::vector<int> normalIndices;
-    for (size_t i = 0; i < flat_.rowTypes.size(); ++i)
+    // Convert BlockPGSSolver::SolveResult to ConstraintSolver::SolveResult
+    result.lambdas = std::move(blockResult.lambdas);
+    result.converged = blockResult.converged;
+    result.iterations = blockResult.iterations;
+    result.residual = blockResult.residual;
+    for (size_t k = 0; k < numBodies && k < blockResult.bodyForces.size(); ++k)
     {
-      if (flat_.rowTypes[i] == RowType::Normal)
-      {
-        normalIndices.push_back(static_cast<int>(i));
-      }
+      result.bodyForces[k].linearForce =
+        Coordinate{blockResult.bodyForces[k].linearForce.x(),
+                   blockResult.bodyForces[k].linearForce.y(),
+                   blockResult.bodyForces[k].linearForce.z()};
+      result.bodyForces[k].angularTorque =
+        Coordinate{blockResult.bodyForces[k].angularTorque.x(),
+                   blockResult.bodyForces[k].angularTorque.y(),
+                   blockResult.bodyForces[k].angularTorque.z()};
     }
-
-    const int numNormals = static_cast<int>(normalIndices.size());
-    Eigen::MatrixXd aNormal{numNormals, numNormals};
-    Eigen::VectorXd bNormal{numNormals};
-
-    for (int i = 0; i < numNormals; ++i)
-    {
-      int const rowI = normalIndices[static_cast<size_t>(i)];
-      bNormal(i) = b(rowI);
-      for (int j = 0; j < numNormals; ++j)
-      {
-        int const rowJ = normalIndices[static_cast<size_t>(j)];
-        aNormal(i, j) = flatEffectiveMass_(rowI, rowJ);
-      }
-    }
-
-    // Step 5: Solve normals with ASM
-    auto normalResult = solveActiveSet(aNormal, bNormal, numNormals, std::nullopt);
-
-    // Step 6: Compute post-normal velocities in constraint space
-    // Jv_new = Jv_old + A * lambda
-    // Since b = -Jv_old (for tangents) or b = -(1+e)*Jv_old (for normals),
-    // we have Jv_old = -b (tangents). Therefore Jv_new = -b + A * lambda.
-    Eigen::VectorXd lambdaNormal = Eigen::VectorXd::Zero(flatEffectiveMass_.rows());
-    for (int i = 0; i < numNormals; ++i)
-    {
-      int const rowI = normalIndices[static_cast<size_t>(i)];
-      lambdaNormal(rowI) = normalResult.lambda(i);
-    }
-
-    Eigen::VectorXd const jvPostNormal = -b + flatEffectiveMass_ * lambdaNormal;
-
-    // Step 7: Solve friction with Gauss-Seidel iteration
-    // Iterate per-contact friction solves to handle multi-contact coupling through A matrix
-    // Ticket: 0070_nlopt_convergence_energy_injection
-    auto spec = buildFrictionSpec(contactConstraints);
-    const int numContacts = spec.numContacts;
-
-    Eigen::VectorXd lambdaFriction = Eigen::VectorXd::Zero(flatEffectiveMass_.rows());
-
-    constexpr int maxGSIterations = 10;
-    constexpr double gsConvergenceTol = 1e-6;
-
-    for (int gsIter = 0; gsIter < maxGSIterations; ++gsIter)
-    {
-      Eigen::VectorXd lambdaFrictionOld = lambdaFriction;
-
-      // Gauss-Seidel sweep: solve each contact with updated RHS from other contacts
-      for (int c = 0; c < numContacts; ++c)
-      {
-        // Flattened structure: [n_0, t1_0, t2_0, n_1, t1_1, t2_1, ...]
-        int const tangent1Idx = 3 * c + 1;
-        int const tangent2Idx = 3 * c + 2;
-
-        // Extract 2x2 tangent block from A matrix
-        Eigen::Matrix2d att;
-        att(0, 0) = flatEffectiveMass_(tangent1Idx, tangent1Idx);
-        att(0, 1) = flatEffectiveMass_(tangent1Idx, tangent2Idx);
-        att(1, 0) = flatEffectiveMass_(tangent2Idx, tangent1Idx);
-        att(1, 1) = flatEffectiveMass_(tangent2Idx, tangent2Idx);
-
-        // Current tangent velocity including effects from normal impulse
-        // and friction impulses from OTHER contacts (exclude self to avoid
-        // Gauss-Seidel self-cancellation: including self causes iteration N+1
-        // to cancel iteration N's result, driving friction to zero)
-        double const savedT1 = lambdaFriction(tangent1Idx);
-        double const savedT2 = lambdaFriction(tangent2Idx);
-        lambdaFriction(tangent1Idx) = 0.0;
-        lambdaFriction(tangent2Idx) = 0.0;
-
-        Eigen::Vector2d jvCurrent;
-        jvCurrent(0) = jvPostNormal(tangent1Idx) +
-                       (flatEffectiveMass_.row(tangent1Idx) * lambdaFriction)(0);
-        jvCurrent(1) = jvPostNormal(tangent2Idx) +
-                       (flatEffectiveMass_.row(tangent2Idx) * lambdaFriction)(0);
-
-        lambdaFriction(tangent1Idx) = savedT1;
-        lambdaFriction(tangent2Idx) = savedT2;
-
-        // Friction QP RHS: drive tangent velocity to zero
-        Eigen::Vector2d bt;
-        bt(0) = -jvCurrent(0);
-        bt(1) = -jvCurrent(1);
-
-        // Unconstrained optimum: λ_t* = A_tt^{-1} * b_t
-        Eigen::Vector2d lambdaTangentStar = att.ldlt().solve(bt);
-
-        // Friction cone radius: μ * λ_n
-        double const mu = spec.frictionCoefficients[static_cast<size_t>(c)];
-        double const radiusSquared = mu * mu * normalResult.lambda(c) * normalResult.lambda(c);
-
-        // Ball projection: if ||λ_t*|| > μ*λ_n, project onto boundary
-        double const lambdaTangentNormSquared = lambdaTangentStar.squaredNorm();
-        if (lambdaTangentNormSquared > radiusSquared && radiusSquared > 1e-12)
-        {
-          double const scale = std::sqrt(radiusSquared / lambdaTangentNormSquared);
-          lambdaTangentStar *= scale;
-        }
-
-        lambdaFriction(tangent1Idx) = lambdaTangentStar(0);
-        lambdaFriction(tangent2Idx) = lambdaTangentStar(1);
-      }
-
-      // Check convergence: ||λ_new - λ_old|| / ||λ_old||
-      double const deltaLambda = (lambdaFriction - lambdaFrictionOld).norm();
-      double const lambdaNorm = lambdaFrictionOld.norm();
-
-      if (lambdaNorm > 1e-12 && deltaLambda / lambdaNorm < gsConvergenceTol)
-      {
-        // Converged
-        break;
-      }
-      else if (lambdaNorm < 1e-12 && deltaLambda < gsConvergenceTol)
-      {
-        // Converged (zero initial guess case)
-        break;
-      }
-    }
-
-    // Step 8: Assemble combined λ vector
-    Eigen::VectorXd const lambdaCombined = lambdaNormal + lambdaFriction;
-
-    // Step 9: Extract per-body forces
-    result.bodyForces =
-      extractBodyForcesFlat(flat_, lambdaCombined, numBodies, dt);
-
-    result.lambdas = lambdaCombined;
-    result.converged = normalResult.converged;
-    result.iterations = normalResult.iterations;
-
-    // Compute residual: ||A*lambda - b||
-    Eigen::VectorXd const residualVec = flatEffectiveMass_ * lambdaCombined - b;
-    result.residual = residualVec.norm();
   }
   else
   {

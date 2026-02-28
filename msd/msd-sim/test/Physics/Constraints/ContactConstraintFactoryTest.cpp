@@ -73,7 +73,7 @@ InertialState createRotatingState(const Coordinate& position,
 // ContactConstraintFactory Tests
 // ============================================================================
 
-TEST(ContactConstraintFactoryTest, CreateFromCollision_SingleContact_0032a)
+TEST(ContactConstraintFactoryTest, CreateFromCollision_SingleContact)
 {
   // Test: Creates exactly 1 constraint for single contact point
   CollisionResult result;
@@ -96,7 +96,7 @@ TEST(ContactConstraintFactoryTest, CreateFromCollision_SingleContact_0032a)
 }
 
 TEST(ContactConstraintFactoryTest,
-     CreateFromCollision_ManifoldWith4Contacts_0032a)
+     CreateFromCollision_ManifoldWith4Contacts)
 {
   // Test: Creates 4 constraints for 4-point contact manifold
   CollisionResult result;
@@ -129,7 +129,7 @@ TEST(ContactConstraintFactoryTest,
   }
 }
 
-TEST(ContactConstraintFactoryTest, CombineRestitution_GeometricMean_0032a)
+TEST(ContactConstraintFactoryTest, CombineRestitution_GeometricMean)
 {
   // Test: combineRestitution returns sqrt(eA * eB)
   double eA = 0.8;
@@ -141,7 +141,7 @@ TEST(ContactConstraintFactoryTest, CombineRestitution_GeometricMean_0032a)
   EXPECT_NEAR(expected, combined, 1e-10);
 }
 
-TEST(ContactConstraintFactoryTest, CombineRestitution_ZeroValues_0032a)
+TEST(ContactConstraintFactoryTest, CombineRestitution_ZeroValues)
 {
   // Test: Returns zero when either coefficient is zero
   EXPECT_NEAR(
@@ -152,7 +152,7 @@ TEST(ContactConstraintFactoryTest, CombineRestitution_ZeroValues_0032a)
     0.0, contact_constraint_factory::combineRestitution(0.0, 0.0), 1e-10);
 }
 
-TEST(ContactConstraintFactoryTest, ComputeRelativeNormalVelocity_HeadOn_0032a)
+TEST(ContactConstraintFactoryTest, ComputeRelativeNormalVelocity_HeadOn)
 {
   // Test: Correctly computes relative normal velocity for head-on collision
   Coordinate normal{0, 0, 1};
@@ -175,7 +175,7 @@ TEST(ContactConstraintFactoryTest, ComputeRelativeNormalVelocity_HeadOn_0032a)
 }
 
 TEST(ContactConstraintFactoryTest,
-     ComputeRelativeNormalVelocity_WithAngular_0032a)
+     ComputeRelativeNormalVelocity_WithAngular)
 {
   // Test: Includes angular velocity contribution (ω × r term)
   Coordinate normal{0, 0, 1};
@@ -201,7 +201,7 @@ TEST(ContactConstraintFactoryTest,
 }
 
 TEST(ContactConstraintFactoryTest,
-     RestVelocityThreshold_DisablesRestitution_0032a)
+     RestVelocityThreshold_DisablesRestitution)
 {
   // Test: Restitution disabled below rest velocity threshold (0.5 m/s)
   CollisionResult result;
@@ -228,7 +228,7 @@ TEST(ContactConstraintFactoryTest,
 }
 
 TEST(ContactConstraintFactoryTest,
-     CreateFromCollision_NoContacts_ReturnsEmpty_0032a)
+     CreateFromCollision_NoContacts_ReturnsEmpty)
 {
   // Test: Returns empty vector when contactCount == 0
   CollisionResult result;

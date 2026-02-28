@@ -13,4 +13,5 @@ target_sources(${MSD_SIM_NAME} PRIVATE
     PositionCorrector.cpp
     ContactCache.cpp
     ConstraintIslandBuilder.cpp
+    BlockPGSSolver.cpp
 )

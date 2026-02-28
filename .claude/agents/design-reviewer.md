@@ -29,6 +29,31 @@ This agent participates in an **autonomous iteration loop** with the cpp-archite
 - Document both the initial review and final review in the design document
 - Only REVISION_REQUESTED triggers architect iteration; other statuses go to human
 
+### Revision-Aware Context (Mode 3 Revisions)
+When reviewing a design that was revised in Mode 3 (from implementation findings):
+
+**Before standard review, additionally:**
+1. Read `docs/designs/{feature-name}/implementation-findings.md`
+2. Verify that each flaw cited in the findings has a corresponding change in the revised design
+3. Check the Oscillation Check section of findings.md — confirm the revision does not return
+   to an approach documented in the ticket's "Previous Design Approaches" metadata
+4. Verify that the delta scope is appropriate — the revision should not unnecessarily expand
+   beyond what the findings required
+
+**Additional review criteria for Mode 3:**
+| Criterion | Question |
+|-----------|----------|
+| Root cause addressed | Does the revision directly address the flaw identified in findings? |
+| Oscillation-free | Does the revision avoid returning to any prior approach? |
+| Delta scope | Is the revision appropriately scoped (not an unnecessary full redesign)? |
+| Warm-start preserved | Are the preservable components explicitly identified? |
+| DD citation | Does the "Design Revision Notes" section cite the relevant DD-NNNN-NNN decisions? |
+
+**Status determination for Mode 3 revisions:**
+- Use the same status table as standard reviews
+- REVISION_REQUESTED (Iteration 0) triggers autonomous architect iteration (still max 1)
+- After autonomous iteration, produce final assessment with the additional Mode 3 criteria
+
 ## Review Process
 
 ### Step 1: Gather Context
@@ -36,8 +61,26 @@ Before reviewing, you must:
 1. Read the design document at `docs/designs/{feature-name}/design.md`
 2. Examine the PlantUML diagram at `docs/designs/{feature-name}/{feature-name}.puml`
 3. Review relevant sections of CLAUDE.md for project coding standards
-4. Explore the existing codebase to understand current patterns and conventions
-5. Note any human feedback or decisions on Open Questions from the design phase
+4. **Query the guidelines MCP server** for rules applicable to the design patterns present:
+   - Use `search_guidelines` with terms matching the design's key patterns (e.g., "memory ownership", "initialization", "RAII")
+   - Use `get_rule` to retrieve full rationale for rules you plan to cite in your review
+   - Only cite rules returned by `search_guidelines`. Do not invent rule IDs.
+   - When flagging a standards violation in the design, include the rule ID (e.g., `MSD-INIT-001`) so the architect can trace the requirement
+5. Explore the existing codebase to understand current patterns and conventions
+6. Note any human feedback or decisions on Open Questions from the design phase
+
+### Severity Enforcement Policy
+
+Guidelines have three severity levels. Map them to finding severity as follows:
+
+| Guideline Severity | Minimum Finding Severity | Review Impact |
+|--------------------|--------------------------|---------------|
+| `required`         | BLOCKING                 | Cannot approve with open violations |
+| `recommended`      | MAJOR                    | Should fix before merge; document if deferred |
+| `advisory`         | MINOR or NIT             | Discretionary; cite for awareness |
+
+When citing a rule, always include its severity. Example:
+"Violates MSD-INIT-001 (required): Use NaN for uninitialized floating-point members → BLOCKING"
 
 ### Step 2: Evaluate Against Criteria
 
@@ -91,7 +134,18 @@ For high-uncertainty risks, specify isolated prototypes:
 - Time box (30 min / 1 hour / 2 hours)
 - Fallback if prototype fails
 
-### Step 5: Determine Status
+### Step 5: Required Rules Compliance Check
+
+Before finalizing your review verdict:
+1. Identify the categories relevant to this design (e.g., Resource Management, Initialization, Naming)
+2. For each relevant category, query `get_category(name, detailed=True)`
+3. Filter for rules with `severity: required`
+4. Verify the design complies with each required rule
+5. Any required-rule violation that is not addressed is a BLOCKING finding
+
+This is a systematic sweep — do not rely only on pattern-matched `search_guidelines` queries.
+
+### Step 6: Determine Status
 
 | Status | Criteria | Action |
 |--------|----------|--------|

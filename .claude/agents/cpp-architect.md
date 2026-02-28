@@ -37,6 +37,30 @@ Revise an existing design based on reviewer feedback. This mode is triggered whe
 4. Document all changes in a "Revision Notes" section
 5. Update the PlantUML diagram if the changes affect it
 
+### Mode 3: Revision from Implementation Findings
+Revise an existing design based on implementation failure findings. This mode is triggered when:
+- The orchestrator sets ticket status to "Implementation Blocked — Design Revision Needed"
+- `docs/designs/{feature-name}/implementation-findings.md` exists
+- The human has approved the revision at the human gate
+
+**In Mode 3**:
+1. Read `docs/designs/{feature-name}/implementation-findings.md` in full
+2. Read the existing `docs/designs/{feature-name}/design.md` (current design)
+3. **Oscillation Guard**: Check the ticket metadata "Previous Design Approaches" list.
+   If the proposed design change in findings.md matches an approach in that list, STOP and
+   report to the orchestrator that the proposed revision would oscillate — do not proceed.
+   This is a hard block: the architect MUST NOT proceed if oscillation is detected.
+4. Identify the specific design decisions (DD-NNNN-NNN) that the findings cite as flawed
+5. Produce a **delta design** — modify only the decisions cited in the findings:
+   - Do NOT redesign sections that the findings identify as still correct
+   - Do NOT restructure the overall architecture unless the findings require it
+   - Apply the "What to Preserve" list from the findings
+6. Append a "Design Revision Notes" section to design.md documenting:
+   - Which design decisions changed and why (reference the findings)
+   - What warm-start guidance was incorporated for the implementer
+   - What was explicitly preserved
+7. Update the PlantUML diagram only if the structural changes require it
+
 ## Process
 
 ### 0.1 Create Feature Branch
@@ -197,6 +221,39 @@ See: `./{feature-name}.puml`
 ### Requirements Clarification
 1. {Ambiguity in requirements}
 ```
+
+## Guidelines MCP Integration
+
+When designing C++ interfaces and components, query the guidelines MCP server to retrieve applicable rules before finalizing decisions:
+
+- Use `search_guidelines` to find rules relevant to the code patterns you are designing (e.g., "memory ownership", "brace initialization", "NaN uninitialized")
+- Cite specific rule IDs (e.g., `MSD-INIT-001`) in the design document when recommending patterns or flagging design choices
+- Only cite rules returned by `search_guidelines`. Do not invent rule IDs.
+- Use `get_rule` to retrieve full rationale when providing detailed justification for a design decision
+- Use `list_categories` or `get_category` to enumerate all relevant rule categories before starting a design
+
+When the design document references a project coding convention, include the rule ID so reviewers and implementers can trace the rationale.
+
+### Severity Enforcement Policy
+
+Guidelines have three severity levels. Map them to finding severity as follows:
+
+| Guideline Severity | Minimum Finding Severity | Review Impact |
+|--------------------|--------------------------|---------------|
+| `required`         | BLOCKING                 | Cannot approve with open violations |
+| `recommended`      | MAJOR                    | Should fix before merge; document if deferred |
+| `advisory`         | MINOR or NIT             | Discretionary; cite for awareness |
+
+When citing a rule, always include its severity. Example:
+"Violates MSD-INIT-001 (required): Use NaN for uninitialized floating-point members → BLOCKING"
+
+### Required Rules Discovery
+
+When starting a design:
+1. Identify categories relevant to your design (e.g., Resource Management, Initialization)
+2. Query `search_guidelines` with `severity=required` for each relevant category
+3. List the required rules as design constraints in the "Constraints" section of the design document
+4. Ensure the proposed design satisfies all listed required rules
 
 ## Coding Standards to Apply
 When designing interfaces, follow these project conventions:
@@ -455,5 +512,30 @@ If any git/GitHub operations fail, report the error but do NOT stop — the desi
    PUMLEOF
    )"
    ```
+
+### After Revision from Findings (Mode 3):
+1. Confirm findings have been addressed — each cited flaw has a corresponding design change
+2. Confirm oscillation guard was applied — the revision does not return to a prior approach
+3. List warm-start hints for the implementer (which files can be preserved)
+4. Commit revised design artifacts:
+   ```bash
+   git add docs/designs/{feature-name}/design.md
+   git add docs/designs/{feature-name}/{feature-name}.puml  # only if diagram changed
+   git commit -m "design: revision from implementation findings for {feature-name}"
+   git push
+   ```
+5. **Post updated PlantUML diagram** as a new PR comment (if diagram changed):
+   ```bash
+   pr_number=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')
+   gh pr comment $pr_number --body "$(cat <<'PUMLEOF'
+   ## Updated Architecture Diagram (Revision from Implementation Findings)
+
+   ![PlantUML Diagram](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/{owner}/{repo}/{branch-name}/docs/designs/{feature-name}/{feature-name}.puml&fmt=svg)
+
+   *Updated after design revision from implementation findings*
+   PUMLEOF
+   )"
+   ```
+6. The design will proceed to design-reviewer in revision-aware mode
 
 Your designs should be thorough enough that another developer could implement them without requiring additional architectural guidance.

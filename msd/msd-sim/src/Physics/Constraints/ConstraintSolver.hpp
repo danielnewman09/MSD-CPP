@@ -6,11 +6,13 @@
 // Ticket: 0073_hybrid_pgs_large_islands
 // Ticket: 0071c_eigen_fixed_size_matrices
 // Ticket: 0071f_solver_workspace_reuse
+// Ticket: 0075b_block_pgs_solver
 // Design: docs/designs/0031_generalized_lagrange_constraints/design.md
 // Design: docs/designs/0032_contact_constraint_refactor/design.md
 // Design: docs/designs/0052_custom_friction_cone_solver/design.md
 // Design: docs/designs/0068_nlopt_friction_cone_solver/design.md
 // Design: docs/designs/0073_hybrid_pgs_large_islands/design.md
+// Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 2)
 
 #ifndef MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
 #define MSD_SIM_PHYSICS_CONSTRAINT_SOLVER_HPP
@@ -26,6 +28,7 @@
 
 #include "msd-sim/src/DataTypes/Coordinate.hpp"
 #include "msd-sim/src/DataTypes/Vector3D.hpp"
+#include "msd-sim/src/Physics/Constraints/BlockPGSSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/Constraint.hpp"
 #include "msd-sim/src/Physics/Constraints/NLoptFrictionSolver.hpp"
 #include "msd-sim/src/Physics/Constraints/ProjectedGaussSeidel.hpp"
@@ -38,16 +41,23 @@ namespace msd_sim
 /**
  * @brief Computes Lagrange multipliers for arbitrary constraint systems
  *
- * Dispatches between:
- * - Active Set Method (ASM): exact LCP, O(k^3), used when numRows <= kASMThreshold
- * - Projected Gauss-Seidel (PGS): approximate, O(n) per sweep, used for large islands
+ * Dispatches between solvers based on friction presence and island size:
  *
- * Uses constraint flattening to expand multi-row constraints (FrictionConstraint
- * dim=2) into per-row entries for the friction system.
+ * | Condition                              | Solver                      |
+ * |----------------------------------------|-----------------------------|
+ * | No friction AND numRows <= kASMThreshold | Active Set Method (ASM)   |
+ * | No friction AND numRows > kASMThreshold  | PGS scalar                |
+ * | Has friction AND numRows <= kASMThreshold*3 | Block PGS (3 per contact) |
+ * | Has friction AND numRows > kASMThreshold*3  | Block PGS (scaled)        |
+ *
+ * The ASM path for frictionless contacts is unchanged (no regression risk).
+ * Block PGS replaces the decoupled NLopt/flat-PGS friction solver path.
+ * The decoupled solver is preserved behind a flag for A/B validation.
  *
  * @ticket 0031_generalized_lagrange_constraints
  * @ticket 0052d_solver_integration_ecos_removal
  * @ticket 0073_hybrid_pgs_large_islands
+ * @ticket 0075b_block_pgs_solver
  */
 class ConstraintSolver
 {
@@ -279,11 +289,15 @@ private:
   FlattenedConstraints flat_;        ///< Reused flat constraint representation
   Eigen::MatrixXd flatEffectiveMass_;  ///< Reused (3C x 3C) effective mass matrix
 
-  // Friction cone solver instance (Ticket: 0068c)
+  // Friction cone solver instance (Ticket: 0068c) — kept behind toggle for A/B validation
   NLoptFrictionSolver nloptSolver_;
 
   // PGS solver instance for large islands (Ticket: 0073_hybrid_pgs_large_islands)
   ProjectedGaussSeidel pgsSolver_;
+
+  // Block PGS solver for friction contacts (Ticket: 0075b_block_pgs_solver)
+  // Replaces the decoupled normal-then-friction path for contacts with friction.
+  BlockPGSSolver blockPgsSolver_;
 };
 
 }  // namespace msd_sim

@@ -9,5 +9,4 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/DropTest.cpp                 # Ticket: 0060d
   ${CMAKE_CURRENT_SOURCE_DIR}/CollisionTest.cpp            # Ticket: 0060d
   ${CMAKE_CURRENT_SOURCE_DIR}/TestAssetExtensionTest.cpp   # Ticket: 0062a
-  ${CMAKE_CURRENT_SOURCE_DIR}/FrictionConeSolverTest.cpp   # Ticket: 0066
 )

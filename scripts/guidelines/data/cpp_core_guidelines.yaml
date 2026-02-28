@@ -1,0 +1,1751 @@
+# Ticket: 0078b_cpp_core_guidelines_population
+# Design: docs/designs/0078_cpp_guidelines_mcp_server/design.md
+#
+# C++ Core Guidelines rules — R, C, and ES sections.
+# Populated in follow-up ticket 0078b.
+# See: https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines
+#
+# Schema:
+#   rule_id:           CPP-{section}.{number}  (e.g., CPP-R.11)
+#   category:          Category name (string)
+#   source:            cpp_core_guidelines
+#   severity:          required | recommended | advisory
+#   status:            proposed | active | deprecated  (default: active)
+#   title:             One-line summary
+#   rationale:         Why the rule exists
+#   enforcement_notes: How to detect violations
+#   enforcement_check: (optional) clang-tidy / cppcheck check ID
+#   good_example:      (optional) Code snippet showing correct usage
+#   bad_example:       (optional) Code snippet showing violation
+#   tags:              List of cross-cutting concern labels
+#   cross_refs:        List of {to_rule_id, relationship} objects
+
+rules:
+
+  # ---------------------------------------------------------------------------
+  # R — Resource Management
+  # ---------------------------------------------------------------------------
+
+  - rule_id: CPP-R.1
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Manage resources automatically using resource handles and RAII
+    rationale: >
+      Manual resource management with naked new/delete, fopen/fclose, and similar
+      paired acquire/release APIs is error-prone. Exceptions and early returns can
+      bypass the release call. RAII (Resource Acquisition Is Initialization) ties
+      the resource lifetime to the scope of an owning object so the destructor
+      automatically releases it regardless of how the scope exits.
+    enforcement_notes: >
+      Flag raw new/delete calls outside of constructors/destructors of RAII wrappers.
+      Flag C-style resource management (malloc/free, fopen/fclose) without RAII
+      wrappers. Prefer std::vector, std::string, std::fstream, and standard smart
+      pointers over their raw counterparts.
+    good_example: |
+      // RAII: resource acquired in constructor, released in destructor
+      {
+        std::ifstream file{"data.txt"};  // Opens in constructor
+        process(file);
+      }  // Closes in destructor — no explicit close needed
+    bad_example: |
+      FILE* f = fopen("data.txt", "r");
+      process(f);
+      fclose(f);  // If process() throws, this is skipped — resource leak
+    tags:
+      - resource-management
+      - ownership
+      - safety
+      - raii
+
+  - rule_id: CPP-R.2
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: In interfaces, use raw pointers only to denote individual objects (not arrays)
+    rationale: >
+      Raw pointers do not convey ownership information. A raw pointer parameter could
+      mean "borrow this for the duration of the call", "take ownership of this", or
+      "this is the start of an array". Span<T>, unique_ptr, or references each
+      express the intent precisely. Using raw pointers for arrays is especially
+      dangerous because pointer arithmetic has no bounds checking.
+    enforcement_notes: >
+      Flag raw pointer parameters that receive arrays — prefer span<T>. Flag raw
+      pointer return types — either return by value, return a reference, or return
+      unique_ptr/optional. Raw pointers in internal implementation details are less
+      concerning but public interfaces should avoid them.
+    good_example: |
+      void processItems(std::span<const Item> items);  // Clear: non-owning view of array
+      std::unique_ptr<Widget> createWidget();           // Clear: caller takes ownership
+      const Config& getConfig();                        // Clear: non-owning reference
+    bad_example: |
+      void processItems(Item* items, int count);  // How many? Who owns?
+      Widget* createWidget();                     // Does caller delete this?
+    tags:
+      - resource-management
+      - ownership
+      - interfaces
+
+  - rule_id: CPP-R.3
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: A raw pointer is non-owning
+    rationale: >
+      Conventionally, a raw pointer (T*) in modern C++ means "I borrow this; I do
+      not own it and will not delete it." Ownership should be expressed via
+      unique_ptr (exclusive) or shared_ptr (shared). Mixing ownership and
+      non-ownership via raw pointers is the root cause of double-free and use-after-free bugs.
+    enforcement_notes: >
+      Treat any raw pointer member variable that calls delete in the destructor as a
+      violation — wrap in unique_ptr instead. Any raw pointer returned from a factory
+      function should be unique_ptr. Only allow raw pointers as function parameters
+      or return types where the semantics are unambiguously non-owning.
+    good_example: |
+      class Engine {
+      public:
+        explicit Engine(const Config& cfg) : config_{cfg} {}  // non-owning ref
+      private:
+        const Config& config_;  // Clearly non-owning
+      };
+    bad_example: |
+      class Engine {
+      public:
+        explicit Engine(Config* cfg) : config_{cfg} {}  // Owning? Non-owning? Unclear
+      private:
+        Config* config_;  // If Engine deletes this: ownership via raw pointer
+      };
+    tags:
+      - resource-management
+      - ownership
+      - safety
+
+  - rule_id: CPP-R.4
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: A raw reference is non-owning
+    rationale: >
+      A reference (T& or const T&) is inherently non-owning: you cannot delete through
+      a reference, and references cannot be null. They clearly express "I borrow this
+      object; the caller is responsible for its lifetime." Prefer references over raw
+      pointers for non-owning access to always-present objects.
+    enforcement_notes: >
+      If a raw pointer member variable is never null and never deleted by this class,
+      consider replacing it with a reference to express non-owning semantics more
+      clearly. Audit pointer member variables: if they are assigned once at construction
+      and never reassigned or deleted, a const reference is likely more appropriate.
+    good_example: |
+      class Renderer {
+      public:
+        explicit Renderer(const Scene& scene) : scene_{scene} {}
+        void draw() { scene_.render(); }
+      private:
+        const Scene& scene_;  // Non-owning reference — clearly not deleted here
+      };
+    bad_example: |
+      class Renderer {
+      public:
+        explicit Renderer(const Scene* scene) : scene_{scene} {}  // Could be null?
+      private:
+        const Scene* scene_;  // Is this non-owning? Unclear.
+      };
+    tags:
+      - resource-management
+      - ownership
+      - references
+
+  - rule_id: CPP-R.5
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Prefer scoped objects; don't heap-allocate unnecessarily
+    rationale: >
+      Stack-allocated objects have automatic storage duration — they are destroyed when
+      the enclosing scope exits. Heap allocation with new requires explicit delete or a
+      smart pointer wrapper. Unnecessary heap allocation increases complexity, adds
+      indirection, and forces lifetime management concerns onto callers. Reserve heap
+      allocation for objects whose lifetime must exceed their creating scope or whose
+      size is not known at compile time.
+    enforcement_notes: >
+      Flag new expressions for small, fixed-size objects that could be stack-allocated.
+      Flag heap-allocated objects that never outlive their creating scope. Prefer
+      std::vector over raw array + size; prefer value members over pointer-to-member.
+    good_example: |
+      void compute() {
+        Matrix4x4 transform{};  // Stack-allocated — no heap overhead
+        fillTransform(transform);
+        applyTransform(transform);
+      }  // Automatically destroyed
+    bad_example: |
+      void compute() {
+        auto* transform = new Matrix4x4{};  // Unnecessary heap allocation
+        fillTransform(transform);
+        applyTransform(transform);
+        delete transform;  // Must not forget; throws leak if missed
+      }
+    tags:
+      - resource-management
+      - performance
+      - ownership
+
+  - rule_id: CPP-R.6
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: recommended
+    title: Avoid non-const global variables
+    rationale: >
+      Non-const global variables introduce hidden dependencies between translation units,
+      make initialization order undefined across TUs, and create implicit shared state
+      that is difficult to reason about and test. Concurrent access to global state
+      requires synchronization, and mutable globals prevent functions from being
+      referentially transparent.
+    enforcement_notes: >
+      Flag non-const variables at namespace scope. Const globals (constexpr, const)
+      are acceptable. Singleton patterns using static local variables (Meyers Singleton)
+      are safer but still carry state concerns. Prefer passing dependencies explicitly.
+    good_example: |
+      // Constants are fine
+      constexpr float kPi = 3.14159265f;
+
+      // Pass state explicitly rather than using globals
+      void simulate(SimulationState& state, float dt);
+    bad_example: |
+      // Mutable global — hidden dependency, initialization order issues
+      SimulationState g_simulationState;
+      void simulate(float dt) { g_simulationState.step(dt); }
+    tags:
+      - resource-management
+      - safety
+      - design
+
+  - rule_id: CPP-R.10
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Avoid malloc() and free()
+    rationale: >
+      malloc/free do not call constructors or destructors, making them incompatible with
+      C++ object lifetimes. Mixing new/delete with malloc/free leads to undefined
+      behavior (deleting a malloc'd pointer). C++ has operator new/delete and smart
+      pointers that are type-safe and invoke constructors and destructors correctly.
+    enforcement_notes: >
+      Flag any call to malloc, calloc, realloc, or free in C++ code. Replace malloc
+      + placement-new patterns with std::vector or std::unique_ptr. Replace realloc
+      patterns with std::vector::resize or std::vector::reserve.
+    bad_example: |
+      Widget* w = (Widget*)malloc(sizeof(Widget));  // No constructor called!
+      // ... use w ...
+      free(w);  // No destructor called!
+    good_example: |
+      auto w = std::make_unique<Widget>();  // Constructor and destructor called correctly
+    tags:
+      - resource-management
+      - safety
+
+  - rule_id: CPP-R.11
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Avoid calling new and delete explicitly
+    rationale: >
+      Explicit new/delete pairs are a well-known source of memory leaks and double-free
+      errors. Any code path that exits early (exception, early return, break) can skip
+      the delete. std::make_unique and std::make_shared encapsulate the new call and
+      guarantee the delete via RAII. Explicit new/delete is appropriate only inside
+      RAII wrapper constructors/destructors.
+    enforcement_notes: >
+      Flag naked new expressions that are not immediately assigned to a smart pointer
+      or returned as a smart pointer. Flag delete expressions outside of RAII
+      wrapper destructors. Clang-tidy check: cppcoreguidelines-owning-memory.
+    enforcement_check: cppcoreguidelines-owning-memory
+    good_example: |
+      auto widget = std::make_unique<Widget>(args...);  // RAII — no delete needed
+      auto shared = std::make_shared<Texture>(width, height);
+    bad_example: |
+      Widget* widget = new Widget(args...);
+      processWidget(widget);
+      delete widget;  // Leaked if processWidget throws
+    tags:
+      - resource-management
+      - ownership
+      - safety
+    cross_refs:
+      - to_rule_id: MSD-RES-002
+        relationship: related
+
+  - rule_id: CPP-R.12
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Immediately give the result of an explicit resource allocation to a manager object
+    rationale: >
+      A resource allocation (new, fopen, CreateFile) is not exception-safe until it
+      is owned by a manager object (smart pointer, RAII wrapper). If the allocation
+      is followed by more expressions before being assigned to a manager, an exception
+      between allocation and assignment causes a leak.
+    enforcement_notes: >
+      Ensure that every new expression is the immediate argument to make_unique,
+      make_shared, or a smart pointer constructor. Forbid patterns where new is used
+      in a complex expression: f(new T{}, new U{}) — if the second new throws after
+      the first succeeds, the first is leaked.
+    good_example: |
+      // Safe: make_unique allocates and wraps atomically
+      auto a = std::make_unique<A>();
+      auto b = std::make_unique<B>();
+      f(std::move(a), std::move(b));
+    bad_example: |
+      // Unsafe: if new B throws, new A leaks
+      f(new A{}, new B{});
+    tags:
+      - resource-management
+      - ownership
+      - safety
+      - exception-safety
+
+  - rule_id: CPP-R.13
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Perform at most one explicit resource allocation in a single expression
+    rationale: >
+      When a function call takes two resource allocations as arguments, the C++
+      evaluation order rules do not guarantee which allocation happens first or when
+      exceptions from one might prevent cleanup of the other. Separating allocations
+      into separate statements with named variables eliminates this risk.
+    enforcement_notes: >
+      Flag function calls where two or more arguments are resource allocations (new,
+      make_unique, make_shared). Ensure each allocation is a separate statement
+      assigned to a named variable before use.
+    good_example: |
+      auto r1 = std::make_unique<Resource1>();
+      auto r2 = std::make_unique<Resource2>();
+      use(std::move(r1), std::move(r2));
+    bad_example: |
+      use(std::make_unique<Resource1>(), std::make_unique<Resource2>());
+      // Evaluation order is unspecified — if second allocation throws, first may leak
+    tags:
+      - resource-management
+      - exception-safety
+      - safety
+
+  - rule_id: CPP-R.14
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Avoid [] parameters; use span instead
+    rationale: >
+      Array parameters decay to pointers, losing size information. The caller must
+      pass the size separately, and there is no bounds checking at the call site or
+      inside the callee. std::span<T> carries both pointer and length, enables range-
+      based for loops, integrates with STL algorithms, and makes the intent clear:
+      this parameter is a non-owning view of a contiguous sequence.
+    enforcement_notes: >
+      Flag function parameters declared as T[] or T* when they represent arrays
+      (indicated by a separate size parameter or the parameter name). Replace with
+      std::span<T> or std::span<const T>.
+    good_example: |
+      void processVertices(std::span<const Vertex> vertices);
+
+      // Caller
+      std::vector<Vertex> v = loadVertices();
+      processVertices(v);  // Implicit conversion from vector to span
+    bad_example: |
+      void processVertices(const Vertex* vertices, int count);  // Lost size info
+    tags:
+      - resource-management
+      - safety
+      - interfaces
+
+  - rule_id: CPP-R.20
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Use unique_ptr or shared_ptr to represent ownership
+    rationale: >
+      Raw owning pointers are the root cause of most memory errors. Smart pointers
+      express intent in the type system: unique_ptr means exclusive ownership
+      (one owner, automatically deleted), shared_ptr means shared ownership (reference
+      counted). Prefer unique_ptr — it has zero overhead compared to a raw pointer
+      and makes ownership transfer explicit via std::move.
+    enforcement_notes: >
+      Any raw pointer that is deleted anywhere (class destructor, function body) should
+      be replaced with unique_ptr. Raw pointers returned from factory functions should
+      return unique_ptr. Shared ownership patterns using raw pointers should use
+      shared_ptr.
+    good_example: |
+      std::unique_ptr<Mesh> loadMesh(const std::string& path);  // Factory — caller owns
+      std::shared_ptr<Texture> sharedTexture = makeTexture();    // Shared ownership
+    bad_example: |
+      Mesh* loadMesh(const std::string& path);  // Who deletes? When?
+    tags:
+      - resource-management
+      - ownership
+      - safety
+
+  - rule_id: CPP-R.21
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Prefer unique_ptr over shared_ptr unless you need to share ownership
+    rationale: >
+      shared_ptr carries atomic reference-count overhead on every copy and incurs a
+      control block heap allocation. Most objects have one clear owner; shared ownership
+      often indicates an unclear ownership design rather than a genuine requirement.
+      unique_ptr has the same memory footprint as a raw pointer, is zero-overhead,
+      and makes exclusive ownership explicit. Start with unique_ptr and move to
+      shared_ptr only when shared ownership is genuinely required.
+    enforcement_notes: >
+      Flag shared_ptr usage where the object is only ever held by one owner at a time.
+      If a shared_ptr is passed as a const reference and never copied into another
+      shared_ptr, it could be unique_ptr + reference. Review code reviews for
+      "I'll just use shared_ptr to be safe" patterns.
+    good_example: |
+      // clear exclusive ownership
+      class PhysicsEngine {
+        std::unique_ptr<BroadPhase> broadPhase_;
+        std::unique_ptr<NarrowPhase> narrowPhase_;
+      };
+    bad_example: |
+      // Shared ownership for no reason — no second owner exists
+      class PhysicsEngine {
+        std::shared_ptr<BroadPhase> broadPhase_;   // Unnecessary overhead
+        std::shared_ptr<NarrowPhase> narrowPhase_; // Unnecessary overhead
+      };
+    tags:
+      - resource-management
+      - ownership
+      - performance
+    cross_refs:
+      - to_rule_id: MSD-RES-002
+        relationship: related
+
+  - rule_id: CPP-R.22
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Use make_shared to make shared_ptrs
+    rationale: >
+      make_shared allocates the object and the reference-count control block in a
+      single heap allocation, whereas shared_ptr<T>(new T{}) requires two allocations.
+      make_shared is also exception-safe — with two separate allocations, an exception
+      between them can cause a leak. make_shared is preferred for both performance
+      and safety.
+    enforcement_notes: >
+      Flag shared_ptr<T>(new T{...}) patterns. Replace with make_shared<T>(...).
+      Note: make_shared cannot be used when a custom deleter is needed — that is
+      a valid exception.
+    good_example: |
+      auto texture = std::make_shared<Texture>(width, height);  // Single allocation
+    bad_example: |
+      auto texture = std::shared_ptr<Texture>(new Texture{width, height});  // Two allocations
+    tags:
+      - resource-management
+      - ownership
+      - performance
+
+  - rule_id: CPP-R.23
+    category: Resource Management
+    source: cpp_core_guidelines
+    severity: required
+    title: Use make_unique to make unique_ptrs
+    rationale: >
+      make_unique is exception-safe (avoids the "two raw-new in a function call"
+      problem from CPP-R.13), provides symmetric syntax with make_shared, and prevents
+      the anti-pattern of assigning a raw new to a unique_ptr in a complex expression.
+      It is also more readable — the type appears only once.
+    enforcement_notes: >
+      Flag unique_ptr<T>(new T{...}) patterns. Replace with make_unique<T>(...).
+      Exception: custom deleters cannot use make_unique and must use the constructor.
+    good_example: |
+      auto engine = std::make_unique<PhysicsEngine>(config);
+    bad_example: |
+      std::unique_ptr<PhysicsEngine> engine{new PhysicsEngine{config}};  // Verbose, error-prone
+    tags:
+      - resource-management
+      - ownership
+      - safety
+
+  # ---------------------------------------------------------------------------
+  # C — Classes and Class Hierarchies
+  # ---------------------------------------------------------------------------
+
+  - rule_id: CPP-C.1
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Organize related data into structures (structs or classes)
+    rationale: >
+      A struct or class groups related data under a single name, making the relationship
+      explicit. A function that takes (float x, float y, float z) is harder to read and
+      more error-prone (argument order mix-ups) than one that takes a Coordinate or
+      Vector3. Named aggregates also enable invariant enforcement, encapsulation, and
+      more informative error messages.
+    enforcement_notes: >
+      Flag functions with more than 3–4 parameters of the same type that represent
+      a logical group. Flag parallel arrays or parallel local variables that always
+      move together. Consider whether a named struct would improve readability.
+    good_example: |
+      struct Coordinate { float x, y, z; };
+      void setPosition(const Coordinate& pos);
+    bad_example: |
+      void setPosition(float x, float y, float z);  // Arguments easily swapped
+    tags:
+      - classes
+      - design
+      - interfaces
+
+  - rule_id: CPP-C.2
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Use class if the class has an invariant; use struct if data members can vary independently
+    rationale: >
+      A struct is an open aggregate — all members are public and can be set
+      independently. A class with private members enforces an invariant: some
+      combinations of member values are invalid and the class ensures they never
+      arise. If you write a constructor that validates inputs, use class and
+      private members to prevent invariant violations from outside.
+    enforcement_notes: >
+      If a struct has a constructor that enforces constraints on its data members,
+      consider converting to a class with private members. If a class has all public
+      members and no invariants, consider using struct for clarity.
+    good_example: |
+      class Angle {  // Invariant: value is in [0, 2*pi)
+      public:
+        explicit Angle(float radians);
+        float value() const { return value_; }
+      private:
+        float value_;
+      };
+
+      struct AABB {  // No invariant: min and max can be set independently
+        Coordinate min;
+        Coordinate max;
+      };
+    tags:
+      - classes
+      - design
+      - invariants
+
+  - rule_id: CPP-C.7
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Don't define a class or enum and declare a variable of its type in the same statement
+    rationale: >
+      Combining a type definition and a variable declaration in one statement is
+      error-prone and reduces readability. The type definition and variable declaration
+      serve different purposes and should be separated to make the code easier to read
+      and maintain. This is especially problematic with anonymous structs and enums.
+    enforcement_notes: >
+      Flag combined type-definition-plus-variable-declaration patterns. Separate
+      the type definition from the variable declaration into two statements.
+    bad_example: |
+      struct Point { float x, y; } p1, p2;  // Type definition and variable in one statement
+      enum Direction { North, South } dir;  // Same problem
+    good_example: |
+      struct Point { float x, y; };
+      Point p1, p2;
+
+      enum Direction { North, South };
+      Direction dir{North};
+    tags:
+      - classes
+      - style
+
+  - rule_id: CPP-C.20
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: "If you can avoid defining any default operations, do (Rule of Zero)"
+    rationale: >
+      The Rule of Zero: if a class can express its resource management entirely
+      through member types that already handle their own resources (smart pointers,
+      containers, strings), the compiler-generated copy/move/destructor are correct.
+      Defining any special member function invites subtle bugs and requires defining
+      all of them (Rule of Five). Design classes so members own their resources
+      via RAII types, making special members unnecessary.
+    enforcement_notes: >
+      If a class declares a destructor but its only purpose is to destroy members
+      that already have their own destructors, the destructor is unnecessary — delete
+      it. If a class holds only RAII members (vector, unique_ptr, string), all five
+      special members should be defaulted or omitted.
+    good_example: |
+      class Document {
+      public:
+        Document(std::string name, std::vector<Page> pages)
+          : name_{std::move(name)}, pages_{std::move(pages)} {}
+        // No destructor, copy, or move defined — compiler generates correctly
+      private:
+        std::string name_;
+        std::vector<Page> pages_;
+      };
+    bad_example: |
+      class Document {
+      public:
+        ~Document() { /* nothing useful */ }  // Unnecessary — suppresses move generation!
+      private:
+        std::string name_;
+        std::vector<Page> pages_;
+      };
+    tags:
+      - classes
+      - resource-management
+      - special-members
+    cross_refs:
+      - to_rule_id: CPP-C.21
+        relationship: related
+      - to_rule_id: MSD-RES-001
+        relationship: related
+
+  - rule_id: CPP-C.21
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: "If you define or =delete any copy, move, or destructor function, define or =delete them all (Rule of Five)"
+    rationale: >
+      Special member functions are interrelated. Declaring a destructor suppresses
+      implicit move generation; declaring copy suppresses implicit move. If you
+      declare any one of the five (destructor, copy constructor, copy assignment,
+      move constructor, move assignment), the others may be generated incorrectly
+      or not at all. Define all five explicitly or =delete those that should not
+      exist. The safest path is Rule of Zero (CPP-C.20): design so the compiler
+      generates all five correctly without any declarations.
+    enforcement_notes: >
+      Flag classes that declare a destructor but lack explicit copy/move declarations.
+      Flag classes that declare copy but lack move declarations (and vice versa).
+      Clang-tidy check: cppcoreguidelines-special-member-functions.
+    enforcement_check: cppcoreguidelines-special-member-functions
+    good_example: |
+      class Buffer {
+      public:
+        Buffer() : data_{new char[1024]}, size_{1024} {}
+        ~Buffer() { delete[] data_; }
+        Buffer(const Buffer& o) : data_{new char[o.size_]}, size_{o.size_} {
+          std::copy(o.data_, o.data_ + o.size_, data_);
+        }
+        Buffer(Buffer&& o) noexcept : data_{o.data_}, size_{o.size_} {
+          o.data_ = nullptr; o.size_ = 0;
+        }
+        Buffer& operator=(const Buffer& o) {
+          if (this != &o) { delete[] data_; data_ = new char[o.size_];
+            size_ = o.size_; std::copy(o.data_, o.data_ + o.size_, data_); }
+          return *this;
+        }
+        Buffer& operator=(Buffer&& o) noexcept {
+          if (this != &o) { delete[] data_; data_ = o.data_; size_ = o.size_;
+            o.data_ = nullptr; o.size_ = 0; }
+          return *this;
+        }
+      private:
+        char* data_; std::size_t size_;
+      };
+    bad_example: |
+      class Buffer {
+      public:
+        Buffer() : data_{new char[1024]}, size_{1024} {}
+        ~Buffer() { delete[] data_; }
+        // Missing copy/move — compiler generates shallow copy (double-free!)
+      private:
+        char* data_; std::size_t size_;
+      };
+    tags:
+      - classes
+      - resource-management
+      - special-members
+      - safety
+    cross_refs:
+      - to_rule_id: CPP-C.20
+        relationship: related
+      - to_rule_id: MSD-RES-001
+        relationship: derived_from
+
+  - rule_id: CPP-C.22
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Make default operations consistent
+    rationale: >
+      Copy constructor and copy assignment should do the same thing (copy all members).
+      Move constructor and move assignment should do the same thing (transfer all
+      members). The destructor should release all resources that copy/move acquired.
+      Inconsistencies between these operations cause subtle bugs: objects in a different
+      state after assignment than after construction, or resources leaked on assignment
+      but cleaned up on destruction.
+    enforcement_notes: >
+      Audit classes implementing Rule of Five: ensure copy ctor and copy assignment
+      perform the same logical operation. Ensure move ctor and move assignment perform
+      the same logical operation. Ensure the destructor releases exactly the resources
+      acquired in the constructors.
+    tags:
+      - classes
+      - special-members
+      - safety
+    cross_refs:
+      - to_rule_id: CPP-C.21
+        relationship: related
+
+  - rule_id: CPP-C.30
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Define a destructor if a class needs an explicit action at object destruction
+    rationale: >
+      If a class acquires a resource that is not managed by a member with its own
+      destructor (e.g., a raw pointer, a file descriptor, a lock), it must define a
+      destructor to release it. Do not define a destructor if the compiler-generated
+      destructor is correct (Rule of Zero). Defining an unnecessary destructor suppresses
+      implicit move generation and forces you to implement Rule of Five.
+    enforcement_notes: >
+      If a destructor does nothing but call delete on a pointer member, replace the
+      raw pointer with unique_ptr and remove the destructor. A destructor is warranted
+      only for non-RAII resources (OS handles, C-style resources, third-party libraries).
+    tags:
+      - classes
+      - resource-management
+      - special-members
+
+  - rule_id: CPP-C.31
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: All resources acquired by a class must be released by the class's destructor
+    rationale: >
+      Symmetry between construction and destruction is the foundation of RAII.
+      Every resource acquired in a constructor (or elsewhere during the object's
+      lifetime) must be released in the destructor. Partial release (some resources
+      cleaned up, others not) leads to leaks. Use the Rule of Zero where possible so
+      member destructors handle release automatically.
+    enforcement_notes: >
+      Compare resource acquisition sites (constructor, init methods) against the
+      destructor. Every acquired resource should have a corresponding release.
+      Static analysis tools and sanitizers (AddressSanitizer, Valgrind) can detect
+      incomplete releases at runtime.
+    tags:
+      - classes
+      - resource-management
+      - safety
+
+  - rule_id: CPP-C.36
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: A destructor must not fail
+    rationale: >
+      Destructors are called during stack unwinding when an exception is propagating.
+      If a destructor throws a second exception while the first is active, std::terminate
+      is called immediately — the program ends without completing cleanup. Destructors
+      must be noexcept and must handle all error conditions internally (log and continue,
+      or abort gracefully) rather than propagating exceptions.
+    enforcement_notes: >
+      Destructors that call functions which may throw must catch and suppress those
+      exceptions. Flag destructors not marked noexcept. If a resource release can
+      fail meaningfully (e.g., flushing a file buffer), provide an explicit close()
+      function that the caller can call before the destructor and check its result.
+    good_example: |
+      class ManagedFile {
+      public:
+        ~ManagedFile() noexcept {
+          if (file_) {
+            if (fflush(file_) != 0) { /* log error, cannot throw */ }
+            fclose(file_);
+          }
+        }
+      private:
+        FILE* file_{nullptr};
+      };
+    bad_example: |
+      class ManagedFile {
+      public:
+        ~ManagedFile() {
+          flush();  // May throw! Undefined behavior during stack unwinding
+        }
+      };
+    tags:
+      - classes
+      - special-members
+      - exception-safety
+      - safety
+
+  - rule_id: CPP-C.37
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Make destructors noexcept
+    rationale: >
+      noexcept on a destructor communicates to the compiler and callers that
+      destruction cannot fail. The compiler generates more efficient code for
+      noexcept destructors (no exception handling tables needed). Destructors are
+      implicitly noexcept in C++11 and later unless the destructor body or any base
+      class destructor may throw. Explicitly marking noexcept makes the intent clear
+      and prevents accidental non-noexcept inheritance.
+    enforcement_notes: >
+      Flag destructors not explicitly marked noexcept. Flag destructors that call
+      potentially-throwing functions without try/catch. Clang-tidy's
+      modernize-use-noexcept and cppcoreguidelines-virtual-class-destructor checks
+      cover some of these cases.
+    enforcement_check: cppcoreguidelines-virtual-class-destructor
+    good_example: |
+      ~ResourceHolder() noexcept { release(); }
+    bad_example: |
+      ~ResourceHolder() { release(); }  // Implicitly noexcept but intent unclear
+    tags:
+      - classes
+      - special-members
+      - exception-safety
+
+  - rule_id: CPP-C.44
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Prefer default constructors to be simple and non-throwing
+    rationale: >
+      Default constructors are called in many contexts where errors cannot be handled:
+      element insertion into containers, array initialization, exception handling.
+      A throwing default constructor severely limits the usability of the type.
+      Design default constructors to place the object in a well-defined "empty" or
+      "default" state without performing complex operations or I/O.
+    enforcement_notes: >
+      Review default constructor implementations for file I/O, network operations,
+      complex computation, or other potentially-failing operations. Extract such
+      operations into named initialization methods (init(), load()) or factory functions.
+    good_example: |
+      class Connection {
+      public:
+        Connection() = default;  // Default-constructed: not yet connected
+        void connect(const std::string& host, int port);  // Explicit connect step
+      private:
+        std::string host_;
+        int port_{0};
+        bool connected_{false};
+      };
+    bad_example: |
+      class Connection {
+      public:
+        Connection() { connect("default-host", 8080); }  // Default ctor connects!? Throws if network is down
+      };
+    tags:
+      - classes
+      - constructors
+      - exception-safety
+
+  - rule_id: CPP-C.45
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Don't define a default constructor that only initializes data members; use in-class member initializers instead
+    rationale: >
+      In-class member initializers (C++11) provide default values directly in the
+      class definition, making them visible at the declaration site. This removes
+      the need for a default constructor whose sole purpose is to initialize members.
+      If a member has an in-class initializer, any constructor that does not
+      explicitly initialize that member uses the in-class default automatically.
+    enforcement_notes: >
+      If a default constructor body contains only member initializations and nothing
+      else (no logic, no I/O, no resource acquisition), replace the constructor body
+      with in-class member initializers and remove the constructor (or =default it).
+    good_example: |
+      class Widget {
+        float width_{0.0f};    // In-class initializer
+        float height_{0.0f};   // In-class initializer
+        // Default constructor not needed — compiler generates it using initializers
+      };
+    bad_example: |
+      class Widget {
+      public:
+        Widget() : width_{0.0f}, height_{0.0f} {}  // Unnecessary ctor — no logic
+      private:
+        float width_, height_;
+      };
+    tags:
+      - classes
+      - constructors
+      - initialization
+
+  - rule_id: CPP-C.48
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Prefer in-class initializers to member initializers in constructors for constant initializers
+    rationale: >
+      In-class initializers document the default value at the point of declaration,
+      making the class easier to understand without reading every constructor.
+      They are copied into every constructor's initialization list automatically,
+      reducing duplication. This is especially valuable for classes with multiple
+      constructors — each one benefits from the defaults without repeating them.
+    enforcement_notes: >
+      If a member is initialized to the same value in every constructor's member
+      initializer list (or most constructors), move the initializer to the class
+      declaration. Reserve constructor member initializers for values computed
+      from constructor arguments.
+    good_example: |
+      class Simulation {
+        float timeStep_{1.0f / 60.0f};  // Default visible at declaration
+        int maxIterations_{100};
+        bool paused_{false};
+        // All constructors inherit these defaults automatically
+      };
+    bad_example: |
+      class Simulation {
+      public:
+        Simulation() : timeStep_{1.0f/60.0f}, maxIterations_{100}, paused_{false} {}
+        Simulation(float dt) : timeStep_{dt}, maxIterations_{100}, paused_{false} {}
+        // maxIterations_ and paused_ duplicated in every constructor
+      private:
+        float timeStep_;
+        int maxIterations_;
+        bool paused_;
+      };
+    tags:
+      - classes
+      - constructors
+      - initialization
+
+  - rule_id: CPP-C.49
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Prefer initialization over assignment in constructors
+    rationale: >
+      Member initializer lists initialize members directly during construction.
+      Assignments in the constructor body first default-initialize the member and
+      then assign to it — two operations instead of one. For non-trivial types
+      (std::string, std::vector, user-defined classes), this means an unnecessary
+      default construction followed by an assignment. Use the member initializer list
+      to initialize all members.
+    enforcement_notes: >
+      Flag constructor bodies that assign to members without first using those members
+      as input. Replace assignments with member initializer list entries.
+      Exception: members that are intentionally default-initialized first and then
+      conditionally assigned based on logic are acceptable.
+    good_example: |
+      class Entity {
+      public:
+        explicit Entity(std::string name) : name_{std::move(name)} {}
+      private:
+        std::string name_;
+      };
+    bad_example: |
+      class Entity {
+      public:
+        explicit Entity(std::string name) {
+          name_ = std::move(name);  // Default-constructs name_ first, then assigns
+        }
+      private:
+        std::string name_;
+      };
+    tags:
+      - classes
+      - constructors
+      - initialization
+      - performance
+
+  - rule_id: CPP-C.80
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Use =default if you have to be explicit about using the default semantics
+    rationale: >
+      =default documents intent explicitly: "I considered whether this class needs
+      a custom special member function and concluded the default behavior is correct."
+      It generates the same code as the compiler's implicit version, avoiding the
+      overhead concern of an empty body (which may or may not be inlined), and
+      allows the member function to be constexpr and noexcept where the compiler
+      would automatically make it so.
+    enforcement_notes: >
+      If a special member function body is empty or only calls a superclass's
+      corresponding function, replace it with =default. Review special member
+      functions with trivial bodies.
+    good_example: |
+      class ValueType {
+      public:
+        ValueType() = default;
+        ValueType(const ValueType&) = default;
+        ValueType& operator=(const ValueType&) = default;
+        ~ValueType() = default;
+      };
+    bad_example: |
+      class ValueType {
+      public:
+        ValueType() {}                           // Inefficient empty body
+        ValueType(const ValueType& o) { /* ... copy ... */ }
+        // Defines copy but not move — suppresses implicit move generation
+      };
+    tags:
+      - classes
+      - special-members
+      - style
+
+  - rule_id: CPP-C.81
+    category: Classes and Class Hierarchies
+    source: cpp_core_guidelines
+    severity: required
+    title: Use =delete when you want to prohibit default operations
+    rationale: >
+      =delete makes it a compile-time error to call an operation. This is preferable
+      to leaving a function undeclared (which gives an unhelpful "function not found"
+      error) or declaring it private with no definition (which gives a link error).
+      Use =delete to explicitly prohibit copying, moving, or default construction
+      where those operations are semantically wrong for the type.
+    enforcement_notes: >
+      Audit classes whose private section declares (but does not define) copy/move
+      constructors or assignment operators — replace with =delete for clarity.
+      Non-copyable base classes (like boost::noncopyable) can be replaced with
+      =delete on copy operations.
+    good_example: |
+      class Mutex {
+      public:
+        Mutex() = default;
+        Mutex(const Mutex&) = delete;             // Cannot copy a mutex
+        Mutex& operator=(const Mutex&) = delete;  // Cannot copy-assign a mutex
+      };
+    bad_example: |
+      class Mutex {
+      private:
+        Mutex(const Mutex&);             // Private, undefined — link error if called
+        Mutex& operator=(const Mutex&); // Private, undefined — link error if called
+      };
+    tags:
+      - classes
+      - special-members
+      - style
+
+  # ---------------------------------------------------------------------------
+  # ES — Expressions and Statements
+  # ---------------------------------------------------------------------------
+
+  - rule_id: CPP-ES.1
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Prefer the standard library to other libraries and "handcrafted code"
+    rationale: >
+      The C++ standard library provides well-tested, portable, efficient algorithms
+      and data structures. Hand-rolled equivalents introduce new bugs and require
+      ongoing maintenance. Using standard algorithms (<algorithm>, <numeric>) makes
+      code self-documenting (std::sort vs. a sort loop), enables compiler
+      optimizations, and signals intent to other developers.
+    enforcement_notes: >
+      Flag manual loops that reimplement standard algorithms: element search (use
+      std::find), counting (std::count), transformation (std::transform), accumulation
+      (std::accumulate). Use standard containers (vector, map, unordered_map) over
+      hand-rolled equivalents.
+    good_example: |
+      auto it = std::find(items.begin(), items.end(), target);
+      std::sort(vertices.begin(), vertices.end(), byDistance);
+      float total = std::accumulate(values.begin(), values.end(), 0.0f);
+    bad_example: |
+      // Hand-rolled find
+      int idx = -1;
+      for (int i = 0; i < items.size(); ++i) {
+        if (items[i] == target) { idx = i; break; }
+      }
+    tags:
+      - expressions-statements
+      - style
+      - maintainability
+
+  - rule_id: CPP-ES.5
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Keep scopes small
+    rationale: >
+      Declaring variables at the widest possible scope (function top, loop outside)
+      obscures their purpose and keeps them alive longer than necessary. Small scopes
+      declare variables where they are first needed, limit their lifetime, and make
+      it obvious which code can access or modify them. This also enables the compiler
+      to reuse stack space more aggressively.
+    enforcement_notes: >
+      Flag variables declared before a nested block if they are only used inside that
+      block. Move declarations to the smallest enclosing scope where they are used.
+      Declare loop variables in the loop header: `for (int i = 0; ...)` not `int i; for (...)`.
+    good_example: |
+      for (int i = 0; i < count; ++i) {
+        auto item = getItem(i);  // Declared where used
+        process(item);
+      }
+    bad_example: |
+      int i;
+      auto item = Item{};  // Declared at function top, used only in loop
+      for (i = 0; i < count; ++i) {
+        item = getItem(i);
+        process(item);
+      }
+    tags:
+      - expressions-statements
+      - style
+      - scoping
+
+  - rule_id: CPP-ES.10
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Declare one name per declaration
+    rationale: >
+      Declaring multiple variables in a single statement is a common source of
+      confusion. Pointer and reference declarators bind to the variable name, not
+      the type: `int* p, q` declares a pointer and an integer, not two pointers.
+      Single-variable declarations eliminate this ambiguity and make each
+      variable's type immediately clear.
+    enforcement_notes: >
+      Flag declarations that declare more than one variable: `int a, b, c;` or
+      `float* p, q;`. Replace with separate declarations on separate lines.
+    good_example: |
+      int a{0};
+      int b{0};
+      int c{0};
+    bad_example: |
+      int a, b, c;       // Hard to add initializers; intent unclear
+      float* p, q;       // q is float, not float*! Common mistake
+    tags:
+      - expressions-statements
+      - style
+      - initialization
+
+  - rule_id: CPP-ES.11
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Use auto to avoid redundant repetition of type names
+    rationale: >
+      auto reduces verbosity when the type is obvious from context (iterator types,
+      factory return values, lambda captures). It prevents type mismatch bugs where
+      the declared type and initialization expression diverge over time. auto also
+      forces initialization — `auto x;` is a compile error, preventing uninitialized
+      variables. Use auto when the type is clear from the right-hand side; use explicit
+      types when clarity would otherwise be lost.
+    enforcement_notes: >
+      Flag verbose iterator declarations: `std::vector<Foo>::const_iterator it = ...`
+      should use auto. Flag factory return assignments where the type is repeated:
+      `std::unique_ptr<Widget> w = std::make_unique<Widget>()`.
+    good_example: |
+      auto it = items.find(key);             // Type obvious from context
+      auto widget = std::make_unique<Widget>(); // Avoids repeating Widget
+      for (auto& item : items) { process(item); }
+    bad_example: |
+      std::unordered_map<std::string, Widget>::iterator it = items.find(key);  // Verbose
+      std::unique_ptr<Widget> widget = std::make_unique<Widget>();              // Repeated
+    tags:
+      - expressions-statements
+      - style
+      - type-safety
+
+  - rule_id: CPP-ES.20
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Always initialize an object
+    rationale: >
+      Reading an uninitialized object produces undefined behavior. In C++, local
+      variables of built-in types (int, float, pointer) are not zero-initialized —
+      they contain whatever value was in memory. Uninitialized reads are a common
+      source of non-deterministic bugs that are difficult to reproduce. Always provide
+      an initializer, even if it is the type's natural zero value.
+    enforcement_notes: >
+      Flag local variable declarations without initializers: `int x;`, `float f;`,
+      `T* p;`. Use brace initialization to zero-initialize: `int x{0}`, `float f{}`.
+      Clang-tidy check: cppcoreguidelines-init-variables.
+    enforcement_check: cppcoreguidelines-init-variables
+    good_example: |
+      int count{0};
+      float ratio{1.0f};
+      std::string name{};  // Empty string
+    bad_example: |
+      int count;    // Uninitialized — undefined behavior on read
+      float ratio;  // Uninitialized — may contain garbage
+    tags:
+      - expressions-statements
+      - initialization
+      - safety
+
+  - rule_id: CPP-ES.21
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Don't introduce a variable (or constant) before you need it
+    rationale: >
+      Declaring variables early and assigning them later separates initialization from
+      use, requires the variable to be default-initialized (possibly to a meaningless
+      sentinel), and makes it harder to determine the variable's purpose. Declare
+      variables at the point of first use and initialize them with their real value
+      immediately. This enables const, reduces scope, and makes the code more readable.
+    enforcement_notes: >
+      Flag variables declared in one place and first meaningfully assigned in another
+      (not counting default initialization). Move declaration to the site of first
+      assignment and initialize directly. Flag variables that are default-initialized
+      and then immediately overwritten without reading the default value.
+    good_example: |
+      // Declare when the value is ready
+      const float area = width * height;
+      render(area);
+    bad_example: |
+      float area;  // Declared early, uninitialized
+      // ... other code ...
+      area = width * height;  // Assigned later — why separate?
+      render(area);
+    tags:
+      - expressions-statements
+      - initialization
+      - style
+      - scoping
+
+  - rule_id: CPP-ES.22
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Don't declare a variable until you have a value to initialize it with
+    rationale: >
+      This rule is closely related to CPP-ES.21. The emphasis here is on const
+      correctness: if a variable's value is computed from a one-time calculation
+      and never changes, it should be const (or constexpr). You cannot declare it
+      const and then assign later. Therefore, never declare a variable until the
+      initializing expression is ready. Use lambdas or helper functions to compute
+      complex initial values if needed.
+    enforcement_notes: >
+      Audit variables that could be const but are not, because they were declared
+      before their value was known. Apply IIFE (Immediately Invoked Function
+      Expression) pattern or a helper lambda to compute complex initial values
+      inline so the variable can be const.
+    good_example: |
+      // Use a lambda for complex initialization to allow const
+      const auto result = [&]() -> std::string {
+        if (useDefault) return "default";
+        return computeValue(input);
+      }();
+    bad_example: |
+      std::string result;          // Non-const, declared early
+      if (useDefault) result = "default";
+      else result = computeValue(input);
+      // 'result' could have been const
+    tags:
+      - expressions-statements
+      - initialization
+      - const-correctness
+
+  - rule_id: CPP-ES.23
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Prefer the {} initializer syntax
+    rationale: >
+      Brace initialization (uniform initialization) prevents narrowing conversions
+      at compile time (assigning a double to an int via braces is a compile error),
+      avoids the Most Vexing Parse (a constructor call that looks like a function
+      declaration), and is consistent across all initialization contexts (objects,
+      arrays, aggregates, standard containers). Parenthesis initialization has
+      context-dependent semantics and allows silent narrowing.
+    enforcement_notes: >
+      Flag parenthesis initialization for objects: `Type name(args)` should be
+      `Type name{args}`. Flag copy-initialization with implicit conversions that
+      would narrow: `int x = 3.14;` should be `int x{3};` (and the narrowing
+      should be intentional). Exception: avoid braces for types with
+      initializer_list constructors when the element-list semantics are not intended
+      (e.g., std::vector<int>{10} creates a one-element vector; use std::vector<int>(10)
+      for a 10-element vector).
+    enforcement_check: modernize-use-default-member-init
+    good_example: |
+      int count{0};
+      float ratio{1.0f};
+      Coordinate pos{x, y, z};
+      std::vector<int> ids{1, 2, 3};
+      auto engine = PhysicsEngine{config};
+    bad_example: |
+      int count = 0;               // Copy-initialization — allows narrowing
+      float ratio(1.0f);           // Parenthesis initialization — Most Vexing Parse risk
+      auto engine = PhysicsEngine(config);  // Parenthesis — potentially ambiguous
+    tags:
+      - expressions-statements
+      - initialization
+      - syntax
+      - safety
+    cross_refs:
+      - to_rule_id: MSD-INIT-002
+        relationship: related
+
+  - rule_id: CPP-ES.25
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Declare an object const or constexpr unless you want to modify its value later
+    rationale: >
+      const communicates that a value does not change, makes reasoning about the
+      code easier, and prevents accidental modification. constexpr extends this to
+      compile-time constants, enabling use in template arguments and array sizes
+      while improving optimization opportunities. const by default, mutable by
+      exception is the correct mindset.
+    enforcement_notes: >
+      After code is written, review local variables: any that are never assigned
+      after initialization should be const. Any that are computable at compile time
+      should be constexpr. Clang-tidy check: misc-const-correctness (where available).
+    good_example: |
+      const float gravity{9.81f};
+      constexpr int kMaxVertices{65536};
+      const auto mesh = loadMesh(path);  // mesh is not reassigned
+    bad_example: |
+      float gravity = 9.81f;    // Not const — can be accidentally modified
+      int maxVertices = 65536;  // Not constexpr — runtime value for a compile-time constant
+    tags:
+      - expressions-statements
+      - const-correctness
+      - style
+
+  - rule_id: CPP-ES.26
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Don't use a variable for two unrelated purposes
+    rationale: >
+      Reusing a variable for multiple unrelated purposes makes the code harder to
+      read (the variable name cannot describe all its roles) and harder to refactor.
+      It also prevents the variable from being const in either role. Each variable
+      should have a single, well-named purpose from declaration to last use.
+    enforcement_notes: >
+      Flag variables whose semantic role changes partway through their scope: a loop
+      counter used as a result accumulator after the loop, a temporary used for
+      loading one value and then overwritten with a different value. Introduce a new
+      variable for the new purpose.
+    good_example: |
+      const int count = computeCount();
+      const float average = computeSum() / count;  // 'count' has one role
+    bad_example: |
+      int temp = computeCount();
+      doSomething(temp);
+      temp = computeSum();  // 'temp' is now repurposed — confusing
+      doSomethingElse(temp);
+    tags:
+      - expressions-statements
+      - style
+      - naming
+
+  - rule_id: CPP-ES.30
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Don't use macros for program text manipulation
+    rationale: >
+      Macros are textual substitution without scope, type checking, or debugger
+      support. They cannot be overloaded, cannot be namespaced, silently shadow
+      other names, and produce confusing compiler errors. C++ provides superior
+      alternatives: constexpr for compile-time constants, inline functions for
+      reusable code, templates for generic code, and static_assert for compile-time
+      checks.
+    enforcement_notes: >
+      Flag #define for constants — use constexpr or const instead. Flag #define for
+      function-like macros — use inline functions or templates. Legitimate uses of
+      macros: header guards (prefer #pragma once), platform detection, and
+      conditional compilation. Clang-tidy check: cppcoreguidelines-macro-usage.
+    enforcement_check: cppcoreguidelines-macro-usage
+    good_example: |
+      constexpr float kPi{3.14159265f};   // Type-safe, scoped, debuggable
+      constexpr int square(int x) { return x * x; }  // Function, not macro
+    bad_example: |
+      #define PI 3.14159265    // No type, no scope, not debuggable
+      #define SQUARE(x) ((x)*(x))  // Evaluates x twice, no type safety
+    tags:
+      - expressions-statements
+      - preprocessor
+      - safety
+
+  - rule_id: CPP-ES.31
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Don't use macros for constants or "functions"
+    rationale: >
+      This is a more specific form of CPP-ES.30 targeting the two most common macro
+      abuses. Macro constants pollute the global namespace, have no type, cannot be
+      passed to templates, and are not debuggable. Macro functions can evaluate
+      arguments multiple times and produce impenetrable error messages. Every macro
+      constant should be constexpr; every macro function should be an inline function
+      or template.
+    enforcement_notes: >
+      Scan for #define followed by a numeric or string literal (constant macros).
+      Scan for #define followed by a parenthesized argument list (function macros).
+      Replace both categories with constexpr/inline alternatives.
+    tags:
+      - expressions-statements
+      - preprocessor
+      - safety
+    cross_refs:
+      - to_rule_id: CPP-ES.30
+        relationship: related
+
+  - rule_id: CPP-ES.40
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Avoid complicated expressions
+    rationale: >
+      Complex expressions with multiple operators, side effects, or dependent
+      evaluation orders are hard to read, easy to misparse, and frequently produce
+      bugs due to incorrect assumptions about operator precedence or evaluation order.
+      Break complex expressions into named intermediate variables to improve clarity
+      and debuggability.
+    enforcement_notes: >
+      Flag expressions with more than 3–4 operators (especially mixed arithmetic
+      and logical). Flag expressions with side effects (++, --, assignment) embedded
+      in subexpressions. Extract subexpressions into named const variables.
+    good_example: |
+      const float dx = b.x - a.x;
+      const float dy = b.y - a.y;
+      const float distance = std::sqrt(dx * dx + dy * dy);
+    bad_example: |
+      float distance = std::sqrt((b.x-a.x)*(b.x-a.x) + (b.y-a.y)*(b.y-a.y));
+      // b.x-a.x computed twice; hard to read; no names for intermediate values
+    tags:
+      - expressions-statements
+      - style
+      - readability
+
+  - rule_id: CPP-ES.41
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: If in doubt about operator precedence, parenthesize
+    rationale: >
+      Operator precedence in C++ has many levels and several counterintuitive rules
+      (e.g., bitwise operators have lower precedence than comparison operators). When
+      an expression's precedence is non-obvious or the reader might be surprised,
+      add parentheses for clarity. The cost (two extra characters) is far less than
+      the cost of a precedence bug.
+    enforcement_notes: >
+      Flag mixed arithmetic-and-bitwise expressions without explicit parentheses.
+      Flag mixed comparison-and-logical expressions where precedence may be
+      surprising: `a & b == c` means `a & (b == c)`, not `(a & b) == c`.
+    bad_example: |
+      if (flags & MASK == EXPECTED_VALUE)  // Bug: == has higher precedence than &
+        process();
+    good_example: |
+      if ((flags & MASK) == EXPECTED_VALUE)  // Intent clear with parentheses
+        process();
+    tags:
+      - expressions-statements
+      - style
+      - safety
+
+  - rule_id: CPP-ES.45
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Avoid "magic constants"; use symbolic names
+    rationale: >
+      Numeric literals embedded in code ("magic constants") are not self-documenting
+      and cannot be updated consistently. A literal 9.81 appears to be gravity but
+      could be a coincidence; 3.14159265 is clearly pi but is duplicated if used in
+      multiple places. Named constants (constexpr float kGravity = 9.81f) are
+      self-documenting, centrally maintained, and communicable to readers.
+    enforcement_notes: >
+      Flag numeric literals in non-initialization contexts (not in constexpr variable
+      initializers or test code). Common exceptions: 0, 1, -1, 2 in arithmetic
+      where meaning is clear. Flag duplicated literals across multiple files.
+    good_example: |
+      constexpr float kGravity{9.81f};
+      constexpr float kPi{3.14159265f};
+      constexpr int kMaxBodies{1024};
+    bad_example: |
+      body.applyForce(mass * 9.81f);   // What is 9.81?
+      if (count > 1024) truncate();     // Why 1024?
+    tags:
+      - expressions-statements
+      - style
+      - readability
+      - maintainability
+
+  - rule_id: CPP-ES.46
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Avoid lossy (narrowing) arithmetic conversions
+    rationale: >
+      Narrowing conversions silently truncate or lose precision. Assigning a double
+      to a float, a float to an int, or a long to a short can silently lose data.
+      These conversions compile without warning by default with many compilers and
+      produce values that surprise the programmer. Brace initialization prevents
+      narrowing at compile time. For intentional narrowing, use an explicit cast with
+      a comment explaining why.
+    enforcement_notes: >
+      Use brace initialization to get compile-time narrowing diagnostics. Enable
+      -Wconversion and -Wnarrowing compiler warnings. Flag implicit conversions in
+      arithmetic: mixing int and float, float and double, signed and unsigned.
+      Use explicit casts (static_cast) to make intentional conversions visible.
+    enforcement_check: cppcoreguidelines-narrowing-conversions
+    good_example: |
+      float f{3.14f};
+      int i{static_cast<int>(f)};  // Explicit, intentional narrowing
+    bad_example: |
+      float f = 3.14;   // double to float — silently loses precision
+      int i = 3.14f;    // float to int — silently truncates
+    tags:
+      - expressions-statements
+      - type-safety
+      - safety
+
+  - rule_id: CPP-ES.47
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Use nullptr rather than 0 or NULL
+    rationale: >
+      nullptr is the type-safe null pointer constant. 0 and NULL (typically defined
+      as 0 or (void*)0) are integers or void pointers that can be accidentally passed
+      to overloaded functions expecting integers instead of pointers. nullptr has
+      type std::nullptr_t and can only be assigned to or compared with pointers,
+      preventing these ambiguities.
+    enforcement_notes: >
+      Flag use of 0 or NULL as pointer values. Replace with nullptr. Clang-tidy
+      check: modernize-use-nullptr.
+    enforcement_check: modernize-use-nullptr
+    good_example: |
+      Widget* w = nullptr;
+      if (w != nullptr) { /* ... */ }
+    bad_example: |
+      Widget* w = NULL;  // Ambiguous — is NULL defined as 0 or (void*)0?
+      if (w != 0) { /* ... */ }  // 0 is an integer, not a pointer null
+    tags:
+      - expressions-statements
+      - type-safety
+      - style
+
+  - rule_id: CPP-ES.48
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Avoid casts
+    rationale: >
+      C-style casts (T)x are dangerous: they silently perform const_cast, reinterpret_cast,
+      or static_cast depending on the types involved, and the programmer's intent is
+      unclear. C++ named casts (static_cast, dynamic_cast, const_cast, reinterpret_cast)
+      are explicit about what conversion is being performed, can be searched in code
+      review, and are more restrictive — a static_cast cannot accidentally remove const.
+      Avoid all casts where possible; use named casts for necessary conversions.
+    enforcement_notes: >
+      Flag all C-style casts. Replace with appropriate named cast. Flag
+      reinterpret_cast outside of low-level platform/serialization code. Flag
+      const_cast — if you need to remove const, reconsider the design.
+    good_example: |
+      int i = static_cast<int>(someFloat);      // Clear: intentional float-to-int
+      auto* derived = dynamic_cast<Derived*>(basePtr);  // Clear: checked downcast
+    bad_example: |
+      int i = (int)someFloat;   // C-style: what conversion is being done?
+      Derived* d = (Derived*)basePtr;  // No runtime check!
+    tags:
+      - expressions-statements
+      - type-safety
+      - safety
+
+  - rule_id: CPP-ES.49
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: If you must use a cast, use a named cast
+    rationale: >
+      When a conversion cannot be avoided, named casts (static_cast, dynamic_cast,
+      const_cast, reinterpret_cast) make the kind of conversion explicit and
+      searchable. This is a softer form of CPP-ES.48: if you cannot eliminate the
+      cast, at least make it clear which operation is being performed. Grep for
+      reinterpret_cast in code review is far more effective than grep for (Type).
+    enforcement_notes: >
+      Verify that any remaining casts after applying CPP-ES.48 use named cast syntax.
+      Annotate each named cast with a comment explaining why it is necessary and safe.
+    tags:
+      - expressions-statements
+      - type-safety
+    cross_refs:
+      - to_rule_id: CPP-ES.48
+        relationship: related
+
+  - rule_id: CPP-ES.50
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Don't cast away const
+    rationale: >
+      const expresses a contract: this object will not be modified through this
+      reference/pointer. Casting away const via const_cast breaks that contract and
+      is undefined behavior if the underlying object is actually const. The correct
+      fix is almost always to redesign the interface so const_cast is not needed:
+      make the function accept a non-const parameter, add a mutable member, or
+      provide a non-const overload.
+    enforcement_notes: >
+      Flag all uses of const_cast. Each one should be reviewed carefully. If the
+      underlying object is genuinely mutable and the constness was added only for
+      an interface reason, consider whether the interface should be redesigned.
+      Valid use: calling a C API that incorrectly takes non-const when it does not
+      modify the data.
+    bad_example: |
+      void badFunction(const std::string& s) {
+        std::string& mutable_s = const_cast<std::string&>(s);  // Breaks contract!
+        mutable_s.clear();  // Undefined behavior if s refers to a const object
+      }
+    good_example: |
+      // Fix: make the parameter non-const if modification is intended
+      void goodFunction(std::string& s) {
+        s.clear();
+      }
+    tags:
+      - expressions-statements
+      - const-correctness
+      - safety
+
+  - rule_id: CPP-ES.56
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Write std::move() only when you need to explicitly move an object to another scope
+    rationale: >
+      std::move marks an object as a candidate for move construction or move
+      assignment. Applying std::move unnecessarily (e.g., on a return value that
+      is already subject to NRVO, or on a temporary) can suppress optimizations.
+      Applying std::move to a const reference has no effect (move calls copy instead).
+      Use std::move only when you intend to transfer ownership and the source will
+      not be used after the move.
+    enforcement_notes: >
+      Flag std::move applied to a local variable in a return statement — this
+      suppresses NRVO (Named Return Value Optimization). Flag std::move on const
+      objects — it has no effect and indicates a misunderstanding. Correct uses:
+      passing a local variable into a container (emplace/push), passing to a
+      constructor taking T&&, or transferring unique_ptr ownership.
+    good_example: |
+      auto mesh = loadMesh(path);
+      scene.addMesh(std::move(mesh));  // Transfer ownership into scene
+    bad_example: |
+      std::string createName() {
+        std::string result = "hello";
+        return std::move(result);  // Suppresses NRVO! Just return result;
+      }
+    tags:
+      - expressions-statements
+      - move-semantics
+      - performance
+
+  - rule_id: CPP-ES.60
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Avoid new and delete outside resource management functions
+    rationale: >
+      This is the expression-level counterpart to CPP-R.11. Explicit new and delete
+      in application code (outside of RAII wrapper constructors/destructors) are
+      virtually always a sign that a smart pointer or standard container should be
+      used instead. Moving resource management into dedicated RAII types isolates
+      the risk and makes the application code exception-safe without try/catch.
+    enforcement_notes: >
+      Flag new and delete in non-constructor, non-destructor code. Verify that any
+      remaining uses are inside designated RAII classes with corresponding deletes
+      in destructors.
+    tags:
+      - expressions-statements
+      - resource-management
+      - safety
+    cross_refs:
+      - to_rule_id: CPP-R.11
+        relationship: related
+
+  - rule_id: CPP-ES.70
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Prefer a switch statement to an if statement when there is a choice
+    rationale: >
+      A switch statement over an integer or enum value is typically clearer and
+      faster than a chain of if/else if statements. It visually enumerates the
+      cases, the compiler can warn when enum cases are missing (-Wswitch), and
+      some compilers optimize switch into jump tables. A switch communicates
+      "select exactly one of these known cases" while if/else if chains do not
+      enforce mutual exclusivity.
+    enforcement_notes: >
+      When a chain of `if (x == A) ... else if (x == B) ... else if (x == C)`
+      tests the same variable against constants, replace with switch. Ensure
+      that switch statements on enums have a case for every enum value or a
+      well-considered default.
+    good_example: |
+      switch (direction) {
+        case Direction::North: moveNorth(); break;
+        case Direction::South: moveSouth(); break;
+        case Direction::East:  moveEast();  break;
+        case Direction::West:  moveWest();  break;
+      }
+    bad_example: |
+      if (direction == Direction::North) moveNorth();
+      else if (direction == Direction::South) moveSouth();
+      else if (direction == Direction::East) moveEast();
+      else if (direction == Direction::West) moveWest();
+    tags:
+      - expressions-statements
+      - style
+      - performance
+
+  - rule_id: CPP-ES.75
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Avoid do-statements
+    rationale: >
+      do-while loops execute the body before evaluating the condition, which is
+      unintuitive and a frequent source of off-by-one errors. Most do-while loops
+      can be rewritten as while loops or for loops with a clearer structure.
+      The condition appears at the bottom and is easily missed during code review.
+      do-while is appropriate for retry logic, but even then a while(true) with
+      an explicit break is often more readable.
+    enforcement_notes: >
+      Flag do-while statements. Evaluate whether a while or for loop with equivalent
+      semantics would be clearer. Document the reason when do-while is retained.
+    bad_example: |
+      do {
+        processPacket();
+      } while (hasMore());  // Condition at the bottom — easy to miss
+    good_example: |
+      processPacket();       // Or: while (hasMore()) { processPacket(); }
+      while (hasMore()) {
+        processPacket();
+      }
+    tags:
+      - expressions-statements
+      - style
+
+  - rule_id: CPP-ES.76
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Avoid goto
+    rationale: >
+      goto produces non-structured control flow that is difficult to follow, reason
+      about, and refactor. It bypasses RAII destructors when jumping forward out of
+      a scope containing objects, creating resource leaks. Modern C++ structured
+      control flow (loops, exceptions, std::optional, early returns) covers all
+      legitimate use cases for goto. Its only remaining niche is breaking out of
+      nested loops, which is better handled by a helper function.
+    enforcement_notes: >
+      Flag all goto statements. Replace loop-exit gotos with a helper function and
+      early return. Replace error-handling gotos with RAII and exceptions.
+    tags:
+      - expressions-statements
+      - style
+      - safety
+
+  - rule_id: CPP-ES.84
+    category: Expressions and Statements
+    source: cpp_core_guidelines
+    severity: required
+    title: Don't try to declare a local variable with no name
+    rationale: >
+      A temporary object constructed and immediately destroyed (e.g., `Lock{mutex};`
+      — intended as a scoped lock, but the lock is immediately released) is a common
+      and subtle bug. The programmer's intent was to hold the lock for the duration
+      of the scope, but without naming the variable the destructor runs at the
+      semicolon. Always name local objects whose destructor performs important work.
+    enforcement_notes: >
+      Flag temporary objects of RAII types (Lock, unique_lock, scope_exit) used
+      as statements without naming. Warn that the destructor runs immediately.
+    bad_example: |
+      Lock{mutex};         // WRONG: lock acquired and immediately released!
+      criticalSection();   // Not protected
+    good_example: |
+      Lock lock{mutex};    // Correct: lock held until end of scope
+      criticalSection();   // Protected
+    tags:
+      - expressions-statements
+      - raii
+      - safety

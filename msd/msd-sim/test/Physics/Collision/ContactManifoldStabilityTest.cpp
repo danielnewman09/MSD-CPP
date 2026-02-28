@@ -50,7 +50,7 @@ double computeSystemEnergy(const WorldModel& world)
 // Validates: Resting contact stability, no drift/jitter/sinking
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, ContactManifoldStabilityTest_D1_RestingCube_StableFor1000Frames)
+TEST_F(ReplayEnabledTest, ContactManifoldStabilityTest_RestingCube_StableFor1000Frames)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062d_replay_stability_edge_contact_tests
@@ -165,7 +165,7 @@ TEST_F(ReplayEnabledTest, ContactManifoldStabilityTest_D1_RestingCube_StableFor1
 //   3. Cube remains on the floor (no fly-away or sinking)
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, ContactManifoldStabilityTest_D4_MicroJitter_DampsOut)
+TEST_F(ReplayEnabledTest, ContactManifoldStabilityTest_MicroJitter_DampsOut)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062d_replay_stability_edge_contact_tests

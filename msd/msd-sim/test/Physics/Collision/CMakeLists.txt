@@ -6,8 +6,9 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/EdgeContactTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/EnergyAccountingTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/EPAConvergenceDiagnosticTest.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/FrictionDirectionTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/FrictionSlidingTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/LinearCollisionTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MultiBodyContactTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ParameterIsolationTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/PerContactDepthTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/RotationalCollisionTest.cpp

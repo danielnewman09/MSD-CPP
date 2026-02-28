@@ -75,6 +75,39 @@ For each technical decision from prototype results:
 - Decision is reflected in implementation
 - Prototype learnings about gotchas/pitfalls addressed
 
+### Phase 2.5: Guidelines MCP Lookup
+
+Before evaluating code quality, query the guidelines MCP server for rules applicable to the implementation:
+
+- Use `search_guidelines` with terms matching the implementation's key patterns (e.g., "memory ownership", "brace initialization", "NaN", "Rule of Zero", "const reference")
+- Only cite rules returned by `search_guidelines`. Do not invent rule IDs.
+- Use `get_rule` to retrieve full rationale for any rule you plan to cite in your review
+- When a code quality finding corresponds to a project convention, include the rule ID (e.g., `MSD-RES-001`) in the Issues Found table so the implementer can trace the requirement
+
+#### Severity Enforcement Policy
+
+Guidelines have three severity levels. Map them to finding severity as follows:
+
+| Guideline Severity | Minimum Finding Severity | Review Impact |
+|--------------------|--------------------------|---------------|
+| `required`         | BLOCKING                 | Cannot approve with open violations |
+| `recommended`      | MAJOR                    | Should fix before merge; document if deferred |
+| `advisory`         | MINOR or NIT             | Discretionary; cite for awareness |
+
+When citing a rule, always include its severity. Example:
+"Violates MSD-INIT-001 (required): Use NaN for uninitialized floating-point members → BLOCKING"
+
+#### Required Rules Compliance Check
+
+Before finalizing your review verdict:
+1. Identify the categories relevant to this implementation (e.g., Resource Management, Initialization, Naming)
+2. For each relevant category, query `get_category(name, detailed=True)`
+3. Filter for rules with `severity: required`
+4. Verify the implementation complies with each required rule
+5. Any required-rule violation that is not addressed is a BLOCKING finding
+
+This is a systematic sweep — do not rely only on pattern-matched `search_guidelines` queries.
+
 ### Phase 3: Code Quality
 
 **Resource Management**:
@@ -390,11 +423,28 @@ If git/GitHub operations fail, report the error but do NOT let it block the revi
 3. You re-review ONLY the changes
 4. Repeat until APPROVED
 
-### Escalation
+### Escalation — 3rd CHANGES REQUESTED (Same Fundamental Issue)
 If CHANGES REQUESTED 3 times for the same fundamental issue:
-- Escalate to human operator
-- May indicate design problem, not implementation problem
-- Document the pattern for human review
+1. Determine that the issue is design-level (not merely an implementation shortcoming):
+   - The same root cause appears in all three review cycles
+   - The implementer cannot fix it without violating the design
+2. Produce `docs/designs/{feature-name}/implementation-findings.md` using the template at
+   `.claude/templates/implementation-findings.md.template`:
+   - Set Produced by: Implementation Reviewer
+   - Set Trigger: 3rd CHANGES REQUESTED
+   - Fill "What Was Attempted" from the three review cycles (what the implementer tried each time)
+   - Classify the failure
+   - Complete Root Cause Analysis (cite the specific design decision that is flawed)
+   - Propose a scoped design change
+   - Complete the Oscillation Check
+3. Commit the findings artifact:
+   ```bash
+   git add docs/designs/{feature-name}/implementation-findings.md
+   git commit -m "review: 3rd escalation — implementation-findings for {feature-name}"
+   git push
+   ```
+4. Inform the orchestrator that ticket status should advance to
+   "Implementation Blocked — Design Revision Needed"
 
 ## Constraints
 
