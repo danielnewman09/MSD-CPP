@@ -961,3 +961,132 @@ None — this is new infrastructure in a separate repository. No MSD-CPP C++ sou
   - Separate metadata table with key-value rows: More queryable but adds complexity for what is currently a simple use case
 - **Trade-offs**: JSON blob fields are not individually queryable via SQL. If advanced querying of custom metadata is needed later, a migration to a key-value table can be considered.
 - **Status**: active
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-27
+**Status**: APPROVED WITH NOTES
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Module organization | ✓ | `engine/`, `server/`, `cli/` separation is clean. Mirrors the guidelines-server pattern (schema.py, server.py, seed script). |
+| Naming conventions | ✓ | Python modules follow `snake_case`. Public symbols consistent with existing MSD-CPP Python tooling. |
+| Dependency direction | ✓ | `server/` depends on `engine/`; `cli/` depends on `engine/`. No cycles. `engine/` has no dependency on consuming repo code — it reads YAML config. |
+| Consistency with existing MCP servers | ✓ | FastMCP pattern with class + factory function matches `guidelines_server.py` and `mcp_codebase_server.py`. |
+| Standalone repo separation | ✓ | Engine is fully project-agnostic. MSD-CPP-specific knowledge is externalized to `.workflow/phases.yaml` and `.workflow/config.yaml`, following the same pattern as `.guidelines/` in ticket 0081. |
+| SQLite consistency | ✓ | Follows the existing pattern (codebase.db, traceability.db, guidelines.db). WAL mode + PRAGMA foreign_keys = ON is correct. |
+
+#### Python Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Type annotations | ~ | Design describes data classes in `models.py` but does not specify whether they use `dataclasses.dataclass`, `pydantic.BaseModel`, or plain classes. Given the existing replay server uses Pydantic, this should be clarified. |
+| Async patterns | ✓ | Not required. FastMCP in stdio/SSE modes handles concurrency at the MCP layer. Synchronous SQLite access is appropriate — SQLite's WAL mode provides read concurrency; atomic claiming serializes writes by design. |
+| Error handling | ~ | The design specifies error_details in the schema but does not describe the Python exception hierarchy in `engine/` or how errors surface to MCP tool callers (error dicts vs. exceptions). Should match guidelines_server.py's error-dict-on-not-found pattern. |
+| Resource management | ✓ | Not specified explicitly, but SQLite connections via context managers (`with conn:`) are the established pattern in the codebase and must be used. The design implies this via WAL mode and transaction semantics. |
+| Idempotency | ✓ | `import-tickets` idempotency explicitly stated. Scheduler `seed phases` must be idempotent on repeated runs — the UNIQUE(ticket_id, phase_name) constraint enforces this at the DB level. |
+| Configuration validation | ~ | `config.py` reads YAML but the design does not specify how invalid configuration is reported (missing required fields, unknown agent types, invalid condition syntax). Validation errors should fail fast with clear messages. |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Atomic claiming | ✓ | The `UPDATE ... WHERE ... RETURNING *` query is correct for SQLite 3.35+. Python 3.12 ships SQLite 3.39+. This is safe. |
+| WAL mode concurrency | ✓ | WAL mode permits concurrent readers + single writer. The write load is low (one claim at a time) and brief. Appropriate for the expected single-developer workload. |
+| SSE transport | ✓ | FastMCP supports SSE natively. Docker Compose mounts are correctly specified. |
+| pip + Docker distribution | ✓ | `pyproject.toml` entry point (`workflow-engine`) + Dockerfile is the right approach. Consistent with guidelines-server extraction plan in 0081. |
+| `.workflow/` configuration parsing | ✓ | YAML parsing with PyYAML (already in `python/requirements.txt` for guidelines seeder) is appropriate. Condition evaluation for `contains`, `has_multiple`, and equality is straightforward. |
+| markdown_sync parsing | ~ | Parsing checkbox state from markdown is fragile if ticket authors deviate from the `- [x]` format. The design mentions a `ticket_parser.py` extension point in the consuming repo, which is the correct escape hatch. The base parser must be defensive. |
+| Parallel phase group resolution | ✓ | The `parallel_group` column + `after`/`before` semantics in phases.yaml are well-specified. Availability resolution: mark all group members available when `after` phase completes; block next sequential phase until all group members complete. |
+| Python 3.12 requirement | ✓ | Implied by the slim Docker base image. The `|` union type syntax used in guidelines_server.py requires Python 3.10+. Explicitly state minimum version in `pyproject.toml`. |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | SQLite in-memory databases (`:memory:`) enable fully isolated unit tests for schema, claim, state_machine, scheduler, and audit. |
+| Mockable dependencies | ✓ | `engine/` modules take explicit `conn` or `db_path` parameters, enabling test injection. Config reader takes a path, enabling temp directories. |
+| Observable state | ✓ | All state is in the SQLite DB — tests can query directly after calling engine functions. |
+| MCP tool integration tests | ✓ | FastMCP supports in-process testing via the Python API without a network connection. |
+| Concurrent agent test | ✓ | `test_concurrent_agents.py` specified. Using Python `threading` + in-memory SQLite will validate the atomic claim query correctly. Note: in-memory SQLite does not share state across connections by default — tests should use a temp file or `sqlite3.connect("file::memory:?cache=shared&uri=true")`. |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | Heartbeat implicit model may produce false-positive stale detection if an agent calls no MCP tools for > 10 min during a long-running phase (e.g., a compilation or test run inside the agent's work) | Reliability | Med | Med | Document minimum heartbeat-call frequency in agent prompt preamble; consider a 30-min default timeout rather than 10-min for Phase 1 | No |
+| R2 | markdown_sync checkbox parser breaks if ticket markdown deviates from the expected checkbox format (e.g., extra spaces, different heading structure) | Feasibility | Low | Low | Defensive regex with test fixtures covering edge cases; `ticket_parser.py` extension point is the escape hatch | No |
+| R3 | `phases.yaml` condition evaluation is limited (contains, has_multiple, equality) — complex conditions (e.g., "C++ AND Frontend but not Python") are not expressible | Feasibility | Low | Low | Acceptable for current phase definitions; `ticket_parser.py` extension point handles complex cases | No |
+| R4 | Two-phase worktree scenario: a developer working in a git worktree and a CI agent running concurrently will share the DB at `build/Debug/docs/workflow.db` only if they use the same build directory. If worktrees use separate build directories, they have separate DBs with no cross-worktree coordination | Architecture | Med | Low | Document that the DB is per-worktree; cross-worktree coordination would require a shared DB path in config | No |
+| R5 | The `RETURNING *` clause in the atomic claim query requires that Python's `sqlite3` module uses autocommit or that the UPDATE is inside an explicit transaction. If FastMCP or SQLite connection setup disables autocommit, the UPDATE may not be visible to other connections immediately | Reliability | Low | High | Prototype the atomic claim in isolation before implementation to verify transaction semantics | Yes |
+
+### Prototype Guidance
+
+#### Prototype P1: Atomic Claim Transaction Semantics
+
+**Risk addressed**: R5
+**Question to answer**: Does `UPDATE ... RETURNING *` inside a Python `sqlite3` transaction correctly serialize concurrent claims from two threads connecting to the same WAL-mode database file, with no double-claims?
+
+**Success criteria**:
+- 100 concurrent claim attempts from 2 threads produce exactly N unique claims (where N = number of rows in `phases` table)
+- No two threads receive the same `phase_id` from the `RETURNING *` result
+- No deadlocks or `sqlite3.OperationalError: database is locked` errors
+
+**Prototype approach**:
+```
+Location: prototypes/0083_database_agent_orchestration/p1_atomic_claim/
+Type: Standalone Python script (pytest fixture + threading)
+
+Steps:
+1. Create a temp file SQLite DB with WAL mode enabled
+2. Insert 10 phases all with status='available'
+3. Spawn 2 threads, each attempting to claim all 10 phases sequentially
+4. Collect all phase_ids returned by RETURNING *
+5. Assert no duplicates and total claim count == 10
+```
+
+**Time box**: 30 minutes
+
+**If prototype fails**:
+- Wrap the UPDATE in an explicit `BEGIN IMMEDIATE` transaction to serialize writers
+- Alternatively, use `sqlite3.connect(check_same_thread=False)` with a Python threading.Lock for the claim operation
+
+### Open Question Resolutions
+
+The following open questions from the design were resolved in the Design Decisions section. No human input is needed to proceed:
+
+| Question | Resolution | Decision |
+|----------|------------|----------|
+| Database location | Gitignored in build directory | DD-0083-001 (derived state, not tracked) |
+| Agent spawning model | Manual launch first (Option A) | DD-0083-001 (defer launcher script to Phase 4) |
+| Heartbeat mechanism | Implicit on any MCP tool call | DD-0083-007 |
+| Markdown sync frequency | Real-time for status; batch for Workflow Log | Design section 6 |
+| Distribution model | Both Docker and pip | DD-0083-008 |
+
+### Minor Notes (No Changes Required)
+
+1. **`models.py` data classes**: Recommend using `@dataclasses.dataclass(frozen=True)` for immutable record types (phases, tickets) and mutable `@dataclasses.dataclass` for agent state. Pydantic is acceptable if the team prefers runtime validation. Document the choice in `models.py`.
+
+2. **`pyproject.toml` Python version floor**: Set `requires-python = ">=3.10"` (union type syntax) or `>=3.12` (matches Docker base image). Do not leave it unspecified.
+
+3. **WAL checkpoint strategy**: The design mentions WAL mode and periodic checkpoints. Explicitly specify that the server runs `PRAGMA wal_autocheckpoint = 1000` (default) — this is sufficient for the expected write volume and requires no additional configuration.
+
+4. **CLI entry point naming**: `workflow-engine` as a CLI entry point conflicts with the package name as a Python import (`workflow_engine`). Prefer `wfe` or `workflow-cli` as the entry point name to avoid shell confusion (hyphen in Python import names requires importlib or workarounds).
+
+5. **`phases.yaml` parallel groups structure**: The current design nests parallel group phases inside a `parallel_groups` top-level key separate from the sequential `phases` list. This creates two lookups to build the full ordered phase sequence. Consider flattening to a single `phases` list where parallel phases carry `parallel_group: impl` as an attribute — consistent with the `parallel_group` column in the `phases` DB table.
+
+### Summary
+
+The design is architecturally sound and well-specified. The standalone repo extraction, SQLite coordination layer, FastMCP server pattern, and `.workflow/` configuration externalization are all consistent with established MSD-CPP infrastructure patterns. The schema is appropriately normalized, the atomic claim query is correct for SQLite 3.35+, and the test plan covers all major components.
+
+One prototype is recommended (P1: Atomic Claim Transaction Semantics) before full implementation to validate concurrent claim behavior. This is low-risk but high-impact to verify before building the full claim infrastructure.
+
+The design is ready for human review and proceeds to the Prototype phase upon approval.

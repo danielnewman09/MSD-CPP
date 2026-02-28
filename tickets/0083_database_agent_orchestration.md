@@ -2,8 +2,8 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Design
-- [ ] Design Complete — Awaiting Review
+- [x] Ready for Design
+- [x] Design Complete — Awaiting Review
 - [ ] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
@@ -155,19 +155,23 @@ Additionally, the workflow engine is not specific to MSD-CPP — any project usi
 {This section is automatically updated as the workflow progresses}
 
 ### Design Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-02-27
+- **Completed**: 2026-02-27
+- **Branch**: 0083-database-agent-orchestration
+- **PR**: N/A
 - **Artifacts**:
   - `docs/designs/0083_database_agent_orchestration/design.md`
   - `docs/designs/0083_database_agent_orchestration/0083_database_agent_orchestration.puml`
-- **Design Decisions**:
-- **Notes**:
+- **Design Decisions**: DD-0083-001 through DD-0083-009 documented in design.md
+- **Notes**: Design produced collaboratively with human. Covers standalone workflow-engine repo, SQLite schema, FastMCP server, scheduler, CLI, markdown sync, and MSD-CPP consumer integration.
 
 ### Design Review Phase
-- **Started**:
-- **Completed**:
-- **Status**:
-- **Reviewer Notes**:
+- **Started**: 2026-02-27
+- **Completed**: 2026-02-27
+- **Branch**: 0083-database-agent-orchestration
+- **PR**: N/A
+- **Status**: APPROVED WITH NOTES
+- **Reviewer Notes**: Design is architecturally sound. Consistent with existing MCP server patterns (guidelines-server, codebase-server). One prototype recommended (P1: Atomic Claim Transaction Semantics) before full implementation. Minor notes on models.py data class choice, pyproject.toml Python version floor, CLI entry point naming, and phases.yaml parallel group flattening.
 
 ### Prototype Phase
 - **Started**:
