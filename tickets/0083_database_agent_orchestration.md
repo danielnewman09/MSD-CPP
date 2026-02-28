@@ -158,7 +158,7 @@ Additionally, the workflow engine is not specific to MSD-CPP — any project usi
 - **Started**: 2026-02-27
 - **Completed**: 2026-02-27
 - **Branch**: 0083-database-agent-orchestration
-- **PR**: N/A
+- **PR**: #111 (draft)
 - **Artifacts**:
   - `docs/designs/0083_database_agent_orchestration/design.md`
   - `docs/designs/0083_database_agent_orchestration/0083_database_agent_orchestration.puml`
@@ -169,7 +169,7 @@ Additionally, the workflow engine is not specific to MSD-CPP — any project usi
 - **Started**: 2026-02-27
 - **Completed**: 2026-02-27
 - **Branch**: 0083-database-agent-orchestration
-- **PR**: N/A
+- **PR**: #111 (draft)
 - **Status**: APPROVED WITH NOTES
 - **Reviewer Notes**: Design is architecturally sound. Consistent with existing MCP server patterns (guidelines-server, codebase-server). One prototype recommended (P1: Atomic Claim Transaction Semantics) before full implementation. Minor notes on models.py data class choice, pyproject.toml Python version floor, CLI entry point naming, and phases.yaml parallel group flattening.
 
