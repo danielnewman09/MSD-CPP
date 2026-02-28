@@ -351,58 +351,12 @@ Priority order:
 
 ## GitHub PR Integration
 
-After completing the review, post results to the feature's GitHub PR for visibility.
+Use the workflow MCP tools for all git/GitHub operations.
 
-### Finding the PR
-```bash
-# Derive branch name from ticket filename
-# tickets/0041_reference_frame_transform_refactor.md → 0041-reference-frame-transform-refactor
-
-# Find the PR number for this branch
-gh pr list --head "{branch-name}" --json number --jq '.[0].number'
-```
-
-### Posting Review Summary as PR Comment
-
-If a PR exists, post a concise review summary as a PR comment:
-
-```bash
-gh pr comment {pr-number} --body "$(cat <<'EOF'
-## Implementation Review Summary
-
-**Status**: {APPROVED / CHANGES REQUESTED / BLOCKED}
-**Date**: {YYYY-MM-DD}
-
-### Design Conformance
-- {Pass/Fail with brief explanation}
-
-### Code Quality
-- {Pass/Needs Improvement/Fail with key findings}
-
-### Test Coverage
-- {Pass/Needs Improvement/Fail with summary}
-
-### Critical Issues
-| ID | Location | Issue |
-|----|----------|-------|
-| C1 | `file:line` | {brief description} |
-
-### Next Steps
-- {What happens next based on status}
-
-*Full review at `docs/designs/{feature-name}/implementation-review.md`*
-EOF
-)"
-```
-
-### Committing Review Results
-
-After creating the implementation review document:
-```bash
-git add docs/designs/{feature-name}/implementation-review.md
-git commit -m "review: implementation review for {feature-name}"
-git push
-```
+After completing the review:
+1. Call `commit_and_push` with `docs/designs/{feature-name}/implementation-review.md`
+2. Call `post_pr_comment` with a concise review summary including: status, design conformance, code quality, test coverage, critical issues, and next steps
+3. Call `complete_phase` to advance workflow
 
 If git/GitHub operations fail, report the error but do NOT let it block the review output. The `implementation-review.md` file is the primary artifact.
 
@@ -437,12 +391,7 @@ If CHANGES REQUESTED 3 times for the same fundamental issue:
    - Complete Root Cause Analysis (cite the specific design decision that is flawed)
    - Propose a scoped design change
    - Complete the Oscillation Check
-3. Commit the findings artifact:
-   ```bash
-   git add docs/designs/{feature-name}/implementation-findings.md
-   git commit -m "review: 3rd escalation — implementation-findings for {feature-name}"
-   git push
-   ```
+3. Call `commit_and_push` with `docs/designs/{feature-name}/implementation-findings.md`
 4. Inform the orchestrator that ticket status should advance to
    "Implementation Blocked — Design Revision Needed"
 

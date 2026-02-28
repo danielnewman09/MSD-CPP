@@ -133,15 +133,7 @@ After each test run, append to iteration log:
 **Assessment**: {moving forward?}
 ```
 
-Auto-commit after each successful test cycle:
-
-```bash
-git add replay/tests/ {iteration-log.md}
-git commit -m "test: iteration {N} — {one-line summary}
-
-{ticket-name}
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
+Auto-commit after each successful test cycle by calling `commit_and_push` with test files and `iteration-log.md`.
 
 ### Phase 3: Failure Handling
 
@@ -183,6 +175,8 @@ Before handoff, verify:
 
 ## Handoff Protocol
 
+Use the workflow MCP tools for all git/GitHub operations.
+
 After completing test writing:
 1. Inform human operator that tests are complete
 2. Provide summary of:
@@ -190,17 +184,7 @@ After completing test writing:
    - Test coverage vs design specification
    - Any test failures documented for the implementer
    - Areas where additional coverage might be valuable
-3. **Commit test artifacts**:
-   ```bash
-   git add replay/tests/
-   git commit -m "test: python tests for {feature-name}
-
-   {ticket-name}
-   Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-   ```
-4. **Push to remote**:
-   ```bash
-   git push
-   ```
+3. Call `commit_and_push` with test files (`replay/tests/`)
+4. Call `complete_phase` to advance workflow
 
 If any git operations fail, report the error but do NOT stop — the test files are the primary output.

@@ -207,12 +207,7 @@ If the frontend architecture is complex, create at `docs/designs/{feature-name}/
 
 ## Feature Branch Integration
 
-Commit convention:
-```bash
-git add docs/designs/{feature-name}/frontend/design.md
-git commit -m "design: frontend architecture for {feature-name}"
-git push
-```
+Call `commit_and_push` with `docs/designs/{feature-name}/frontend/design.md` after completing design.
 
 ## Constraints
 

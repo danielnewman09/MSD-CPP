@@ -52,23 +52,7 @@ If it DOES exist, read it fully before proceeding. This log records all previous
 
 **1.4 Set Up Feature Branch**
 
-The feature branch should already exist from the design phase. Set it up:
-
-1. **Derive branch name** from the ticket filename (same convention as architect):
-   - `tickets/0041_reference_frame_transform_refactor.md` → `0041-reference-frame-transform-refactor`
-2. **Check if branch exists** (it should, from design phase):
-   ```bash
-   git branch --list "{branch-name}"
-   ```
-3. **If branch exists**: Switch to it:
-   ```bash
-   git checkout {branch-name}
-   ```
-4. **If branch does not exist** (unusual — design phase should have created it): Create from main:
-   ```bash
-   git checkout -b {branch-name} main
-   ```
-5. If git operations fail, report the error but proceed with implementation — git integration is non-blocking.
+Call `setup_branch` with the ticket ID to check out the feature branch (should already exist from design phase). If it fails, proceed with implementation — git integration is non-blocking.
 
 **1.5 Create Implementation Plan**
 Map out file creation/modification order before writing code.
@@ -147,17 +131,7 @@ Append a new entry to the iteration log (`docs/designs/{feature-name}/iteration-
 
 **2. Auto-Commit**
 
-After each successful build+test cycle, commit all changes:
-
-```bash
-git add {changed files} {iteration-log.md}
-git commit -m "{prefix}: iteration {N} — {one-line summary of change}
-
-{ticket-name}
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
-Commit prefix follows project convention (`impl:`, `investigate:`, `fix:`, etc.).
+After each successful build+test cycle, call `commit_and_push` with the changed files and `iteration-log.md`.
 
 **3. Circle Detection — Before Making Next Change**
 
@@ -179,12 +153,7 @@ If a circle is detected:
    - Complete the Root Cause Analysis section
    - Propose a scoped design change
    - Complete the Oscillation Check
-4. Commit the findings artifact:
-   ```bash
-   git add docs/designs/{feature-name}/implementation-findings.md
-   git commit -m "impl: circle detected — implementation-findings for {feature-name}"
-   git push
-   ```
+4. Call `commit_and_push` with `docs/designs/{feature-name}/implementation-findings.md`
 5. Inform the orchestrator that ticket status should advance to
    "Implementation Blocked — Design Revision Needed"
 
@@ -248,74 +217,17 @@ Refer to CLAUDE.md for build commands:
 - Component-specific presets available (e.g., `debug-assets-only`, `debug-tests-only`)
 
 ## Handoff Protocol
+
+Use the workflow MCP tools for all git/GitHub operations.
+
 After completing implementation:
 1. Inform human operator that implementation is complete
 2. Provide summary of files created/modified, test coverage status, any deviations
 3. Note areas warranting extra attention in review
 4. Include the iteration log (`docs/designs/{feature-name}/iteration-log.md`) as a deliverable artifact — it provides full traceability of what was tried during implementation
 5. Human reviews implementation before Implementation Review proceeds
-6. **Commit implementation artifacts**:
-   ```bash
-   git add {all new and modified source files, test files, CMakeLists.txt changes}
-   git commit -m "impl: implement {feature-name}"
-   ```
-7. **Push to remote**:
-   ```bash
-   git push
-   ```
-8. **Create or update PR** (idempotent):
-   ```bash
-   # Check if PR already exists (should exist from design phase)
-   existing_pr=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')
-
-   if [ -z "$existing_pr" ]; then
-     # No PR exists — create one
-     gh pr create \
-       --title "{ticket-number}: {Feature Name}" \
-       --body "$(cat <<'PREOF'
-   ## Summary
-   - {One-line description of what was implemented}
-
-   ## Implementation
-   - {Key files created/modified}
-   - {Test coverage summary}
-
-   ## Design Artifacts
-   - `docs/designs/{feature-name}/design.md`
-   - `docs/designs/{feature-name}/implementation-notes.md`
-
-   Closes #{issue-number}
-
-   ---
-   *Phase: Implementation | Status: Ready for Review*
-   PREOF
-   )"
-   else
-     # PR exists from design phase — mark ready for review
-     gh pr ready $existing_pr
-
-     # Update PR body with implementation details
-     gh pr edit $existing_pr \
-       --title "{ticket-number}: {Feature Name}" \
-       --body "$(cat <<'PREOF'
-   ## Summary
-   - {One-line description of what was implemented}
-
-   ## Implementation
-   - {Key files created/modified}
-   - {Test coverage summary}
-
-   ## Design Artifacts
-   - `docs/designs/{feature-name}/design.md`
-   - `docs/designs/{feature-name}/implementation-notes.md`
-
-   Closes #{issue-number}
-
-   ---
-   *Phase: Implementation | Status: Ready for Review*
-   PREOF
-   )"
-   fi
-   ```
+6. Call `commit_and_push` with all new and modified source files, CMakeLists.txt changes
+7. Call `create_or_update_pr` (draft=false) to mark the PR ready for review
+8. Call `complete_phase` to advance workflow
 
 If any git/GitHub operations fail, report the error but do NOT stop — the implementation code is the primary output.

@@ -136,12 +136,7 @@ After implementation, verify:
 ## Handoff
 
 After completing implementation:
-1. Commit production Python files only:
-   ```bash
-   git add replay/replay/
-   git commit -m "impl: python implementation for {feature-name}"
-   git push
-   ```
+1. Call `commit_and_push` with production Python files (`replay/replay/`)
 2. Provide summary of files created/modified
 3. Note areas needing extra review attention
 

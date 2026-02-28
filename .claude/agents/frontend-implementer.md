@@ -166,12 +166,7 @@ After implementation, verify:
 ## Handoff
 
 After completing implementation:
-1. Commit all frontend files:
-   ```bash
-   git add replay/static/
-   git commit -m "impl: frontend implementation for {feature-name}"
-   git push
-   ```
+1. Call `commit_and_push` with frontend files (`replay/static/`)
 2. Provide summary of files created/modified
 3. Report verification results
 4. Note areas needing extra review attention

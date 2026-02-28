@@ -142,15 +142,7 @@ Append to the iteration log:
 
 **2. Auto-Commit**
 
-After each successful build+test cycle, commit test files only:
-
-```bash
-git add {test files} {iteration-log.md}
-git commit -m "test: iteration {N} — {one-line summary}
-
-{ticket-name}
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
+After each successful build+test cycle, call `commit_and_push` with test files and `iteration-log.md`.
 
 **3. Circle Detection**
 
@@ -207,6 +199,8 @@ Refer to CLAUDE.md for build commands:
 
 ## Handoff Protocol
 
+Use the workflow MCP tools for all git/GitHub operations.
+
 After completing test writing:
 1. Inform human operator that tests are complete
 2. Provide summary of:
@@ -214,17 +208,7 @@ After completing test writing:
    - Test coverage vs design specification
    - Any test failures documented for the implementer
    - Areas where additional coverage might be valuable
-3. **Commit test artifacts**:
-   ```bash
-   git add {all test files, CMakeLists.txt changes}
-   git commit -m "test: tests for {feature-name}
-
-   {ticket-name}
-   Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-   ```
-4. **Push to remote**:
-   ```bash
-   git push
-   ```
+3. Call `commit_and_push` with all test files and CMakeLists.txt changes
+4. Call `complete_phase` to advance workflow
 
 If any git operations fail, report the error but do NOT stop — the test files are the primary output.

@@ -207,12 +207,7 @@ except Exception as e:
 
 ## Feature Branch Integration
 
-Commit convention:
-```bash
-git add docs/designs/{feature-name}/python/design.md
-git commit -m "design: python architecture for {feature-name}"
-git push
-```
+Call `commit_and_push` with `docs/designs/{feature-name}/python/design.md` after completing design.
 
 ## Constraints
 

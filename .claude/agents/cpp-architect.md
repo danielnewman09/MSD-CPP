@@ -63,26 +63,9 @@ Revise an existing design based on implementation failure findings. This mode is
 
 ## Process
 
-### 0.1 Create Feature Branch
+### 0.1 Set Up Feature Branch
 
-Before beginning design work, set up the feature branch:
-
-1. **Derive branch name** from the ticket filename:
-   - `tickets/0041_reference_frame_transform_refactor.md` → `0041-reference-frame-transform-refactor`
-   - Replace underscores with hyphens, strip the `.md` extension and `tickets/` prefix
-2. **Check if branch already exists**:
-   ```bash
-   git branch --list "{branch-name}"
-   ```
-3. **If branch does not exist**: Create from main and switch to it:
-   ```bash
-   git checkout -b {branch-name} main
-   ```
-4. **If branch exists**: Switch to it:
-   ```bash
-   git checkout {branch-name}
-   ```
-5. If git operations fail, report the error but proceed with design work — git integration is non-blocking.
+Call `setup_branch` with the ticket ID to create or check out the feature branch. If it fails, proceed with design work — git integration is non-blocking.
 
 ### 1. Analyze Current Architecture
 Before designing, thoroughly examine:
@@ -255,31 +238,6 @@ When starting a design:
 3. List the required rules as design constraints in the "Constraints" section of the design document
 4. Ensure the proposed design satisfies all listed required rules
 
-## Coding Standards to Apply
-When designing interfaces, follow these project conventions:
-
-### Memory Management
-- Use `std::unique_ptr` for exclusive ownership transfer
-- Use plain references (`const T&` or `T&`) for non-owning access
-- Avoid `std::shared_ptr` - establish clear ownership hierarchies
-- Never use raw pointers in public interfaces
-
-### Initialization
-- Use `std::numeric_limits<T>::quiet_NaN()` for uninitialized floating-point values
-- Always use brace initialization `{}`
-- Prefer Rule of Zero - use `= default` for special member functions
-
-### Naming
-- Classes: `PascalCase`
-- Methods: `camelCase`
-- Member variables: `snake_case_` (trailing underscore)
-- Constants: `kPascalCase`
-
-### Return Values
-- Prefer returning values over output parameters
-- Use return structs for multiple values
-- Use `std::optional<std::reference_wrapper<const T>>` only for truly optional lookups
-
 ## Design Complexity Sanity Checks
 
 Before finalizing a design, evaluate whether constraints (especially backward compatibility) are leading to unnecessary complexity. The following patterns are **red flags** that should trigger a pause and human consultation:
@@ -432,60 +390,20 @@ If any issues affected the architecture:
 
 ## Handoff Protocol
 
+Use the workflow MCP tools for all git/GitHub operations.
+
 ### After Initial Design (Mode 1):
 1. Inform that the design is ready for review
 2. List all Open Questions requiring human input, organized by category
 3. Specify which questions are blocking vs. informational
 4. The design will automatically proceed to design-reviewer for assessment
-5. **Commit design artifacts**:
-   ```bash
-   git add docs/designs/{feature-name}/design.md docs/designs/{feature-name}/{feature-name}.puml
-   git commit -m "design: initial architecture for {feature-name}"
+5. Call `commit_and_push` with design artifact paths (`design.md`, `.puml`)
+6. Call `create_or_update_pr` (draft=true)
+7. Call `post_pr_comment` with rendered PlantUML diagram using the proxy URL format:
    ```
-6. **Push branch to remote**:
-   ```bash
-   git push -u origin {branch-name}
+   ![PlantUML Diagram](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/{owner}/{repo}/{branch}/docs/designs/{feature-name}/{feature-name}.puml&fmt=svg)
    ```
-7. **Create draft PR** (idempotent — check first):
-   ```bash
-   # Check if PR already exists for this branch
-   existing_pr=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')
-
-   if [ -z "$existing_pr" ]; then
-     gh pr create --draft \
-       --title "{ticket-number}: {Feature Name}" \
-       --body "$(cat <<'PREOF'
-   ## Summary
-   - {One-line description of the feature}
-
-   ## Design Artifacts
-   - `docs/designs/{feature-name}/design.md`
-   - `docs/designs/{feature-name}/{feature-name}.puml`
-
-   ## Open Questions
-   - {List any blocking questions}
-
-   Part of #{issue-number}
-
-   ---
-   *Phase: Design | Status: Draft*
-   PREOF
-   )" \
-       --label "ticket:{NNNN}" --label "phase:design"
-   fi
-   ```
-8. **Post rendered PlantUML diagram** as a PR comment:
-   ```bash
-   pr_number=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')
-   gh pr comment $pr_number --body "$(cat <<'PUMLEOF'
-   ## Architecture Diagram
-
-   ![PlantUML Diagram](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/{owner}/{repo}/{branch-name}/docs/designs/{feature-name}/{feature-name}.puml&fmt=svg)
-
-   *Rendered from `docs/designs/{feature-name}/{feature-name}.puml`*
-   PUMLEOF
-   )"
-   ```
+8. Call `complete_phase` to advance workflow
 
 If any git/GitHub operations fail, report the error but do NOT stop — the design documents are the primary output.
 
@@ -494,48 +412,17 @@ If any git/GitHub operations fail, report the error but do NOT stop — the desi
 2. Summarize the changes made
 3. Note any issues that could not be fully addressed (and why)
 4. The design will return to design-reviewer for final assessment
-5. **Commit revised artifacts**:
-   ```bash
-   git add docs/designs/{feature-name}/design.md docs/designs/{feature-name}/{feature-name}.puml
-   git commit -m "design: revise architecture for {feature-name}"
-   git push
-   ```
-6. **Post updated PlantUML diagram** as a new PR comment (if diagram changed):
-   ```bash
-   pr_number=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')
-   gh pr comment $pr_number --body "$(cat <<'PUMLEOF'
-   ## Updated Architecture Diagram
-
-   ![PlantUML Diagram](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/{owner}/{repo}/{branch-name}/docs/designs/{feature-name}/{feature-name}.puml&fmt=svg)
-
-   *Updated after design revision*
-   PUMLEOF
-   )"
-   ```
+5. Call `commit_and_push` with revised artifact paths (`design.md`, `.puml`)
+6. Call `post_pr_comment` with updated PlantUML diagram (if diagram changed)
+7. Call `complete_phase` to advance workflow
 
 ### After Revision from Findings (Mode 3):
 1. Confirm findings have been addressed — each cited flaw has a corresponding design change
 2. Confirm oscillation guard was applied — the revision does not return to a prior approach
 3. List warm-start hints for the implementer (which files can be preserved)
-4. Commit revised design artifacts:
-   ```bash
-   git add docs/designs/{feature-name}/design.md
-   git add docs/designs/{feature-name}/{feature-name}.puml  # only if diagram changed
-   git commit -m "design: revision from implementation findings for {feature-name}"
-   git push
-   ```
-5. **Post updated PlantUML diagram** as a new PR comment (if diagram changed):
-   ```bash
-   pr_number=$(gh pr list --head "{branch-name}" --json number --jq '.[0].number')
-   gh pr comment $pr_number --body "$(cat <<'PUMLEOF'
-   ## Updated Architecture Diagram (Revision from Implementation Findings)
-
-   ![PlantUML Diagram](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/{owner}/{repo}/{branch-name}/docs/designs/{feature-name}/{feature-name}.puml&fmt=svg)
-
-   *Updated after design revision from implementation findings*
-   PUMLEOF
-   )"
-   ```
-6. The design will proceed to design-reviewer in revision-aware mode
+4. Call `commit_and_push` with revised artifact paths (`design.md`, `.puml` if changed)
+5. Call `post_pr_comment` with updated PlantUML diagram (if diagram changed)
+6. Call `complete_phase` to advance workflow
+7. The design will proceed to design-reviewer in revision-aware mode
 
 Your designs should be thorough enough that another developer could implement them without requiring additional architectural guidance.

@@ -12,12 +12,7 @@ You manage the lifecycle of feature tickets, ensuring each phase is executed in 
 
 ## Project Context
 
-This project follows specific coding standards from CLAUDE.md including:
-- C++20 with CMake and Conan
-- Brace initialization, Rule of Zero/Five
-- Memory management via references and unique_ptr (avoid shared_ptr)
-- Use NaN for uninitialized floating-point values
-- PlantUML diagrams for architectural documentation
+See CLAUDE.md for project coding standards and conventions.
 
 ## Multi-Language Support
 
@@ -468,16 +463,17 @@ Ensure all work adheres to project standards:
 
 ## GitHub Integration Conventions
 
-All agents that create artifacts should integrate with GitHub for visibility. The orchestrator ensures these conventions are followed across phases.
+Use the workflow MCP tools (`setup_branch`, `commit_and_push`, `create_or_update_pr`, `post_pr_comment`) for all git/GitHub operations. The orchestrator ensures these conventions are followed across phases.
 
 ### Branch Naming
 - Format: `{ticket-number}-{ticket-name-kebab-case}` (e.g., `0041-reference-frame-transform-refactor`)
 - Derive from ticket filename: `tickets/0041_reference_frame_transform_refactor.md` → branch `0041-reference-frame-transform-refactor`
 - **Single branch per ticket**, shared across all phases (design, implementation, review, docs)
+- Use `setup_branch` to create or check out the branch
 
 ### PR Lifecycle
-- **Design phase**: Create a **draft** PR when design artifacts are first committed
-- **Implementation phase**: Mark PR as **ready for review** when implementation is committed
+- **Design phase**: Call `create_or_update_pr` (draft=true) when design artifacts are first committed
+- **Implementation phase**: Call `create_or_update_pr` (draft=false) to mark PR ready for review
 - **Human merges**: PRs are never auto-merged; humans merge after final approval
 
 ### Issue Linking
@@ -486,7 +482,7 @@ All agents that create artifacts should integrate with GitHub for visibility. Th
 - If no GitHub issue exists, omit the linking line
 
 ### Commit Message Prefixes
-All commits on a ticket branch should use a phase prefix:
+The `commit_and_push` tool auto-generates phase-appropriate prefixes:
 - `design:` — Design documents, PlantUML diagrams
 - `review:` — Review summaries appended to documents
 - `prototype:` — Prototype code and results
@@ -494,20 +490,17 @@ All commits on a ticket branch should use a phase prefix:
 - `docs:` — Documentation updates (CLAUDE.md, tutorials)
 
 ### PlantUML Rendering in PRs
-Use the PlantUML proxy service to render diagrams as images in PR comments:
+Use `post_pr_comment` with the PlantUML proxy URL to render diagrams in PR comments:
 ```
 https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/{owner}/{repo}/{branch}/docs/designs/{feature-name}/{feature-name}.puml&fmt=svg
 ```
 
 ### Idempotency
-All git/GitHub operations must be **idempotent** — agents check before creating:
-- Check if branch exists before creating (`git branch --list`)
-- Check if PR exists before creating (`gh pr list --head "{branch}"`)
-- Check if comment already posted before posting
+All workflow MCP tools are **idempotent** — they check existing state before creating branches, PRs, or comments.
 
 ### Non-Blocking Git Operations
 Git and GitHub operations are **non-blocking**:
-- If `git push` or `gh pr create` fails, report the error but do NOT stop the agent's core work
+- If any MCP tool call fails, report the error but do NOT stop the agent's core work
 - The design/implementation/review work is the primary output; GitHub integration is secondary
 
 You are the guardian of workflow integrity. Ensure phases complete properly, feedback is incorporated, and the human always knows the current state and next steps.

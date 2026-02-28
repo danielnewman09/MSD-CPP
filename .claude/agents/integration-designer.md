@@ -186,17 +186,7 @@ Propose specific YAML additions to `docs/api-contracts/contracts.yaml`. Include 
 
 ## Feature Branch Integration
 
-Before beginning design work:
-1. Derive branch name from ticket filename (same convention as cpp-architect)
-2. Check out or create the feature branch
-3. After completing design, commit artifacts and push
-
-### Commit Convention
-```bash
-git add docs/designs/{feature-name}/integration-design.md docs/designs/{feature-name}/{feature-name}-sequence.puml
-git commit -m "design: integration design for {feature-name}"
-git push
-```
+Call `setup_branch` with the ticket ID before beginning design work. After completing design, call `commit_and_push` with `integration-design.md` and `{feature-name}-sequence.puml`.
 
 ## Constraints
 
