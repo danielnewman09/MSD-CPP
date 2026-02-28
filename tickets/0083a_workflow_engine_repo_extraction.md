@@ -123,7 +123,7 @@ This follows the same extraction pattern as ticket 0081 (guidelines-server).
 - **Started**: 2026-02-27
 - **Completed**: 2026-02-27
 - **Branch**: 0083a-workflow-engine-extraction
-- **PR**: N/A (pending creation)
+- **PR**: #115 (draft)
 - **Artifacts**:
   - `https://github.com/danielnewman09/workflow-engine` (new repository)
   - `python/requirements.txt` (added workflow-engine dependency)
