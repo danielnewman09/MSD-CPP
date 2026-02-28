@@ -44,6 +44,19 @@ Before reviewing, you must:
 5. Explore the existing codebase to understand current patterns and conventions
 6. Note any human feedback or decisions on Open Questions from the design phase
 
+### Severity Enforcement Policy
+
+Guidelines have three severity levels. Map them to finding severity as follows:
+
+| Guideline Severity | Minimum Finding Severity | Review Impact |
+|--------------------|--------------------------|---------------|
+| `required`         | BLOCKING                 | Cannot approve with open violations |
+| `recommended`      | MAJOR                    | Should fix before merge; document if deferred |
+| `advisory`         | MINOR or NIT             | Discretionary; cite for awareness |
+
+When citing a rule, always include its severity. Example:
+"Violates MSD-INIT-001 (required): Use NaN for uninitialized floating-point members → BLOCKING"
+
 ### Step 2: Evaluate Against Criteria
 
 #### Architectural Fit
@@ -96,7 +109,18 @@ For high-uncertainty risks, specify isolated prototypes:
 - Time box (30 min / 1 hour / 2 hours)
 - Fallback if prototype fails
 
-### Step 5: Determine Status
+### Step 5: Required Rules Compliance Check
+
+Before finalizing your review verdict:
+1. Identify the categories relevant to this design (e.g., Resource Management, Initialization, Naming)
+2. For each relevant category, query `get_category(name, detailed=True)`
+3. Filter for rules with `severity: required`
+4. Verify the design complies with each required rule
+5. Any required-rule violation that is not addressed is a BLOCKING finding
+
+This is a systematic sweep — do not rely only on pattern-matched `search_guidelines` queries.
+
+### Step 6: Determine Status
 
 | Status | Criteria | Action |
 |--------|----------|--------|
