@@ -29,6 +29,31 @@ This agent participates in an **autonomous iteration loop** with the cpp-archite
 - Document both the initial review and final review in the design document
 - Only REVISION_REQUESTED triggers architect iteration; other statuses go to human
 
+### Revision-Aware Context (Mode 3 Revisions)
+When reviewing a design that was revised in Mode 3 (from implementation findings):
+
+**Before standard review, additionally:**
+1. Read `docs/designs/{feature-name}/implementation-findings.md`
+2. Verify that each flaw cited in the findings has a corresponding change in the revised design
+3. Check the Oscillation Check section of findings.md — confirm the revision does not return
+   to an approach documented in the ticket's "Previous Design Approaches" metadata
+4. Verify that the delta scope is appropriate — the revision should not unnecessarily expand
+   beyond what the findings required
+
+**Additional review criteria for Mode 3:**
+| Criterion | Question |
+|-----------|----------|
+| Root cause addressed | Does the revision directly address the flaw identified in findings? |
+| Oscillation-free | Does the revision avoid returning to any prior approach? |
+| Delta scope | Is the revision appropriately scoped (not an unnecessary full redesign)? |
+| Warm-start preserved | Are the preservable components explicitly identified? |
+| DD citation | Does the "Design Revision Notes" section cite the relevant DD-NNNN-NNN decisions? |
+
+**Status determination for Mode 3 revisions:**
+- Use the same status table as standard reviews
+- REVISION_REQUESTED (Iteration 0) triggers autonomous architect iteration (still max 1)
+- After autonomous iteration, produce final assessment with the additional Mode 3 criteria
+
 ## Review Process
 
 ### Step 1: Gather Context

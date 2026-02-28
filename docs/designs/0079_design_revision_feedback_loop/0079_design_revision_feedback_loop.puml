@@ -1,0 +1,148 @@
+@startuml
+skinparam state {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<existing>> White
+}
+
+title Design Revision Feedback Loop\n(0079 — Implementation-Blocked Path)
+
+' === NORMAL IMPLEMENTATION PATH (unchanged) ===
+state "Ready for Implementation" as impl_ready <<existing>>
+state "Implementation\nComplete" as impl_done <<existing>>
+state "Test Writing\nComplete" as test_done <<existing>>
+state "Quality Gate\nPassed" as qg_passed <<existing>>
+state "APPROVED —\nReady to Merge" as approved <<existing>>
+
+' === NEW: IMPLEMENTATION BLOCKED STATUS ===
+state "Implementation Blocked —\nDesign Revision Needed" as blocked <<new>>
+
+' === NEW: HUMAN GATE ===
+state "Human Gate\n[Required — cannot auto-proceed]" as human_gate <<new>> {
+  state "Review implementation-findings.md" as hg_review <<new>>
+  state "Decide: approve revision OR close ticket" as hg_decide <<new>>
+  hg_review --> hg_decide
+}
+
+' === EXISTING ESCALATION TRIGGERS (modified) ===
+state "Implementer\nCircle Detection" as circle <<modified>>
+state "Quality Gate\n3rd Failure" as qg_fail3 <<modified>>
+state "Implementation Reviewer\n3rd CHANGES REQUESTED" as rev_fail3 <<modified>>
+
+' === NEW: IMPLEMENTATION FINDINGS ARTIFACT ===
+state "implementation-findings.md\nproduced" as findings_artifact <<new>> {
+  state "What was attempted" as f1 <<new>>
+  state "Failure classification" as f2 <<new>>
+  state "Root cause analysis" as f3 <<new>>
+  state "Proposed design change" as f4 <<new>>
+  state "Oscillation check" as f5 <<new>>
+  f1 --> f2 --> f3 --> f4 --> f5
+}
+
+' === EXISTING: DESIGNER (Mode 3 added) ===
+state "cpp-architect\n[Mode 3: Revision]" as architect_rev <<modified>> {
+  state "Read implementation-findings.md" as ar1 <<modified>>
+  state "Read original design.md" as ar2 <<modified>>
+  state "Check oscillation guard" as ar3 <<new>>
+  state "Produce delta design\n(not full redesign)" as ar4 <<modified>>
+  state "Append Revision Notes\nto design.md" as ar5 <<modified>>
+  ar1 --> ar2 --> ar3 --> ar4 --> ar5
+}
+
+' === EXISTING: DESIGN REVIEWER (revision-aware) ===
+state "design-reviewer\n[Revision-Aware]" as dr_rev <<modified>> {
+  state "Read implementation-findings.md" as dr1 <<modified>>
+  state "Verify revision addresses\nroot cause" as dr2 <<modified>>
+  state "Check oscillation\n(not returning to prior approach)" as dr3 <<new>>
+  state "Standard criteria\n+ revision checks" as dr4 <<modified>>
+  dr1 --> dr2 --> dr3 --> dr4
+}
+
+' === NEW: ORCHESTRATOR REVISION TRACKING ===
+state "Orchestrator\nRevision Tracking" as orch_track <<new>> {
+  state "Increment Design Revision Count\n(cap at 2 = 3 total attempts)" as ot1 <<new>>
+  state "Record approach in\nPrevious Design Approaches" as ot2 <<new>>
+  state "Check cap — if at limit\nescalate to human (no auto-retry)" as ot3 <<new>>
+  ot1 --> ot2 --> ot3
+}
+
+' === OPTIONAL PROTOTYPE AFTER REVISION ===
+state "Optional Prototype\n[Human decides per revision]" as opt_proto <<new>>
+
+' === REVISION RE-ENTRY ===
+state "Ready for Implementation\n[Re-entry — warm start]" as reimpl <<new>>
+
+' === TRANSITIONS: NORMAL PATH ===
+impl_ready --> impl_done : implementation succeeds
+impl_done --> test_done : tests written
+test_done --> qg_passed : quality gate passes
+qg_passed --> approved : review approved
+
+' === TRANSITIONS: ESCALATION TRIGGERS → BLOCKED ===
+impl_ready --> circle : implementer detects\ncircle (3+ iterations\nsame pattern)
+impl_done --> qg_fail3 : quality gate fails\n3 consecutive times
+qg_passed --> rev_fail3 : reviewer CHANGES REQUESTED\n3x same fundamental issue
+
+circle --> findings_artifact : produces\nimplementation-findings.md
+qg_fail3 --> findings_artifact : adds Design Revision\nRecommendation to report\nthen produces findings
+rev_fail3 --> findings_artifact : produces\nimplementation-findings.md
+
+findings_artifact --> blocked : ticket status\nadvances to blocked
+
+' === TRANSITIONS: BLOCKED → HUMAN GATE ===
+blocked --> human_gate : orchestrator routes here\n(REQUIRED — no auto-skip)
+
+' === TRANSITIONS: HUMAN GATE DECISIONS ===
+human_gate --> orch_track : human approves\nrevision path
+human_gate --> [*] : human closes ticket\n(fundamental re-scope needed)
+
+' === TRANSITIONS: REVISION LOOP ===
+orch_track --> architect_rev : cap not reached\nrevision approved
+orch_track --> [*] : cap reached (2 revisions)\nescalate — fundamental re-scope
+
+architect_rev --> dr_rev : delta design produced
+
+dr_rev --> opt_proto : APPROVED —\nhuman decides if\nprototype needed
+dr_rev --> architect_rev : REVISION_REQUESTED\n(autonomous iteration,\nmax 1)
+dr_rev --> [*] : BLOCKED — human must\nresolve before re-entry
+
+opt_proto --> reimpl : prototype validates\napproach
+opt_proto --> reimpl : human decides\nno prototype needed
+
+reimpl --> impl_done : implementation succeeds\n(warm start — preserve\nunchanged files)
+reimpl --> circle : circle detected again
+
+' === NOTES ===
+note right of findings_artifact
+  Template: .claude/templates/
+  implementation-findings.md.template
+
+  Produced by: implementer (circle),
+  quality gate (3rd failure),
+  implementation reviewer (3rd CHANGES REQUESTED)
+end note
+
+note right of human_gate
+  HARD REQUIREMENT: human must
+  explicitly approve revision.
+  Orchestrator never auto-proceeds
+  past this gate.
+end note
+
+note right of orch_track
+  Ticket metadata tracks:
+  - Design Revision Count (max 2)
+  - Previous Design Approaches []
+  (oscillation prevention)
+end note
+
+note right of architect_rev
+  Mode 3 (new):
+  - Delta design only
+  - Oscillation guard (reject if
+    approach in Previous Approaches)
+  - Warm-start guidance for implementer
+  - Append to design.md (not replace)
+end note
+
+@enduml
