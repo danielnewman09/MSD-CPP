@@ -359,3 +359,108 @@ In order of implementation:
 
 6. Run full test suite. Validate all 9 acceptance criteria. Update pinned values for
    `VelocitySwap` and `ZeroGravity` if needed.
+
+---
+
+## Design Review
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-28
+**Status**: APPROVED WITH NOTES
+**Iteration**: 0 of 1 (no revision needed)
+
+### Criteria Assessment
+
+#### Architectural Fit
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | Pass | `updateVResTangentOnly` (camelCase method), `tangentKInvs` (camelCase local) follow project conventions |
+| Namespace organization | Pass | Remains in `msd_sim` namespace, no new namespaces introduced |
+| File structure | Pass | Changes confined to existing `BlockPGSSolver.hpp/.cpp` in `msd-sim/src/Physics/Constraints/` |
+| Dependency direction | Pass | No new dependencies. ContactConstraint read-only access preserved. No impact on CollisionPipeline or ConstraintSolver |
+
+#### C++ Design Quality
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII usage | Pass | No new resource management. `tangentKInvs` is a stack-local `std::vector<Matrix2d>` in `solve()` scope |
+| Smart pointer appropriateness | Pass | No new heap allocations. Design correctly uses value types throughout |
+| Value/reference semantics | Pass | `Eigen::Matrix2d` stored by value in vector. LDLT decomposition result stored by value. Appropriate for small fixed-size matrices |
+| Rule of 0/3/5 | Pass | No new classes. BlockPGSSolver already satisfies Rule of Zero (noted in existing header comment) |
+| Const correctness | Pass | `computeBlockVelocityError` remains const. New `updateVResTangentOnly` appropriately non-const (mutates `vRes_`) |
+| Exception safety | Pass | LDLT failure handled with zero-matrix fallback (existing pattern). No new exception paths |
+| Initialization | Pass | Design specifies brace initialization `{}` for all new variables. No new floating-point members introduced |
+
+#### Feasibility
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | Pass | No new includes required. Eigen `Matrix2d`, `Vector2d`, `LDLT` already available via `<Eigen/Dense>` |
+| Template complexity | Pass | No templates. Fixed-size Eigen types (`Matrix2d`, `Vector2d`) are fully resolved at compile time |
+| Memory strategy | Pass | `tangentKInvs` replaces `blockKInvs` with smaller matrices (2x2 vs 3x3). Net memory reduction. No new allocations |
+| Thread safety | Pass | BlockPGSSolver is single-threaded per project conventions. `vRes_` workspace member access unchanged |
+| Build integration | Pass | No CMake changes. Same two source files, same library target |
+
+#### Testability
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | Pass | BlockPGSSolver instantiable in isolation (existing pattern). Public `solve()` interface unchanged |
+| Mockable dependencies | Pass | ContactConstraint provides all inputs via const accessors. No new dependencies to mock |
+| Observable state | Pass | SolveResult exposes `lambdas`, `converged`, `iterations`, `residual`. All observable through unchanged interface |
+| No hidden global state | Pass | No globals. `vRes_` and `bounceLambdas_` are per-instance workspace members, not shared state |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | 2x2 K_tt solve may not produce sufficient tipping torque for `FrictionProducesTippingTorque` — coupling enters through sequential vRes_ updates rather than K_nt algebraic terms | Technical | Medium | High | Run FrictionProducesTippingTorque immediately after implementation as go/no-go gate | Yes |
+| R2 | Split-step converges to a different fixed point, causing pinned exact-value tests (VelocitySwap, ZeroGravity) to fail with physically correct but numerically different values | Technical | High | Low | Re-derive expected values after implementation; verify energy/momentum conservation holds | No |
+| R3 | Two-pass structure may require more sweeps to converge than single-pass for some contact configurations (sequential information propagation vs simultaneous) | Performance | Low | Low | Monitor `iterations` in SolveResult across test suite; maxSweeps=50 provides large headroom | No |
+
+### Prototype Guidance
+
+#### Prototype P1: Tipping Torque Validation
+
+**Risk addressed**: R1
+**Question to answer**: Does the split-step 2x2 K_tt solve produce omega_Y dominance over omega_Z in the FrictionProducesTippingTorque test scenario (cube sliding on floor with high friction)?
+
+**Success criteria**:
+- `FrictionProducesTippingTorque` test passes: omega_Y magnitude exceeds omega_Z magnitude after friction deceleration
+- No energy injection: total system energy is monotonically non-increasing (within numerical tolerance) across simulation frames
+
+**Prototype approach**:
+```
+Location: Direct implementation in BlockPGSSolver.cpp (this is a 2-file change;
+          the prototype IS the implementation)
+Type: Run existing Catch2 test suite after implementation
+
+Steps:
+1. Implement the split-step sweepOnce as specified in the design
+2. Build with: cmake --build --preset debug-sim-only
+3. Run ONLY FrictionProducesTippingTorque first:
+   ./build/Debug/debug/msd_sim_test "FrictionProducesTippingTorque"
+4. If it passes, run full test suite
+5. If it fails, the split-step hypothesis is invalidated — revert and reassess
+```
+
+**Time box**: 2 hours (implementation + validation)
+
+**If prototype fails**:
+- The split-step hypothesis is invalidated for tipping torque
+- Revert to the current P4 asymmetric decoupled code
+- Investigate hybrid approach: split-step for oblique contacts, coupled solve for axis-aligned contacts (requires geometric classifier — previously rejected in P1-P6 but may be viable with split-step as the baseline)
+
+### Notes for Implementer
+
+1. **PlantUML diagram inconsistency**: The diagram shows `tangentKInvs_` as a class member (with trailing underscore), but the design text correctly describes it as a local variable in `solve()`. The text is authoritative — keep it as a local `std::vector<Eigen::Matrix2d>` in `solve()`, not a member. The diagram should be updated to remove it from the member list, but this is cosmetic and should not block implementation.
+
+2. **`projectCoulombCone` disposition**: The existing static method `projectCoulombCone` projects all 3 components (including normal >= 0 clamping). In the split-step, Pass 1 does its own `max(0, ...)` clamping and Pass 2 does inline Coulomb cone projection on tangent only. This means `projectCoulombCone` is no longer called from `sweepOnce`. The implementer should either:
+   - (a) Keep it as a private static utility (it may be useful for future code or debugging), or
+   - (b) Remove it if there are no other callers.
+   Either is acceptable. If kept, add a comment noting it is currently unused by sweepOnce but retained for potential reuse.
+
+3. **Convergence metric epsilon threshold**: The design's pseudocode uses `|delta_n_applied| > epsilon` and `delta_t_applied.squaredNorm() > epsilon` as guards for `updateVRes*` calls. The existing code uses `delta.squaredNorm() > 1e-24`. The implementer should use the same `1e-24` threshold for consistency.
+
+4. **`sweepOnce` parameter type change**: The parameter changes from `const std::vector<Eigen::Matrix3d>& blockKInvs` to `const std::vector<Eigen::Matrix2d>& tangentKInvs`. This is an internal private method, so the change is safe. Ensure the Doxygen comment on `sweepOnce` is updated to reflect the split-step algorithm (replacing the current asymmetric decoupled description).
+
+### Summary
+
+The design is well-structured, minimal in scope (2 files only), and correctly preserves the external interface. The mathematical reasoning for why the split-step eliminates K_nt energy injection while preserving physics coupling through sequential vRes_ updates is sound and well-documented with references to the parent ticket's math formulation. The single material risk (R1: tipping torque adequacy) is correctly identified and has a clear empirical validation path with a defined fallback. The design is approved for implementation with the notes above.
