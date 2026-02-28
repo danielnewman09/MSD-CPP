@@ -11,6 +11,7 @@
 - [x] Design Approved — Ready for Prototype (P2)
 - [x] Prototype Complete — Awaiting Review (P2: decoupled K_tt — NEGATIVE, new regressions)
 - [x] Implementation Blocked — Design Revision Needed (Revision 2 required)
+- [x] Design Revision 2 Complete — Fix F2 Implemented (Prototype P3 NEGATIVE — Revision 3 required)
 - [ ] Implementation Complete — Awaiting Test Writing
 - [ ] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
@@ -27,7 +28,7 @@
 - **Generate Tutorial**: No
 - **Requires Math Design**: No
 - **GitHub Issue**: #112
-- **Design Revision Count**: 1
+- **Design Revision Count**: 2
 - **Previous Design Approaches**: [Warm-start contamination (Phase A bounce in cache) — refuted by Prototype P1; Full decoupled K_tt solve — fixes oblique but breaks SlidingCubeX/TippingTorque, refuted by Prototype P2]
 
 ---
@@ -271,6 +272,39 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
   to validate the fix before proceeding to full implementation. The prototype is a
   one-function change to sweepOnce in BlockPGSSolver.cpp.
 
+### Design Revision Phase (Revision 2)
+- **Started**: 2026-02-28 17:00
+- **Completed**: 2026-02-28 18:00
+- **Revision Number**: 2 of 3
+- **Trigger**: Prototype P2 — decoupled solve introduced tipping-torque regressions in
+  SlidingCubeX, SlidingCubeY, FrictionProducesTippingTorque
+- **Human Gate Decision**: Approved Option A — implement Fix F2 (phaseBLambdas) first, revert P2
+- **Action 1 — P2 Revert**: Restored coupled K_inv solve in `sweepOnce`; restored
+  `blockKInvs` precomputation loop in `solve()`
+- **Action 2 — Fix F2**: Implemented phaseBLambdas warm-start cache split across 4 files
+- **Prototype P3 Result**: NEGATIVE — Fix F2 does NOT fix the 3 restitution tests.
+  Warm-start diagnostic confirms: disabling warm-start entirely with coupled K_inv solve
+  still fails all 3 restitution tests (ratio = 0.057, omegaZ = 3.14 regardless of warm-start).
+  The iteration 3 finding "InelasticBounce passes with warm-start disabled" was specific to
+  the P2 decoupled solve and does not apply to the coupled solve.
+- **Conclusion**: ALL 12 failures require addressing K_nt coupling in the coupled 3x3 block
+  solve. Fix F2 is a correct semantic improvement (no regressions, reduces a class of warm-start
+  contamination at large timesteps) but does not fix any test. Design Revision 3 required.
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.cpp` (P2 reverted + F2 implemented)
+  - `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.hpp` (F2: phaseBLambdas field)
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.cpp` (F2: warmStartLambdas wired)
+  - `msd/msd-sim/src/Physics/Constraints/ConstraintSolver.hpp` (F2: warmStartLambdas field)
+  - `msd/msd-sim/src/Physics/Collision/CollisionPipeline.cpp` (F2: cache write uses warmStartLambdas)
+  - `docs/designs/0084_block_pgs_solver_rework/design.md` (Revision 2 section appended)
+  - `docs/designs/0084_block_pgs_solver_rework/iteration-log.md` (Iteration 4 added)
+- **Notes**: Fix F2 is now in production. The restitution and oblique sliding failures all
+  require a solution to the K_nt coupling incompatibility. The next design revision must
+  explore options that preserve angular impulse balance while eliminating spurious normal
+  impulse from K_nt coupling.
+
 ### Test Writing Phase
 - **Started**:
 - **Completed**:
@@ -307,11 +341,17 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
 ### Feedback on Implementation
 {Your comments on the implementation}
 
-### Feedback on Design Revision (if Implementation Blocked)
+### Feedback on Design Revision 1 (Decoupled Solve)
 - **Decision**: Approve revision
 - **Preferred approach**: Full decoupled solve — solve normal row with scalar K_nn independently, solve tangent with 2x2 subblock independently. Do NOT use Hypothesis B (zeroing unconstrained(0) when vErr(0) >= 0) as it's a band-aid that masks the coupling issue.
 - **What to preserve**: Two-phase architecture (Phase A restitution + Phase B dissipative), existing data structures from 0075a
 - **Prototype decision**: Yes — validate the decoupled solve fixes the oblique sliding tests before full implementation
+
+### Feedback on Design Revision 2 (Post-P2)
+- **Decision**: Approve revision — Option A
+- **Preferred approach**: Implement Fix F2 (phaseBLambdas warm-start cache) first. This safely fixes the 3 restitution tests (InelasticBounce, PerfectlyElastic, EqualMassElastic) without regression risk. Revert the P2 decoupled solve code before implementing. The oblique sliding failures will be addressed in a subsequent pass after F2 is validated.
+- **What to preserve**: Full coupled K_inv solve in sweepOnce (revert P2 changes), two-phase architecture, existing data structures
+- **Prototype decision**: Yes — validate Fix F2 fixes the 3 restitution tests and causes no regressions
 
 ### Feedback on Tests
 {Your comments on test coverage, test quality, or missing test scenarios}

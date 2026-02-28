@@ -89,6 +89,10 @@ public:
   {
     std::vector<BodyForces> bodyForces;
     Eigen::VectorXd lambdas;
+    Eigen::VectorXd warmStartLambdas;  ///< Lambdas to use as warm-start for next frame.
+                                       ///< For BlockPGS: Phase B lambdas only (no bounce).
+                                       ///< For ASM/PGS: same as lambdas (no Phase A split).
+                                       ///< Initialized defensively to lambdas. Ticket: 0084 Fix F2.
     bool converged{false};
     int iterations{0};
     double residual{std::numeric_limits<double>::quiet_NaN()};

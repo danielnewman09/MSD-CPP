@@ -40,7 +40,7 @@ namespace msd_sim
  * **Phase B — Dissipative Block PGS Sweeps** (iterative):
  *   For each sweep, for each contact c (3x3 block):
  *   1. v_err = J_block * (v_pre + vRes_[bodyA, bodyB])
- *   2. delta_lambda = K_inv * (-v_err)  [no restitution term]
+ *   2. delta_lambda = K^{-1} * (-v_err)  [no restitution term]
  *   3. lambda_acc += delta_lambda, then project onto Coulomb cone
  *   4. vRes_ += M^{-1} * J_block^T * (lambda_proj - lambda_acc_old)
  *
@@ -87,6 +87,9 @@ public:
   {
     std::vector<BodyForces> bodyForces;  ///< Per-body force/torque (size = numBodies)
     Eigen::VectorXd lambdas;            ///< 3 per contact: [lambda_n, lambda_t1, lambda_t2]
+                                        ///< = Phase A bounce + Phase B
+    Eigen::VectorXd phaseBLambdas;      ///< Phase B lambdas only (no bounce) — used as
+                                        ///< warm-start for next frame. Ticket: 0084 Fix F2.
     bool converged{false};
     int iterations{0};
     double residual{std::numeric_limits<double>::quiet_NaN()};
@@ -205,29 +208,20 @@ private:
   /**
    * @brief Phase B: Execute one complete sweep over all contacts.
    *
-   * For each contact: solve decoupled normal+tangent, accumulate, project onto
-   * Coulomb cone, update velocity residual. Returns max ||delta|| for convergence.
+   * For each contact: solve the 3x3 block, accumulate, project onto Coulomb
+   * cone, update velocity residual. Returns max ||delta|| for convergence check.
    *
    * Algorithm per contact c:
    *   1. v_err = J_block * (v_pre + vRes_[bodyA, bodyB])
-   *   2. delta_lambda_n = -v_err(0) / K(0,0)             [scalar normal solve]
-   *      delta_lambda_t = K_tt.ldlt().solve(-v_err_t)    [2x2 K_tt tangent solve]
-   *      delta_lambda = [delta_lambda_n; delta_lambda_t]
+   *   2. delta_lambda = K_inv * (-v_err)     [purely dissipative RHS]
    *   3. lambda_temp = lambda_acc[c] + delta_lambda
    *   4. lambda_proj = projectCoulombCone(lambda_temp, mu)
    *   5. delta = lambda_proj - lambda_acc[c]
    *   6. vRes_ += M^{-1} * J_block^T * delta
    *   7. lambda_acc[c] = lambda_proj
    *
-   * Decoupled normal solve (Ticket 0084 Revision 1): the original 3x3 coupled
-   * block solve allowed tangential vErr to drive a normal correction via K_nt
-   * off-diagonal terms, injecting upward velocity on every sliding frame.
-   * The decoupled NORMAL solve severs this: delta_lambda_n depends only on
-   * vErr(0). Tangent solve uses K_tt.ldlt() (2x2 tangent-tangent subblock)
-   * as specified in the design document.
-   *
    * @param contacts ContactConstraint pointers
-   * @param blockKs Pre-computed 3x3 K matrices per contact
+   * @param blockKInvs Pre-computed K^{-1} per contact (from LDLT inversion)
    * @param lambda In/out accumulated 3D impulses (3*numContacts)
    * @param states Per-body kinematic state
    * @param inverseMasses Per-body inverse mass
@@ -236,7 +230,7 @@ private:
    */
   double sweepOnce(
     const std::vector<ContactConstraint*>& contacts,
-    const std::vector<Eigen::Matrix3d>& blockKs,
+    const std::vector<Eigen::Matrix3d>& blockKInvs,
     Eigen::VectorXd& lambda,
     const std::vector<std::reference_wrapper<const InertialState>>& states,
     const std::vector<double>& inverseMasses,

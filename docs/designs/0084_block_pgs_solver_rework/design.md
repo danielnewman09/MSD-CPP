@@ -612,3 +612,76 @@ Fix F2 (phaseBLambdas warm-start cache split) is a secondary correctness improve
 from the original design, correctly ordered after F1 validation.
 
 The design should proceed to Prototype P2 immediately.
+
+---
+
+## Design Revision 2 (Post-P2: Fix F2 Implementation)
+
+**Trigger**: Prototype P2 (decoupled solve) produced new regressions in SlidingCubeX,
+SlidingCubeY, and FrictionProducesTippingTorque. Human approved Option A: implement Fix F2
+(phaseBLambdas warm-start cache) first, revert P2 changes, then address oblique sliding in
+a subsequent pass.
+
+**Human decision**: See ticket feedback section "Feedback on Design Revision 2".
+
+### What Was Done in Design Revision 2
+
+**Step 1 — Revert P2 prototype**: The decoupled solve changes in `sweepOnce` were reverted.
+The coupled K_inv solve (`blockKInvs[ci] * (-vErr)`) was restored. The `blockKInvs`
+precomputation loop in `solve()` was restored. The `sweepOnce` parameter was reverted to
+`blockKInvs`.
+
+**Step 2 — Implement Fix F2**: The phaseBLambdas warm-start cache split was implemented:
+- `BlockPGSSolver::SolveResult::phaseBLambdas` field added (Phase B lambdas only)
+- `ConstraintSolver::SolveResult::warmStartLambdas` field added (warm-start seed for next frame)
+- BlockPGS path: `warmStartLambdas = blockResult.phaseBLambdas` (Phase B only, excludes bounce)
+- ASM/PGS paths: `warmStartLambdas = lambdas` (no Phase A split, identity mapping)
+- `CollisionPipeline` cache write changed to use `globalWarmStartLambdas` (from `warmStartLambdas`)
+
+### Prototype P3: Fix F2 Validation
+
+**Date**: 2026-02-28
+**Goal**: Validate Fix F2 fixes the 3 restitution tests (InelasticBounce, PerfectlyElastic,
+EqualMassElastic) without regressions.
+
+**Result: NEGATIVE (partial)**
+
+Fix F2 was implemented correctly and confirmed semantically sound:
+- 768 tests pass (unchanged — no regressions introduced)
+- 12 tests still fail (same 12 as before — unchanged)
+
+**Critical finding**: The 3 restitution tests do NOT pass after Fix F2, even with warm-start
+completely disabled (`hasWarmStart = false` diagnostic). This reveals that the iteration 3
+finding ("InelasticBounce passes with warm-start disabled") was **specific to the P2 decoupled
+solve context** and does NOT apply to the original coupled K_inv solve.
+
+With the coupled K_inv solve:
+- `InelasticBounce`: KE ratio = 0.057 (expected 0.125+), **regardless of warm-start state**
+- `EqualMassElastic`: omegaZ = 3.14 rad/s (expected ~0.198), **regardless of warm-start state**
+- `PerfectlyElastic`: maxHeight = 0.70 (expected > 1.0), **regardless of warm-start state**
+
+The omegaZ = 3.14 signature is the K_nt coupling mechanism identified in the root cause
+analysis: tangential vErr drives a normal correction that feeds back as angular velocity via
+`updateVRes3`. This is not a warm-start issue — it is a Phase B K_nt coupling issue that
+affects all contact frames, including the first bounce frame.
+
+**Conclusion**: Fix F2 is a correct semantic improvement (prevents a class of warm-start
+contamination at future timesteps) but is not the fix for the restitution test failures.
+The root cause for ALL 12 failures is the K_nt coupling in the coupled 3x3 block solve.
+
+### Status After Revision 2
+
+| Fix | Status | Effect |
+|-----|--------|--------|
+| Fix F2 (phaseBLambdas cache) | Implemented | Correct semantic improvement; no regressions; does NOT fix any of the 12 failing tests |
+| Fix for K_nt coupling | Required | Must address the 3x3 coupled block solve injecting normal impulse from tangential vErr |
+
+The primary challenge remains: how to address K_nt coupling without introducing the
+tipping-torque regression that P2's decoupled solve caused. The next pass must find an
+approach that:
+1. Eliminates the K_nt-driven normal impulse injection (fixes oblique sliding + restitution)
+2. Preserves the K_inv row structure for correct per-contact angular impulse balance
+   (prevents SlidingCubeX/TippingTorque regression)
+
+This is a structural incompatibility in the 3x3 block solve that requires further investigation.
+Design Revision 3 is needed to explore alternative approaches.
