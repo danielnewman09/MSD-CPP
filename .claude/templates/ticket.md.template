@@ -18,6 +18,7 @@
 - [ ] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
+- [ ] Implementation Blocked — Design Revision Needed
 - [ ] Implementation Complete — Awaiting Test Writing
 - [ ] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
@@ -36,6 +37,8 @@
 - **Generate Tutorial**: No (set to Yes for features with educational value)
 - **Requires Math Design**: No (set to Yes for features with significant mathematical content)
 - **GitHub Issue**: (set to #N if a corresponding GitHub issue exists)
+- **Design Revision Count**: 0 (incremented by orchestrator; max 2)
+- **Previous Design Approaches**: [] (populated by orchestrator; used for oscillation prevention)
 
 ---
 
@@ -186,6 +189,19 @@
   - `docs/designs/{feature-name}/implementation-notes.md`
 - **Notes**:
 
+### Design Revision Phase (if escalated from Implementation Blocked)
+- **Revision Number**: {N of 2 maximum}
+- **Trigger**: {Circle Detection / 3rd Quality Gate Failure / 3rd CHANGES REQUESTED}
+- **Findings Artifact**: `docs/designs/{feature-name}/implementation-findings.md`
+- **Human Gate Decision**: {Approved / Closed}
+- **Approach Ruled Out**: {description of the prior approach now in Previous Design Approaches}
+- **Delta Design Changes**:
+  - {list design decisions that changed}
+- **Warm-Start Preserved**:
+  - {list files/modules preserved from prior implementation}
+- **Prototype Required**: Yes / No
+- **Notes**:
+
 ### Test Writing Phase
 - **Started**:
 - **Completed**:
@@ -244,6 +260,11 @@
 
 ### Feedback on Implementation
 {Your comments on the implementation}
+
+### Feedback on Design Revision (if Implementation Blocked)
+{Your decision at the human gate: approve revision OR close ticket}
+{Notes on scope of revision — what to change, what to preserve}
+{Prototype decision for this revision: Yes / No}
 
 ### Feedback on Tests
 {Your comments on test coverage, test quality, or missing test scenarios}

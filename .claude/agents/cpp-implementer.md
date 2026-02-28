@@ -170,7 +170,26 @@ Before making the next change, read the iteration log and check for:
 If a circle is detected:
 1. STOP making changes
 2. Document the pattern in the iteration log under "Circle Detection Flags"
-3. Escalate to the human with a summary of what has been tried and why approaches are cycling
+3. Produce `docs/designs/{feature-name}/implementation-findings.md` using the template at
+   `.claude/templates/implementation-findings.md.template`:
+   - Set Produced by: Implementer
+   - Set Trigger: Circle Detection
+   - Fill "What Was Attempted" from the iteration log entries
+   - Classify the failure (DESIGN_FLAW / MISSING_ABSTRACTION / INCORRECT_INVARIANT / etc.)
+   - Complete the Root Cause Analysis section
+   - Propose a scoped design change
+   - Complete the Oscillation Check
+4. Commit the findings artifact:
+   ```bash
+   git add docs/designs/{feature-name}/implementation-findings.md
+   git commit -m "impl: circle detected — implementation-findings for {feature-name}"
+   git push
+   ```
+5. Inform the orchestrator that ticket status should advance to
+   "Implementation Blocked — Design Revision Needed"
+
+**CONSTRAINT**: The implementer MUST NOT attempt any further implementation changes after
+detecting a circle. All subsequent work happens at the design level.
 
 ### Phase 3: Build Verification
 

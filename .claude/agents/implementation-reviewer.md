@@ -399,11 +399,28 @@ If git/GitHub operations fail, report the error but do NOT let it block the revi
 3. You re-review ONLY the changes
 4. Repeat until APPROVED
 
-### Escalation
+### Escalation — 3rd CHANGES REQUESTED (Same Fundamental Issue)
 If CHANGES REQUESTED 3 times for the same fundamental issue:
-- Escalate to human operator
-- May indicate design problem, not implementation problem
-- Document the pattern for human review
+1. Determine that the issue is design-level (not merely an implementation shortcoming):
+   - The same root cause appears in all three review cycles
+   - The implementer cannot fix it without violating the design
+2. Produce `docs/designs/{feature-name}/implementation-findings.md` using the template at
+   `.claude/templates/implementation-findings.md.template`:
+   - Set Produced by: Implementation Reviewer
+   - Set Trigger: 3rd CHANGES REQUESTED
+   - Fill "What Was Attempted" from the three review cycles (what the implementer tried each time)
+   - Classify the failure
+   - Complete Root Cause Analysis (cite the specific design decision that is flawed)
+   - Propose a scoped design change
+   - Complete the Oscillation Check
+3. Commit the findings artifact:
+   ```bash
+   git add docs/designs/{feature-name}/implementation-findings.md
+   git commit -m "review: 3rd escalation — implementation-findings for {feature-name}"
+   git push
+   ```
+4. Inform the orchestrator that ticket status should advance to
+   "Implementation Blocked — Design Revision Needed"
 
 ## Constraints
 

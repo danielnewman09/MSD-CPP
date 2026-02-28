@@ -71,6 +71,7 @@ If `Languages: C++` (the default), the **existing 16-phase pipeline runs unchang
 | Design Approved — Ready for Prototype | Execute Prototyper | `.claude/agents/cpp-prototyper.md` |
 | Prototype Complete — Awaiting Review | Inform human review needed | None |
 | Ready for Implementation | Fan out per language (see below) | Per-language implementers |
+| Implementation Blocked — Design Revision Needed | Execute Design Revision Loop (human gate required) | See Design Revision Loop section |
 | Implementation Complete — Awaiting Test Writing | Fan out per language (see below) | Per-language test writers |
 | Test Writing Complete — Awaiting Quality Gate | Execute Quality Gate | `.claude/agents/code-quality-gate.md` |
 | Quality Gate Passed — Awaiting Review | Fan out per language reviews | Per-language reviewers |
@@ -192,9 +193,64 @@ The Quality Gate phase operates as an automated loop:
    - Re-invoke the **implementer** (not test writer) with specific failures from quality gate report — the implementer fixes production code
    - After implementer fixes, re-run quality gate
    - Track iteration count in Workflow Log
-3. **On 3rd consecutive failure**: Escalate to human, may indicate design issue
+3. **On 3rd consecutive failure**: Quality gate agent produces implementation-findings.md
+   and advances ticket to "Implementation Blocked — Design Revision Needed". The Design
+   Revision Loop then handles routing through the human gate.
 
 **Test writer re-invocation**: The test writer is only re-invoked if the implementation reviewer (Phase: Review) returns "CHANGES REQUESTED (Test Coverage)" — indicating inadequate coverage. In that case, the workflow returns to "Implementation Complete — Awaiting Test Writing" and the test writer runs again with reviewer feedback.
+
+### Design Revision Loop
+
+When ticket status is "Implementation Blocked — Design Revision Needed":
+
+**Step 1: Verify findings artifact exists**
+- Confirm `docs/designs/{feature-name}/implementation-findings.md` exists
+- If missing, log error and request human guidance — cannot proceed without findings
+
+**Step 2: Human Gate (REQUIRED — no auto-skip)**
+- Report to human with findings summary:
+  - Which trigger fired (circle detection / 3rd quality gate failure / 3rd CHANGES REQUESTED)
+  - The failure classification and root cause from findings.md
+  - The proposed design change
+  - Current revision count (N of 2 maximum)
+- Wait for explicit human approval before proceeding
+- Present the human gate checklist from findings.md
+- Human decision options:
+  - A. Approve revision path → proceed to Step 3
+  - B. Close ticket (fundamental re-scope needed) → mark ticket Closed, stop workflow
+
+**Step 3: Revision Tracking (Orchestrator)**
+- Increment `Design Revision Count` in ticket metadata
+- If count exceeds 2 (i.e., this would be the 3rd revision = 4th design attempt):
+  - STOP — do not invoke the architect
+  - Report to human: "Design revision cap reached (2 revisions). Ticket requires fundamental re-scoping."
+  - Mark ticket as requiring human intervention
+- Append the proposed approach from findings.md to `Previous Design Approaches` in ticket metadata
+- Update ticket status to "Ready for Design" (re-entering design phase)
+
+**Step 4: Execute Designer (Mode 3)**
+- Invoke cpp-architect with Mode 3 context:
+  - Path to `docs/designs/{feature-name}/implementation-findings.md`
+  - Current `docs/designs/{feature-name}/design.md`
+  - Previous Design Approaches list (for oscillation guard)
+  - Instruction: delta design, not full redesign
+
+**Step 5: Execute Design Reviewer (Revision-Aware)**
+- Invoke design-reviewer with Mode 3 context:
+  - Path to `docs/designs/{feature-name}/implementation-findings.md`
+  - Instruction to apply revision-aware criteria from the Revision-Aware Context section
+
+**Step 6: Optional Prototype**
+- Human decides whether a prototype is required for this revision (recorded at the human gate)
+- If YES: invoke cpp-prototyper before re-entering implementation
+- If NO: proceed directly to implementation re-entry
+
+**Step 7: Implementation Re-entry**
+- Update ticket status to "Ready for Implementation"
+- Invoke cpp-implementer with:
+  - Updated `docs/designs/{feature-name}/design.md`
+  - Warm-start hints from the findings artifact (which files can be preserved)
+  - Full iteration log from previous implementation attempts
 
 ### Tutorial Generation Handling
 
