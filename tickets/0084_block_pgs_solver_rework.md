@@ -3,7 +3,7 @@
 ## Status
 - [x] Draft
 - [x] Ready for Design
-- [ ] Design Complete — Awaiting Review
+- [x] Design Complete — Awaiting Review
 - [ ] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
@@ -157,12 +157,21 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
 {This section is automatically updated as the workflow progresses}
 
 ### Design Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-02-27 00:00
+- **Completed**: 2026-02-27 00:00
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
 - **Artifacts**:
-  - `docs/designs/0083_block_pgs_solver_rework/design.md`
-  - `docs/designs/0083_block_pgs_solver_rework/0083_block_pgs_solver_rework.puml`
-- **Notes**:
+  - `docs/designs/0084_block_pgs_solver_rework/design.md`
+  - `docs/designs/0084_block_pgs_solver_rework/0084_block_pgs_solver_rework.puml`
+- **Notes**: Root cause analysis identified four distinct failure mechanisms:
+  (1) K_nt cross-coupling energy injection in Phase B RHS construction for oblique
+  sliding, (2) Phase A uses current velocity not pre_impact_rel_vel_normal for
+  restitution, (3) Phase B vRes_ not seeded from Phase A contributions,
+  (4) ERP Baumgarte correction incorrectly embedded in Phase A rather than Phase B.
+  Design introduces BlockPGSSolver replacing the decoupled normal-then-friction path.
+  Two blocking open questions: FlattenedConstraints penetrationDepths extension
+  (recommended: yes) and Phase B 3x3 vs tangent-only blocks (recommended: 3x3).
 
 ### Design Review Phase
 - **Started**:
