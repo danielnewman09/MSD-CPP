@@ -1,9 +1,12 @@
 // Ticket: 0084a_tilted_drop_rotation_tests
 //
-// PURPOSE: Systematic regression suite for rotation axis isolation after a
-// tilted cube is dropped and bounces on the floor. Tests assert that
-// post-bounce angular velocity stays predominantly in the tilt axis and
-// does not develop significant spurious rotation about the orthogonal axes.
+// PURPOSE: Per-bounce regression suite for rotation axis isolation after a
+// tilted cube is dropped and bounces on the floor. Tests detect individual
+// bounce events and assert full state snapshots at each bounce, catching:
+//   - Cross-axis angular velocity injection from uneven contact normals
+//   - Lateral displacement drift off the expected tilt plane
+//   - Energy growth beyond physical tolerance
+//   - Cross-axis accumulation worsening across successive bounces
 //
 // This covers the rotational coupling path exercised by the asymmetric
 // decoupling fix in ticket 0084. Any regression in BlockPGS K_nt handling
@@ -20,25 +23,23 @@
 //   - Gravity: g = 9.81 m/s^2 downward
 //   - dt = 0.016 s per frame (60 FPS)
 //   - restitution = 0.5, friction = 0.5
-//   - Drop height: ~4m above floor to build sufficient angular momentum at bounce
-//   - 200 frames (~3.3 s): enough for first bounce to occur and rotation to develop
+//   - Drop height: ~4m above floor surface
+//   - 200 frames (~3.3 s): enough for multiple bounces
 //
 // MEASUREMENT STRATEGY:
-//   Rotation is measured at peak angular velocity during the simulation
-//   (not at the final frame, where damping may reduce omega to near-zero).
-//   Peak omega and its axis composition are tracked across all frames.
-//   The peak frame is typically within 1-5 frames of the first floor contact.
-//
-// THRESHOLD RATIONALE:
-//   kCrossAxisRatio = 0.5: if any cross-axis omega exceeds 50% of the dominant
-//   axis component, the solver is introducing spurious coupling. With a healthy
-//   solver, observed ratios are expected near zero for clean single-axis tilts.
+//   Bounce events are detected by vertical velocity sign reversal (negative
+//   to non-negative) when the downward speed exceeds kBounceVzThreshold.
+//   At each bounce, a full state snapshot is captured: angular velocity,
+//   position, lateral displacement from spawn, and system energy.
+//   Per-bounce assertions replace the old aggregate peak-omega metric.
 
 #include <gtest/gtest.h>
 
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -53,26 +54,100 @@
 using namespace msd_sim;
 
 // ============================================================================
-// Constants and helpers
+// Constants and types
 // ============================================================================
 
 namespace
 {
 
-/// Threshold: cross-axis omega must be below this fraction of the dominant axis
-/// at the peak rotation frame (first bounce). For a pure single-axis tilt, the
-/// cross-axis component should be near zero (numerical noise only). A 5%
-/// threshold catches the uneven contact normal bug where asymmetric normal
-/// directions at first contact inject spurious cross-axis rotation.
+// --- Thresholds ---
+
+/// Cross-axis omega must be below this fraction of the dominant axis
 constexpr double kCrossAxisRatio = 0.05;
 
-/// Total number of frames to simulate (200 frames = ~3.3 s)
+/// Angular velocity change threshold (rad/s per frame) for contact detection.
+/// During free flight there are no external torques on the CoM, so omega is
+/// constant. Any delta above this threshold indicates a contact impulse.
+constexpr double kOmegaChangeThreshold = 0.5;
+
+/// Cross-axis displacement must be below this fraction of lateral norm
+constexpr double kDisplacementCrossRatio = 0.20;
+
+/// Energy must not grow beyond this multiple of initial energy
+constexpr double kEnergyGrowthTolerance = 1.10;
+
+/// For XY: each axis must contribute at least this fraction of omega norm
+constexpr double kBothActiveRatio = 0.10;
+
+/// Cross-axis ratio shouldn't grow between first and last bounce by more than this
+constexpr double kCrossAxisAccumulationMargin = 0.05;
+
+/// Tighter Z-axis threshold for XY tests: wrong-corner contacts from excessive
+/// penetration inject Z-axis rotation that the general kCrossAxisRatio misses.
+constexpr double kXYZAxisRatio = 0.02;
+
+/// Minimum number of contact events expected in the simulation
+constexpr int kMinBounces = 2;
+
+/// Maximum number of contact events to capture before stopping.
+/// Increased to capture sub-bounce pairs (initial corner + follow-on).
+constexpr int kMaxBounces = 6;
+
+/// Total number of frames to simulate
 constexpr int kSimFrames = 200;
 
-/// Drop height offset above lowest-corner clearance.
-/// The cube is placed with its lowest corner at z=0 (touching floor), then
-/// elevated by this amount so it falls and builds angular momentum at contact.
-constexpr double kDropHeight = 4.0;  // meters above floor surface
+/// Drop height offset above lowest-corner clearance (meters)
+constexpr double kDropHeight = 4.0;
+
+// --- Types ---
+
+enum class TiltAxis
+{
+  X,
+  Y,
+  XY
+};
+
+struct TiltConfig
+{
+  TiltAxis axis;
+  double tiltDeg;
+  std::string label;
+};
+
+struct SceneSetup
+{
+  uint32_t cubeId;
+  Coordinate initialPosition;
+  double initialEnergy;
+};
+
+struct BounceSnapshot
+{
+  int frame;
+  double omegaX;       // |omega_x|
+  double omegaY;       // |omega_y|
+  double omegaZ;       // |omega_z|
+  double omegaNorm;
+  double signedOmegaX;  // signed omega_x (for sign consistency checks)
+  double signedOmegaY;  // signed omega_y
+  double signedOmegaZ;  // signed omega_z
+  double deltaOmegaNorm;  // |delta_omega| that triggered detection
+  double posX;
+  double posY;
+  double posZ;
+  double displacementX;
+  double displacementY;
+  double energy;
+};
+
+struct BounceResult
+{
+  std::vector<BounceSnapshot> bounces;
+  bool nanDetected{false};
+};
+
+// --- Free helper functions ---
 
 /// Compute total system energy using EnergyTracker with gravity potential
 double computeSystemEnergy(const WorldModel& world)
@@ -86,753 +161,571 @@ double computeSystemEnergy(const WorldModel& world)
   return sysEnergy.total();
 }
 
-/// Z-center for a unit cube tilted by theta about a single axis (X or Y),
-/// positioned so the lowest corner is at z=0, then elevated by dropHeight.
+/// Z-center for a unit cube tilted by theta about a single axis
 double centerZForSingleAxisTilt(double thetaRad, double dropHeight)
 {
   return 0.5 * std::cos(thetaRad) + 0.5 * std::sin(thetaRad) + dropHeight;
 }
 
-/// Z-center for a unit cube tilted about combined X+Y axes, using the
-/// conservative half-diagonal to ensure clearance for any equal tilt <= 45°.
+/// Z-center for a unit cube tilted about combined X+Y axes
 double centerZForCombinedTilt(double dropHeight)
 {
-  // half-diagonal of unit cube = sqrt(3)/2 ≈ 0.866
-  constexpr double kHalfDiag = 0.8660;
+  constexpr double kHalfDiag = 0.8660;  // sqrt(3)/2
   return kHalfDiag + dropHeight;
 }
 
-struct PeakOmega
+/// Compute cross-axis ratio for a single-axis bounce snapshot
+double crossAxisRatio(const BounceSnapshot& snap, TiltAxis axis)
 {
-  double x{};
-  double y{};
-  double z{};
-  double norm{};
-  int frame{};
-};
+  if (snap.omegaNorm < 1e-6) return 0.0;
+
+  if (axis == TiltAxis::X)
+  {
+    return std::max(snap.omegaY, snap.omegaZ) / snap.omegaNorm;
+  }
+  else
+  {
+    return std::max(snap.omegaX, snap.omegaZ) / snap.omegaNorm;
+  }
+}
 
 }  // anonymous namespace
 
 // ============================================================================
-// Test fixture
+// Test fixture with helper methods
 // ============================================================================
 
 class TiltedDropTest : public ReplayEnabledTest
 {
+protected:
+  /// Set up a tilted drop scene: floor + cube with given tilt config
+  SceneSetup setupScene(const TiltConfig& config)
+  {
+    spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+
+    const double tiltRad = config.tiltDeg * M_PI / 180.0;
+
+    Eigen::Quaterniond q;
+    double centerZ{};
+
+    switch (config.axis)
+    {
+      case TiltAxis::X:
+        q = Eigen::Quaterniond{
+          Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitX()}};
+        centerZ = centerZForSingleAxisTilt(tiltRad, kDropHeight);
+        break;
+      case TiltAxis::Y:
+        q = Eigen::Quaterniond{
+          Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitY()}};
+        centerZ = centerZForSingleAxisTilt(tiltRad, kDropHeight);
+        break;
+      case TiltAxis::XY:
+        q = Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitX()} *
+            Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitY()};
+        centerZ = centerZForCombinedTilt(kDropHeight);
+        break;
+    }
+
+    const Coordinate spawnPos{0.0, 0.0, centerZ};
+    const auto& cube = spawnInertial("unit_cube", spawnPos, 1.0, 0.5, 0.5);
+    const uint32_t cubeId = cube.getInstanceId();
+    world().getObject(cubeId).getInertialState().orientation = q;
+
+    const double initialEnergy = computeSystemEnergy(world());
+
+    return SceneSetup{cubeId, spawnPos, initialEnergy};
+  }
+
+  /// Capture a BounceSnapshot from the current simulation state
+  BounceSnapshot captureSnapshot(int frame, uint32_t cubeId,
+                                 const Coordinate& spawnPos,
+                                 double deltaOmegaNorm)
+  {
+    const auto& state = world().getObject(cubeId).getInertialState();
+
+    const double sox = state.getAngularVelocity().x();
+    const double soy = state.getAngularVelocity().y();
+    const double soz = state.getAngularVelocity().z();
+    const double ox = std::abs(sox);
+    const double oy = std::abs(soy);
+    const double oz = std::abs(soz);
+    const double norm = std::sqrt(ox * ox + oy * oy + oz * oz);
+
+    BounceSnapshot snap{};
+    snap.frame = frame;
+    snap.omegaX = ox;
+    snap.omegaY = oy;
+    snap.omegaZ = oz;
+    snap.omegaNorm = norm;
+    snap.signedOmegaX = sox;
+    snap.signedOmegaY = soy;
+    snap.signedOmegaZ = soz;
+    snap.deltaOmegaNorm = deltaOmegaNorm;
+    snap.posX = state.position.x();
+    snap.posY = state.position.y();
+    snap.posZ = state.position.z();
+    snap.displacementX = state.position.x() - spawnPos.x();
+    snap.displacementY = state.position.y() - spawnPos.y();
+    snap.energy = computeSystemEnergy(world());
+    return snap;
+  }
+
+  /// Run simulation and detect contact events via angular velocity discontinuity.
+  ///
+  /// During free flight there are no external torques on the CoM, so angular
+  /// velocity is constant. Any frame-to-frame change in omega exceeding
+  /// kOmegaChangeThreshold indicates a contact impulse was applied. This
+  /// naturally captures both the initial corner impact and rapid follow-on
+  /// wrong-corner contacts as separate events.
+  BounceResult detectBounces(uint32_t cubeId, const Coordinate& spawnPos)
+  {
+    BounceResult result{};
+    Eigen::Vector3d prevOmega = Eigen::Vector3d::Zero();
+
+    for (int frame = 1; frame <= kSimFrames; ++frame)
+    {
+      step(1);
+
+      const auto& state = world().getObject(cubeId).getInertialState();
+
+      if (std::isnan(state.position.z()))
+      {
+        result.nanDetected = true;
+        return result;
+      }
+
+      const Eigen::Vector3d currOmega{
+        state.getAngularVelocity().x(),
+        state.getAngularVelocity().y(),
+        state.getAngularVelocity().z()};
+
+      const double deltaOmegaNorm = (currOmega - prevOmega).norm();
+
+      if (deltaOmegaNorm > kOmegaChangeThreshold)
+      {
+        result.bounces.push_back(
+          captureSnapshot(frame, cubeId, spawnPos, deltaOmegaNorm));
+
+        if (static_cast<int>(result.bounces.size()) >= kMaxBounces)
+        {
+          return result;
+        }
+      }
+
+      prevOmega = currOmega;
+    }
+
+    return result;
+  }
+
+  /// Print diagnostic output for all bounces
+  static void printBounces(const std::vector<BounceSnapshot>& bounces,
+                           const std::string& label)
+  {
+    std::cout << "\n=== " << label << " (" << bounces.size()
+              << " bounces) ===\n";
+    for (size_t i = 0; i < bounces.size(); ++i)
+    {
+      const auto& s = bounces[i];
+      std::cout << "  Contact " << i << " (frame " << s.frame
+                << ", dOmega=" << s.deltaOmegaNorm << "): "
+                << "omega=[" << s.omegaX << ", " << s.omegaY << ", "
+                << s.omegaZ << "] norm=" << s.omegaNorm
+                << "  signed=[" << s.signedOmegaX << ", " << s.signedOmegaY
+                << ", " << s.signedOmegaZ << "]"
+                << "  pos=[" << s.posX << ", " << s.posY << ", " << s.posZ
+                << "]  dx=" << s.displacementX << " dy=" << s.displacementY
+                << "  E=" << s.energy << "\n";
+    }
+  }
+
+  /// Assert single-axis bounce: dominant omega on expected axis, cross-axis suppressed
+  static void assertSingleAxisBounce(const BounceSnapshot& snap, int bounceIndex,
+                                     TiltAxis axis, double initialEnergy,
+                                     const std::string& label)
+  {
+    ASSERT_GT(snap.omegaNorm, 1e-6)
+      << label << " bounce " << bounceIndex
+      << ": omega norm too small to analyze";
+
+    double dominant{};
+    double cross1{};
+    double cross2{};
+    std::string dominantName;
+    std::string cross1Name;
+    std::string cross2Name;
+
+    if (axis == TiltAxis::X)
+    {
+      dominant = snap.omegaX;  dominantName = "X";
+      cross1 = snap.omegaY;   cross1Name = "Y";
+      cross2 = snap.omegaZ;   cross2Name = "Z";
+    }
+    else
+    {
+      dominant = snap.omegaY;  dominantName = "Y";
+      cross1 = snap.omegaX;   cross1Name = "X";
+      cross2 = snap.omegaZ;   cross2Name = "Z";
+    }
+
+    EXPECT_GE(dominant, snap.omegaNorm * kCrossAxisRatio)
+      << label << " bounce " << bounceIndex
+      << ": " << dominantName << "-tilt should produce dominant rotation about "
+      << dominantName << ". omega" << dominantName << "=" << dominant
+      << " norm=" << snap.omegaNorm;
+
+    EXPECT_LE(cross1, snap.omegaNorm * kCrossAxisRatio)
+      << label << " bounce " << bounceIndex
+      << ": spurious " << cross1Name << " rotation. omega" << cross1Name << "="
+      << cross1 << " norm=" << snap.omegaNorm;
+
+    EXPECT_LE(cross2, snap.omegaNorm * kCrossAxisRatio)
+      << label << " bounce " << bounceIndex
+      << ": spurious " << cross2Name << " rotation. omega" << cross2Name << "="
+      << cross2 << " norm=" << snap.omegaNorm;
+
+    // Lateral displacement check
+    const double lateralNorm =
+      std::sqrt(snap.displacementX * snap.displacementX +
+                snap.displacementY * snap.displacementY);
+    if (lateralNorm > 1e-4)
+    {
+      // For X-tilt, displacement should be in Y (cross-axis displacement is X)
+      // For Y-tilt, displacement should be in X (cross-axis displacement is Y)
+      double crossDisplacement = (axis == TiltAxis::X)
+                                   ? std::abs(snap.displacementX)
+                                   : std::abs(snap.displacementY);
+      EXPECT_LT(crossDisplacement, lateralNorm * kDisplacementCrossRatio)
+        << label << " bounce " << bounceIndex
+        << ": cross-axis displacement too large. cross=" << crossDisplacement
+        << " lateralNorm=" << lateralNorm;
+    }
+
+    // Energy check
+    EXPECT_LE(snap.energy, initialEnergy * kEnergyGrowthTolerance)
+      << label << " bounce " << bounceIndex
+      << ": energy growth beyond tolerance. E=" << snap.energy
+      << " initial=" << initialEnergy;
+  }
+
+  /// Assert combined XY bounce: both X and Y active, Z suppressed
+  static void assertCombinedAxisBounce(const BounceSnapshot& snap,
+                                       int bounceIndex, double initialEnergy,
+                                       const std::string& label)
+  {
+    ASSERT_GT(snap.omegaNorm, 1e-6)
+      << label << " bounce " << bounceIndex
+      << ": omega norm too small to analyze";
+
+    EXPECT_GE(snap.omegaX, snap.omegaNorm * kBothActiveRatio)
+      << label << " bounce " << bounceIndex
+      << ": X-axis should be active for XY tilt. omegaX=" << snap.omegaX
+      << " norm=" << snap.omegaNorm;
+
+    EXPECT_GE(snap.omegaY, snap.omegaNorm * kBothActiveRatio)
+      << label << " bounce " << bounceIndex
+      << ": Y-axis should be active for XY tilt. omegaY=" << snap.omegaY
+      << " norm=" << snap.omegaNorm;
+
+    // Tighter Z threshold: wrong-corner contacts from excessive penetration
+    // inject Z-axis rotation that the general cross-axis threshold misses
+    EXPECT_LE(snap.omegaZ, snap.omegaNorm * kXYZAxisRatio)
+      << label << " bounce " << bounceIndex
+      << ": spurious Z rotation for XY tilt (tight threshold). omegaZ="
+      << snap.omegaZ << " norm=" << snap.omegaNorm
+      << " ratio=" << (snap.omegaNorm > 1e-6 ? snap.omegaZ / snap.omegaNorm : 0.0);
+
+    EXPECT_LE(snap.energy, initialEnergy * kEnergyGrowthTolerance)
+      << label << " bounce " << bounceIndex
+      << ": energy growth beyond tolerance. E=" << snap.energy
+      << " initial=" << initialEnergy;
+  }
+
+  /// Assert omega sign consistency across bounces for XY tests.
+  /// Wrong-corner contacts from excessive penetration flip the rotation
+  /// direction, causing sign reversals in omega_x or omega_y between bounces.
+  static void assertOmegaSignConsistency(
+    const std::vector<BounceSnapshot>& bounces, const std::string& label)
+  {
+    ASSERT_GE(bounces.size(), 2u)
+      << label << ": need at least 2 contact events for sign consistency check";
+
+    const auto& first = bounces.front();
+
+    // Only check sign if the first bounce has significant omega in that axis
+    const bool xSignificant = std::abs(first.signedOmegaX) > 0.1;
+    const bool ySignificant = std::abs(first.signedOmegaY) > 0.1;
+
+    for (size_t i = 1; i < bounces.size(); ++i)
+    {
+      const auto& snap = bounces[i];
+
+      if (xSignificant && std::abs(snap.signedOmegaX) > 0.1)
+      {
+        const bool sameSign =
+          (first.signedOmegaX > 0) == (snap.signedOmegaX > 0);
+        EXPECT_TRUE(sameSign)
+          << label << " bounce " << i
+          << ": omega_x sign flipped from bounce 0. "
+          << "first=" << first.signedOmegaX
+          << " current=" << snap.signedOmegaX;
+      }
+
+      if (ySignificant && std::abs(snap.signedOmegaY) > 0.1)
+      {
+        const bool sameSign =
+          (first.signedOmegaY > 0) == (snap.signedOmegaY > 0);
+        EXPECT_TRUE(sameSign)
+          << label << " bounce " << i
+          << ": omega_y sign flipped from bounce 0. "
+          << "first=" << first.signedOmegaY
+          << " current=" << snap.signedOmegaY;
+      }
+    }
+  }
 };
 
 // ============================================================================
 // Single-axis X tilts
-// Assertion: peak post-bounce rotation predominantly about X; Y and Z subdominant
 // ============================================================================
 
-// ---------------------------------------------------------------------------
-// X 5 degrees (small tilt)
-// ---------------------------------------------------------------------------
-TEST_F(TiltedDropTest, TiltedDrop_X_Small_DominantAxisX)
+TEST_F(TiltedDropTest, TiltedDrop_X_Small_BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  TiltConfig config{TiltAxis::X, 5.0, "X_5deg"};
+  auto scene = setupScene(config);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
-  constexpr double kTiltDeg = 5.0;
-  const double tiltRad = kTiltDeg * M_PI / 180.0;
-  const double centerZ = centerZForSingleAxisTilt(tiltRad, kDropHeight);
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << ": expected at least " << kMinBounces << " bounces, got "
+    << result.bounces.size();
 
-  Eigen::Quaterniond q{Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitX()}};
+  printBounces(result.bounces, config.label);
 
-  const auto& cube = spawnInertial("unit_cube",
-                                   Coordinate{0.0, 0.0, centerZ},
-                                   1.0,   // mass (kg)
-                                   0.5,   // restitution
-                                   0.5);  // friction
-  const uint32_t cubeId = cube.getInstanceId();
-  world().getObject(cubeId).getInertialState().orientation = q;
-
-  const double initialEnergy = computeSystemEnergy(world());
-  double maxEnergy = initialEnergy;
-  PeakOmega peak{};
-  bool nanDetected = false;
-
-  for (int frame = 1; frame <= kSimFrames; ++frame)
+  for (size_t i = 0; i < result.bounces.size(); ++i)
   {
-    step(1);
-
-    const auto& state = world().getObject(cubeId).getInertialState();
-    if (std::isnan(state.position.z()))
-    {
-      nanDetected = true;
-      break;
-    }
-
-    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
-
-    const double ox = std::abs(state.getAngularVelocity().x());
-    const double oy = std::abs(state.getAngularVelocity().y());
-    const double oz = std::abs(state.getAngularVelocity().z());
-    const double norm = std::sqrt(ox * ox + oy * oy + oz * oz);
-    if (norm > peak.norm)
-    {
-      peak = {ox, oy, oz, norm, frame};
-    }
+    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
+                           TiltAxis::X, scene.initialEnergy, config.label);
   }
 
-  ASSERT_FALSE(nanDetected) << "NaN detected in position";
-
-  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
-    << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
-    << " max=" << maxEnergy;
-
-  std::cout << "\n=== TiltedDrop X " << kTiltDeg << " deg (peak frame "
-            << peak.frame << ") ===\n";
-  std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
-            << " (norm=" << peak.norm << ")\n";
-
-  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
-
-  EXPECT_GE(peak.x, peak.norm * kCrossAxisRatio)
-    << "X-tilt should produce dominant rotation about X axis at peak. "
-    << "omegaX=" << peak.x << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.y, peak.norm * kCrossAxisRatio)
-    << "Spurious Y rotation should be subdominant for X-tilt. "
-    << "omegaY=" << peak.y << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-    << "Spurious Z rotation should be subdominant for X-tilt. "
-    << "omegaZ=" << peak.z << " norm=" << peak.norm;
+  // Cross-bounce accumulation check (ASSERT_GE above guarantees >= 2 bounces)
+  const double firstRatioX = crossAxisRatio(result.bounces.front(), TiltAxis::X);
+  const double lastRatioX = crossAxisRatio(result.bounces.back(), TiltAxis::X);
+  EXPECT_LE(lastRatioX, firstRatioX + kCrossAxisAccumulationMargin)
+    << config.label << ": cross-axis ratio grew between bounces. first="
+    << firstRatioX << " last=" << lastRatioX;
 }
 
-// ---------------------------------------------------------------------------
-// X 15 degrees (medium tilt)
-// ---------------------------------------------------------------------------
-TEST_F(TiltedDropTest, TiltedDrop_X_Medium_DominantAxisX)
+TEST_F(TiltedDropTest, TiltedDrop_X_Medium_BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  TiltConfig config{TiltAxis::X, 15.0, "X_15deg"};
+  auto scene = setupScene(config);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
-  constexpr double kTiltDeg = 15.0;
-  const double tiltRad = kTiltDeg * M_PI / 180.0;
-  const double centerZ = centerZForSingleAxisTilt(tiltRad, kDropHeight);
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << ": expected at least " << kMinBounces << " bounces, got "
+    << result.bounces.size();
 
-  Eigen::Quaterniond q{Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitX()}};
+  printBounces(result.bounces, config.label);
 
-  const auto& cube = spawnInertial("unit_cube",
-                                   Coordinate{0.0, 0.0, centerZ},
-                                   1.0,
-                                   0.5,
-                                   0.5);
-  const uint32_t cubeId = cube.getInstanceId();
-  world().getObject(cubeId).getInertialState().orientation = q;
-
-  const double initialEnergy = computeSystemEnergy(world());
-  double maxEnergy = initialEnergy;
-  PeakOmega peak{};
-  bool nanDetected = false;
-
-  for (int frame = 1; frame <= kSimFrames; ++frame)
+  for (size_t i = 0; i < result.bounces.size(); ++i)
   {
-    step(1);
-
-    const auto& state = world().getObject(cubeId).getInertialState();
-    if (std::isnan(state.position.z()))
-    {
-      nanDetected = true;
-      break;
-    }
-
-    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
-
-    const double ox = std::abs(state.getAngularVelocity().x());
-    const double oy = std::abs(state.getAngularVelocity().y());
-    const double oz = std::abs(state.getAngularVelocity().z());
-    const double norm = std::sqrt(ox * ox + oy * oy + oz * oz);
-    if (norm > peak.norm)
-    {
-      peak = {ox, oy, oz, norm, frame};
-    }
+    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
+                           TiltAxis::X, scene.initialEnergy, config.label);
   }
 
-  ASSERT_FALSE(nanDetected) << "NaN detected in position";
-
-  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
-    << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
-    << " max=" << maxEnergy;
-
-  std::cout << "\n=== TiltedDrop X " << kTiltDeg << " deg (peak frame "
-            << peak.frame << ") ===\n";
-  std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
-            << " (norm=" << peak.norm << ")\n";
-
-  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
-
-  EXPECT_GE(peak.x, peak.norm * kCrossAxisRatio)
-    << "X-tilt should produce dominant rotation about X axis at peak. "
-    << "omegaX=" << peak.x << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.y, peak.norm * kCrossAxisRatio)
-    << "Spurious Y rotation should be subdominant for X-tilt. "
-    << "omegaY=" << peak.y << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-    << "Spurious Z rotation should be subdominant for X-tilt. "
-    << "omegaZ=" << peak.z << " norm=" << peak.norm;
+  const double firstRatioXM = crossAxisRatio(result.bounces.front(), TiltAxis::X);
+  const double lastRatioXM = crossAxisRatio(result.bounces.back(), TiltAxis::X);
+  EXPECT_LE(lastRatioXM, firstRatioXM + kCrossAxisAccumulationMargin)
+    << config.label << ": cross-axis ratio grew between bounces. first="
+    << firstRatioXM << " last=" << lastRatioXM;
 }
 
-// ---------------------------------------------------------------------------
-// X 30 degrees (large tilt)
-// ---------------------------------------------------------------------------
-TEST_F(TiltedDropTest, TiltedDrop_X_Large_DominantAxisX)
+TEST_F(TiltedDropTest, TiltedDrop_X_Large_BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  TiltConfig config{TiltAxis::X, 30.0, "X_30deg"};
+  auto scene = setupScene(config);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
-  constexpr double kTiltDeg = 30.0;
-  const double tiltRad = kTiltDeg * M_PI / 180.0;
-  const double centerZ = centerZForSingleAxisTilt(tiltRad, kDropHeight);
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << ": expected at least " << kMinBounces << " bounces, got "
+    << result.bounces.size();
 
-  Eigen::Quaterniond q{Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitX()}};
+  printBounces(result.bounces, config.label);
 
-  const auto& cube = spawnInertial("unit_cube",
-                                   Coordinate{0.0, 0.0, centerZ},
-                                   1.0,
-                                   0.5,
-                                   0.5);
-  const uint32_t cubeId = cube.getInstanceId();
-  world().getObject(cubeId).getInertialState().orientation = q;
-
-  const double initialEnergy = computeSystemEnergy(world());
-  double maxEnergy = initialEnergy;
-  PeakOmega peak{};
-  bool nanDetected = false;
-
-  for (int frame = 1; frame <= kSimFrames; ++frame)
+  for (size_t i = 0; i < result.bounces.size(); ++i)
   {
-    step(1);
-
-    const auto& state = world().getObject(cubeId).getInertialState();
-    if (std::isnan(state.position.z()))
-    {
-      nanDetected = true;
-      break;
-    }
-
-    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
-
-    const double ox = std::abs(state.getAngularVelocity().x());
-    const double oy = std::abs(state.getAngularVelocity().y());
-    const double oz = std::abs(state.getAngularVelocity().z());
-    const double norm = std::sqrt(ox * ox + oy * oy + oz * oz);
-    if (norm > peak.norm)
-    {
-      peak = {ox, oy, oz, norm, frame};
-    }
+    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
+                           TiltAxis::X, scene.initialEnergy, config.label);
   }
 
-  ASSERT_FALSE(nanDetected) << "NaN detected in position";
-
-  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
-    << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
-    << " max=" << maxEnergy;
-
-  std::cout << "\n=== TiltedDrop X " << kTiltDeg << " deg (peak frame "
-            << peak.frame << ") ===\n";
-  std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
-            << " (norm=" << peak.norm << ")\n";
-
-  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
-
-  EXPECT_GE(peak.x, peak.norm * kCrossAxisRatio)
-    << "X-tilt should produce dominant rotation about X axis at peak. "
-    << "omegaX=" << peak.x << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.y, peak.norm * kCrossAxisRatio)
-    << "Spurious Y rotation should be subdominant for X-tilt. "
-    << "omegaY=" << peak.y << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-    << "Spurious Z rotation should be subdominant for X-tilt. "
-    << "omegaZ=" << peak.z << " norm=" << peak.norm;
+  const double firstRatioXL = crossAxisRatio(result.bounces.front(), TiltAxis::X);
+  const double lastRatioXL = crossAxisRatio(result.bounces.back(), TiltAxis::X);
+  EXPECT_LE(lastRatioXL, firstRatioXL + kCrossAxisAccumulationMargin)
+    << config.label << ": cross-axis ratio grew between bounces. first="
+    << firstRatioXL << " last=" << lastRatioXL;
 }
 
 // ============================================================================
 // Single-axis Y tilts
-// Assertion: peak post-bounce rotation predominantly about Y; X and Z subdominant
 // ============================================================================
 
-// ---------------------------------------------------------------------------
-// Y 5 degrees (small tilt)
-// ---------------------------------------------------------------------------
-TEST_F(TiltedDropTest, TiltedDrop_Y_Small_DominantAxisY)
+TEST_F(TiltedDropTest, TiltedDrop_Y_Small_BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  TiltConfig config{TiltAxis::Y, 5.0, "Y_5deg"};
+  auto scene = setupScene(config);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
-  constexpr double kTiltDeg = 5.0;
-  const double tiltRad = kTiltDeg * M_PI / 180.0;
-  const double centerZ = centerZForSingleAxisTilt(tiltRad, kDropHeight);
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << ": expected at least " << kMinBounces << " bounces, got "
+    << result.bounces.size();
 
-  Eigen::Quaterniond q{Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitY()}};
+  printBounces(result.bounces, config.label);
 
-  const auto& cube = spawnInertial("unit_cube",
-                                   Coordinate{0.0, 0.0, centerZ},
-                                   1.0,
-                                   0.5,
-                                   0.5);
-  const uint32_t cubeId = cube.getInstanceId();
-  world().getObject(cubeId).getInertialState().orientation = q;
-
-  const double initialEnergy = computeSystemEnergy(world());
-  double maxEnergy = initialEnergy;
-  PeakOmega peak{};
-  bool nanDetected = false;
-
-  for (int frame = 1; frame <= kSimFrames; ++frame)
+  for (size_t i = 0; i < result.bounces.size(); ++i)
   {
-    step(1);
-
-    const auto& state = world().getObject(cubeId).getInertialState();
-    if (std::isnan(state.position.z()))
-    {
-      nanDetected = true;
-      break;
-    }
-
-    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
-
-    const double ox = std::abs(state.getAngularVelocity().x());
-    const double oy = std::abs(state.getAngularVelocity().y());
-    const double oz = std::abs(state.getAngularVelocity().z());
-    const double norm = std::sqrt(ox * ox + oy * oy + oz * oz);
-    if (norm > peak.norm)
-    {
-      peak = {ox, oy, oz, norm, frame};
-    }
+    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
+                           TiltAxis::Y, scene.initialEnergy, config.label);
   }
 
-  ASSERT_FALSE(nanDetected) << "NaN detected in position";
-
-  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
-    << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
-    << " max=" << maxEnergy;
-
-  std::cout << "\n=== TiltedDrop Y " << kTiltDeg << " deg (peak frame "
-            << peak.frame << ") ===\n";
-  std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
-            << " (norm=" << peak.norm << ")\n";
-
-  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
-
-  EXPECT_GE(peak.y, peak.norm * kCrossAxisRatio)
-    << "Y-tilt should produce dominant rotation about Y axis at peak. "
-    << "omegaY=" << peak.y << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.x, peak.norm * kCrossAxisRatio)
-    << "Spurious X rotation should be subdominant for Y-tilt. "
-    << "omegaX=" << peak.x << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-    << "Spurious Z rotation should be subdominant for Y-tilt. "
-    << "omegaZ=" << peak.z << " norm=" << peak.norm;
+  const double firstRatioYS = crossAxisRatio(result.bounces.front(), TiltAxis::Y);
+  const double lastRatioYS = crossAxisRatio(result.bounces.back(), TiltAxis::Y);
+  EXPECT_LE(lastRatioYS, firstRatioYS + kCrossAxisAccumulationMargin)
+    << config.label << ": cross-axis ratio grew between bounces. first="
+    << firstRatioYS << " last=" << lastRatioYS;
 }
 
-// ---------------------------------------------------------------------------
-// Y 15 degrees (medium tilt)
-// ---------------------------------------------------------------------------
-TEST_F(TiltedDropTest, TiltedDrop_Y_Medium_DominantAxisY)
+TEST_F(TiltedDropTest, TiltedDrop_Y_Medium_BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  TiltConfig config{TiltAxis::Y, 15.0, "Y_15deg"};
+  auto scene = setupScene(config);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
-  constexpr double kTiltDeg = 15.0;
-  const double tiltRad = kTiltDeg * M_PI / 180.0;
-  const double centerZ = centerZForSingleAxisTilt(tiltRad, kDropHeight);
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << ": expected at least " << kMinBounces << " bounces, got "
+    << result.bounces.size();
 
-  Eigen::Quaterniond q{Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitY()}};
+  printBounces(result.bounces, config.label);
 
-  const auto& cube = spawnInertial("unit_cube",
-                                   Coordinate{0.0, 0.0, centerZ},
-                                   1.0,
-                                   0.5,
-                                   0.5);
-  const uint32_t cubeId = cube.getInstanceId();
-  world().getObject(cubeId).getInertialState().orientation = q;
-
-  const double initialEnergy = computeSystemEnergy(world());
-  double maxEnergy = initialEnergy;
-  PeakOmega peak{};
-  bool nanDetected = false;
-
-  for (int frame = 1; frame <= kSimFrames; ++frame)
+  for (size_t i = 0; i < result.bounces.size(); ++i)
   {
-    step(1);
-
-    const auto& state = world().getObject(cubeId).getInertialState();
-    if (std::isnan(state.position.z()))
-    {
-      nanDetected = true;
-      break;
-    }
-
-    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
-
-    const double ox = std::abs(state.getAngularVelocity().x());
-    const double oy = std::abs(state.getAngularVelocity().y());
-    const double oz = std::abs(state.getAngularVelocity().z());
-    const double norm = std::sqrt(ox * ox + oy * oy + oz * oz);
-    if (norm > peak.norm)
-    {
-      peak = {ox, oy, oz, norm, frame};
-    }
+    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
+                           TiltAxis::Y, scene.initialEnergy, config.label);
   }
 
-  ASSERT_FALSE(nanDetected) << "NaN detected in position";
-
-  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
-    << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
-    << " max=" << maxEnergy;
-
-  std::cout << "\n=== TiltedDrop Y " << kTiltDeg << " deg (peak frame "
-            << peak.frame << ") ===\n";
-  std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
-            << " (norm=" << peak.norm << ")\n";
-
-  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
-
-  EXPECT_GE(peak.y, peak.norm * kCrossAxisRatio)
-    << "Y-tilt should produce dominant rotation about Y axis at peak. "
-    << "omegaY=" << peak.y << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.x, peak.norm * kCrossAxisRatio)
-    << "Spurious X rotation should be subdominant for Y-tilt. "
-    << "omegaX=" << peak.x << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-    << "Spurious Z rotation should be subdominant for Y-tilt. "
-    << "omegaZ=" << peak.z << " norm=" << peak.norm;
+  const double firstRatioYM = crossAxisRatio(result.bounces.front(), TiltAxis::Y);
+  const double lastRatioYM = crossAxisRatio(result.bounces.back(), TiltAxis::Y);
+  EXPECT_LE(lastRatioYM, firstRatioYM + kCrossAxisAccumulationMargin)
+    << config.label << ": cross-axis ratio grew between bounces. first="
+    << firstRatioYM << " last=" << lastRatioYM;
 }
 
-// ---------------------------------------------------------------------------
-// Y 30 degrees (large tilt)
-// ---------------------------------------------------------------------------
-TEST_F(TiltedDropTest, TiltedDrop_Y_Large_DominantAxisY)
+TEST_F(TiltedDropTest, TiltedDrop_Y_Large_BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  TiltConfig config{TiltAxis::Y, 30.0, "Y_30deg"};
+  auto scene = setupScene(config);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
-  constexpr double kTiltDeg = 30.0;
-  const double tiltRad = kTiltDeg * M_PI / 180.0;
-  const double centerZ = centerZForSingleAxisTilt(tiltRad, kDropHeight);
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << ": expected at least " << kMinBounces << " bounces, got "
+    << result.bounces.size();
 
-  Eigen::Quaterniond q{Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitY()}};
+  printBounces(result.bounces, config.label);
 
-  const auto& cube = spawnInertial("unit_cube",
-                                   Coordinate{0.0, 0.0, centerZ},
-                                   1.0,
-                                   0.5,
-                                   0.5);
-  const uint32_t cubeId = cube.getInstanceId();
-  world().getObject(cubeId).getInertialState().orientation = q;
-
-  const double initialEnergy = computeSystemEnergy(world());
-  double maxEnergy = initialEnergy;
-  PeakOmega peak{};
-  bool nanDetected = false;
-
-  for (int frame = 1; frame <= kSimFrames; ++frame)
+  for (size_t i = 0; i < result.bounces.size(); ++i)
   {
-    step(1);
-
-    const auto& state = world().getObject(cubeId).getInertialState();
-    if (std::isnan(state.position.z()))
-    {
-      nanDetected = true;
-      break;
-    }
-
-    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
-
-    const double ox = std::abs(state.getAngularVelocity().x());
-    const double oy = std::abs(state.getAngularVelocity().y());
-    const double oz = std::abs(state.getAngularVelocity().z());
-    const double norm = std::sqrt(ox * ox + oy * oy + oz * oz);
-    if (norm > peak.norm)
-    {
-      peak = {ox, oy, oz, norm, frame};
-    }
+    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
+                           TiltAxis::Y, scene.initialEnergy, config.label);
   }
 
-  ASSERT_FALSE(nanDetected) << "NaN detected in position";
-
-  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
-    << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
-    << " max=" << maxEnergy;
-
-  std::cout << "\n=== TiltedDrop Y " << kTiltDeg << " deg (peak frame "
-            << peak.frame << ") ===\n";
-  std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
-            << " (norm=" << peak.norm << ")\n";
-
-  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
-
-  EXPECT_GE(peak.y, peak.norm * kCrossAxisRatio)
-    << "Y-tilt should produce dominant rotation about Y axis at peak. "
-    << "omegaY=" << peak.y << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.x, peak.norm * kCrossAxisRatio)
-    << "Spurious X rotation should be subdominant for Y-tilt. "
-    << "omegaX=" << peak.x << " norm=" << peak.norm;
-
-  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-    << "Spurious Z rotation should be subdominant for Y-tilt. "
-    << "omegaZ=" << peak.z << " norm=" << peak.norm;
+  const double firstRatioYL = crossAxisRatio(result.bounces.front(), TiltAxis::Y);
+  const double lastRatioYL = crossAxisRatio(result.bounces.back(), TiltAxis::Y);
+  EXPECT_LE(lastRatioYL, firstRatioYL + kCrossAxisAccumulationMargin)
+    << config.label << ": cross-axis ratio grew between bounces. first="
+    << firstRatioYL << " last=" << lastRatioYL;
 }
 
 // ============================================================================
 // Combined X+Y tilts
-// Assertion: both X and Y rotation active at peak; Z subdominant
 // ============================================================================
 
-// ---------------------------------------------------------------------------
-// X+Y 5 degrees each (small combined tilt)
-// ---------------------------------------------------------------------------
-TEST_F(TiltedDropTest, TiltedDrop_XY_Small_BothAxesActive)
+TEST_F(TiltedDropTest, TiltedDrop_XY_Small_BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  TiltConfig config{TiltAxis::XY, 5.0, "XY_5deg"};
+  auto scene = setupScene(config);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
-  constexpr double kTiltDeg = 5.0;
-  const double tiltRad = kTiltDeg * M_PI / 180.0;
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << ": expected at least " << kMinBounces << " bounces, got "
+    << result.bounces.size();
 
-  // Combined X+Y tilt: compose rotations
-  Eigen::Quaterniond q =
-    Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitX()} *
-    Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitY()};
+  printBounces(result.bounces, config.label);
 
-  const double centerZ = centerZForCombinedTilt(kDropHeight);
-
-  const auto& cube = spawnInertial("unit_cube",
-                                   Coordinate{0.0, 0.0, centerZ},
-                                   1.0,
-                                   0.5,
-                                   0.5);
-  const uint32_t cubeId = cube.getInstanceId();
-  world().getObject(cubeId).getInertialState().orientation = q;
-
-  const double initialEnergy = computeSystemEnergy(world());
-  double maxEnergy = initialEnergy;
-  PeakOmega peak{};
-  bool nanDetected = false;
-
-  for (int frame = 1; frame <= kSimFrames; ++frame)
+  for (size_t i = 0; i < result.bounces.size(); ++i)
   {
-    step(1);
-
-    const auto& state = world().getObject(cubeId).getInertialState();
-    if (std::isnan(state.position.z()))
-    {
-      nanDetected = true;
-      break;
-    }
-
-    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
-
-    const double ox = std::abs(state.getAngularVelocity().x());
-    const double oy = std::abs(state.getAngularVelocity().y());
-    const double oz = std::abs(state.getAngularVelocity().z());
-    const double norm = std::sqrt(ox * ox + oy * oy + oz * oz);
-    if (norm > peak.norm)
-    {
-      peak = {ox, oy, oz, norm, frame};
-    }
+    assertCombinedAxisBounce(result.bounces[i], static_cast<int>(i),
+                             scene.initialEnergy, config.label);
   }
 
-  ASSERT_FALSE(nanDetected) << "NaN detected in position";
-
-  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
-    << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
-    << " max=" << maxEnergy;
-
-  std::cout << "\n=== TiltedDrop XY " << kTiltDeg << "+" << kTiltDeg
-            << " deg (peak frame " << peak.frame << ") ===\n";
-  std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
-            << " (norm=" << peak.norm << ")\n";
-
-  ASSERT_GT(peak.norm, 1e-6) << "Peak angular velocity too small to analyze";
-
-  // Both X and Y should be active (each >= 10% of total norm)
-  constexpr double kBothActiveRatio = 0.10;
-  EXPECT_GE(peak.x, peak.norm * kBothActiveRatio)
-    << "Combined X+Y tilt should produce X-axis rotation at peak. "
-    << "omegaX=" << peak.x << " norm=" << peak.norm;
-
-  EXPECT_GE(peak.y, peak.norm * kBothActiveRatio)
-    << "Combined X+Y tilt should produce Y-axis rotation at peak. "
-    << "omegaY=" << peak.y << " norm=" << peak.norm;
-
-  // Spurious Z rotation should be subdominant
-  EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-    << "Spurious Z rotation should be subdominant for X+Y tilt. "
-    << "omegaZ=" << peak.z << " norm=" << peak.norm;
+  assertOmegaSignConsistency(result.bounces, config.label);
 }
 
-// ---------------------------------------------------------------------------
-// X+Y 15 degrees each (medium combined tilt)
-// ---------------------------------------------------------------------------
-TEST_F(TiltedDropTest, TiltedDrop_XY_Medium_BothAxesActive)
+TEST_F(TiltedDropTest, TiltedDrop_XY_Medium_BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  TiltConfig config{TiltAxis::XY, 15.0, "XY_15deg"};
+  auto scene = setupScene(config);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
-  constexpr double kTiltDeg = 15.0;
-  const double tiltRad = kTiltDeg * M_PI / 180.0;
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << ": expected at least " << kMinBounces << " bounces, got "
+    << result.bounces.size();
 
-  Eigen::Quaterniond q =
-    Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitX()} *
-    Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitY()};
+  printBounces(result.bounces, config.label);
 
-  const double centerZ = centerZForCombinedTilt(kDropHeight);
-
-  const auto& cube = spawnInertial("unit_cube",
-                                   Coordinate{0.0, 0.0, centerZ},
-                                   1.0,
-                                   0.5,
-                                   0.5);
-  const uint32_t cubeId = cube.getInstanceId();
-  world().getObject(cubeId).getInertialState().orientation = q;
-
-  const double initialEnergy = computeSystemEnergy(world());
-  double maxEnergy = initialEnergy;
-  PeakOmega peak{};
-  bool nanDetected = false;
-
-  for (int frame = 1; frame <= kSimFrames; ++frame)
+  for (size_t i = 0; i < result.bounces.size(); ++i)
   {
-    step(1);
-
-    const auto& state = world().getObject(cubeId).getInertialState();
-    if (std::isnan(state.position.z()))
-    {
-      nanDetected = true;
-      break;
-    }
-
-    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
-
-    const double ox = std::abs(state.getAngularVelocity().x());
-    const double oy = std::abs(state.getAngularVelocity().y());
-    const double oz = std::abs(state.getAngularVelocity().z());
-    const double norm = std::sqrt(ox * ox + oy * oy + oz * oz);
-    if (norm > peak.norm)
-    {
-      peak = {ox, oy, oz, norm, frame};
-    }
+    assertCombinedAxisBounce(result.bounces[i], static_cast<int>(i),
+                             scene.initialEnergy, config.label);
   }
 
-  ASSERT_FALSE(nanDetected) << "NaN detected in position";
-
-  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
-    << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
-    << " max=" << maxEnergy;
-
-  std::cout << "\n=== TiltedDrop XY " << kTiltDeg << "+" << kTiltDeg
-            << " deg (peak frame " << peak.frame << ") ===\n";
-  std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
-            << " (norm=" << peak.norm << ")\n";
-
-  if (!nanDetected && peak.norm > 1e-6)
-  {
-    constexpr double kBothActiveRatio = 0.10;
-    EXPECT_GE(peak.x, peak.norm * kBothActiveRatio)
-      << "Combined X+Y tilt should produce X-axis rotation at peak. "
-      << "omegaX=" << peak.x << " norm=" << peak.norm;
-
-    EXPECT_GE(peak.y, peak.norm * kBothActiveRatio)
-      << "Combined X+Y tilt should produce Y-axis rotation at peak. "
-      << "omegaY=" << peak.y << " norm=" << peak.norm;
-
-    EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-      << "Spurious Z rotation should be subdominant for X+Y tilt. "
-      << "omegaZ=" << peak.z << " norm=" << peak.norm;
-  }
+  assertOmegaSignConsistency(result.bounces, config.label);
 }
 
-// ---------------------------------------------------------------------------
-// X+Y 30 degrees each (large combined tilt)
-// ---------------------------------------------------------------------------
-TEST_F(TiltedDropTest, TiltedDrop_XY_Large_BothAxesActive)
+TEST_F(TiltedDropTest, TiltedDrop_XY_Large_BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
+  TiltConfig config{TiltAxis::XY, 30.0, "XY_30deg"};
+  auto scene = setupScene(config);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
-  constexpr double kTiltDeg = 30.0;
-  const double tiltRad = kTiltDeg * M_PI / 180.0;
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << ": expected at least " << kMinBounces << " bounces, got "
+    << result.bounces.size();
 
-  Eigen::Quaterniond q =
-    Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitX()} *
-    Eigen::AngleAxisd{tiltRad, Eigen::Vector3d::UnitY()};
+  printBounces(result.bounces, config.label);
 
-  const double centerZ = centerZForCombinedTilt(kDropHeight);
-
-  const auto& cube = spawnInertial("unit_cube",
-                                   Coordinate{0.0, 0.0, centerZ},
-                                   1.0,
-                                   0.5,
-                                   0.5);
-  const uint32_t cubeId = cube.getInstanceId();
-  world().getObject(cubeId).getInertialState().orientation = q;
-
-  const double initialEnergy = computeSystemEnergy(world());
-  double maxEnergy = initialEnergy;
-  PeakOmega peak{};
-  bool nanDetected = false;
-
-  for (int frame = 1; frame <= kSimFrames; ++frame)
+  for (size_t i = 0; i < result.bounces.size(); ++i)
   {
-    step(1);
-
-    const auto& state = world().getObject(cubeId).getInertialState();
-    if (std::isnan(state.position.z()))
-    {
-      nanDetected = true;
-      break;
-    }
-
-    maxEnergy = std::max(maxEnergy, computeSystemEnergy(world()));
-
-    const double ox = std::abs(state.getAngularVelocity().x());
-    const double oy = std::abs(state.getAngularVelocity().y());
-    const double oz = std::abs(state.getAngularVelocity().z());
-    const double norm = std::sqrt(ox * ox + oy * oy + oz * oz);
-    if (norm > peak.norm)
-    {
-      peak = {ox, oy, oz, norm, frame};
-    }
+    assertCombinedAxisBounce(result.bounces[i], static_cast<int>(i),
+                             scene.initialEnergy, config.label);
   }
 
-  ASSERT_FALSE(nanDetected) << "NaN detected in position";
-
-  ASSERT_LE(maxEnergy, initialEnergy * 1.10)
-    << "Energy must not grow beyond 10% tolerance. initial=" << initialEnergy
-    << " max=" << maxEnergy;
-
-  std::cout << "\n=== TiltedDrop XY " << kTiltDeg << "+" << kTiltDeg
-            << " deg (peak frame " << peak.frame << ") ===\n";
-  std::cout << "omega: X=" << peak.x << " Y=" << peak.y << " Z=" << peak.z
-            << " (norm=" << peak.norm << ")\n";
-
-  if (!nanDetected && peak.norm > 1e-6)
-  {
-    constexpr double kBothActiveRatio = 0.10;
-    EXPECT_GE(peak.x, peak.norm * kBothActiveRatio)
-      << "Combined X+Y tilt should produce X-axis rotation at peak. "
-      << "omegaX=" << peak.x << " norm=" << peak.norm;
-
-    EXPECT_GE(peak.y, peak.norm * kBothActiveRatio)
-      << "Combined X+Y tilt should produce Y-axis rotation at peak. "
-      << "omegaY=" << peak.y << " norm=" << peak.norm;
-
-    EXPECT_LE(peak.z, peak.norm * kCrossAxisRatio)
-      << "Spurious Z rotation should be subdominant for X+Y tilt. "
-      << "omegaZ=" << peak.z << " norm=" << peak.norm;
-  }
+  assertOmegaSignConsistency(result.bounces, config.label);
 }
