@@ -14,6 +14,8 @@
 - [x] Design Revision 2 Complete — Fix F2 Implemented (Prototype P3 NEGATIVE — Revision 3 required)
 - [x] Design Revision 3 Complete — Asymmetric Decoupling (Prototype P4 PARTIAL — Revision 4 required)
 - [x] Design Revision 4 Complete — Velocity-Gated Clamp (Prototype P5 NEGATIVE — Revision 5 required)
+- [x] Math Formulation Revised — 6 issues (I1-I6) fixed per math reviewer feedback
+- [x] Design Revision 5 Complete — Post-Sweep Net-Zero Redistribution (Prototype P6 NEGATIVE — Revision 6 required)
 - [ ] Implementation Complete — Awaiting Test Writing
 - [ ] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
@@ -30,8 +32,8 @@
 - **Generate Tutorial**: No
 - **Requires Math Design**: No
 - **GitHub Issue**: #112
-- **Design Revision Count**: 4
-- **Previous Design Approaches**: [Warm-start contamination (Phase A bounce in cache) — refuted by Prototype P1; Full decoupled K_tt solve — fixes oblique but breaks SlidingCubeX/TippingTorque, refuted by Prototype P2; Fix F2 warm-start cache only — no test changes, refuted by Prototype P3; Asymmetric decoupling (scalar row 0, K_inv rows 1-2) — same 3 regressions as P2 because 1/K(0,0) != K_inv(0,0) changes cone bound, refuted by Prototype P4; Velocity-gated clamp (min(unconstrained(0), 0.0) when vErr(0)>=0) — NEGATIVE, fixes TippingTorque but re-breaks oblique tests P4 had fixed plus 2 new regressions, refuted by Prototype P5]
+- **Design Revision Count**: 5
+- **Previous Design Approaches**: [Warm-start contamination (Phase A bounce in cache) — refuted by Prototype P1; Full decoupled K_tt solve — fixes oblique but breaks SlidingCubeX/TippingTorque, refuted by Prototype P2; Fix F2 warm-start cache only — no test changes, refuted by Prototype P3; Asymmetric decoupling (scalar row 0, K_inv rows 1-2) — same 3 regressions as P2 because 1/K(0,0) != K_inv(0,0) changes cone bound, refuted by Prototype P4; Velocity-gated clamp (min(unconstrained(0), 0.0) when vErr(0)>=0) — NEGATIVE, fixes TippingTorque but re-breaks oblique tests P4 had fixed plus 2 new regressions, refuted by Prototype P5; Post-sweep net-zero redistribution (redistribute positive net delta_lambda_n across sliding contacts after each sweep) — NEGATIVE, same 12 failures as baseline with no improvement, refuted by Prototype P6]
 
 ---
 
@@ -283,6 +285,46 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
   - `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.hpp` (sweepOnce signature reverted to pre-P2)
   - `docs/designs/0084_block_pgs_solver_rework/design.md` (Design Revision 4 section appended)
   - `docs/designs/0084_block_pgs_solver_rework/iteration-log.md` (Iteration 6 added)
+
+### Math Formulation Revision Phase
+- **Started**: 2026-02-28 22:30
+- **Completed**: 2026-02-28 23:00
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
+- **Artifacts**:
+  - `docs/designs/0084_block_pgs_solver_rework/math-formulation.md` (6 issues I1-I6 fixed)
+- **Notes**:
+  - I1: Fixed K_ang matrix typo — entry (2,1) was `a_2^T I_A^{-1} a_2`, now `a_2^T I_A^{-1} a_1`
+  - I2: Fixed oblique t2 sign — `[-1/√2, 1/√2, 0]` → `[1/√2, -1/√2, 0]` (cross product is correct)
+  - I3 (critical): Section 3 rewritten. Pre-projection K_nt * vErr sum is identically zero for ANY
+    angular velocity. Actual energy injection mechanism is Coulomb cone projection asymmetrically
+    clipping tangential impulses for contacts with different accumulated lambda_n values.
+  - I4: Per-Contact Indistinguishability proof updated to reference cone projection mechanism.
+  - I5: Example 2 replaced with cone-projection-aware example demonstrating asymmetric clipping.
+  - I6: Section 6 post-sweep correction criterion reformulated on post-projection delta_lambda_n.
+
+### Design Revision Phase (Revision 5)
+- **Started**: 2026-02-28 23:00
+- **Completed**: 2026-02-28 23:59
+- **Revision Number**: 5
+- **Trigger**: Prototype P5 — velocity-gated clamp NEGATIVE, plus math review revealing I3/I6 errors
+- **Human Gate Decision**: Approved — post-sweep net-zero redistribution (P6)
+- **Prototype P6 Result**: NEGATIVE — same 12 failures as baseline, no improvement
+  - 4 redistribution variants tested (V1: no guards → 37 regressions; V2: dynamic only → 24 regressions;
+    V3: + penetration guard → 12 failures baseline; V4: + sliding cone boundary → 12 failures baseline)
+  - Root cause: energy injection accumulates over multiple frames via warm-start, not within one sweep.
+    Post-sweep redistribution can zero the per-sweep net delta but cannot prevent next-frame contamination.
+- **Conclusion**: Post-sweep redistribution is architecturally insufficient. The energy injection must
+  be addressed at the per-sweep K_inv solve level (where it originates), not post-sweep.
+  The pattern across P1-P6 is now clear: any approach that operates post-hoc (after the energy is
+  injected) cannot fix the problem. The fix must prevent injection at the source.
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.cpp` (P5 reverted, P6 redistribution added)
+  - `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.hpp` (sweepOnce comment updated for P6)
+  - `docs/designs/0084_block_pgs_solver_rework/math-formulation.md` (I1-I6 fixed)
+  - `docs/designs/0084_block_pgs_solver_rework/iteration-log.md` (Iteration 7 added)
 
 ### Implementation Phase
 - **Started**:

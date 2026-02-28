@@ -421,3 +421,141 @@ Key observation: The oblique case injects NET upward momentum across ALL contact
 
 Design Revision 5 required. Prototype P5 is definitively NEGATIVE. The velocity-gated clamp approach fails because it cannot distinguish CORRECT K_nt contributions (axis-aligned, self-canceling) from INCORRECT K_nt contributions (oblique, net energy injection).
 
+---
+
+## Iteration 7 — Prototype P6: Post-Sweep Net-Zero Redistribution
+
+**Date**: 2026-02-28
+**Phase**: Prototype (Design Revision 5)
+**Change**: Reverted P5 velocity-gated clamp. Restored full coupled K_inv solve
+(`unconstrained = blockKInvs[ci] * (-vErr)`). Added post-sweep net-zero redistribution
+in `solve()` after each `sweepOnce` call.
+**Goal**: Correct spurious net normal impulse growth (from cone asymmetry) post-sweep
+without touching the per-contact coupled solve.
+
+### Changes Made
+
+1. **Reverted P5**: Removed velocity-gated clamp from `sweepOnce`. Restored plain:
+   ```cpp
+   const Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
+   ```
+
+2. **Post-sweep redistribution in `solve()`**:
+   After each `sweepOnce`, compute per-body net delta_lambda_n. If net positive for a
+   dynamic body with 2+ non-penetrating sliding contacts, subtract the mean correction
+   from each sliding contact's lambda_n and re-project onto the Coulomb cone.
+
+   Guards applied (in order):
+   - Dynamic bodies only (`inverseMasses[k] > 0`)
+   - 2+ contacts on body
+   - No penetrating contacts on body (`vErr_n >= 0` for all)
+   - Net delta must be positive (`netDelta > 1e-8`)
+   - Contact must be at sliding cone boundary (`||lambda_t|| >= 0.99 * mu * lambda_n`)
+
+3. **Math formulation revisions (6 issues I1-I6 fixed)**:
+   - I1: K_ang matrix entry (2,1) typo fixed: `a_2^T I_A^{-1} a_2` → `a_2^T I_A^{-1} a_1`
+   - I2: Oblique t2 sign corrected: `[-1/√2, 1/√2, 0]` → `[1/√2, -1/√2, 0]`
+   - I3: Section 3 rewritten — pre-projection K_nt sum is identically zero for any angular
+     velocity. Actual injection mechanism is Coulomb cone projection breaking cancellation.
+   - I4: Per-Contact Indistinguishability proof updated to reference cone projection.
+   - I5: Example 2 replaced with cone-projection-aware computation showing asymmetric
+     clipping mechanism. Corrected GTest template.
+   - I6: Section 6 post-sweep criterion reformulated on post-projection delta_lambda_n
+     (not pre-projection K_nt * vErr which is identically zero).
+
+### Variants Tested
+
+Four successive redistribution variants were attempted before arriving at the final result:
+
+| Variant | Guards | Tests Passing | New Regressions |
+|---------|--------|---------------|-----------------|
+| V1: No guards | None | 743/780 | 37 new failures |
+| V2: Dynamic bodies only | inverseMasses > 0 | 756/780 | 24 new failures |
+| V3: + Penetration guard | vErr_n >= 0 for all contacts | 768/780 | 0 (baseline) |
+| V4: + Sliding cone boundary | \|\|lambda_t\|\| >= 0.99 mu lambda_n | 768/780 | 0 (baseline) |
+
+**V1 failure**: Single-contact scenarios zeroed entire lambda_n (correction = delta / 1 contact).
+**V2 failure**: Redistribution disrupted HighSpeed axis-aligned deceleration.
+**V3 result**: Exactly 12 failures, same as baseline. RockingCube newly passing, HighSpeed newly passing (no regressions vs baseline). But none of the 12 core failures fixed.
+**V4 result**: Identical to V3 — the isSliding guard did not change the outcome.
+
+### Result: NEGATIVE — No improvement over baseline
+
+**Total tests**: 780. Pass: 768. Fail: 12. Same 12 as original baseline.
+
+**Failing tests** (all 12 from original, none fixed):
+- ReplayEnabledTest.EnergyAccountingTest_InelasticBounce_KEReducedByESquared
+- ReplayEnabledTest.LinearCollisionTest_PerfectlyElastic_EnergyConserved
+- ReplayEnabledTest.LinearCollisionTest_EqualMassElastic_VelocitySwap
+- ReplayEnabledTest.ParameterIsolation_TimestepSensitivity_ERPAmplification
+- ReplayEnabledTest.RotationalCollisionTest_SphereDrop_NoRotation
+- ReplayEnabledTest.RotationalEnergyTest_ZeroGravity_RotationalEnergyTransfer_Conserved
+- FrictionSlidingTest.SlidingCube_ConeCompliantEveryFrame_HighSpeed
+- FrictionSlidingTest.SlidingCube_ConeCompliantEveryFrame_Oblique45_Slow
+- FrictionSlidingTest.SlidingCube_ConeCompliantEveryFrame_Oblique45_Medium
+- FrictionSlidingTest.SlidingCube_ConeCompliantEveryFrame_Oblique45
+- FrictionSlidingTest.SlidingCube_ConeCompliantEveryFrame_HighSpeedOblique
+- FrictionSlidingTest.FrictionWithRestitution_BounceThenSlide
+
+**Root cause**: The redistribution cannot fix the oblique energy injection because:
+1. For oblique contacts, the energy injection occurs within the K_inv solve itself
+   (before the sweep even completes). The net positive delta_n is a symptom of per-sweep
+   impulse growth, not recoverable by post-sweep adjustment.
+2. The oblique cube is launched to Vz = 21 m/s within 10 frames (confirmed by diagnostic
+   output). At this point, the redistribution activates but the cube is already airborne.
+   The penetration guard correctly blocks redistribution during penetrating frames (when
+   the contact force IS legitimately large), but the damage is done on the non-penetrating
+   frames between.
+3. Axis-aligned high-speed sliding (HighSpeed test) has legitimate positive net delta_n
+   during deceleration transients that must NOT be redistributed. The penetration guard
+   (`vErr_n >= 0`) does not distinguish this case from oblique energy injection.
+
+### Key Insight
+
+The post-sweep redistribution approach is architecturally wrong for this problem:
+- The math formulation (Section 3, corrected in I3) states that the pre-projection K_nt
+  sum IS identically zero. What actually matters is the post-projection net.
+- But the post-projection net for oblique contacts grows OVER MULTIPLE FRAMES (accumulates
+  through warm-start), not within a single sweep.
+- A post-sweep correction can zero the net delta for one sweep, but the warm-start for
+  the next frame starts from the corrupted lambda. The redistribution would need to be
+  frame-level, not sweep-level — and frame-level redistribution faces the same guard
+  problems as sweep-level.
+
+### Structural Incompatibility Confirmed
+
+The pattern across P1-P6:
+- Any change to row 0 of the solve (P2, P4, P5) that reduces K_nt normal coupling
+  breaks tipping torque and/or axis-aligned sliding.
+- Any post-solve correction (P6) that zeros net delta_n is too blunt to distinguish
+  energy injection from correct physics.
+- The P5 velocity-gated clamp was the closest approach but still too aggressive for
+  HighSpeed sliding.
+
+The root cause is that for oblique geometry, the CORRECT steady-state lambda_n is
+smaller than what the accumulation produces, but the algorithm has no way to know the
+"correct" lambda_n from geometric properties alone without a reference solution.
+
+### Next Step
+
+Human decision required. Options:
+
+**Option A — Geometric oblique detector**: Identify oblique contacts by K_nt magnitude
+(|K_nt| / K_nn > threshold) and apply decoupled normal row only for those contacts.
+Risk: threshold sensitivity, may still affect tipping torque for borderline geometry.
+
+**Option B — Accumulated lambda cap**: After convergence, compare accumulated lambda_n
+to what Phase A + scalar normal solve would give. Cap if too large. Requires reference
+solve per frame.
+
+**Option C — Accept P5 + fix HighSpeed separately**: P5 fixes 7/12 failures with 2
+regressions (SlidingCubeX lateral drift, HighSpeed). Investigate whether HighSpeed test
+tolerances can be loosened or a per-contact mu-scaling can compensate.
+
+**Option D — Different algorithmic approach**: Use a splitting method or alternating
+direction approach (e.g., ADMM) where normal and friction subproblems are decoupled at
+the algorithm level rather than at the solve level.
+
+**Option E — Accept the status quo**: Document the 12 known failures as known issues with
+the current Block PGS coupled solve. Investigate a longer-term architectural change.
+

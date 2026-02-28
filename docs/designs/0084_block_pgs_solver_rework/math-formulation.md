@@ -156,7 +156,7 @@ $$
 K_A^{\text{ang}} = \begin{bmatrix}
 \mathbf{a}_n^T \mathbf{I}_A^{-1} \mathbf{a}_n & -\mathbf{a}_n^T \mathbf{I}_A^{-1} \mathbf{a}_1 & -\mathbf{a}_n^T \mathbf{I}_A^{-1} \mathbf{a}_2 \\
 -\mathbf{a}_1^T \mathbf{I}_A^{-1} \mathbf{a}_n & \mathbf{a}_1^T \mathbf{I}_A^{-1} \mathbf{a}_1 & \mathbf{a}_1^T \mathbf{I}_A^{-1} \mathbf{a}_2 \\
--\mathbf{a}_2^T \mathbf{I}_A^{-1} \mathbf{a}_n & \mathbf{a}_2^T \mathbf{I}_A^{-1} \mathbf{a}_2 & \mathbf{a}_2^T \mathbf{I}_A^{-1} \mathbf{a}_2
+-\mathbf{a}_2^T \mathbf{I}_A^{-1} \mathbf{a}_n & \mathbf{a}_2^T \mathbf{I}_A^{-1} \mathbf{a}_1 & \mathbf{a}_2^T \mathbf{I}_A^{-1} \mathbf{a}_2
 \end{bmatrix}
 $$
 
@@ -238,7 +238,7 @@ $$
 $$
 
 $$
-\mathbf{t}_2 = \mathbf{n} \times \mathbf{t}_1 = [0,0,1]^T \times \frac{1}{\sqrt{2}}[-1, -1, 0]^T = \frac{1}{\sqrt{2}}[-1, 1, 0]^T
+\mathbf{t}_2 = \mathbf{n} \times \mathbf{t}_1 = [0,0,1]^T \times \frac{1}{\sqrt{2}}[-1, -1, 0]^T = \frac{1}{\sqrt{2}}[1, -1, 0]^T
 $$
 
 For corner $\mathbf{r}_A = [r_x, r_y, -0.5]^T$:
@@ -287,83 +287,75 @@ $$
 For a non-penetrating sliding contact ($v_\text{err,n}^{(i)} \approx 0$), this reduces to:
 
 $$
-\Delta\lambda_n^{(i)} \approx -K^{-1}_{01}(i) \, v_\text{err,t1}^{(i)} - K^{-1}_{02}(i) \, v_\text{err,t2}^{(i)}
+\Delta\lambda_n^{(i),\text{pre}} \approx -K^{-1}_{01}(i) \, v_\text{err,t1}^{(i)} - K^{-1}_{02}(i) \, v_\text{err,t2}^{(i)}
 $$
 
-The **net normal impulse** across all contacts is:
+where the superscript "pre" denotes the value before Coulomb cone projection.
+
+**Key result (linear regime)**: The pre-projection net normal impulse across all contacts is identically zero for any rigid-body angular velocity:
 
 $$
-\Delta\Lambda_n = \sum_{i=1}^{N_c} \Delta\lambda_n^{(i)}
+\Delta\Lambda_n^{\text{pre}} = \sum_{i=1}^{N_c} \Delta\lambda_n^{(i),\text{pre}} = 0
 $$
 
-**For axis-aligned sliding** (cube slides in +X, $\mathbf{v} = [v_x, 0, 0]^T$):
-
-Each contact has $\mathbf{t}_1$ aligned with the sliding direction. The tangential velocity errors at each contact point are dominated by $v_\text{err,t1}^{(i)} \approx v_{t1}$ (the same for all 4 contacts due to no angular velocity initially). The tangential errors are approximately equal across all contacts.
-
-Since $\sum_i K_{n,t_1}^{(i)} = 0$ and the $v_\text{err,t1}^{(i)}$ values are approximately equal:
+**Proof**: The velocity error at contact point $i$ is:
 
 $$
-\Delta\Lambda_n \approx -v_{t1} \sum_i K^{-1}_{01}(i) \approx 0
+v_\text{err,t1}^{(i)} = \mathbf{t}_1 \cdot \left(\mathbf{v}_\text{COM} + \boldsymbol{\omega} \times \mathbf{r}_A^{(i)}\right)
 $$
 
-(The $K^{-1}_{01}$ values approximately sum to zero because the K matrices have the same structure up to sign flips in $r_x$.)
-
-**For oblique sliding** (cube slides at 45 degrees):
-
-The tangential velocity errors at each contact point are NOT identical when there is any angular velocity component. Even a small solver-induced angular velocity $\omega$ creates differential tangential velocity at each corner through $\boldsymbol{\omega} \times \mathbf{r}_A^{(i)}$. This breaks the symmetry that would cause the K_nt contributions to cancel.
-
-More precisely, consider the contact point velocity at corner $i$:
+Splitting into common and differential parts:
 
 $$
-\mathbf{v}_{\text{contact}}^{(i)} = \mathbf{v}_\text{COM} + \boldsymbol{\omega} \times \mathbf{r}_A^{(i)}
+\Delta\Lambda_n^{\text{pre}} = -\sum_i K^{-1}_{01}(i) \left[ v_{t1,\text{COM}} + \mathbf{t}_1 \cdot (\boldsymbol{\omega} \times \mathbf{r}_A^{(i)}) \right] - \sum_i K^{-1}_{02}(i) (\ldots)
 $$
 
-The tangential velocity error at contact $i$ is:
+For the oblique case, contacts with non-zero K_nt1 are corners 1 ($r_x + r_y = +1$, $K_{n,t1} = +3/\sqrt{2}$) and 4 ($r_x + r_y = -1$, $K_{n,t1} = -3/\sqrt{2}$). Their position vectors satisfy $\mathbf{r}_A^{(4)} = -\mathbf{r}_A^{(1)}$ in the XY plane (same $r_z$). Therefore $\boldsymbol{\omega} \times \mathbf{r}_A^{(4)}$ and $\boldsymbol{\omega} \times \mathbf{r}_A^{(1)}$ have equal tangential components for any $\boldsymbol{\omega}$ (the XY antisymmetry of cross products under sign flip of $r_{xy}$ maps to equal tangential projections when $K_{nt}$ also changes sign). Thus $K_{nt}^{(1)} \cdot v_{err,t1}^{(1)} + K_{nt}^{(4)} \cdot v_{err,t1}^{(4)} = 0$, and contacts 2, 3 contribute zero (their $K_{nt} = 0$). The sum is zero regardless of $\boldsymbol{\omega}$.
+
+**The actual energy injection mechanism: Nonlinear Coulomb cone projection**.
+
+The K_nt coupling is necessary but not sufficient for energy injection. The essential nonlinearity is the Coulomb cone projection step:
 
 $$
-v_\text{err,t1}^{(i)} = \mathbf{t}_1 \cdot (\mathbf{v}_{\text{contact,A}}^{(i)} - \mathbf{v}_{\text{contact,B}}^{(i)})
+\lambda^{(i)} \leftarrow \text{Proj}_{\text{cone}}\left(\lambda_{\text{old}}^{(i)} + \Delta\lambda^{(i),\text{pre}}\right)
 $$
 
-For a static floor, $\mathbf{v}_{\text{contact,B}}^{(i)} = 0$. With angular velocity $\boldsymbol{\omega} = [\omega_x, \omega_y, \omega_z]^T$:
+where the Coulomb cone constrains $\|\lambda_t^{(i)}\| \leq \mu \lambda_n^{(i)}$.
+
+When a contact is in sliding friction (i.e., $\|\lambda_t\|$ would exceed $\mu \lambda_n$ without clipping), the projection clips the tangential impulse:
 
 $$
-v_\text{err,t1}^{(i)} = \mathbf{t}_1 \cdot (\mathbf{v}_\text{COM} + \boldsymbol{\omega} \times \mathbf{r}_A^{(i)})
+\lambda_t^{(i),\text{proj}} = \lambda_t^{(i),\text{pre}} \cdot \frac{\mu \lambda_n^{(i)}}{\|\lambda_t^{(i),\text{pre}}\|}
 $$
 
-The common part $\mathbf{t}_1 \cdot \mathbf{v}_\text{COM}$ is the same for all contacts. The differential part is:
+This clipping modifies the actual realized $\Delta\lambda_n^{(i)}$ (the post-projection change relative to $\lambda_{\text{old}}^{(i)}$), and critically, **different contacts are clipped by different amounts** because:
+
+1. Each contact has a different unconstrained $\lambda_t^{(i),\text{pre}}$ (from different velocity errors).
+2. Each contact has a different $\lambda_n^{(i)}$ (from accumulated K_nt-driven impulses plus warm-start).
+3. The ratio $\|\lambda_t^{(i),\text{pre}}\| / (\mu \lambda_n^{(i)})$ differs per contact.
+
+After projection, the post-projection net normal impulse change per body is:
 
 $$
-\delta v_{t1}^{(i)} = \mathbf{t}_1 \cdot (\boldsymbol{\omega} \times \mathbf{r}_A^{(i)})
+\Delta\Lambda_n^{\text{post}} = \sum_{i=1}^{N_c} \left(\lambda_n^{(i),\text{proj}} - \lambda_{n,\text{old}}^{(i)}\right)
 $$
 
-This varies per contact and breaks the summation symmetry. The net normal impulse becomes:
+Because the projection is nonlinear, the pre-projection identity $\Delta\Lambda_n^{\text{pre}} = 0$ no longer holds post-projection. The asymmetric clipping creates $\Delta\Lambda_n^{\text{post}} \neq 0$, which is the actual energy injection.
 
-$$
-\Delta\Lambda_n = -\sum_i K^{-1}_{01}(i) (v_{t1,\text{COM}} + \delta v_{t1}^{(i)}) - \sum_i K^{-1}_{02}(i) (v_{t2,\text{COM}} + \delta v_{t2}^{(i)})
-$$
+**The feedback loop**: A positive $\Delta\Lambda_n^{\text{post}}$ increases $\lambda_n$ at some contacts, expanding their cone radius $\mu \lambda_n$, which in turn allows larger tangential impulses in subsequent sweeps, which produce different velocity errors, which produce different pre-projection impulses, which are again asymmetrically clipped. This is a positive feedback loop that grows without bound for oblique sliding geometries.
 
-The common-velocity terms still approximately cancel ($\sum_i K^{-1}_{0j}(i) \approx 0$). But the cross terms:
-
-$$
--\sum_i K^{-1}_{01}(i) \, \delta v_{t1}^{(i)}
-$$
-
-do NOT cancel in general. They produce a net positive $\Delta\Lambda_n$, which injects normal impulse and drives the cube upward.
-
-**The feedback loop**: A positive $\Delta\Lambda_n$ increases the normal velocity of body A (pushes it away from the floor through `updateVRes3`). On the next sweep iteration, this creates angular velocity through the lever-arm coupling ($\boldsymbol{\omega} \times \mathbf{r}_A$), which further differentiates the tangential velocity errors across contacts, which drives more $\Delta\Lambda_n$. This is a positive feedback loop that grows without bound.
-
-**Physical interpretation**: For axis-aligned sliding, the geometric symmetry of the four corners ensures that K_nt contributions cancel in aggregate. For oblique sliding, the 45-degree rotation of the tangent basis breaks this symmetry. The corners that had equal-and-opposite K_nt values in the axis-aligned case now have unequal K_nt values that create a net bias.
+**Why oblique but not axis-aligned?** For axis-aligned sliding with 4 symmetric corners, the K_nt pattern is $\{-1.5, +1.5, -1.5, +1.5\}$ for $K_{n,t_1}$ (Section 2). The pre-projection $\Delta\lambda_n^{(i),\text{pre}}$ values tend to cancel by this sign symmetry. Even after cone projection, the asymmetric clipping is small because the tangential velocity errors are nearly equal across contacts (translational sliding with small angular perturbation). For oblique sliding, the K_nt pattern $\{+2.121, 0, 0, -2.121\}$ concentrates the normal impulse coupling on two corners. The iterative PGS process builds up differential angular velocities at these corners, which get cone-clipped asymmetrically, creating persistent net normal growth.
 
 ### Section 4: Why Per-Contact Fixes Fail
 
 All four prototype approaches (P2, P3, P4, P5) failed because they attempted to modify the per-contact K_nt behavior without accounting for the system-level summation property.
 
-**Theorem (Per-Contact Indistinguishability)**: For any single contact point $i$ in isolation, the K_nt coupling term $K^{-1}_{0j}(i) \cdot v_{\text{err},j}^{(i)}$ is structurally identical regardless of whether the sliding direction is axis-aligned or oblique. The distinction between energy-injecting and energy-neutral coupling exists only in the aggregate $\sum_i$.
+**Theorem (Per-Contact Indistinguishability)**: For any single contact point $i$ in isolation, the K_nt coupling term $K^{-1}_{0j}(i) \cdot v_{\text{err},j}^{(i)}$ is structurally identical regardless of whether the sliding direction is axis-aligned or oblique. The distinction between energy-injecting and energy-neutral coupling exists only at the system level, after the nonlinear Coulomb cone projection is applied across multiple contacts.
 
-**Proof sketch**: For a single contact, the K matrix depends only on $\mathbf{r}_A^{(i)}$, $\mathbf{n}$, $\mathbf{t}_1$, $\mathbf{t}_2$, $\mathbf{I}_A^{-1}$, and $w_A$. None of these encode information about other contacts or about whether the sliding direction aligns with a geometric symmetry axis of the multi-contact system. Therefore, no per-contact criterion based on $K^{(i)}$, $\mathbf{v}_\text{err}^{(i)}$, or their combination can distinguish the two cases.
+**Proof sketch**: For a single contact, the K matrix depends only on $\mathbf{r}_A^{(i)}$, $\mathbf{n}$, $\mathbf{t}_1$, $\mathbf{t}_2$, $\mathbf{I}_A^{-1}$, and $w_A$. None of these encode information about other contacts or about whether the sliding direction aligns with a geometric symmetry axis of the multi-contact system. The pre-projection K_nt contribution $\Delta\lambda_n^{(i),\text{pre}}$ at any single contact may be non-zero in both axis-aligned and oblique cases. The cancellation in the linear (pre-projection) regime comes from summing across all contacts — a system-level property. Furthermore, even after observing the post-projection $\Delta\lambda_n^{(i),\text{proj}}$ at a single contact, one cannot determine whether the net across all contacts is positive (energy-injecting) or zero (energy-neutral), because this depends on how the other contacts are cone-clipped. Therefore, no per-contact criterion based on $K^{(i)}$, $\mathbf{v}_\text{err}^{(i)}$, or their post-projection impulses can distinguish the two cases.
 
 **Corollary**: Any correct fix must either:
-1. Operate at the system level (aggregating information across contacts), or
+1. Operate at the system level (aggregating post-projection impulse changes across contacts sharing a body), or
 2. Reformulate the per-contact solve to avoid the problematic K_nt coupling entirely while preserving its beneficial effects through alternative means.
 
 ### Section 5: The Correct Normal Impulse for Oblique Sliding
@@ -392,34 +384,46 @@ where $\delta\lambda_n^{(i)}$ are the K_nt-driven redistributions satisfying $\s
 
 ### Section 6: A System-Level Correction Criterion
 
-**Definition**: The **net K_nt normal impulse injection** over one PGS sweep is:
+As established in Section 3, the energy injection arises from the nonlinear Coulomb cone projection generating asymmetric post-projection $\Delta\lambda_n$ across contacts sharing a body. The correct criterion must operate on **post-projection** quantities, not pre-projection K_nt-weighted velocity errors (which are identically zero by the symmetry argument in Section 3).
+
+**Definition**: The **net post-projection normal impulse change** over one PGS sweep for a body $b$ is:
 
 $$
-\Delta\Lambda_n^{\text{K_{nt}}} = \sum_{i=1}^{N_c} \left[ K^{-1}_{01}(i) \, v_{\text{err,t1}}^{(i)} + K^{-1}_{02}(i) \, v_{\text{err,t2}}^{(i)} \right]
+\Delta\Lambda_n^{(b)} = \sum_{i \in \mathcal{C}(b)} \left( \lambda_n^{(i),\text{after}} - \lambda_n^{(i),\text{before}} \right)
 $$
 
-(The normal impulse correction from K_nt coupling, summed over all contacts, before Coulomb projection.)
+where $\mathcal{C}(b)$ is the set of all contact indices involving body $b$, and "before/after" refer to the accumulated $\lambda_n$ values at the start and end of the PGS sweep, after the full coupled K_inv solve and Coulomb cone projection for each contact.
 
-**Criterion**: The coupling is energy-injecting when $|\Delta\Lambda_n^{\text{K_{nt}}}| > \epsilon$ for some tolerance $\epsilon$, and energy-neutral when $|\Delta\Lambda_n^{\text{K_{nt}}}| \leq \epsilon$.
+**Criterion**: The cone projection has injected energy when $\Delta\Lambda_n^{(b)} > \epsilon$ for a body with no penetrating contacts (all $v_{\text{err,n}}^{(i)} \geq 0$). In the absence of penetration, any positive net normal impulse growth across a body's contacts is spurious — it is not warranted by contact geometry and represents energy injection.
 
-**Proposed algorithm (Post-Sweep Net Correction)**:
+**Proposed algorithm (Post-Sweep Net-Zero Redistribution)**:
 
-After each PGS sweep, compute the net K_nt-driven normal impulse across all contacts sharing the same body pair. If this net is significantly positive (energy injection), redistribute the per-contact normal corrections to enforce $\sum_i \Delta\lambda_n^{(i),\text{K_{nt}}} = 0$ while preserving the relative distribution:
+After each PGS sweep, for each body $b$ that has no penetrating contacts ($v_{\text{err,n}}^{(i)} \geq 0$ for all $i \in \mathcal{C}(b)$):
+
+1. Compute $\Delta\Lambda_n^{(b)}$ (the post-projection net normal impulse change).
+2. If $|\Delta\Lambda_n^{(b)}| > \epsilon$, subtract the mean from each contact's $\lambda_n$:
 
 $$
-\Delta\lambda_n^{(i),\text{corrected}} = \Delta\lambda_n^{(i),\text{K_{nt}}} - \frac{\Delta\Lambda_n^{\text{K_{nt}}}}{N_c}
+\lambda_n^{(i)} \leftarrow \lambda_n^{(i)} - \frac{\Delta\Lambda_n^{(b)}}{|\mathcal{C}(b)|}
 $$
 
-This preserves the per-contact differential (tipping torque) while zeroing the net injection.
+3. Re-project each modified contact onto the Coulomb cone to ensure $\|\lambda_t^{(i)}\| \leq \mu \lambda_n^{(i)}$.
+
+This redistribution:
+- Zeros the net normal impulse injection (prevents spurious upward momentum).
+- Preserves the per-contact differential $\lambda_n^{(i)} - \lambda_n^{(j)}$ (preserves tipping torque distribution).
+- Re-projection ensures cone feasibility after the redistribution.
+
+**Why operate on post-projection quantities?**: The pre-projection K_nt contribution $\sum_i K^{-1}_{0j}(i) v_{\text{err},j}^{(i)}$ is identically zero for any angular velocity (proven in Section 3). Using it as a criterion would yield a zero signal and provide no information about actual energy injection. The post-projection $\Delta\Lambda_n^{(b)}$ captures the actual asymmetric clipping effect that breaks the pre-projection cancellation and drives energy injection.
 
 **Alternative algorithm (Split-Impulse for Normal Row)**:
 
 Decompose the normal row computation into two parts:
 
-1. **Self-term**: $\Delta\lambda_n^{\text{self}} = K^{-1}_{00} \cdot (-v_{\text{err,n}})$ -- the direct normal correction.
-2. **K_nt-term**: $\Delta\lambda_n^{\text{K_{nt}}} = K^{-1}_{01} \cdot (-v_{\text{err,t1}}) + K^{-1}_{02} \cdot (-v_{\text{err,t2}})$ -- the coupling correction.
+1. **Self-term**: $\Delta\lambda_n^{\text{self}} = K^{-1}_{00} \cdot (-v_{\text{err,n}})$ — the direct normal correction from penetration velocity.
+2. **K_nt-term**: $\Delta\lambda_n^{\text{K_{nt}}} = K^{-1}_{01} \cdot (-v_{\text{err,t1}}) + K^{-1}_{02} \cdot (-v_{\text{err,t2}})$ — the coupling correction from tangential velocity.
 
-After computing both for all contacts sharing a body pair, apply the self-terms directly and apply the K_nt-terms with the net-zero constraint enforced via redistribution. This preserves the exact K^{-1}_{00} value for the Coulomb cone bound while preventing net energy injection.
+Apply self-terms directly (these correct actual penetration). Collect K_nt-terms for all contacts sharing a body, enforce mean-zero redistribution, then apply. This operates on pre-projection quantities but exploits the known cancellation structure to achieve net-zero. Note that after this redistribution, the Coulomb cone re-projection must still be applied, which can re-introduce asymmetry. This approach is less complete than the post-projection criterion above, but simpler to implement in a single-pass sweep.
 
 ### Section 7: Schur Complement Relationship
 
@@ -703,9 +707,9 @@ TEST(KntCoupling, AxisAligned_KntSumsToZero) {
 }
 ```
 
-### Example 2: Edge Case -- Oblique Sliding K_nt with Angular Velocity
+### Example 2: Edge Case -- Oblique Sliding Cone-Projection Asymmetry
 
-**Scenario**: Unit cube sliding at 45 degrees with a small angular velocity. Verify that K_nt contributions create a non-zero net normal impulse.
+**Scenario**: Unit cube sliding at 45 degrees. Demonstrate that the pre-projection net normal impulse from K_nt coupling is zero, but after Coulomb cone projection the net becomes non-zero due to asymmetric clipping.
 
 **Inputs**:
 ```
@@ -713,141 +717,148 @@ Body A: unit cube, mass = 1.0 kg, I_A^{-1} = 6 * I_3
 Body B: static floor, w_B = 0, I_B^{-1} = 0
 n = [0, 0, 1]
 t1 = [-1/sqrt(2), -1/sqrt(2), 0]  (opposing 45-degree sliding direction)
-t2 = [-1/sqrt(2), 1/sqrt(2), 0]   (n x t1)
+t2 = [1/sqrt(2), -1/sqrt(2), 0]   (n x t1, corrected sign)
+mu = 0.5  (friction coefficient)
 
-Contact 1: r_A = [+0.5, +0.5, -0.5]
-Contact 2: r_A = [-0.5, +0.5, -0.5]
-Contact 3: r_A = [+0.5, -0.5, -0.5]
-Contact 4: r_A = [-0.5, -0.5, -0.5]
+Contact 1: r_A = [+0.5, +0.5, -0.5],  lambda_old = [1.0, -0.2, -0.1]
+Contact 2: r_A = [-0.5, +0.5, -0.5],  lambda_old = [1.0, -0.1, -0.1]
+Contact 3: r_A = [+0.5, -0.5, -0.5],  lambda_old = [1.0, -0.1, -0.1]
+Contact 4: r_A = [-0.5, -0.5, -0.5],  lambda_old = [1.0, -0.2, -0.1]
+
+(lambda_old represents current accumulated impulses: lambda_n = 1.0 Ns for weight support,
+with small tangential components from prior friction.)
 
 Sliding velocity: v_COM = [2/sqrt(2), 2/sqrt(2), 0.0] m/s
-Angular velocity: omega = [0.0, 0.0, 0.1] rad/s (small Z-spin from solver transient)
+Angular velocity: omega = [0, 0, 0] rad/s (simplified for hand computation)
 ```
 
 **Hand Computation**:
 
-Step 1: K_{n,t1} for oblique tangent basis (computed in Section 2 above):
+Step 1: Pre-projection unconstrained delta-lambda from K_nt coupling.
 
-$K_{n,t1}^{(i)} = \frac{3(r_x + r_y)}{\sqrt{2}}$
+For each contact, the unconstrained normal correction is:
+$\Delta\lambda_n^{(i),\text{pre}} = K^{-1}_{01}(i) \cdot (-v_{\text{err,t1}}^{(i)}) + K^{-1}_{02}(i) \cdot (-v_{\text{err,t2}}^{(i)})$
 
-| Contact | $r_x + r_y$ | $K_{n,t1}^{(i)}$ |
-|---------|-------------|-------------------|
-| 1 | +1.0 | $+3/\sqrt{2} = +2.121$ |
-| 2 | 0.0 | 0.0 |
-| 3 | 0.0 | 0.0 |
-| 4 | -1.0 | $-3/\sqrt{2} = -2.121$ |
+With $\omega = 0$, all contacts have the same $v_\text{err}$:
 
-Sum $= 0$ (the K_nt values themselves still sum to zero).
+$v_{\text{err,t1}} = \mathbf{t}_1 \cdot v_\text{COM} = (-1/\sqrt{2})(2/\sqrt{2}) + (-1/\sqrt{2})(2/\sqrt{2}) = -1 - 1 = -2.0$ m/s
 
-Step 2: Contact-point tangential velocity errors WITH angular velocity:
+So $(-v_{\text{err,t1}}) = +2.0$ m/s for all contacts.
 
-$v_{\text{contact}}^{(i)} = v_\text{COM} + \omega \times r_A^{(i)}$
+Since $K^{-1}_{01}$ sums to zero (by symmetry of K_nt values from Section 2):
 
-For $\omega = [0, 0, 0.1]$:
+$\Delta\Lambda_n^{\text{pre}} = \sum_i K^{-1}_{01}(i) \cdot 2.0 = 2.0 \sum_i K^{-1}_{01}(i) = 0$
 
-Contact 1 ($r_A = [0.5, 0.5, -0.5]$):
-$\omega \times r_A = [0, 0, 0.1] \times [0.5, 0.5, -0.5] = [-0.05, 0.05, 0]$
-$v_{\text{contact}} = [1.414, 1.414, 0] + [-0.05, 0.05, 0] = [1.364, 1.464, 0]$
-$v_{\text{err,t1}} = t_1 \cdot v_{\text{contact}} = [-0.707, -0.707, 0] \cdot [1.364, 1.464, 0] = -0.707 \cdot 1.364 - 0.707 \cdot 1.464 = -2.000$
+**Pre-projection net = 0. Confirmed.**
 
-Contact 4 ($r_A = [-0.5, -0.5, -0.5]$):
-$\omega \times r_A = [0, 0, 0.1] \times [-0.5, -0.5, -0.5] = [0.05, -0.05, 0]$
-$v_{\text{contact}} = [1.414, 1.414, 0] + [0.05, -0.05, 0] = [1.464, 1.364, 0]$
-$v_{\text{err,t1}} = [-0.707, -0.707, 0] \cdot [1.464, 1.364, 0] = -0.707 \cdot 1.464 - 0.707 \cdot 1.364 = -2.000$
+Step 2: Compute accumulated lambda_temp before cone projection.
 
-Contact 2 ($r_A = [-0.5, 0.5, -0.5]$):
-$\omega \times r_A = [0, 0, 0.1] \times [-0.5, 0.5, -0.5] = [-0.05, -0.05, 0]$
-$v_{\text{contact}} = [1.414, 1.414, 0] + [-0.05, -0.05, 0] = [1.364, 1.364, 0]$
-$v_{\text{err,t1}} = [-0.707, -0.707, 0] \cdot [1.364, 1.364, 0] = -1.929$
+$K^{-1}_{01}$ values are proportional to $K_{n,t1}$ values (same sign pattern): contacts 1 and 4 get a positive $\Delta\lambda_n^{\text{pre}} \sim +\epsilon$ while contacts 2 and 3 get $0$ (since K_nt1 = 0). However, numerically the contact-1 and contact-4 contributions cancel exactly, so $\Delta\lambda_n^{(i),\text{pre}} \approx 0$ for all.
 
-Contact 3 ($r_A = [0.5, -0.5, -0.5]$):
-$\omega \times r_A = [0, 0, 0.1] \times [0.5, -0.5, -0.5] = [0.05, 0.05, 0]$
-$v_{\text{contact}} = [1.414, 1.414, 0] + [0.05, 0.05, 0] = [1.464, 1.464, 0]$
-$v_{\text{err,t1}} = [-0.707, -0.707, 0] \cdot [1.464, 1.464, 0] = -2.071$
+For this example, assume representative pre-projection accumulated impulses:
 
-Step 3: Net K_nt normal impulse contribution (using $K_{n,t1}^{(i)} \cdot v_{\text{err,t1}}^{(i)}$, ignoring K^{-1} vs K for the proportionality argument):
+```
+Contact 1: lambda_temp = lambda_old + delta_pre = [1.0, -0.35, -0.18]  (|lambda_t| = 0.391)
+Contact 2: lambda_temp = [1.0, -0.20, -0.10]                           (|lambda_t| = 0.224)
+Contact 3: lambda_temp = [1.0, -0.20, -0.10]                           (|lambda_t| = 0.224)
+Contact 4: lambda_temp = [1.0, -0.35, -0.18]                           (|lambda_t| = 0.391)
+```
 
-$\text{Net} = \sum_i K_{n,t1}^{(i)} \cdot v_{\text{err,t1}}^{(i)}$
+(Contacts 1 and 4 have larger tangential impulses because their K_nt drives a larger tangential correction than contacts 2 and 3.)
 
-$= (+2.121)(-2.000) + (0)(-1.929) + (0)(-2.071) + (-2.121)(-2.000)$
+Step 3: Apply Coulomb cone projection with $\mu = 0.5$.
 
-$= -4.242 + 0 + 0 + 4.242 = 0$
+Cone radius = $\mu \lambda_n = 0.5 \times 1.0 = 0.5$ Ns for all contacts.
 
-Hmm, with the angular velocity being purely about Z, the symmetry is preserved for this specific tangent basis. Let me try $\omega = [0.1, 0, 0]$ instead (X-spin, which breaks the 45-degree symmetry):
+| Contact | $\|\lambda_t^{\text{pre}}\|$ | Inside cone? | Clipping factor | $\lambda_n^{\text{proj}}$ |
+|---------|-----------------------------|--------------|-----------------|--------------------------|
+| 1 | 0.391 | Yes (0.391 < 0.5) | 1.0 | 1.0 |
+| 2 | 0.224 | Yes (0.224 < 0.5) | 1.0 | 1.0 |
+| 3 | 0.224 | Yes (0.224 < 0.5) | 1.0 | 1.0 |
+| 4 | 0.391 | Yes (0.391 < 0.5) | 1.0 | 1.0 |
 
-Contact 1 ($r_A = [0.5, 0.5, -0.5]$):
-$\omega \times r_A = [0.1, 0, 0] \times [0.5, 0.5, -0.5] = [0 \cdot (-0.5) - 0 \cdot 0.5, 0 \cdot 0.5 - 0.1 \cdot (-0.5), 0.1 \cdot 0.5 - 0 \cdot 0.5]$
-$= [0, 0.05, 0.05]$
-$v_{\text{contact}} = [1.414, 1.414, 0] + [0, 0.05, 0.05] = [1.414, 1.464, 0.05]$
-$v_{\text{err,t1}} = [-0.707, -0.707, 0] \cdot [1.414, 1.464, 0.05] = -0.707 \cdot 1.414 - 0.707 \cdot 1.464 = -2.035$
+In this symmetric case all contacts are inside the cone, so no clipping occurs and $\Delta\Lambda_n^{\text{post}} = 0$.
 
-Contact 4 ($r_A = [-0.5, -0.5, -0.5]$):
-$\omega \times r_A = [0.1, 0, 0] \times [-0.5, -0.5, -0.5] = [0 + 0, 0 + 0.05, -0.05 - 0] = [0, 0.05, -0.05]$
+Step 4: Asymmetric case — contacts at different cone radii.
 
-Wait, let me be more careful: $[0.1, 0, 0] \times [-0.5, -0.5, -0.5]$:
-$= [0 \cdot (-0.5) - 0 \cdot (-0.5), \; 0 \cdot (-0.5) - 0.1 \cdot (-0.5), \; 0.1 \cdot (-0.5) - 0 \cdot (-0.5)]$
-$= [0, 0.05, -0.05]$
-$v_{\text{contact}} = [1.414, 1.414, 0] + [0, 0.05, -0.05] = [1.414, 1.464, -0.05]$
-$v_{\text{err,t1}} = [-0.707, -0.707, 0] \cdot [1.414, 1.464, -0.05] = -2.035$
+Now suppose contact 1 has accumulated extra normal impulse from prior iterations: $\lambda_n^{(1)} = 1.2$, $\lambda_n^{(4)} = 0.8$ (sum = 2.0, same total weight support). Cone radii: $\mu\lambda_n^{(1)} = 0.6$, $\mu\lambda_n^{(4)} = 0.4$.
 
-The t1 components are the same for contacts 1 and 4 because the angular velocity contributes equally to the Y-component of both. The $r_y$ values ($+0.5$ vs $-0.5$) do NOT affect $\omega_x \times r_A$ in the Y-direction.
+Pre-projection tangential magnitudes (same as before): contacts 1 and 4 both have $\|\lambda_t^{\text{pre}}\| = 0.391$.
 
-Let me try $\omega = [0, 0.1, 0]$ (Y-spin):
+| Contact | $\lambda_n^{(i)}$ | $\mu\lambda_n$ | $\|\lambda_t^{\text{pre}}\|$ | Clipped? | $\|\lambda_t^{\text{proj}}\|$ | $\lambda_n^{\text{proj}}$ |
+|---------|--------------------|----------------|------------------------------|----------|-------------------------------|--------------------------|
+| 1 | 1.2 | 0.6 | 0.391 | No | 0.391 | 1.2 |
+| 4 | 0.8 | 0.4 | 0.391 | **Yes** | 0.4 | 0.8 |
 
-Contact 1 ($r_A = [0.5, 0.5, -0.5]$):
-$\omega \times r_A = [0, 0.1, 0] \times [0.5, 0.5, -0.5] = [0.1 \cdot (-0.5) - 0, 0 - 0 \cdot (-0.5), 0 - 0.1 \cdot 0.5]$
-$= [-0.05, 0, -0.05]$
-$v_{\text{contact}} = [1.414, 1.414, 0] + [-0.05, 0, -0.05] = [1.364, 1.414, -0.05]$
-$v_{\text{err,t1}} = [-0.707](1.364) + [-0.707](1.414) = -0.964 - 1.000 = -1.964$
+Contact 4 is clipped but contact 1 is not. After projection, both $\lambda_n$ values remain unchanged (cone projection only clips $\lambda_t$, $\lambda_n$ is not modified by the projection itself). However, in the next PGS sweep, the velocity error at contact 4 will differ from contact 1 because its tangential impulse was clipped. This asymmetric clipping produces different velocity residuals, which in subsequent iterations lead to different $\Delta\lambda_n$ corrections — and because the K_nt values at contacts 1 and 4 have opposite signs (+2.121 vs -2.121), the asymmetric velocity residuals generate a non-zero net $\Delta\Lambda_n$ in the next sweep.
 
-Contact 4 ($r_A = [-0.5, -0.5, -0.5]$):
-$\omega \times r_A = [0, 0.1, 0] \times [-0.5, -0.5, -0.5] = [-0.05, 0, 0.05]$
-$v_{\text{contact}} = [1.414, 1.414, 0] + [-0.05, 0, 0.05] = [1.364, 1.414, 0.05]$
-$v_{\text{err,t1}} = -0.964 - 1.000 = -1.964$
+**Mechanism summary**:
+- Pre-projection: $\sum_i K_{nt}^{(i)} v_{err}^{(i)} = 0$ (exact, proven above)
+- After clipping: contact 4 has reduced $\|\lambda_t\|$, so its velocity error in the next sweep is different from contact 1's
+- Next sweep: contacts 1 and 4 see different $v_\text{err}$ → their K_nt contributions no longer cancel
+- Net $\Delta\Lambda_n^{\text{post}} \neq 0$: positive energy injection begins
 
-Still the same. The problem is that for $\omega \times r_A$, the Y-component depends on $r_z$ and $r_x$ but not on $r_y$, and the X-component depends on $r_z$ and $r_y$. With all four corners having the same $r_z = -0.5$, the asymmetry comes only from $r_x$ and $r_y$.
-
-The key insight is that the angular velocity must have a component that creates differential tangential velocities at corners with different K_nt values. The K_nt values for the oblique case are $+2.121, 0, 0, -2.121$ for corners labeled by $r_x + r_y = +1, 0, 0, -1$. For the contributions to not cancel, we need $v_{\text{err,t1}}$ to differ between corner 1 ($r_x + r_y = +1$) and corner 4 ($r_x + r_y = -1$).
-
-The critical angular velocity component is one that generates different t1-velocities at these two corners. Corner 1 has $r_A = [0.5, 0.5, -0.5]$ and corner 4 has $r_A = [-0.5, -0.5, -0.5]$. These corners are related by a 180-degree rotation about the Z-axis. An angular velocity $\omega_z$ about Z produces $\omega \times r_A$ tangential components that are antisymmetric under this rotation -- which is exactly the symmetry that causes cancellation.
-
-**The actual mechanism in the solver**: The K_nt coupling itself induces the angular velocity through the updateVRes3 function. When K_nt drives a non-zero $\Delta\lambda_n$ at one corner, `updateVRes3` applies $-(\mathbf{r}_A \times \mathbf{n}) \cdot \Delta\lambda_n$ as an angular impulse. This angular impulse is different at each corner because $\mathbf{r}_A$ differs. Over multiple PGS sweep iterations within a single frame, this builds up differential angular velocities that break the symmetry needed for cancellation.
-
-This is a multi-iteration positive feedback effect within a single PGS solve, not a single-step phenomenon. It requires detailed per-iteration numerical tracking to demonstrate, which is beyond hand computation. The numerical example below uses the full K^{-1} computation.
+This is the actual energy injection mechanism. It requires at least two PGS sweeps (one to generate the asymmetric state via clipping, one to convert it to net normal impulse), explaining why the feedback is iterative.
 
 **Expected Output**:
 ```
-sum_K_nt1_oblique = 0.0  (K_nt values sum to zero regardless of tangent basis)
-Per-iteration feedback: angular velocity induced by K_nt coupling breaks
-  symmetry in subsequent iterations, producing net positive delta_Lambda_n
+sum_K_nt1_oblique_pre = 0.0  (K_nt values sum to zero: proven analytically)
+After asymmetric cone clipping: net delta_Lambda_n != 0 in subsequent sweeps
 ```
 
 **GTest Template**:
 ```cpp
-TEST(KntCoupling, Oblique_KntStillSumsToZero) {
-  // K_nt values sum to zero even for oblique tangent basis
+TEST(KntCoupling, Oblique_PreProjectionNetIsZero) {
+  // Pre-projection: K_nt-weighted velocity errors sum to zero for any angular velocity
   const Eigen::Vector3d n{0, 0, 1};
   const Eigen::Vector3d t1 = Eigen::Vector3d{-1, -1, 0}.normalized();
-  const Eigen::Vector3d t2 = n.cross(t1);
+  const Eigen::Vector3d t2 = n.cross(t1);  // [1/sqrt(2), -1/sqrt(2), 0]
   const Eigen::Matrix3d I_inv = 6.0 * Eigen::Matrix3d::Identity();
+  constexpr double wA = 1.0;
 
-  double sum_Knt1 = 0.0;
+  // Build K matrices for all 4 contacts and compute K^{-1}_{01}
+  // Use a representative angular velocity to verify sum = 0
+  const Eigen::Vector3d omega{0.1, 0.0, 0.0};
+  const Eigen::Vector3d vCOM = Eigen::Vector3d{1, 1, 0} / std::sqrt(2.0) * 2.0;
+
+  double sumNetNormal = 0.0;
 
   for (double rx : {-0.5, 0.5}) {
     for (double ry : {-0.5, 0.5}) {
       const Eigen::Vector3d rA{rx, ry, -0.5};
       const Eigen::Vector3d an = rA.cross(n);
       const Eigen::Vector3d a1 = rA.cross(t1);
+      const Eigen::Vector3d a2 = rA.cross(t2);
 
-      const double Knt1 = -(an.transpose() * I_inv * a1);
-      sum_Knt1 += Knt1;
+      // Build 3x3 K
+      Eigen::Matrix3d K = Eigen::Matrix3d::Zero();
+      K(0,0) = wA + an.dot(I_inv * an);
+      K(0,1) = -(an.dot(I_inv * a1));   K(1,0) = K(0,1);
+      K(0,2) = -(an.dot(I_inv * a2));   K(2,0) = K(0,2);
+      K(1,1) = wA + a1.dot(I_inv * a1);
+      K(1,2) = a1.dot(I_inv * a2);      K(2,1) = K(1,2);
+      K(2,2) = wA + a2.dot(I_inv * a2);
+
+      const Eigen::Matrix3d Kinv = K.inverse();
+
+      // Velocity error at this contact
+      const Eigen::Vector3d vContact = vCOM + omega.cross(rA);
+      Eigen::Vector3d vErr;
+      vErr(0) = -n.dot(vContact);
+      vErr(1) = t1.dot(vContact);
+      vErr(2) = t2.dot(vContact);
+
+      // Pre-projection normal correction
+      const double deltaN = (Kinv.row(0) * (-vErr))(0);
+      sumNetNormal += deltaN;
     }
   }
 
-  constexpr double kTolerance = 1e-12;
-  EXPECT_NEAR(sum_Knt1, 0.0, kTolerance);
-  // K_nt values sum to zero, but the energy injection occurs through
-  // multi-iteration feedback within the PGS sweep (not a single-step effect)
+  // Pre-projection net must be zero
+  constexpr double kTolerance = 1e-10;
+  EXPECT_NEAR(sumNetNormal, 0.0, kTolerance)
+    << "Pre-projection K_nt net is identically zero; energy injection "
+       "requires nonlinear cone projection to break cancellation";
 }
 ```
 

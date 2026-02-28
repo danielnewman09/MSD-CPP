@@ -150,8 +150,144 @@ BlockPGSSolver::SolveResult BlockPGSSolver::solve(
 
   for (iter = 0; iter < maxSweeps_ && maxDelta > convergenceTolerance_; ++iter)
   {
+    // Record lambda_n before the sweep for each contact
+    std::vector<double> lambdaNBefore(numContacts);
+    for (size_t ci = 0; ci < numContacts; ++ci)
+    {
+      lambdaNBefore[ci] = lambdaPhaseB(static_cast<Eigen::Index>(ci * 3));
+    }
+
     maxDelta = sweepOnce(
       contacts, blockKInvs, lambdaPhaseB, states, inverseMasses, inverseInertias);
+
+    // ===== Post-Sweep Net-Zero Redistribution (Ticket: 0084 Prototype P6) =====
+    //
+    // After each sweep, the nonlinear Coulomb cone projection may have
+    // asymmetrically clipped tangential impulses across contacts sharing a body,
+    // breaking the pre-projection cancellation symmetry. This creates a net
+    // positive delta_lambda_n across a body's contacts — the actual energy
+    // injection mechanism (see math-formulation.md Section 3 and 6).
+    //
+    // Fix: for each dynamic body (non-zero inverse mass) with 2+ sliding contacts,
+    // compute the sum of delta_lambda_n across its contacts. If net positive,
+    // subtract the mean from each contact's lambda_n and re-project onto
+    // the Coulomb cone to restore feasibility.
+    //
+    // GUARD: Only redistribute when ALL contacts on the body are non-penetrating
+    // (vErr(0) >= 0). If any contact is penetrating, the normal impulse growth
+    // is physically correct (resisting penetration) and must not be redistributed.
+    //
+    // Only dynamic bodies (inverseMasses[k] > 0) are corrected.
+    // Only applies when a body has >= 2 contacts.
+    //
+    // This preserves the per-contact differential (tipping torque) while
+    // eliminating spurious net normal impulse growth from cone asymmetry.
+
+    // Compute velocity errors and check penetration status for all contacts
+    std::vector<double> vErrNormal(numContacts);
+    for (size_t ci = 0; ci < numContacts; ++ci)
+    {
+      vErrNormal[ci] = computeBlockVelocityError(*contacts[ci], states)(0);
+    }
+
+    // Check per-body: is any contact penetrating (vErr_n < 0)?
+    // Also accumulate net delta_lambda_n and contact count for non-penetrating bodies.
+    std::vector<double> bodyNetDeltaN(numBodies, 0.0);
+    std::vector<int> bodyContactCount(numBodies, 0);
+    std::vector<bool> bodyHasPenetration(numBodies, false);
+
+    for (size_t ci = 0; ci < numContacts; ++ci)
+    {
+      const auto base = static_cast<Eigen::Index>(ci * 3);
+      const double deltaN = lambdaPhaseB(base) - lambdaNBefore[ci];
+
+      const ContactConstraint& cc = *contacts[ci];
+      const size_t idxA = cc.bodyAIndex();
+      const size_t idxB = cc.bodyBIndex();
+
+      const bool penetrating = (vErrNormal[ci] < 0.0);
+
+      // Track for dynamic bodies only
+      if (inverseMasses[idxA] > 0.0)
+      {
+        bodyNetDeltaN[idxA] += deltaN;
+        bodyContactCount[idxA] += 1;
+        if (penetrating)
+        {
+          bodyHasPenetration[idxA] = true;
+        }
+      }
+      if (inverseMasses[idxB] > 0.0)
+      {
+        bodyNetDeltaN[idxB] += deltaN;
+        bodyContactCount[idxB] += 1;
+        if (penetrating)
+        {
+          bodyHasPenetration[idxB] = true;
+        }
+      }
+    }
+
+    // Redistribute: only for bodies that are non-penetrating, dynamic, and
+    // have >= 2 sliding contacts, AND have a net POSITIVE delta_n (energy injection).
+    // "Sliding" means the contact is at the cone boundary (||lambda_t|| == mu*lambda_n).
+    // Static-friction contacts (inside the cone) are excluded because their delta_n
+    // already sums to ~zero by the K_inv symmetry in the linear regime.
+    constexpr double kRedistTolerance = 1e-8;
+    constexpr double kConeOnSurface = 0.99;  // fraction of cone radius to consider "on surface"
+
+    for (size_t ci = 0; ci < numContacts; ++ci)
+    {
+      const ContactConstraint& cc = *contacts[ci];
+      const size_t idxA = cc.bodyAIndex();
+      const auto base = static_cast<Eigen::Index>(ci * 3);
+
+      // Only redistribute if:
+      // 1. Body A is dynamic
+      // 2. Body A has >= 2 contacts
+      // 3. No contact on body A is penetrating
+      // 4. Net delta is positive (spurious normal injection)
+      if (inverseMasses[idxA] <= 0.0 ||
+          bodyContactCount[idxA] < 2 ||
+          bodyHasPenetration[idxA])
+      {
+        continue;
+      }
+
+      const double netDelta = bodyNetDeltaN[idxA];
+      if (netDelta <= kRedistTolerance)
+      {
+        continue;  // Net non-positive: no energy injection to correct
+      }
+
+      // Only apply correction to contacts that are at the sliding friction boundary.
+      // Static friction contacts (inside the cone) should not be redistributed.
+      const Eigen::Vector3d lambdaBlock = lambdaPhaseB.segment<3>(base);
+      const double lambdaN = lambdaBlock(0);
+      const double tangentNorm = lambdaBlock.tail<2>().norm();
+      const double mu = cc.getFrictionCoefficient();
+      const bool isSliding = (lambdaN > 0.0 && tangentNorm >= kConeOnSurface * mu * lambdaN);
+
+      if (!isSliding)
+      {
+        continue;
+      }
+
+      const double correction = netDelta / bodyContactCount[idxA];
+      Eigen::Vector3d lambdaNew = lambdaBlock;
+      const Eigen::Vector3d lambdaOld = lambdaBlock;
+      lambdaNew(0) -= correction;
+
+      // Re-project onto Coulomb cone after redistributing lambda_n
+      const Eigen::Vector3d lambdaProj = projectCoulombCone(lambdaNew, mu);
+
+      const Eigen::Vector3d delta = lambdaProj - lambdaOld;
+      if (delta.squaredNorm() > 1e-24)
+      {
+        updateVRes3(cc, delta, inverseMasses, inverseInertias);
+        lambdaPhaseB.segment<3>(base) = lambdaProj;
+      }
+    }
   }
 
   result.converged = (maxDelta <= convergenceTolerance_);
@@ -497,41 +633,18 @@ double BlockPGSSolver::sweepOnce(
     // v_err = J_block * (v_pre + vRes_[bodyA, bodyB])
     const Eigen::Vector3d vErr = computeBlockVelocityError(cc, states);
 
-    // Step 2: Full coupled K_inv solve with velocity-gated normal clamp.
+    // Step 2: Full coupled K_inv solve.
     //
-    // Ticket: 0084 Design Revision 4 — Velocity-gated clamp.
+    // Ticket: 0084 Prototype P6 — reverted P5 velocity-gated clamp.
+    // The coupled K_inv solve preserves the exact K_inv(0,0) coefficient
+    // for the Coulomb cone bound (lambda_n) and the K_inv(1:2, 0:2) rows
+    // for correct tangential/angular coupling (tipping torque).
     //
-    // The full 3x3 coupled solve preserves the exact K_inv(0,0) coefficient
-    // for the Coulomb cone bound (lambda_n), which is required for correct
-    // per-contact angular impulse balance across 4 corner contacts
-    // (SlidingCubeX / FrictionProducesTippingTorque tests).
-    //
-    // However, the K_nt off-diagonal terms K_inv(0,1) and K_inv(0,2) drive
-    // unconstrained(0) != 0 even when vErr(0) = 0 (non-penetrating contact),
-    // causing spurious lambda_n growth and energy injection through oblique
-    // sliding and restitution coupling.
-    //
-    // Velocity-gated clamp: after the full coupled solve, if the contact is
-    // NOT penetrating (vErr(0) >= 0), clamp the normal correction to be
-    // non-positive. Physically: a non-penetrating contact should never push
-    // harder than it already is — normal impulse correction must not increase.
-    //
-    // This preserves:
-    //   - Exact K_inv(0,0) for Coulomb cone bound (penetrating frames)
-    //   - All K_inv(1:2, 0:2) rows for correct tangential/angular coupling
-    //
-    // And prevents:
-    //   - K_inv(0,1:2) * vErr_t driving spurious lambda_n growth when sliding
-    //     (the oblique energy injection mechanism)
-    //
-    // Ticket: 0084 Design Revision 4 (Prototype P5)
-    Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
-    // Velocity-gated clamp: when contact is not penetrating (vErr(0) >= 0),
-    // normal impulse correction must not increase (push harder)
-    if (vErr(0) >= 0.0)
-    {
-      unconstrained(0) = std::min(unconstrained(0), 0.0);
-    }
+    // The energy injection mechanism is the nonlinear Coulomb cone projection
+    // breaking the pre-projection cancellation symmetry (see math-formulation.md
+    // Section 3). The fix is a post-sweep net-zero redistribution in solve(),
+    // not a per-contact clamp in sweepOnce.
+    const Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
 
     // Step 3: Accumulate
     Eigen::Vector3d lambdaOld = lambda.segment<3>(base);

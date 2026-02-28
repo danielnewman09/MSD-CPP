@@ -208,24 +208,23 @@ private:
   /**
    * @brief Phase B: Execute one complete sweep over all contacts.
    *
-   * For each contact: solve the 3x3 block using the full coupled K^{-1} solve
-   * with velocity-gated clamp on the normal row (Ticket: 0084 Design Revision 4).
+   * For each contact: solve the 3x3 block using the full coupled K^{-1} solve.
    * Accumulates, projects onto Coulomb cone, updates velocity residual.
    * Returns max ||delta|| for convergence check.
    *
-   * Algorithm per contact c (velocity-gated clamp — Design Revision 4):
+   * Algorithm per contact c (original coupled solve — P5 velocity-gated clamp reverted):
    *   1. v_err = J_block * (v_pre + vRes_[bodyA, bodyB])
    *   2. unconstrained = K_inv * (-v_err)  [full coupled 3x3 solve]
-   *   3. Velocity-gated clamp: if v_err(0) >= 0 (not penetrating),
-   *      clamp unconstrained(0) = min(unconstrained(0), 0.0)
-   *      Prevents K_nt coupling from growing lambda_n when contact is not
-   *      penetrating, while preserving exact K_inv(0,0) for the Coulomb cone
-   *      bound when the contact IS penetrating (v_err(0) < 0).
-   *   4. lambda_temp = lambda_acc[c] + unconstrained
-   *   5. lambda_proj = projectCoulombCone(lambda_temp, mu)
-   *   6. delta = lambda_proj - lambda_acc[c]
-   *   7. vRes_ += M^{-1} * J_block^T * delta
-   *   8. lambda_acc[c] = lambda_proj
+   *   3. lambda_temp = lambda_acc[c] + unconstrained
+   *   4. lambda_proj = projectCoulombCone(lambda_temp, mu)
+   *   5. delta = lambda_proj - lambda_acc[c]
+   *   6. vRes_ += M^{-1} * J_block^T * delta
+   *   7. lambda_acc[c] = lambda_proj
+   *
+   * Energy injection from the nonlinear Coulomb cone projection breaking the
+   * pre-projection cancellation symmetry is handled by the post-sweep
+   * net-zero redistribution in solve() — not in this per-contact function.
+   * See math-formulation.md Section 3 and 6, and Ticket: 0084 Prototype P6.
    *
    * @param contacts ContactConstraint pointers
    * @param blockKInvs Pre-computed K^{-1} per contact (full 3x3 coupled inverse)
