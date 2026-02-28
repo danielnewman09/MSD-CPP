@@ -40,7 +40,8 @@ workflow-engine/
 │
 ├── cli/
 │   ├── __init__.py
-│   └── cli.py                  # Human review CLI (approve/reject/query)
+│   ├── cli.py                  # Human review CLI (approve/reject/query)
+│   └── supervisor.py           # Agent pool supervisor (spawn-work-exit cycle)
 │
 ├── tests/
 │   ├── test_schema.py
@@ -54,6 +55,7 @@ workflow-engine/
 │   ├── test_scheduler.py
 │   ├── test_audit.py
 │   ├── test_config.py
+│   ├── test_supervisor.py
 │   ├── test_mcp_tools.py
 │   ├── test_concurrent_agents.py
 │   └── test_full_lifecycle.py
@@ -746,6 +748,298 @@ The `python/setup.sh` script installs it into the shared venv alongside other to
 
 ---
 
+## Agent Lifecycle
+
+### Fundamental Constraint: Agents Are Conversations, Not Processes
+
+Claude Code agents are LLM conversations with finite context windows. They are not persistent daemons, background workers, or long-running processes. Each agent invocation is a single conversation that:
+- Starts fresh with a system prompt (the agent definition in `.claude/agents/*.md`)
+- Has access to tools (file I/O, bash, MCP tools including the workflow server)
+- Accumulates context with each turn (tool calls, results, reasoning)
+- Eventually terminates (task complete, context exhaustion, or error)
+
+This means:
+- An agent **cannot poll indefinitely** — it would exhaust its context window
+- An agent **cannot survive a crash** — there is no process to restart
+- An agent **should not loop across multiple phases** — context from phase N would pollute phase N+1 and waste context budget
+- An agent **has no timer** — it cannot schedule a heartbeat callback
+
+These constraints drive the lifecycle model below.
+
+### Lifecycle Model: Single-Phase, Single-Shot
+
+Each agent instance handles **exactly one phase**, then terminates. The external supervisor (human or launcher script) is responsible for spawning new agent instances as work becomes available.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Agent Instance                         │
+│                                                         │
+│  1. register_agent(type) → agent_id                     │
+│  2. list_available_work(type) → phase list              │
+│  3. claim_phase(agent_id, phase_id) → phase details     │
+│  4. declare_files(agent_id, phase_id, paths)            │
+│  5. start_phase(agent_id, phase_id)                     │
+│  6. ── do the actual work (design/implement/review) ──  │
+│  7. complete_phase(agent_id, phase_id, summary, files)  │
+│  8. EXIT                                                │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Why single-phase, not multi-phase loop?**
+- Context isolation: each phase gets a fresh context window, preventing cross-contamination
+- Predictable context usage: phase work dominates the context, not accumulated history from prior phases
+- Clean failure semantics: if an agent crashes mid-phase, only that phase is affected
+- Simpler agent prompts: no loop logic, no "what to do when idle" instructions
+
+### Agent Launch Modes
+
+#### Mode 1: Manual Launch (Phase 1-2)
+
+The human opens terminals and launches agents directly:
+
+```bash
+# Terminal 1: launch a designer
+claude --agent cpp-architect
+
+# Terminal 2: launch an implementer
+claude --agent cpp-implementer
+
+# Terminal 3: launch a reviewer
+claude --agent design-reviewer
+```
+
+Each agent's prompt (`.claude/agents/*.md`) includes the Work Queue Integration preamble. The agent registers, claims one phase, executes it, reports completion, and the conversation ends. The human launches a new instance if more work is available.
+
+**Pros**: Simple, full human control, no infrastructure beyond the MCP server
+**Cons**: Manual effort to keep agents running; human must monitor the queue
+
+#### Mode 2: Supervisor Script (Phase 3-4)
+
+A supervisor script automates the spawn-work-exit cycle:
+
+```bash
+# Launch a pool of 4 agents that continuously process work
+workflow-engine supervisor --pool-size 4 --project-root .
+
+# Launch agents of specific types only
+workflow-engine supervisor --types cpp-architect,cpp-implementer --pool-size 2
+
+# Run until no work remains, then exit
+workflow-engine supervisor --pool-size 3 --drain
+```
+
+The supervisor:
+1. Queries the work queue for available phases
+2. Matches available phases to agent types
+3. Spawns a Claude Code agent (`claude --agent <type>`) for each match, up to pool size
+4. Waits for the agent process to exit
+5. Runs the scheduler to resolve newly available phases
+6. Repeats from step 1
+7. Stops when: pool is idle with no available work, `--drain` flag is set, or human sends SIGINT
+
+```
+┌────────────────────────────────────────────────────────┐
+│                    Supervisor                           │
+│                                                        │
+│  while work_available or agents_running:               │
+│    phases = query_available_work()                     │
+│    for phase in phases[:pool_size - active_count]:     │
+│      agent = spawn_claude_agent(phase.agent_type)      │
+│      track(agent)                                      │
+│    wait_for_any_agent_exit()                           │
+│    run_scheduler()  # resolve new availability         │
+│    cleanup_stale_agents()                              │
+│                                                        │
+│  Human gates: supervisor pauses that slot, prints      │
+│  "Ticket 0084 blocked on Design Review gate.           │
+│   Run: workflow-engine approve <gate-id>"              │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+```
+
+**Pros**: Hands-free operation, maximizes throughput, automatically fills available slots
+**Cons**: Requires the supervisor script (new component); human must still interact for gates
+
+#### Mode 3: Orchestrator-Driven (Hybrid)
+
+The existing workflow-orchestrator agent can act as a lightweight coordinator for a single ticket, spawning subagents via the Task tool:
+
+```
+Human: "Process ticket 0084 through implementation"
+Orchestrator:
+  1. import-tickets, run scheduler
+  2. claim Design phase for ticket 0084
+  3. spawn cpp-architect subagent (Task tool)
+  4. on completion, run scheduler
+  5. claim Design Review phase
+  6. spawn design-reviewer subagent (Task tool)
+  7. ... repeat until target phase reached or human gate hit
+```
+
+This preserves the current "Process ticket: X" UX while using the database for state management. The orchestrator doesn't loop indefinitely — it processes one ticket to a defined stopping point.
+
+**Pros**: Familiar UX, works today, good for single-ticket focus
+**Cons**: Serial within a ticket (but that's the state machine anyway); orchestrator consumes context tracking subagent results
+
+### Work Queue Integration Preamble (Updated)
+
+The standard preamble added to each agent definition (`.claude/agents/*.md`):
+
+```markdown
+### Work Queue Integration
+
+You are a single-phase agent. You will claim one phase, execute it, and exit.
+
+**Startup:**
+1. Call `register_agent` with your agent type to get an agent ID
+2. Call `list_available_work` with your agent type to see available phases
+3. If no work is available, inform the user and EXIT — do not wait or poll
+4. Call `claim_phase` with your agent ID and the chosen phase ID
+5. If the claim fails (already taken), try the next available phase or EXIT
+6. Call `declare_files` with the files you intend to modify
+7. Call `check_conflicts` — if conflicts exist, warn the user but proceed
+8. Call `start_phase` to mark the phase as running
+
+**During work:**
+- Do your normal work as described in the rest of this agent definition
+- MCP tool calls implicitly update your heartbeat — no explicit calls needed
+- If you need human input mid-phase, call `request_human_review` with context,
+  then call `fail_phase` with error "blocked on human gate" and EXIT
+  (a new agent instance will be spawned after the gate is resolved)
+
+**Completion:**
+- On success: call `complete_phase` with result summary and artifact list, then EXIT
+- On failure: call `fail_phase` with error details, then EXIT
+- Never attempt to claim another phase — you are a single-phase agent
+
+**If no workflow MCP server is available:**
+- Fall back to legacy mode (read ticket markdown directly)
+- This ensures backward compatibility during migration
+```
+
+### Git Worktree Isolation
+
+Each agent should operate in a **git worktree** to prevent file conflicts at the filesystem level:
+
+```bash
+# Supervisor spawns each agent in an isolated worktree
+git worktree add /tmp/agent-0084-design 0083-database-agent-orchestration
+cd /tmp/agent-0084-design
+claude --agent cpp-architect
+# After completion, merge worktree changes
+git worktree remove /tmp/agent-0084-design
+```
+
+Claude Code already supports worktree isolation via the `isolation: "worktree"` parameter on the Task tool. The supervisor script should use this mechanism when spawning agents.
+
+**Worktree lifecycle:**
+1. Supervisor creates a worktree for the agent's ticket branch
+2. Agent runs in the worktree, makes commits
+3. Agent exits, supervisor detects exit
+4. If agent succeeded: merge/rebase worktree branch, push, remove worktree
+5. If agent failed: preserve worktree for debugging, mark phase as failed
+
+This eliminates the need for file-level conflict detection between concurrently running agents — they operate on separate filesystem copies. The `file_locks` table becomes a secondary check for logical conflicts (two tickets modifying the same source file), not a filesystem concurrency mechanism.
+
+### Heartbeat and Stale Detection
+
+Since agents are single-phase and relatively short-lived (minutes to ~1 hour), the heartbeat mechanism is primarily a crash-recovery tool:
+
+| Scenario | Heartbeat behavior | Recovery |
+|----------|-------------------|----------|
+| Agent working normally | Implicit heartbeat on each MCP tool call | N/A |
+| Agent thinking (long reasoning, no tool calls) | No heartbeat for duration of reasoning | Timeout must be generous (30+ min) |
+| Agent crashes (OOM, network error) | No more heartbeats | Stale detection releases phase after timeout |
+| Agent context exhausted | Agent may fail to call `fail_phase` | Stale detection releases phase |
+| Agent completes successfully | `complete_phase` called, then exit | N/A |
+
+**Recommended timeout**: 30 minutes (not the originally proposed 10 minutes). Agents may have long reasoning passes or run extended build/test cycles without MCP tool calls.
+
+**Stale recovery flow:**
+1. Scheduler or `cleanup-stale` CLI runs
+2. Finds agents where `last_heartbeat < now() - timeout`
+3. Marks agent as `stale`
+4. Releases claimed phase back to `available`
+5. Releases file locks
+6. Logs to audit trail
+7. Next supervisor cycle spawns a fresh agent for the released phase
+
+### Human Gate Interaction
+
+When a phase reaches a human gate (e.g., Design Review, Prototype Review), the flow is:
+
+1. Agent completes its phase (e.g., Design), calls `complete_phase`
+2. Scheduler runs, sees next phase is a human gate (agent_type: null)
+3. Scheduler creates a `human_gates` record with status `pending`
+4. Next phase remains `blocked` until gate is resolved
+5. Human runs `workflow-engine gates` to see pending reviews
+6. Human reviews artifacts, then runs `workflow-engine approve <gate-id>`
+7. Scheduler runs, resolves gate, marks next phase as `available`
+8. Supervisor (or human) spawns an agent for the now-available phase
+
+The supervisor prints pending gates to the terminal so the human knows action is needed:
+
+```
+[supervisor] Agent cpp-architect completed Design for ticket 0084
+[supervisor] Ticket 0084 blocked on human gate: design_review
+[supervisor] Run: workflow-engine approve <gate-id> --notes "..."
+[supervisor] 2 agents idle, 1 working, 1 gate pending
+```
+
+### Agent Type Registry
+
+The `.workflow/config.yaml` gains an agent registry mapping agent types to their Claude Code agent definitions:
+
+```yaml
+agents:
+  stale_timeout_minutes: 30
+  heartbeat_implicit: true
+
+  # Maps workflow agent types to Claude Code agent commands
+  registry:
+    cpp-architect:
+      command: "claude"
+      args: ["--agent", "cpp-architect"]
+      max_concurrent: 1           # only 1 designer at a time
+    cpp-implementer:
+      command: "claude"
+      args: ["--agent", "cpp-implementer"]
+      max_concurrent: 3           # up to 3 concurrent implementers
+    design-reviewer:
+      command: "claude"
+      args: ["--agent", "design-reviewer"]
+      max_concurrent: 1
+    cpp-prototyper:
+      command: "claude"
+      args: ["--agent", "cpp-prototyper"]
+      max_concurrent: 1
+    cpp-test-writer:
+      command: "claude"
+      args: ["--agent", "cpp-test-writer"]
+      max_concurrent: 2
+    code-quality-gate:
+      command: "claude"
+      args: ["--agent", "code-quality-gate"]
+      max_concurrent: 2
+    implementation-reviewer:
+      command: "claude"
+      args: ["--agent", "implementation-reviewer"]
+      max_concurrent: 1
+    docs-updater:
+      command: "claude"
+      args: ["--agent", "docs-updater"]
+      max_concurrent: 1
+    cpp-tutorial-generator:
+      command: "claude"
+      args: ["--agent", "cpp-tutorial-generator"]
+      max_concurrent: 1
+```
+
+The `max_concurrent` field tells the supervisor how many instances of each agent type to run simultaneously. This prevents over-allocation (e.g., 3 design reviewers when reviews are sequential by nature).
+
+---
+
 ## Concurrency Model
 
 ### Within a Single Ticket
@@ -756,11 +1050,14 @@ Exception: Phases in a `parallel_group` (defined in `phases.yaml`) become availa
 ### Across Tickets
 Independent tickets execute **concurrently** — agents can claim phases from different tickets simultaneously. The atomic claim query ensures no conflicts.
 
+### Filesystem Isolation
+Agents run in git worktrees, eliminating filesystem-level conflicts. Each agent has its own copy of the repo. Changes are merged after the agent completes.
+
 ### Conflict Detection
-When an agent declares files via `declare_files`, the server checks `file_locks` for any active (unreleased) locks on the same paths held by other agents. If conflicts exist, the agent is warned but not blocked (advisory, not mandatory). The human can resolve by reordering work or adding a dependency.
+The `file_locks` table provides **logical** conflict detection — it warns when two tickets (not just two agents) are modifying the same source files. This is advisory: the human decides whether to add a ticket dependency or accept the risk of merge conflicts.
 
 ### Stale Agent Recovery
-The scheduler (or `cleanup-stale` CLI command) checks `agents.last_heartbeat`. If an agent hasn't heartbeated in > `stale_timeout_minutes`:
+The scheduler (or `cleanup-stale` CLI command) checks `agents.last_heartbeat`. If an agent hasn't heartbeated in > `stale_timeout_minutes` (default: 30 minutes):
 1. Mark agent status as `stale`
 2. Release any claimed phases back to `available`
 3. Release any file locks
@@ -797,25 +1094,28 @@ This keeps the engine project-agnostic while allowing MSD-CPP's agents to track 
 - Set up repo structure, pyproject.toml, Dockerfile
 - Implement schema, config reader, scheduler, claim logic
 - Implement MCP server with all tools
-- Implement CLI
+- Implement CLI (human review gates, query, import)
 - Write tests
 - Publish Docker image
 
 ### Phase 2: Integrate MSD-CPP as first consumer
-- Create `.workflow/phases.yaml` and `.workflow/config.yaml`
+- Create `.workflow/phases.yaml` and `.workflow/config.yaml` (with agent registry)
 - Add `workflow-engine` to `python/requirements.txt`
 - Register workflow MCP server in `.mcp.json`
 - Import existing tickets into DB
-- Test with agents claiming work manually
+- Test with agents claiming work manually (Mode 1: manual launch)
 
 ### Phase 3: Agent integration (follow-up ticket)
-- Add work queue preamble to all agent definitions
-- Agents use MCP tools for claim/complete/heartbeat
-- Orchestrator transitions to scheduler role
+- Add Work Queue Integration preamble to all agent definitions
+- Agents use MCP tools for register/claim/complete (single-phase, single-shot)
+- Implement supervisor script (Mode 2: automated spawn-work-exit cycle)
+- Implement git worktree isolation for concurrent agents
+- Orchestrator transitions to scheduler role (Mode 3: hybrid)
 
 ### Phase 4: Deprecate legacy mode (follow-up ticket)
 - Remove direct agent invocation from orchestrator
 - All work routing goes through the database
+- Supervisor becomes the primary launch mechanism
 - Add dashboard/metrics reporting
 
 ---
@@ -840,7 +1140,8 @@ None — this is new infrastructure in a separate repository. No MSD-CPP C++ sou
 | `test_markdown_sync.py` | Import from markdown, export to markdown, conflict resolution |
 | `test_scheduler.py` | Phase seeding, conditional phases, parallel phases |
 | `test_audit.py` | Audit log entries for all state transitions |
-| `test_config.py` | phases.yaml parsing, config.yaml defaults, condition evaluation |
+| `test_config.py` | phases.yaml parsing, config.yaml defaults, condition evaluation, agent registry |
+| `test_supervisor.py` | Pool size enforcement, max_concurrent limits, worktree creation/cleanup, gate notification |
 
 #### Integration Tests
 | Test | What It Validates |
@@ -858,10 +1159,10 @@ None — this is new infrastructure in a separate repository. No MSD-CPP C++ sou
 1. **Database location** — `build/{build_type}/docs/workflow.db` (gitignored, like other DBs) or project root (tracked)?
    - **Recommendation**: Gitignored in build directory. The DB is derived state; markdown tickets are the durable record. Each developer/worktree runs `workflow-engine import-tickets` on setup.
 
-2. **Agent spawning** — Should the system provide a launcher script that spawns N agent processes, or should agents be launched manually?
-   - Option A: Manual launch — developer runs `claude --agent cpp-implementer` in separate terminals
-   - Option B: Launcher script — `workflow-engine launch --agents 4` spawns a pool
-   - **Recommendation**: Start with Option A (manual); add Option B as a convenience in Phase 4
+2. **Agent spawning** — Resolved: three-mode approach (see Agent Lifecycle section)
+   - Mode 1 (Phase 1-2): Manual launch — developer runs `claude --agent <type>` in terminals
+   - Mode 2 (Phase 3-4): Supervisor script — `workflow-engine supervisor --pool-size 4` manages spawn-work-exit cycle
+   - Mode 3 (all phases): Orchestrator-driven — existing `Process ticket: X` UX with DB-backed state
 
 3. **Heartbeat mechanism** — How should agents heartbeat when they're Claude Code subagents (not long-running processes)?
    - Option A: Heartbeat on each MCP tool call (implicit — server updates timestamp on any tool invocation by that agent)
@@ -951,6 +1252,33 @@ None — this is new infrastructure in a separate repository. No MSD-CPP C++ sou
   - Docker-only: Forces container management for local development, which adds friction for a single-developer workflow
   - Pip-only: Loses the hermetic packaging benefit for CI and multi-repo deployments
 - **Trade-offs**: Two distribution paths to maintain and test. Acceptable given the different use cases.
+- **Status**: active
+
+### DD-0083-010: Single-Phase, Single-Shot Agent Lifecycle
+- **Affects**: Agent definitions, supervisor script, Work Queue Integration preamble
+- **Rationale**: Claude Code agents are LLM conversations with finite context windows, not persistent processes. A multi-phase loop would accumulate context from prior phases, wasting context budget and risking cross-contamination. Single-phase agents start fresh, execute one phase, and exit. The external supervisor handles re-spawning.
+- **Alternatives Considered**:
+  - Multi-phase loop: Agent claims, works, completes, claims again in a loop. Rejected because context from phase N pollutes phase N+1, and context window exhaustion becomes unpredictable.
+  - Persistent worker daemon: Not feasible — Claude Code agents are conversations, not processes.
+- **Trade-offs**: Requires an external supervisor to keep work flowing. Each agent invocation has startup overhead (loading system prompt, registering, claiming). Acceptable given the clean isolation benefits.
+- **Status**: active
+
+### DD-0083-011: Git Worktree Isolation for Concurrent Agents
+- **Affects**: Supervisor script, agent spawning, merge workflow
+- **Rationale**: Multiple agents working on different tickets simultaneously will modify different files. Git worktrees provide filesystem-level isolation — each agent gets its own repo copy on a ticket-specific branch. This eliminates the need for file-level locking as a concurrency mechanism and prevents agents from seeing each other's uncommitted changes.
+- **Alternatives Considered**:
+  - Shared working directory with file locks: Fragile — agents may read partially-written files. Requires careful ordering of writes and commits.
+  - Docker containers per agent: Heavyweight; adds container orchestration complexity beyond what's needed.
+- **Trade-offs**: Worktree creation adds ~1-2 seconds per agent spawn. Merge conflicts are possible when worktrees are reintegrated, but these indicate genuine logical conflicts that should be human-reviewed anyway.
+- **Status**: active
+
+### DD-0083-012: Supervisor Script as External Coordinator
+- **Affects**: cli/supervisor.py, agent registry in config.yaml
+- **Rationale**: Since agents are single-shot, something external must manage the spawn-work-exit cycle. A Python supervisor script fills this role: it queries the work queue, matches available phases to agent types, spawns Claude Code agent processes, waits for exits, and re-runs the scheduler. This keeps the engine project-agnostic (the supervisor reads agent commands from `config.yaml`) and avoids requiring the human to manually re-launch agents.
+- **Alternatives Considered**:
+  - Human-only launching (no supervisor): Works for Phase 1-2 but doesn't scale. The human must monitor the queue and re-launch agents after each phase.
+  - Orchestrator agent as supervisor: The orchestrator already exists but runs inside Claude Code, consuming its own context window to track subagent lifecycle. An external Python script is simpler and doesn't burn LLM context.
+- **Trade-offs**: The supervisor is a new component to implement and maintain. It runs outside Claude Code (plain Python process), so it can't use LLM reasoning for scheduling decisions — it follows simple rules (match agent type to available phase, respect max_concurrent).
 - **Status**: active
 
 ### DD-0083-009: Project-Specific Metadata as JSON Blob
