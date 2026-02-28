@@ -685,3 +685,125 @@ approach that:
 
 This is a structural incompatibility in the 3x3 block solve that requires further investigation.
 Design Revision 3 is needed to explore alternative approaches.
+
+---
+
+## Design Revision 3 (Post-P3: Asymmetric Decoupling)
+
+**Trigger**: Prototype P3 (Fix F2 only) produced zero test changes — all 12 still fail.
+**Human decision**: See ticket feedback section "Feedback on Design Revision 3".
+**Approved approach**: Option 3 — Asymmetric decoupling.
+
+### The Asymmetric Decoupling Approach
+
+P2 showed that full decoupled tangent solve breaks tipping torque. The iteration log analysis
+reveals why: the coupling terms `K_inv(1,0)*(-vErr(0))` and `K_inv(2,0)*(-vErr(0))` from
+the normal-to-tangent direction are required for correct per-contact angular impulse balance.
+
+However, the energy injection comes from the tangent-to-normal direction: `K_inv(0,1)*(-vErr(1))`
+and `K_inv(0,2)*(-vErr(2))`. When `vErr(0) = 0` (non-penetrating contact), these terms drive
+a non-zero `unconstrained(0)`, causing spurious normal impulse accumulation.
+
+**The asymmetric fix**: Decouple ONLY row 0 (normal row), while keeping rows 1-2 fully coupled.
+
+**Row 0 (normal)**:
+```cpp
+delta_lambda_n = (-vErr(0)) / K(0,0)
+```
+Scalar solve using only K(0,0). This severs the tangent→normal coupling
+(`K_inv(0,1)` and `K_inv(0,2)` terms) that causes energy injection. For a
+non-penetrating contact (`vErr(0) = 0`), this gives `delta_lambda_n = 0` — exactly correct.
+
+**Rows 1-2 (tangent)**:
+```cpp
+delta_lambda_t = K_inv.block<2,3>(1,0) * (-vErr)
+```
+Full 2×3 block from K_inv, using all three vErr components. This preserves:
+- `K_inv(1,0)*(-vErr(0))` — normal→tangent coupling needed for tipping torque
+- `K_inv(1,1)*(-vErr(1))` + `K_inv(1,2)*(-vErr(2))` — tangent self-coupling
+- Same for row 2
+
+**Why this works**:
+- The energy injection path is `vErr(1,2) → unconstrained(0) → lambda_n growth`.
+  Severing row 0's dependence on `vErr(1,2)` closes this path entirely.
+- The tipping torque path is `vErr(0) → tangent correction → angular impulse balance`.
+  Preserving `K_inv(1:2, 0)*(-vErr(0))` in rows 1-2 keeps this path intact.
+- For oblique sliding: `vErr(0) = 0` → tangent rows' `K_inv(1:2,0)*(-vErr(0)) = 0` anyway
+  (no spurious tangent impulse from non-penetrating normal). Clean separation.
+
+### Implementation in sweepOnce
+
+Replace the single coupled line in Step 2:
+```cpp
+// OLD (coupled 3x3):
+const Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
+
+// NEW (asymmetric decoupled):
+//
+// Row 0: scalar K_nn solve — severs tangent→normal coupling.
+// For a non-penetrating contact (vErr(0) = 0), delta_lambda_n = 0.
+// For a penetrating contact (vErr(0) < 0), delta_lambda_n > 0 (push apart).
+//
+// Rows 1-2: full 2×3 K_inv block — preserves normal→tangent coupling.
+// K_inv.block<2,3>(1,0) * (-vErr) keeps the K_inv(1:2,0)*(-vErr(0)) terms
+// needed for correct per-contact angular impulse balance (tipping torque).
+//
+// Ticket: 0084 Prototype P4 (Design Revision 3 — asymmetric decoupling)
+Eigen::Vector3d unconstrained;
+const double K_nn = blockKs[ci](0, 0);
+unconstrained(0)      = (K_nn > 1e-12) ? (-vErr(0)) / K_nn : 0.0;
+unconstrained.tail<2>() = blockKInvs[ci].block<2, 3>(1, 0) * (-vErr);
+```
+
+Note: Both `blockKs` and `blockKInvs` are already precomputed in `solve()`. The
+`blockKs` parameter passes `K(0,0)` for the normal row scalar; `blockKInvs` provides the
+`K_inv.block<2,3>(1,0)` for the tangent rows. No signature changes to `sweepOnce` are needed
+since both arrays are already available as local variables in `solve()`.
+
+Actually, `sweepOnce` currently takes `blockKInvs` only. To implement the asymmetric approach,
+`sweepOnce` needs access to `blockKs[ci](0,0)` as well. The simplest approach: pass `blockKs`
+alongside `blockKInvs` to `sweepOnce`.
+
+**Revised sweepOnce signature**:
+```cpp
+double sweepOnce(
+  const std::vector<ContactConstraint*>& contacts,
+  const std::vector<Eigen::Matrix3d>& blockKs,      // NEW: for K(0,0) normal scalar
+  const std::vector<Eigen::Matrix3d>& blockKInvs,   // RETAINED: for K_inv(1:2,0:2) tangent
+  Eigen::VectorXd& lambda,
+  const std::vector<std::reference_wrapper<const InertialState>>& states,
+  const std::vector<double>& inverseMasses,
+  const std::vector<Eigen::Matrix3d>& inverseInertias);
+```
+
+The `solve()` function already has both `blockKs` and `blockKInvs`. Pass both to `sweepOnce`.
+
+### What Is Preserved
+
+- Fix F2 (phaseBLambdas warm-start cache) — already in place, unchanged
+- Two-phase architecture (Phase A restitution + Phase B dissipative) — unchanged
+- All other `sweepOnce` logic (Steps 3–7: accumulate, project cone, update vRes) — unchanged
+- `blockKInvs` precomputation in `solve()` — retained (used for rows 1-2)
+- `blockKs` already precomputed — used for K(0,0) in row 0
+
+### Expected Prototype P4 Outcome
+
+Based on the P2 analysis:
+- P2 showed that decoupling row 0 fixes all 4 oblique variants + ERP + RockingCube (6 tests)
+- P2 showed the tipping regression came from losing the K_inv(1:2,0) coupling in tangent rows
+- Asymmetric approach preserves K_inv(1:2,0) while severing K_inv(0,1:2)
+- Expected: oblique tests pass, SlidingCubeX/TippingTorque do NOT regress
+
+The 6 remaining failures (InelasticBounce, PerfectlyElastic, EqualMassElastic, SphereDrop,
+ZeroGravity, BounceThenSlide) will be tracked separately — they may require further investigation
+into Phase A or the restitution/spin coupling mechanism.
+
+### Success Criteria for Prototype P4
+
+- All 5 oblique sliding tests pass (Z-velocity < 2.0 m/s threshold)
+- SlidingCubeX_DeceleratesAndStops: PASS (must not regress)
+- SlidingCubeY_DeceleratesAndStops: PASS (must not regress)
+- SlidingCube_FrictionProducesTippingTorque: PASS (must not regress)
+- RockingCube_AmplitudeDecreases: PASS (was fixed by P2's normal decoupling)
+- TimestepSensitivity_ERPAmplification: PASS (was fixed by P2's normal decoupling)
+- Zero new regressions in the full test suite

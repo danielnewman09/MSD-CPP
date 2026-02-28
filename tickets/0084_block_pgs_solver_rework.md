@@ -12,6 +12,7 @@
 - [x] Prototype Complete — Awaiting Review (P2: decoupled K_tt — NEGATIVE, new regressions)
 - [x] Implementation Blocked — Design Revision Needed (Revision 2 required)
 - [x] Design Revision 2 Complete — Fix F2 Implemented (Prototype P3 NEGATIVE — Revision 3 required)
+- [x] Design Revision 3 Complete — Asymmetric Decoupling (Prototype P4 PARTIAL — Revision 4 required)
 - [ ] Implementation Complete — Awaiting Test Writing
 - [ ] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
@@ -28,8 +29,8 @@
 - **Generate Tutorial**: No
 - **Requires Math Design**: No
 - **GitHub Issue**: #112
-- **Design Revision Count**: 2
-- **Previous Design Approaches**: [Warm-start contamination (Phase A bounce in cache) — refuted by Prototype P1; Full decoupled K_tt solve — fixes oblique but breaks SlidingCubeX/TippingTorque, refuted by Prototype P2]
+- **Design Revision Count**: 3
+- **Previous Design Approaches**: [Warm-start contamination (Phase A bounce in cache) — refuted by Prototype P1; Full decoupled K_tt solve — fixes oblique but breaks SlidingCubeX/TippingTorque, refuted by Prototype P2; Fix F2 warm-start cache only — no test changes, refuted by Prototype P3; Asymmetric decoupling (scalar row 0, K_inv rows 1-2) — same 3 regressions as P2 because 1/K(0,0) != K_inv(0,0) changes cone bound, refuted by Prototype P4]
 
 ---
 
@@ -227,6 +228,35 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
   is disabled — Fix F2 (phaseBLambdas cache) would likely address these 3.
   **Design revision required** to address coupling incompatibility in tangent solve.
 
+### Design Revision Phase (Revision 3)
+- **Started**: 2026-02-28 19:00
+- **Completed**: 2026-02-28 20:00
+- **Revision Number**: 3
+- **Trigger**: Prototype P3 — Fix F2 only produced zero test changes
+- **Human Gate Decision**: Approved Option 3 — Asymmetric decoupling (scalar row 0, K_inv rows 1-2)
+- **Prototype P4 Result**: PARTIAL / NEGATIVE for regression goal
+  - Fixed 7 of 12 original failures (all oblique tests, BounceThenSlide, ERP, RockingCube)
+  - Still failing: InelasticBounce, PerfectlyElastic, EqualMassElastic, SphereDrop, ZeroGravity
+  - Regressions: SlidingCubeX, SlidingCubeY, FrictionProducesTippingTorque (same 3 as P2)
+- **Root cause of continued regression**: `1/K(0,0)` != `K_inv(0,0)`. The asymmetric scalar
+  gives a larger normal impulse than the Schur-complement-reduced K_inv(0,0). This changes
+  the Coulomb cone bound (mu * lambda_n), which disrupts the tangential impulse balance across
+  4 corner contacts. The tipping torque result (omegaZ dominates vs omegaY) is equally severe
+  as in P2. The cone coupling between lambda_n and lambda_t makes ANY change to the normal
+  row affect tipping torque, regardless of what rows 1-2 use.
+- **Conclusion**: The asymmetric decoupling approach is NEGATIVE. Design Revision 4 required.
+  The structural incompatibility is confirmed: any change to row 0 that differs from K_inv(0,0)
+  will affect the cone bound and break tipping torque. The correct fix must either: (a) use
+  full K_inv for row 0 but conditionally clamp growth when vErr(0) >= 0 (velocity-gated
+  Hypothesis B), or (b) find a different mechanism to prevent spurious lambda_n growth.
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.cpp` (P4 asymmetric decoupling implemented)
+  - `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.hpp` (sweepOnce signature updated)
+  - `docs/designs/0084_block_pgs_solver_rework/design.md` (Revision 3 section appended)
+  - `docs/designs/0084_block_pgs_solver_rework/iteration-log.md` (Iteration 5 added)
+
 ### Implementation Phase
 - **Started**:
 - **Completed**:
@@ -352,6 +382,12 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
 - **Preferred approach**: Implement Fix F2 (phaseBLambdas warm-start cache) first. This safely fixes the 3 restitution tests (InelasticBounce, PerfectlyElastic, EqualMassElastic) without regression risk. Revert the P2 decoupled solve code before implementing. The oblique sliding failures will be addressed in a subsequent pass after F2 is validated.
 - **What to preserve**: Full coupled K_inv solve in sweepOnce (revert P2 changes), two-phase architecture, existing data structures
 - **Prototype decision**: Yes — validate Fix F2 fixes the 3 restitution tests and causes no regressions
+
+### Feedback on Design Revision 3 (Post-P3)
+- **Decision**: Approve revision — Option 3 (Asymmetric decoupling)
+- **Preferred approach**: Asymmetric decoupling — decouple only row 0 (normal row uses scalar K_nn, severing tangent→normal coupling that causes energy injection) while keeping rows 1-2 fully coupled (tangent rows use K_inv(1:2, 0:2), preserving normal→tangent coupling needed for tipping torque). This combines the best of both worlds: P2 showed oblique tests pass when row 0 is decoupled, and tipping torque only needs the rows 1-2 coupling.
+- **What to preserve**: Fix F2 (phaseBLambdas warm-start cache) stays in place as a correct semantic improvement. Two-phase architecture preserved.
+- **Prototype decision**: Yes — validate asymmetric decoupling fixes oblique sliding tests without regressing SlidingCubeX/TippingTorque
 
 ### Feedback on Tests
 {Your comments on test coverage, test quality, or missing test scenarios}

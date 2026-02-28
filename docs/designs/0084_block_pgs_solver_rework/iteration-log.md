@@ -237,3 +237,105 @@ Design Revision 3 required. The core problem is a structural incompatibility in 
 Need to find an approach that addresses K_nt normal injection WITHOUT losing the angular
 impulse balance that K_inv(1:2, 0) cross-terms provide.
 
+---
+
+## Iteration 5 — Prototype P4: Asymmetric Decoupling
+
+**Date**: 2026-02-28
+**Phase**: Prototype (Design Revision 3)
+**Change**: Implemented asymmetric decoupling in `sweepOnce`:
+  Row 0 (normal):  `unconstrained(0) = (-vErr(0)) / K(0,0)` (scalar, severs K_inv(0,1:2))
+  Rows 1-2 (tangent): `unconstrained.tail<2>() = K_inv.block<2,3>(1,0) * (-vErr)` (full 2x3 block)
+**Goal**: Fix oblique sliding tests without regressing SlidingCubeX/TippingTorque
+
+### Result: PARTIAL — Fixed 7 of 12 original failures, but same 3 regressions as P2
+
+**Total tests**: 780. Pass: 772. Fail: 8.
+
+**Original failures now fixed (7)**:
+- SlidingCube_ConeCompliantEveryFrame_Oblique45_Slow: PASS
+- SlidingCube_ConeCompliantEveryFrame_Oblique45_Medium: PASS
+- SlidingCube_ConeCompliantEveryFrame_Oblique45: PASS
+- SlidingCube_ConeCompliantEveryFrame_HighSpeedOblique: PASS
+- FrictionWithRestitution_BounceThenSlide: PASS
+- ParameterIsolation_TimestepSensitivity_ERPAmplification: PASS
+- RotationDampingTest_RockingCube_AmplitudeDecreases: PASS
+
+**Original failures still failing (5)**:
+- InelasticBounce_KEReducedByESquared: FAIL
+- PerfectlyElastic_EnergyConserved: FAIL (maxHeight=0.70, needs > 1.0)
+- EqualMassElastic_VelocitySwap: FAIL
+- SphereDrop_NoRotation: FAIL (omegaMax=16.9 rad/s)
+- ZeroGravity_RotationalEnergyTransfer_Conserved: FAIL
+
+**New regressions introduced (3)** — same as P2:
+- SlidingCubeX_DeceleratesAndStops: FAIL (lateral drift 0.023m vs 0.002m)
+- SlidingCubeY_DeceleratesAndStops: FAIL (lateral drift 0.044m vs 0.002m)
+- SlidingCube_FrictionProducesTippingTorque: FAIL (omegaZ=0.052 dominates vs omegaY≈0)
+
+### Root Cause of Remaining Regressions
+
+The human's hypothesis was: preserving `K_inv(1:2, 0)*(-vErr(0))` in rows 1-2 would maintain
+tipping torque. This is REFUTED. The regression is as severe as full decoupled P2.
+
+**Root cause**: `1/K(0,0)` != `K_inv(0,0)`. By Schur complement:
+```
+K_inv(0,0) = 1 / (K(0,0) - K_nt * K_tt^{-1} * K_nt^T)
+```
+The scalar `1/K(0,0)` is LARGER than `K_inv(0,0)` (the denominator is reduced by the
+Schur complement term). Therefore the asymmetric approach gives a LARGER normal impulse
+per step than the original coupled solve.
+
+**The coupling path through the Coulomb cone**: `lambda_n` is the Coulomb cone bound.
+A larger `lambda_n` → a larger cone bound `mu * lambda_n` → tangential impulses are less
+constrained by the cone projection. For axis-aligned sliding (SlidingCubeX, 4 corner
+contacts), the cone clipping behavior determines which tangential components survive the
+projection. Changing `lambda_n` changes the cone bound asymmetrically across the 4 contacts,
+producing an unbalanced angular impulse distribution — which manifests as Z-spin (omegaZ)
+instead of Y-tipping (omegaY).
+
+**Implication**: Any change to the normal row that does NOT preserve K_inv(0,0) exactly
+will break the tipping torque test. The only "safe" change to row 0 is one that leaves
+the steady-state `lambda_n` value unchanged when `vErr(0) = 0`.
+
+### Critical Insight
+
+For axis-aligned sliding (`vErr(0) = 0` during steady sliding):
+- Original coupled solve: `unconstrained(0) = K_inv(0,1)*(-vErr(1)) + K_inv(0,2)*(-vErr(2))`
+  This is NONZERO, driving the energy injection bug.
+- Asymmetric: `unconstrained(0) = 0`
+  No energy injection, but changes steady-state `lambda_n` (from the warm-start initialization
+  path), which changes the Coulomb cone bound.
+
+The core tension: the cone bound (lambda_n) and the tangential impulse balance are
+inextricably linked. We cannot zero row 0 without also changing the effective cone radius.
+
+For the tipping torque test specifically: the cube is accelerating from rest (vErr(0) != 0
+on early frames), so even with `vErr(0) = 0` during steady sliding, the transient `lambda_n`
+built up in early frames determines the cone bound. Any change to how `lambda_n` grows in
+early frames (when contact is being established) propagates to steady-state through the
+accumulated lambda.
+
+### Next Step
+
+The asymmetric decoupling is also NEGATIVE for the regression test. Design Revision 4 is
+needed. The structural incompatibility is confirmed:
+- We need lambda_n to grow correctly for tipping torque (requires K_inv(0,0) * correction)
+- We need to prevent K_inv(0,1:2)*vErr_t from driving spurious lambda_n growth (requires
+  zeroing those terms OR ensuring they cancel out)
+
+Possible directions:
+1. **Constrained normal growth**: Use the full K_inv(0,:)*(-vErr) for row 0, but cap
+   `delta_lambda_n` to be non-positive when `vErr(0) >= 0` (no normal growth during sliding).
+   This is "Hypothesis B" from Revision 1 — but implemented correctly as a one-sided clamp:
+   `unconstrained(0) = min(K_inv(0,:)*(-vErr), 0)` when `vErr(0) >= 0`.
+   Rationale: the full K_inv coupling provides correct lambda_n for active penetration frames,
+   but prevents growth on non-penetrating frames.
+
+2. **Normal component clamping**: Allow the full K_inv solve, but after the cone projection,
+   clamp lambda_n to not exceed its previous value when vErr(0) >= 0.
+
+3. **Separate the coupling physically**: Use the full K_inv solve but add a velocity-based
+   guard: if vErr(0) >= -epsilon (contact not penetrating), zero the normal correction
+   delta_lambda_n but keep full tangential correction.
+
