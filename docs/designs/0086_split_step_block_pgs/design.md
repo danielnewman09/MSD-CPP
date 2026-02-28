@@ -312,6 +312,56 @@ physical intuition: the solution is stable when neither normal nor tangent impul
 
 ---
 
+## Traceability Lessons Applied
+
+The following design decisions from the traceability database informed this design:
+
+### DD-0070-H2: Coupled solve injects energy
+The original diagnosis that started the 0084 chain. When the Coulomb cone clips the coupled
+solution, the mismatch between the QP objective and energy conservation means the
+cone-constrained solution can inject energy. The split-step eliminates this by fixing `lambda_n`
+before the tangent solve — the cone projection in Pass 2 can only *reduce* tangential impulse,
+never inflate normal.
+
+### DD-0075-H3: K_nt coupling "still helps"
+The original argument FOR the coupled 3x3 solve: K_nt coupling produces "more accurate friction
+bounds and eliminates warm-start lag." Six prototypes proved this wrong for oblique contacts, but
+it remains the key risk for 0086. The split-step must demonstrate that sequential `vRes_` updates
+provide equivalent coupling for axis-aligned corner contacts (tipping torque) without energy
+injection for oblique contacts. **Directly informs R1 risk assessment.**
+
+### DD-0075-H4: Missing cross-coupling terms (decoupling failure conditions)
+Documents three specific conditions where decoupling breaks physics:
+1. **Large lever arms** relative to body size
+2. **Rotating/tumbling contacts**
+3. **Friction near Coulomb cone surface (sliding)**
+
+All three are present in `FrictionProducesTippingTorque`. This reinforces R1 as the go/no-go
+gate. The split-step addresses these differently from the P2 full-decouple that this DD
+originally critiqued: Pass 2 sees post-Pass-1 velocity state (physics coupling via `vRes_`),
+whereas P2 saw stale single-pass velocity state.
+
+### DD-0075-H1: Phase A single pass
+Recommends single-pass Phase A because "multiple passes risk over-estimating bounce for tightly
+coupled contact manifolds." Validates our decision to leave Phase A untouched.
+
+### DD-0067-H2: FrictionConeSolver convergence failure for sustained tumbling
+The previous Newton-based friction solver failed for sustained tumbling with saturated friction
+(the reason Block PGS was introduced). The split-step must handle sustained sliding contacts
+without convergence issues. **Action**: monitor `SolveResult.iterations` across the test suite
+to verify the 50-sweep cap provides sufficient headroom — DD-0075-H3 warns that decoupling may
+increase convergence iterations (warm-start lag).
+
+### DD-0053-H5/H7: Performance — workspace allocation and solver hotspot
+Friction solver was the single biggest CPU hotspot at 1.9%. The split-step calls
+`computeBlockVelocityError` twice per contact per sweep (once per pass) vs once currently,
+doubling the velocity error computation cost. Partially offset by 2x2 LDLT being cheaper than
+3x3 LDLT in pre-computation. **Action**: if performance becomes a concern, Pass 2 could cache
+the normal component of `vErr` from Pass 1 to avoid recomputing it, but this is a
+micro-optimization to defer.
+
+---
+
 ## Open Questions
 
 ### Prototype Required
