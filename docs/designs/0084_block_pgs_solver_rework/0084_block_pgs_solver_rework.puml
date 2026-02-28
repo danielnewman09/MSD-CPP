@@ -76,7 +76,7 @@ class BlockPGSSolver <<new>> {
     ' --- Phase B ---
     -initVelocityResidual_(flat, lambdaInit,\n  inverseMasses, inverseInertias): void
     -sweepOnce_(flat, b_phaseB, diag3x3,\n  lambda, mu, inverseMasses, inverseInertias): double
-    -updateVRes_(rowIdx, dLambdaA, dLambdaT1, dLambdaT2,\n  flat, inverseMasses, inverseInertias): void
+    -updateVRes_(contactIdx, dLambdaN, dLambdaT1, dLambdaT2,\n  flat, inverseMasses, inverseInertias): void
     -ballProject_(lt1, lt2, lambdaN, mu): pair<double,double>
     ' --- Result struct ---
     +{field} struct SolveResult
@@ -126,13 +126,17 @@ class "BlockPGSSolver::SolveResult" <<new>> {
     residual: double
 }
 
-class "ConstraintSolver::FlattenedConstraints" {
+class "ConstraintSolver::FlattenedConstraints" <<modified>> {
     jacobianRows: vector<Matrix<1,12>>
     bodyAIndices: vector<size_t>
     bodyBIndices: vector<size_t>
     rowTypes: vector<RowType>
     restitutions: vector<double>
+    penetrationDepths: vector<double>
     numContacts: int
+    ' penetrationDepths added for Phase B ERP term (DD-0084-006)
+    ' Populated in populateFlatConstraints_() from ContactConstraint::getPenetrationDepth()
+    ' Zero for Tangent rows
 }
 
 ' ===== Relationships =====
