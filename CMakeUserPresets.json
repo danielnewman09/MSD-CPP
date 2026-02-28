@@ -247,6 +247,16 @@
             ]
         },
         {
+            "name": "debug-guidelines",
+            "displayName": "Seed Guidelines Database (Debug)",
+            "description": "Seed C++ coding guidelines from YAML files into guidelines.db",
+            "configurePreset": "conan-debug",
+            "jobs": 1,
+            "targets": [
+                "guidelines-seed"
+            ]
+        },
+        {
             "name": "debug-all",
             "displayName": "Build Everything (Debug)",
             "description": "Build all libraries, tests, documentation databases, and traceability",

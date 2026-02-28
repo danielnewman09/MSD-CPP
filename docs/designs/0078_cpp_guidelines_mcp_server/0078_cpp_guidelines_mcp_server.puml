@@ -1,0 +1,144 @@
+@startuml 0078_cpp_guidelines_mcp_server
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+skinparam package {
+    BackgroundColor<<new>> #E8F5E9
+}
+skinparam database {
+    BackgroundColor<<new>> LightGreen
+}
+skinparam note {
+    BackgroundColor LightYellow
+}
+
+title C++ Guidelines MCP Server — Component Architecture
+
+' =====================================================================
+' Data Sources
+' =====================================================================
+package "YAML Seed Files" <<new>> {
+    file "data/project_rules.yaml" as ProjectYAML
+    file "data/cpp_core_guidelines.yaml" as CppCoreYAML
+    file "data/misra_rules.yaml" as MisraYAML
+}
+
+' =====================================================================
+' Indexer
+' =====================================================================
+component "seed_guidelines.py" <<new>> as SeedScript {
+    note right
+      Pydantic validation
+      YAML → SQLite loader
+    end note
+}
+
+' =====================================================================
+' Schema Module
+' =====================================================================
+component "guidelines_schema.py" <<new>> as SchemaModule {
+    note right
+      CREATE TABLE DDL
+      FTS5 virtual table
+    end note
+}
+
+' =====================================================================
+' SQLite Database
+' =====================================================================
+database "guidelines.db\n(SQLite + FTS5)" <<new>> as GuidelinesDB {
+    rectangle "categories" as TblCategories
+    rectangle "rules" as TblRules
+    rectangle "rule_cross_refs" as TblCrossRefs
+    rectangle "tags" as TblTags
+    rectangle "rule_tags" as TblRuleTags
+    rectangle "rules_fts (FTS5)" as TblFTS
+}
+
+' =====================================================================
+' MCP Server
+' =====================================================================
+component "guidelines_server.py" <<new>> as GuidelinesServer {
+    component "GuidelinesServer class" as GuidelinesClass
+    component "create_mcp_server()" as MCP_Factory
+    component "FastMCP instance" as MCP_Instance
+
+    GuidelinesClass --> MCP_Factory : wraps
+    MCP_Factory --> MCP_Instance : returns
+}
+
+' =====================================================================
+' MCP Tools
+' =====================================================================
+package "MCP Tools (5)" <<new>> {
+    component "search_guidelines(query, source?, category?, severity?, limit?)" as ToolSearch
+    component "get_rule(rule_id)" as ToolGetRule
+    component "list_categories()" as ToolListCats
+    component "get_category(name, detailed?)" as ToolGetCat
+    component "get_rules_by_tag(tag)" as ToolGetByTag
+}
+
+' =====================================================================
+' Build / Registration
+' =====================================================================
+package "Build & Registration" <<new>> {
+    file ".mcp.json" as MCPJson
+    file ".claude/settings.local.json" as Settings
+    file "CMakeLists.txt (guidelines-seed)" as CMakeLists
+    file "CMakeUserPresets.json (debug-guidelines)" as CMakePresets
+}
+
+' =====================================================================
+' AI Consumers
+' =====================================================================
+package "AI Agents (consumers)" {
+    component "cpp-architect" as AgentArchitect
+    component "design-reviewer" as AgentReviewer
+    component "cpp-implementer" as AgentImpl
+    component "implementation-reviewer" as AgentImplReviewer
+}
+
+' =====================================================================
+' Relationships
+' =====================================================================
+
+ProjectYAML --> SeedScript : parsed by
+CppCoreYAML --> SeedScript : parsed by
+MisraYAML --> SeedScript : parsed by
+
+SchemaModule --> SeedScript : imported by
+SchemaModule --> GuidelinesServer : imported by
+
+SeedScript --> GuidelinesDB : populates
+
+GuidelinesDB --> GuidelinesClass : queried by
+GuidelinesClass --> ToolSearch : implements
+GuidelinesClass --> ToolGetRule : implements
+GuidelinesClass --> ToolListCats : implements
+GuidelinesClass --> ToolGetCat : implements
+GuidelinesClass --> ToolGetByTag : implements
+
+MCP_Instance --> MCPJson : registered in
+MCPJson --> Settings : enabled in
+SeedScript --> CMakeLists : invoked by
+CMakeLists --> CMakePresets : preset defined in
+
+ToolSearch --> AgentArchitect : called by
+ToolGetRule --> AgentArchitect : called by
+ToolSearch --> AgentReviewer : called by
+ToolGetRule --> AgentReviewer : called by
+ToolSearch --> AgentImpl : called by
+ToolSearch --> AgentImplReviewer : called by
+
+' =====================================================================
+' Rule ID legend
+' =====================================================================
+note bottom of GuidelinesDB
+  Rule ID conventions:
+  MSD-{CATEGORY}-{NNN}  — project rules
+  CPP-{section}.{N}     — C++ Core Guidelines
+  MISRA-{rule}          — MISRA C++ rules
+end note
+
+@enduml

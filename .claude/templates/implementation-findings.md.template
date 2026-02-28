@@ -1,0 +1,131 @@
+# Implementation Findings: {feature-name}
+
+**Date**: {YYYY-MM-DD}
+**Produced by**: {Implementer / Quality Gate / Implementation Reviewer}
+**Trigger**: {Circle Detection / 3rd Quality Gate Failure / 3rd CHANGES REQUESTED}
+**Revision Count**: {N of 2 maximum}
+
+> **Purpose**: This artifact captures structured implementation findings when the
+> workflow has stalled on a problem that cannot be resolved at the implementation
+> layer. It is the input to the human gate and, if the human approves, to the
+> cpp-architect in Mode 3 (revision from findings).
+>
+> Complete ALL sections before marking this ticket as
+> "Implementation Blocked — Design Revision Needed".
+
+---
+
+## What Was Attempted
+
+### Iteration Summary
+
+| Iteration | Hypothesis | Outcome | Key Files Changed |
+|-----------|------------|---------|-------------------|
+| 1 | {hypothesis} | {PASS/FAIL — brief details} | {list} |
+| 2 | {hypothesis} | {PASS/FAIL — brief details} | {list} |
+| N | {hypothesis} | {PASS/FAIL — brief details} | {list} |
+
+*Full detail in iteration log: `docs/designs/{feature-name}/iteration-log.md`*
+
+### Approaches Ruled Out
+
+- **{Approach A}**: {Why it cannot work — specific technical reason, not just "it failed"}
+- **{Approach B}**: {Why it cannot work}
+
+---
+
+## Failure Classification
+
+**Category** (select one):
+- [ ] `DESIGN_FLAW` — The design's core approach is fundamentally incompatible with requirements
+- [ ] `MISSING_ABSTRACTION` — The design does not expose the hook needed for this behavior
+- [ ] `INCORRECT_INVARIANT` — The design encodes an invariant that contradicts the requirement
+- [ ] `PERFORMANCE_CEILING` — The designed approach cannot meet the performance requirement
+- [ ] `INTEGRATION_CONFLICT` — The design conflicts with an existing interface not anticipated at design time
+
+**Classification Rationale**:
+{1-2 sentences explaining precisely why this category fits. Be specific.}
+
+---
+
+## Root Cause Analysis
+
+**Design Artifact with the Flaw**:
+`docs/designs/{feature-name}/design.md` — {section title or decision ID, e.g., DD-NNNN-NNN}
+
+**The Flawed Assumption**:
+{Precise description of what the design assumed that is false. One clear sentence is better than a paragraph.}
+
+**Evidence**:
+{Concrete evidence from implementation. Paste relevant error messages, failing test output,
+or state the logical contradiction clearly. Do not summarize vaguely — be specific.}
+
+Example of the failure manifesting:
+```
+{paste compiler error / test failure / runtime behavior}
+```
+
+**Could Implementation Have Worked Around It?**
+- [ ] Yes — but it would have required violating the design (not permitted)
+- [ ] No — the flaw is in the design itself and cannot be addressed at the implementation layer
+
+---
+
+## Proposed Design Change
+
+**Scope**: Delta — describe ONLY what needs to change. Identify the specific design decisions
+(DD-NNNN-NNN) that are affected. Do NOT propose a full redesign unless the findings
+require it.
+
+**Affected Design Decisions**:
+- `DD-NNNN-NNN`: {why this decision must change}
+
+**Proposed Approach**:
+{1-3 sentences describing the revised approach. What changes, and how does that fix
+the root cause?}
+
+**What to Preserve** (warm-start hints for the architect and implementer):
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `{path/to/file.hpp}` | Preserve unchanged | {why it's still valid} |
+| `{path/to/file.cpp}` | Preserve with minor edits | {what needs to change} |
+| `{path/to/other.cpp}` | Discard and reimplement | {why it cannot be salvaged} |
+| Design section: {section title} | Preserve unchanged | {why it's still correct} |
+
+---
+
+## Oscillation Check
+
+**Have we tried this proposed approach before?**
+- [ ] No — this is a new approach not previously attempted
+- [ ] Yes — describe what happened: {what was tried and why it failed}
+
+**Is there risk of oscillating back to the original (now-failed) approach?**
+- [ ] No — the original approach is definitively ruled out because: {evidence / logical proof}
+- [ ] Yes — risk: {describe the attractor that could pull the design back}; mitigation: {how to prevent it}
+
+**Previous Design Approaches** (from ticket metadata — confirm none of these match the proposal):
+{Copy the Previous Design Approaches list from the ticket here. If empty, write "None recorded yet."}
+
+---
+
+## Human Gate Checklist
+
+The human MUST review this section before the orchestrator can proceed to the Design Revision Loop.
+
+- [ ] The root cause analysis is credible (the implementation was genuinely stuck, not just lacking effort)
+- [ ] The failure classification is accurate
+- [ ] The proposed design change is appropriately scoped (delta, not unnecessary full redesign)
+- [ ] The "What to Preserve" list is reasonable
+- [ ] The oscillation check confirms this is not a return to a prior approach
+- [ ] Revision count is within cap: this is revision {N} of maximum 2
+  - If N > 2: DO NOT approve revision — close ticket and re-scope
+- [ ] Prototype after revision: **Yes / No** *(human circles one)*
+
+**Human Decision**:
+- [ ] APPROVE revision path — proceed to Design Revision Loop
+- [ ] CLOSE ticket — this requires fundamental re-scoping; open a new ticket with revised requirements
+
+**Human Notes**:
+{Any additional guidance for the architect or implementer}

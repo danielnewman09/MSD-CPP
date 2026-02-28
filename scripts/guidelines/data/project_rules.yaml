@@ -1,0 +1,420 @@
+# Ticket: 0078_cpp_guidelines_mcp_server
+# Design: docs/designs/0078_cpp_guidelines_mcp_server/design.md
+#
+# Project-specific MSD C++ coding rules.
+# Extracted from CLAUDE.md "Coding Standards" section.
+#
+# Schema:
+#   rule_id:           MSD-{CATEGORY}-{NNN}
+#   category:          Category name (string, created on first use)
+#   source:            project | cpp_core_guidelines | misra
+#   severity:          required | recommended | advisory
+#   status:            proposed | active | deprecated  (default: active)
+#   title:             One-line summary
+#   rationale:         Why the rule exists
+#   enforcement_notes: How to detect violations
+#   enforcement_check: (optional) clang-tidy / cppcheck check ID
+#   good_example:      (optional) Code snippet showing correct usage
+#   bad_example:       (optional) Code snippet showing violation
+#   tags:              List of cross-cutting concern labels
+#   cross_refs:        List of {to_rule_id, relationship} objects
+#                      relationship: derived_from | related | supersedes | conflicts_with
+
+rules:
+
+  - rule_id: MSD-INIT-001
+    category: Initialization
+    source: project
+    severity: required
+    title: Use NaN for uninitialized floating-point members
+    rationale: >
+      NaN propagates through calculations and makes uninitialized access immediately
+      obvious at runtime. Magic numbers like -1.0f or 0.0f are ambiguous — they could
+      be valid domain values, masking bugs where a member was never initialized.
+    enforcement_notes: >
+      Audit class member initializers. Any float/double member defaulted to -1.0, 0.0,
+      or another numeric sentinel should use std::numeric_limits<T>::quiet_NaN() instead.
+      Look for patterns like `float x_{-1.0f}` or `double y_{0.0}` in class declarations.
+    good_example: |
+      class Example {
+      private:
+        float volume_{std::numeric_limits<float>::quiet_NaN()};
+        float area_{std::numeric_limits<float>::quiet_NaN()};
+      };
+    bad_example: |
+      class Example {
+      private:
+        float volume_{-1.0f};  // Magic number - unclear if -1 is valid or uninitialized
+        float area_{0.0f};      // Could be confused with actual zero value
+      };
+    tags:
+      - initialization
+      - safety
+      - floating-point
+
+  - rule_id: MSD-INIT-002
+    category: Initialization
+    source: project
+    severity: required
+    title: Always use brace initialization
+    rationale: >
+      Brace initialization avoids the Most Vexing Parse problem and provides consistent
+      syntax across all initialization contexts. Parenthesis initialization can be
+      ambiguous (function declaration vs. object construction) and inconsistent
+      (vector<int>(10, 0) has different semantics than vector<int>{10, 0}).
+    enforcement_notes: >
+      Look for parenthesis initialization in object construction: `Type name(args)`,
+      `auto x = Type(args)`. Replace with `Type name{args}` or `auto x = Type{args}`.
+      Exception: avoid braces when the type has an initializer_list constructor that
+      would change semantics (e.g., std::vector<int>{10, 0} creates {10, 0}, not 10 zeros).
+    good_example: |
+      Coordinate point{1.0f, 2.0f, 3.0f};
+      std::vector<int> values{1, 2, 3};
+      auto hull = ConvexHull{points};
+    bad_example: |
+      Coordinate point(1.0f, 2.0f, 3.0f);  // Can be confused with function declaration
+      auto hull = ConvexHull(points);        // Most Vexing Parse risk
+    tags:
+      - initialization
+      - syntax
+    cross_refs:
+      - to_rule_id: CPP-ES.23
+        relationship: derived_from
+
+  - rule_id: MSD-RES-001
+    category: Resource Management
+    source: project
+    severity: required
+    title: "All-or-Nothing Rule: implement all five special members or none"
+    rationale: >
+      If a class needs custom behavior for one special member function (e.g., destructor
+      for resource cleanup), it almost certainly needs custom behavior for the related
+      operations (copy, move). Implementing only some leads to subtle bugs: a custom
+      destructor with a compiler-generated copy constructor produces shallow copies and
+      double-free errors. The safest path is either implement all five (Rule of Five) or
+      use RAII wrappers so the compiler generates all five correctly (Rule of Zero).
+    enforcement_notes: >
+      Search for classes that define a destructor but lack explicit copy/move constructors
+      or assignment operators (or vice versa). Clang-tidy check:
+      cppcoreguidelines-special-member-functions. Any class with `~ClassName()` without
+      explicit copy/move handling is a candidate violation.
+    enforcement_check: cppcoreguidelines-special-member-functions
+    good_example: |
+      // Rule of Zero — use RAII wrapper, compiler generates all five correctly
+      class SafeResourceOwner {
+      public:
+        SafeResourceOwner() : data_(100) {}
+      private:
+        std::vector<int> data_;  // RAII wrapper handles resource management
+      };
+
+      // Rule of Five — implement all five explicitly
+      class ResourceOwner {
+      public:
+        ResourceOwner() : data_{new int[100]} {}
+        ~ResourceOwner() { delete[] data_; }
+        ResourceOwner(const ResourceOwner& other) : data_{new int[100]} {
+          std::copy(other.data_, other.data_ + 100, data_);
+        }
+        ResourceOwner(ResourceOwner&& other) noexcept : data_{other.data_} {
+          other.data_ = nullptr;
+        }
+        ResourceOwner& operator=(const ResourceOwner& other) {
+          if (this != &other) std::copy(other.data_, other.data_ + 100, data_);
+          return *this;
+        }
+        ResourceOwner& operator=(ResourceOwner&& other) noexcept {
+          if (this != &other) { delete[] data_; data_ = other.data_; other.data_ = nullptr; }
+          return *this;
+        }
+      private:
+        int* data_;
+      };
+    bad_example: |
+      class BrokenResourceOwner {
+      public:
+        BrokenResourceOwner() : data_{new int[100]} {}
+        ~BrokenResourceOwner() { delete[] data_; }
+        // Missing copy/move — compiler generates shallow copy (double-free!)
+      private:
+        int* data_;
+      };
+    tags:
+      - resource-management
+      - safety
+      - ownership
+    cross_refs:
+      - to_rule_id: MSD-RES-002
+        relationship: related
+      - to_rule_id: CPP-C.21
+        relationship: derived_from
+
+  - rule_id: MSD-RES-002
+    category: Resource Management
+    source: project
+    severity: required
+    title: Use unique_ptr for ownership transfer; plain references for non-owning access
+    rationale: >
+      Unique_ptr makes ownership explicit and automatically releases resources when the
+      owner goes out of scope. Plain references (const T& or T&) are the most efficient
+      non-owning access — they enforce that the referenced object must outlive the
+      reference holder, which establishes a clear memory allocation hierarchy. Avoid
+      shared_ptr because shared ownership obscures which component is responsible for
+      lifetime management and incurs atomic reference-count overhead.
+    enforcement_notes: >
+      Flag raw pointer member variables and parameters that transfer ownership. Flag
+      shared_ptr usage that could be replaced by unique_ptr + reference. Never use
+      raw pointers in public interfaces — they expose unclear ownership semantics.
+    good_example: |
+      class MeshRenderer {
+      public:
+        // Non-owning reference — registry must outlive renderer
+        explicit MeshRenderer(const AssetRegistry& registry) : registry_{registry} {}
+      private:
+        const AssetRegistry& registry_;  // Non-owning reference
+      };
+
+      // Ownership transfer via unique_ptr
+      std::unique_ptr<Constraint> createConstraint(const Body& a, const Body& b);
+    bad_example: |
+      class MeshRenderer {
+      public:
+        // Shared ownership obscures who is responsible for lifetime
+        explicit MeshRenderer(std::shared_ptr<AssetRegistry> registry)
+          : registry_{std::move(registry)} {}
+      private:
+        std::shared_ptr<AssetRegistry> registry_;  // Avoid
+      };
+    tags:
+      - memory
+      - ownership
+      - resource-management
+    cross_refs:
+      - to_rule_id: MSD-RES-001
+        relationship: related
+      - to_rule_id: MSD-RES-003
+        relationship: related
+      - to_rule_id: CPP-R.11
+        relationship: derived_from
+
+  - rule_id: MSD-RES-003
+    category: Resource Management
+    source: project
+    severity: recommended
+    title: Use optional reference wrapper only for truly optional non-owning returns
+    rationale: >
+      std::optional<std::reference_wrapper<const T>> is the correct idiom when a
+      function may or may not return a reference to an existing object (e.g., a cache
+      lookup). Plain references are preferred in all other non-owning contexts because
+      they are simpler, more efficient, and express that the value always exists.
+      Raw pointers must not be used as optional returns because they expose unclear
+      ownership and require explicit null checks without type-system support.
+    enforcement_notes: >
+      Functions returning T* where T is not heap-allocated exclusively for the caller
+      are candidates for optional reference wrapper. Functions returning nullptr to
+      indicate "not found" should return std::optional<std::reference_wrapper<const T>>.
+    good_example: |
+      // Optional reference — value may not exist in the cache
+      std::optional<std::reference_wrapper<const Asset>>
+      getAsset(const std::string& name) const {
+        auto it = cache_.find(name);
+        if (it != cache_.end()) return std::cref(it->second);
+        return std::nullopt;
+      }
+
+      // Usage
+      if (auto asset = registry.getAsset("cube")) {
+        const Asset& ref = asset->get();
+        // use ref...
+      }
+    bad_example: |
+      // Raw pointer — unclear ownership, no type-system null safety
+      const Asset* getAsset(const std::string& name) const {
+        auto it = cache_.find(name);
+        return (it != cache_.end()) ? &it->second : nullptr;
+      }
+    tags:
+      - memory
+      - ownership
+      - safety
+    cross_refs:
+      - to_rule_id: MSD-RES-002
+        relationship: related
+
+  - rule_id: MSD-NAME-001
+    category: Naming Conventions
+    source: project
+    severity: required
+    title: Follow project naming conventions
+    rationale: >
+      Consistent naming conventions reduce cognitive load when reading unfamiliar code.
+      PascalCase for classes, camelCase for functions/methods, snake_case_ (trailing
+      underscore) for member variables, kPascalCase for constants, and snake_case for
+      namespaces are enforced project-wide.
+    enforcement_notes: >
+      Review class names for PascalCase, function names for camelCase, member variables
+      for trailing underscore snake_case, constants for kPascalCase prefix, and
+      namespaces for snake_case. Clang-tidy readability-identifier-naming checks can
+      enforce these automatically.
+    enforcement_check: readability-identifier-naming
+    good_example: |
+      namespace msd_sim {
+
+      constexpr float kGravityAcceleration = 9.81f;
+
+      class PhysicsEngine {
+      public:
+        void stepSimulation(float deltaTime);
+      private:
+        float time_step_{std::numeric_limits<float>::quiet_NaN()};
+      };
+
+      }  // namespace msd_sim
+    bad_example: |
+      namespace MsdSim {  // Should be snake_case
+
+      constexpr float GravityAcceleration = 9.81f;  // Should be kGravityAcceleration
+
+      class physics_engine {  // Should be PascalCase
+      public:
+        void StepSimulation(float DeltaTime);  // Should be camelCase
+      private:
+        float TimeStep;  // Should be time_step_ (trailing underscore)
+      };
+
+      }  // namespace MsdSim
+    tags:
+      - naming
+      - style
+
+  - rule_id: MSD-NAME-002
+    category: Naming Conventions
+    source: project
+    severity: recommended
+    title: "No misleading 'cached' prefix for non-lazily-computed values"
+    rationale: >
+      The 'cached' prefix implies a value that is lazily computed and may need
+      invalidation. Using it for values computed once at construction time (e.g., by
+      Qhull) is misleading — it suggests the value might be stale or that a validity
+      flag is needed. Reserve 'cached' for values with a validity flag that can be
+      recomputed on demand.
+    enforcement_notes: >
+      Audit member variable names prefixed with 'cached'. If the value is computed once
+      and never recomputed (e.g., set by an external library at construction time), drop
+      the 'cached' prefix. Only use 'cached' when there is an associated validity flag
+      (e.g., centroidValid_) or recomputation logic.
+    good_example: |
+      class ConvexHull {
+      private:
+        float volume_;             // Computed once by Qhull — not cached
+        float surfaceArea_;        // Computed once by Qhull — not cached
+        mutable Coordinate centroid_;   // Lazily computed — truly cached
+        mutable bool centroidValid_;    // Cache validity flag
+      };
+    bad_example: |
+      class ConvexHull {
+      private:
+        float cachedVolume_;       // Misleading — not cached, computed once
+        float cachedSurfaceArea_;  // Misleading — not cached, computed once
+        Coordinate cachedCentroid_; // OK — this IS cached, but inconsistent naming
+      };
+    tags:
+      - naming
+      - style
+    cross_refs:
+      - to_rule_id: MSD-NAME-001
+        relationship: related
+
+  - rule_id: MSD-FUNC-001
+    category: Function Design
+    source: project
+    severity: recommended
+    title: Prefer return values over output parameters
+    rationale: >
+      Return values make data flow explicit and the function signature self-documenting.
+      Output parameters (non-const references modified by the function) obscure which
+      arguments are inputs and which are outputs, require callers to declare variables
+      before the call, and prevent the use of const variables. Return structs group
+      related return values cleanly without the ambiguity of output parameters.
+    enforcement_notes: >
+      Flag functions with non-const reference parameters that are written to (but not
+      also read as input). Replace with return value or return struct. Exception:
+      parameters that serve as both input and output are acceptable as in/out refs.
+    good_example: |
+      struct BoundingBox { Coordinate min; Coordinate max; };
+
+      BoundingBox getBoundingBox() const {
+        return BoundingBox{boundingBoxMin_, boundingBoxMax_};
+      }
+
+      // Usage
+      auto bbox = hull.getBoundingBox();
+      float width = bbox.max.x() - bbox.min.x();
+    bad_example: |
+      void getBoundingBox(Coordinate& min, Coordinate& max) const {
+        min = boundingBoxMin_;
+        max = boundingBoxMax_;
+      }
+
+      // Usage — callers must pre-declare mutable variables
+      Coordinate min, max;
+      hull.getBoundingBox(min, max);
+    tags:
+      - function-design
+      - style
+
+  - rule_id: MSD-ORG-001
+    category: Code Organization
+    source: project
+    severity: recommended
+    title: One class per header file
+    rationale: >
+      One class per header reduces include dependencies, speeds up incremental builds,
+      and makes it easy to locate the definition of any class by name. Bundling multiple
+      classes in one header creates hidden coupling — changing one class forces
+      recompilation of everything that included the shared header.
+    enforcement_notes: >
+      Review header files with multiple class or struct definitions. Exceptions: small
+      helper structs tightly coupled to the main class (e.g., result types, parameter
+      structs) may coexist in the same header. Implementation details in anonymous
+      namespaces in .cpp files are fine.
+    good_example: |
+      // ConvexHull.hpp — contains only ConvexHull class
+      // CollisionDetector.hpp — contains only CollisionDetector class
+    bad_example: |
+      // Physics.hpp — contains ConvexHull, CollisionDetector, RigidBody, Constraint
+      // Hard to find, creates unnecessary coupling
+    tags:
+      - organization
+      - build-time
+
+  - rule_id: MSD-DOC-001
+    category: Documentation
+    source: project
+    severity: recommended
+    title: Public APIs require Doxygen comments
+    rationale: >
+      Doxygen comments on public APIs enable automated API documentation generation and
+      provide inline documentation to IDE users. Without them, callers must read the
+      implementation to understand preconditions, postconditions, and parameter semantics.
+      Ticket references in non-obvious implementations provide traceability back to
+      design decisions.
+    enforcement_notes: >
+      Audit public class members and free functions. Any public method, constructor, or
+      class without a /// or /** ... */ Doxygen comment is a violation. Ticket references
+      (// Ticket: {ticket-name}) should appear at non-obvious implementation sites.
+    good_example: |
+      /**
+       * @brief Compute the convex hull of a set of 3D points.
+       * @param points Input point cloud (must contain at least 4 non-coplanar points)
+       * @return Computed convex hull with volume, surface area, and centroid
+       * @throws std::invalid_argument if fewer than 4 points provided
+       * @ticket 0031_convex_hull_computation
+       */
+      ConvexHull computeHull(const std::vector<Coordinate>& points);
+    bad_example: |
+      // No documentation — caller must read implementation
+      ConvexHull computeHull(const std::vector<Coordinate>& points);
+    tags:
+      - documentation
+      - api

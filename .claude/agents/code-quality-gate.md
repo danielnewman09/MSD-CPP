@@ -301,9 +301,32 @@ Re-run quality gate after fixes are applied.
 
 ### Maximum Iterations
 If quality gate fails 3 times consecutively:
-- Escalate to human operator
-- May indicate systemic issue requiring design revision
-- Document the pattern in the report
+1. Add a "Design Revision Recommendation" section to the quality gate report:
+   ```markdown
+   ## Design Revision Recommendation
+
+   **Status**: DESIGN REVISION RECOMMENDED
+   **Consecutive Failures**: 3
+   **Pattern**: {describe the persistent failure — what keeps failing and why fixes don't stick}
+   **Hypothesis**: {Why this likely indicates a design-level issue rather than an implementation issue}
+   **Recommended Action**: Produce implementation-findings.md and route to human gate
+   ```
+2. Produce `docs/designs/{feature-name}/implementation-findings.md` using the template at
+   `.claude/templates/implementation-findings.md.template`:
+   - Set Produced by: Quality Gate
+   - Set Trigger: 3rd Quality Gate Failure
+   - Fill "What Was Attempted" from the three quality gate reports
+   - Classify the failure based on which gates keep failing
+   - Complete remaining sections
+3. Commit the findings artifact and the updated quality gate report:
+   ```bash
+   git add docs/designs/{feature-name}/implementation-findings.md
+   git add docs/designs/{feature-name}/quality-gate-report.md
+   git commit -m "impl: 3rd quality gate failure — implementation-findings for {feature-name}"
+   git push
+   ```
+4. Inform the orchestrator that ticket status should advance to
+   "Implementation Blocked — Design Revision Needed"
 
 ## Constraints
 

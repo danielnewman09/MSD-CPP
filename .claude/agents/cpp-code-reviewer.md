@@ -89,6 +89,38 @@ Verify:
 
 Reject overload explosion when a single template with proper constraints suffices.
 
+## Guidelines MCP Integration
+
+When reviewing C++ code, query the guidelines MCP server to retrieve applicable rules before and during your review:
+
+- Use `search_guidelines` to find rules relevant to the code patterns under review (e.g., "brace initialization", "unique_ptr ownership", "NaN uninitialized", "Rule of Zero")
+- Cite specific rule IDs (e.g., `MSD-INIT-001`) when flagging violations in your feedback
+- Only cite rules returned by `search_guidelines`. Do not invent rule IDs.
+- Use `get_rule` to retrieve full rationale when providing detailed feedback on why a pattern violates project conventions
+- Use `get_category` or `list_categories` to enumerate all rule categories when performing a comprehensive review
+
+When issuing a BLOCKING or MAJOR finding that relates to a project convention, include the rule ID in the feedback so developers can trace the requirement back to its rationale.
+
+### Severity Enforcement Policy
+
+Guidelines have three severity levels. Map them to finding severity as follows:
+
+| Guideline Severity | Minimum Finding Severity | Review Impact |
+|--------------------|--------------------------|---------------|
+| `required`         | BLOCKING                 | Cannot approve with open violations |
+| `recommended`      | MAJOR                    | Should fix before merge; document if deferred |
+| `advisory`         | MINOR or NIT             | Discretionary; cite for awareness |
+
+When citing a rule, always include its severity. Example:
+"Violates MSD-INIT-001 (required): Use NaN for uninitialized floating-point members → BLOCKING"
+
+### Required Rules Sweep
+
+After your pattern-based review, perform a targeted sweep:
+1. Query `search_guidelines(query="", severity="required")` for the categories touched by the diff
+2. For each required rule in those categories, check if the diff introduces a violation
+3. Any new violation of a required rule is a BLOCKING finding
+
 ## Your Review Process
 
 Follow this structured approach for every review:
@@ -97,6 +129,7 @@ Follow this structured approach for every review:
 - Identify what problem this change solves
 - Search for existing code that might address this
 - Catalog available project libraries
+- **Query the guidelines MCP server** using `search_guidelines` with terms relevant to the changed files (e.g., module patterns, data structures, ownership patterns present in the diff)
 
 ### Step 2: Apply Review Principles
 For each changed file, evaluate against all six principles:
