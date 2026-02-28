@@ -4,7 +4,7 @@
 - [x] Draft
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Prototype
+- [x] Design Approved — Ready for Prototype
 - [ ] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
 - [ ] Implementation Blocked — Design Revision Needed
@@ -174,10 +174,20 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
   (recommended: yes) and Phase B 3x3 vs tangent-only blocks (recommended: 3x3).
 
 ### Design Review Phase
-- **Started**:
-- **Completed**:
-- **Status**:
-- **Reviewer Notes**:
+- **Started**: 2026-02-27 00:00
+- **Completed**: 2026-02-27 00:00
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
+- **Status**: APPROVED WITH NOTES (one autonomous iteration)
+- **Artifacts**:
+  - `docs/designs/0084_block_pgs_solver_rework/design.md` (review appended)
+  - `docs/designs/0084_block_pgs_solver_rework/0084_block_pgs_solver_rework.puml` (FlattenedConstraints updated)
+- **Reviewer Notes**: Three interface-level issues resolved autonomously: updateVRes_ corrected
+  to 3-component block form per DD-0084-004; FlattenedConstraints penetrationDepths[] added per
+  human-resolved Open Question 1; convergenceTolerance_ renamed for MSD-NAME-001 compliance.
+  Physics rationale, DD-0084-001 through DD-0084-007, and testability all passed. Two 30-minute
+  prototypes specified (P1: Phase A restitution correctness; P2: vRes_ warm-start validation).
+  Both can be implemented as Catch2 tests within the implementation phase.
 
 ### Prototype Phase
 - **Started**:
