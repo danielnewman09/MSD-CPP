@@ -28,6 +28,10 @@ fastapi==0.129.0
 uvicorn==0.40.0
 pydantic==2.12.5
 
+# --- Workflow Engine MCP Server (Ticket: 0083a_workflow_engine_repo_extraction) ---
+# Extracted from scripts/workflow/ to a standalone package
+workflow-engine @ git+https://github.com/danielnewman09/workflow-engine.git@v0.1.0
+
 # --- Testing ---
 pytest==8.3.4
 httpx==0.28.1
