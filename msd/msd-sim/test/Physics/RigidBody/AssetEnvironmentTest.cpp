@@ -36,7 +36,7 @@ std::vector<Coordinate> createCubePoints(double size)
 // AssetEnvironment Tests
 // ============================================================================
 
-TEST(AssetEnvironmentTest, GetInverseMass_ReturnsZero_0032a)
+TEST(AssetEnvironmentTest, GetInverseMass_ReturnsZero)
 {
   // Test: getInverseMass() returns 0.0 for infinite mass
   auto points = createCubePoints(1.0);
@@ -48,7 +48,7 @@ TEST(AssetEnvironmentTest, GetInverseMass_ReturnsZero_0032a)
   EXPECT_DOUBLE_EQ(0.0, environment.getInverseMass());
 }
 
-TEST(AssetEnvironmentTest, GetInverseInertiaTensor_ReturnsZeroMatrix_0032a)
+TEST(AssetEnvironmentTest, GetInverseInertiaTensor_ReturnsZeroMatrix)
 {
   // Test: getInverseInertiaTensor() returns zero matrix for infinite inertia
   auto points = createCubePoints(1.0);
@@ -70,7 +70,7 @@ TEST(AssetEnvironmentTest, GetInverseInertiaTensor_ReturnsZeroMatrix_0032a)
   EXPECT_DOUBLE_EQ(0.0, inverseInertia(2, 2));
 }
 
-TEST(AssetEnvironmentTest, GetInertialState_ReturnsZeroVelocity_0032a)
+TEST(AssetEnvironmentTest, GetInertialState_ReturnsZeroVelocity)
 {
   // Test: getInertialState() returns static state with zero velocity
   auto points = createCubePoints(1.0);
@@ -98,7 +98,7 @@ TEST(AssetEnvironmentTest, GetInertialState_ReturnsZeroVelocity_0032a)
   EXPECT_DOUBLE_EQ(3.0, state.position.z());
 }
 
-TEST(AssetEnvironmentTest, GetCoefficientOfRestitution_DefaultValue_0032a)
+TEST(AssetEnvironmentTest, GetCoefficientOfRestitution_DefaultValue)
 {
   // Test: getCoefficientOfRestitution() returns default value (0.5)
   auto points = createCubePoints(1.0);
@@ -110,7 +110,7 @@ TEST(AssetEnvironmentTest, GetCoefficientOfRestitution_DefaultValue_0032a)
   EXPECT_DOUBLE_EQ(0.5, environment.getCoefficientOfRestitution());
 }
 
-TEST(AssetEnvironmentTest, SetCoefficientOfRestitution_UpdatesValue_0032a)
+TEST(AssetEnvironmentTest, SetCoefficientOfRestitution_UpdatesValue)
 {
   // Test: setCoefficientOfRestitution() updates the value
   auto points = createCubePoints(1.0);
@@ -123,7 +123,7 @@ TEST(AssetEnvironmentTest, SetCoefficientOfRestitution_UpdatesValue_0032a)
   EXPECT_DOUBLE_EQ(0.8, environment.getCoefficientOfRestitution());
 }
 
-TEST(AssetEnvironmentTest, SetCoefficientOfRestitution_ValidatesRange_0032a)
+TEST(AssetEnvironmentTest, SetCoefficientOfRestitution_ValidatesRange)
 {
   // Test: setCoefficientOfRestitution() validates range [0, 1]
   auto points = createCubePoints(1.0);
@@ -144,7 +144,7 @@ TEST(AssetEnvironmentTest, SetCoefficientOfRestitution_ValidatesRange_0032a)
                std::invalid_argument);
 }
 
-TEST(AssetEnvironmentTest, Constructor_WithRestitution_SetsValue_0032a)
+TEST(AssetEnvironmentTest, Constructor_WithRestitution_SetsValue)
 {
   // Test: Constructor with restitution parameter sets the value
   auto points = createCubePoints(1.0);

@@ -97,7 +97,7 @@ std::unique_ptr<FrictionConstraint> makeFrictionConstraint(
 // 1. Single contact normal — PGS converges to correct lambda
 // ============================================================================
 
-TEST(ProjectedGaussSeidelTest, SingleContactNormal_ConvergesPositiveLambda_0073)
+TEST(ProjectedGaussSeidelTest, SingleContactNormal_ConvergesPositiveLambda)
 {
   // One body approaching a static surface. PGS should produce lambda > 0.
   // Normal = {0,0,1} (A→B). J*v = -n·vA + n·vB.
@@ -129,7 +129,7 @@ TEST(ProjectedGaussSeidelTest, SingleContactNormal_ConvergesPositiveLambda_0073)
 // ============================================================================
 
 TEST(ProjectedGaussSeidelTest,
-     SingleContactWithFriction_BallProjection_0073)
+     SingleContactWithFriction_BallProjection)
 {
   // Body sliding in X with contact normal in Z. Friction should oppose motion.
   // Verify: ||lambda_t|| <= mu * lambda_n (ball-projection)
@@ -174,7 +174,7 @@ TEST(ProjectedGaussSeidelTest,
 // 3. Warm-start reduces sweeps vs cold-start
 // ============================================================================
 
-TEST(ProjectedGaussSeidelTest, WarmStart_ReducesSweepCount_0073)
+TEST(ProjectedGaussSeidelTest, WarmStart_ReducesSweepCount)
 {
   // With the correct warm-start lambda, PGS should converge in very few sweeps.
   // Cold-start from zero requires more sweeps.
@@ -215,7 +215,7 @@ TEST(ProjectedGaussSeidelTest, WarmStart_ReducesSweepCount_0073)
 // 4. Convergence tolerance — early exit before maxSweeps
 // ============================================================================
 
-TEST(ProjectedGaussSeidelTest, ConvergenceTolerance_EarlyExit_0073)
+TEST(ProjectedGaussSeidelTest, ConvergenceTolerance_EarlyExit)
 {
   ProjectedGaussSeidel pgs;
   pgs.setMaxSweeps(1000);
@@ -245,7 +245,7 @@ TEST(ProjectedGaussSeidelTest, ConvergenceTolerance_EarlyExit_0073)
 // 5. Degenerate contact (A_ii ~ 0) — skip without crash
 // ============================================================================
 
-TEST(ProjectedGaussSeidelTest, DegenerateContact_ZeroMass_NoNaNs_0073)
+TEST(ProjectedGaussSeidelTest, DegenerateContact_ZeroMass_NoNaNs)
 {
   // If both bodies have infinite mass (invMass = 0), A_ii = kRegularizationEpsilon
   // (tiny but nonzero). PGS should not crash and result should be finite.
@@ -277,7 +277,7 @@ TEST(ProjectedGaussSeidelTest, DegenerateContact_ZeroMass_NoNaNs_0073)
 // 6. Large friction island — converges, lambda matches ConstraintSolver
 // ============================================================================
 
-TEST(ProjectedGaussSeidelTest, LargeFrictionIsland_MatchesConstraintSolver_0073)
+TEST(ProjectedGaussSeidelTest, LargeFrictionIsland_MatchesConstraintSolver)
 {
   // Build a 7-contact system with friction (7 CC + 7 FC = 21 rows > kASMThreshold=20).
   // ConstraintSolver::solve() should dispatch to PGS.
@@ -370,13 +370,13 @@ TEST(ProjectedGaussSeidelTest, LargeFrictionIsland_MatchesConstraintSolver_0073)
 // 7. ConstraintSolver threshold dispatch — n=20 uses ASM, n=21 uses PGS
 // ============================================================================
 
-TEST(ConstraintSolverThresholdTest, kASMThresholdValue_Is20_0073)
+TEST(ConstraintSolverThresholdTest, kASMThresholdValue_Is20)
 {
   // Design specifies kASMThreshold = 20 (constexpr, publicly accessible)
   EXPECT_EQ(20u, ConstraintSolver::kASMThreshold);
 }
 
-TEST(ConstraintSolverThresholdTest, ThresholdDispatchASM_20Rows_0073)
+TEST(ConstraintSolverThresholdTest, ThresholdDispatchASM_20Rows)
 {
   // 20 contacts (no friction) = 20 rows = exactly kASMThreshold.
   // Should use ASM path: iterations field is ASM iteration count (finite).
@@ -431,7 +431,7 @@ TEST(ConstraintSolverThresholdTest, ThresholdDispatchASM_20Rows_0073)
     << "ASM iterations should be bounded by 2*numContacts";
 }
 
-TEST(ConstraintSolverThresholdTest, ThresholdDispatchPGS_21Rows_0073)
+TEST(ConstraintSolverThresholdTest, ThresholdDispatchPGS_21Rows)
 {
   // 7 contacts + 7 frictions = 21 rows > kASMThreshold=20.
   // Should use PGS path: iterations field is sweep count.
@@ -501,7 +501,7 @@ TEST(ConstraintSolverThresholdTest, ThresholdDispatchPGS_21Rows_0073)
 // 8. Empty constraint list — both PGS and solver handle gracefully
 // ============================================================================
 
-TEST(ProjectedGaussSeidelTest, EmptyConstraints_ReturnsZeroLambdas_0073)
+TEST(ProjectedGaussSeidelTest, EmptyConstraints_ReturnsZeroLambdas)
 {
   ProjectedGaussSeidel pgs;
 

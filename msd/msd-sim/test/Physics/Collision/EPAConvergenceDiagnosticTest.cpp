@@ -45,7 +45,7 @@ std::vector<Coordinate> createCubePoints(double size)
 // Phase 1: Reproduce the H6 EPA convergence failure directly
 // ============================================================================
 
-TEST(EPAConvergenceDiagnostic, H6_TwoCubes_ShallowOverlap)
+TEST(EPAConvergenceDiagnostic, TwoCubes_ShallowOverlap)
 {
   // Exact H6 scenario: two 1m cubes with 0.01m overlap along X-axis
   auto cubePointsA = createCubePoints(1.0);
@@ -560,7 +560,7 @@ TEST(EPAConvergenceDiagnostic, ExactSimulationQuaternionReproduction)
 // Phase 4: Directly probe the exact post-frame-1 configuration
 // ============================================================================
 
-TEST(EPAConvergenceDiagnostic, H6_PostPositionCorrection_DirectProbe)
+TEST(EPAConvergenceDiagnostic, PostPositionCorrection_DirectProbe)
 {
   // After frame 1, PositionCorrector shifts objects:
   // A: 0.0 -> -0.0005, B: 0.99 -> 0.9905

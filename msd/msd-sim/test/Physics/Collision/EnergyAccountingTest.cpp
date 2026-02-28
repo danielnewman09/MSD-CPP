@@ -44,7 +44,7 @@ double computeSystemEnergy(const WorldModel& world)
 // F1: Free-falling sphere — total energy constant (no collision)
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, EnergyAccountingTest_F1_FreeFall_TotalEnergyConstant)
+TEST_F(ReplayEnabledTest, EnergyAccountingTest_FreeFall_TotalEnergyConstant)
 {
   // Ticket: 0039b_linear_collision_test_suite
 
@@ -79,7 +79,7 @@ TEST_F(ReplayEnabledTest, EnergyAccountingTest_F1_FreeFall_TotalEnergyConstant)
 // F2: Elastic bounce (e=1) — post-bounce KE equals pre-bounce KE
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, EnergyAccountingTest_F2_ElasticBounce_KEConserved)
+TEST_F(ReplayEnabledTest, EnergyAccountingTest_ElasticBounce_KEConserved)
 {
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
@@ -155,7 +155,7 @@ TEST_F(ReplayEnabledTest, EnergyAccountingTest_F2_ElasticBounce_KEConserved)
 // F3: Inelastic bounce (e=0.5) — post-bounce KE = e^2 * pre-bounce KE
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, EnergyAccountingTest_F3_InelasticBounce_KEReducedByESquared)
+TEST_F(ReplayEnabledTest, EnergyAccountingTest_InelasticBounce_KEReducedByESquared)
 {
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
@@ -220,7 +220,7 @@ TEST_F(ReplayEnabledTest, EnergyAccountingTest_F3_InelasticBounce_KEReducedByESq
 // F5: Multi-bounce monotonic energy decrease (e=0.8)
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, EnergyAccountingTest_F5_MultiBounce_EnergyDecreases)
+TEST_F(ReplayEnabledTest, EnergyAccountingTest_MultiBounce_EnergyDecreases)
 {
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 

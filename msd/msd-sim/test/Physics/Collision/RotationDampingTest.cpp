@@ -56,7 +56,7 @@ double computeSystemEnergy(const WorldModel& world)
 // Validates: Rotational restitution -- rocking amplitude decreases
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, RotationDampingTest_C2_RockingCube_AmplitudeDecreases)
+TEST_F(ReplayEnabledTest, RotationDampingTest_RockingCube_AmplitudeDecreases)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests
@@ -163,7 +163,7 @@ TEST_F(ReplayEnabledTest, RotationDampingTest_C2_RockingCube_AmplitudeDecreases)
 // Validates: Multi-contact stability
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, RotationDampingTest_C3_TiltedCubeSettles_ToFlatFace)
+TEST_F(ReplayEnabledTest, RotationDampingTest_TiltedCubeSettles_ToFlatFace)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests
