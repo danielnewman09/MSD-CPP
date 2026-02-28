@@ -1,0 +1,138 @@
+@startuml 0083_database_agent_orchestration
+!theme plain
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 40
+
+title Database-Backed Multi-Agent Orchestration\n(Standalone Engine + Consuming Repo)
+
+package "workflow-engine (standalone repo)" as engine_repo {
+    package "engine/" as engine_pkg {
+        component "schema.py\n(SQLite DDL)" as schema
+        component "config.py\n(reads .workflow/)" as config
+        component "scheduler.py\n(phase seeder)" as scheduler
+        component "claim.py\n(atomic claiming)" as claim
+        component "state_machine.py\n(transitions)" as state_machine
+        component "markdown_sync.py\n(import/export)" as sync
+        component "audit.py\n(logging)" as audit
+    }
+
+    component "MCP Server\n(server.py)" as mcp_server {
+        portin "register_agent" as p_register
+        portin "claim_phase" as p_claim
+        portin "complete_phase" as p_complete
+        portin "list_available_work" as p_list
+        portin "request_human_review" as p_review
+        portin "declare_files" as p_files
+        portin "update_ticket_metadata" as p_meta
+    }
+
+    component "CLI\n(cli.py)" as cli
+
+    database "workflow.db\n(SQLite + WAL)" as db {
+        rectangle "tickets" as tbl_tickets
+        rectangle "phases" as tbl_phases
+        rectangle "human_gates" as tbl_gates
+        rectangle "agents" as tbl_agents
+        rectangle "file_locks" as tbl_locks
+        rectangle "audit_log" as tbl_audit
+    }
+}
+
+package "MSD-CPP (consuming repo)" as msd_repo {
+    package ".workflow/" as workflow_config {
+        artifact "phases.yaml\n(phase definitions\nagent type mappings)" as phases_yaml
+        artifact "config.yaml\n(timeouts, paths\npriority rules)" as config_yaml
+    }
+
+    package "Ticket Content (Git)" as content {
+        artifact "tickets/*.md" as tickets_md
+        artifact "docs/designs/*/\ndesign.md" as designs
+        artifact ".claude/agents/*.md\n(agent definitions)" as agent_defs
+        artifact ".claude/templates/\nticket.md.template" as template
+    }
+
+    artifact ".mcp.json\n(registers workflow\nMCP server)" as mcp_json
+}
+
+package "Agents (Independent Processes)" as agents {
+    component "cpp-architect" as agent_arch <<agent>>
+    component "design-reviewer" as agent_review <<agent>>
+    component "cpp-prototyper" as agent_proto <<agent>>
+    component "cpp-implementer" as agent_impl <<agent>>
+    component "cpp-test-writer" as agent_test <<agent>>
+    component "code-quality-gate" as agent_qa <<agent>>
+    component "impl-reviewer" as agent_code_rev <<agent>>
+    component "docs-updater" as agent_docs <<agent>>
+}
+
+actor "Human\nReviewer" as human
+
+cloud "Docker / pip" as dist
+
+' Distribution
+engine_repo ..> dist : published as\nDocker image\nor pip package
+dist ..> msd_repo : consumed via\n.mcp.json
+
+' Config reads
+config --> phases_yaml : reads phase\ndefinitions
+config --> config_yaml : reads\nconfiguration
+mcp_server --> config : loads project\nconfiguration
+
+' Scheduler interactions
+scheduler --> db : seed phases\nresolve availability\nstale cleanup
+scheduler --> tickets_md : parse metadata\n& status
+sync --> tickets_md : update status\ncheckboxes
+sync --> db : read phase\ncompletion
+
+' Engine internal
+mcp_server --> claim : atomic claiming
+mcp_server --> state_machine : validate transitions
+mcp_server --> audit : log transitions
+claim --> db
+state_machine --> db
+audit --> db
+scheduler --> schema : ensure tables
+
+' Agent interactions with MCP server
+agent_arch --> mcp_server : claim/complete
+agent_review --> mcp_server : claim/complete
+agent_proto --> mcp_server : claim/complete
+agent_impl --> mcp_server : claim/complete
+agent_test --> mcp_server : claim/complete
+agent_qa --> mcp_server : claim/complete
+agent_code_rev --> mcp_server : claim/complete
+agent_docs --> mcp_server : claim/complete
+
+' Agents produce artifacts in consuming repo
+agent_arch --> designs : write\ndesign.md
+agent_impl --> content : write\nsource files
+
+' Human interactions
+human --> cli : approve/reject\ngates & query
+cli --> db : update gate\nstatus
+
+note right of db
+  **Phase State Machine**
+  pending → blocked → available
+  available → claimed → running
+  running → completed | failed
+  pending → skipped
+end note
+
+note bottom of agents
+  Agents run independently.
+  Discover work via MCP tools.
+  Multiple agents run concurrently
+  on different tickets.
+end note
+
+note right of workflow_config
+  Project-specific configuration.
+  Engine reads this to understand
+  the consuming repo's lifecycle.
+  Same pattern as .guidelines/
+  in ticket 0081.
+end note
+
+@enduml
