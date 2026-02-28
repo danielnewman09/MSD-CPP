@@ -5,7 +5,7 @@
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Prototype
-- [ ] Prototype Complete — Awaiting Review
+- [x] Prototype Complete — Awaiting Review
 - [ ] Ready for Implementation
 - [ ] Implementation Blocked — Design Revision Needed
 - [ ] Implementation Complete — Awaiting Test Writing
@@ -186,13 +186,28 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
 - **Reviewer Notes**: Root cause analysis accepted as rigorous and well-supported. Fix F1 (Phase B-only cache storage) is the correct surgical fix. Notes: (1) `warmStartLambdas` in `ConstraintSolver::SolveResult` should be defensively initialized to `lambdas` at top of solve() to cover all code paths; (2) Fix F3 comment update should be included in impl commit; (3) three-step implementation order is mandatory. Prototype P1 (warm-start disable diagnostic) must run before implementing Fix F1.
 
 ### Prototype Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-02-28 06:00
+- **Completed**: 2026-02-28 06:30
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
 - **Prototypes**:
-  - P1: {name} — {result}
+  - P1: Warm-start disable diagnostic — NEGATIVE (hypothesis refuted)
 - **Artifacts**:
   - `docs/designs/0084_block_pgs_solver_rework/prototype-results.md`
-- **Notes**:
+  - `docs/designs/0084_block_pgs_solver_rework/iteration-log.md`
+  - `prototypes/0084_block_pgs_solver_rework/p1_warmstart_disable/patch.diff`
+- **Notes**: P1 result is definitive: setting `hasWarmStart = false` in `BlockPGSSolver::solve()`
+  produces identical failure values for all 12 tests. The Z-velocity injection for oblique
+  sliding contacts (21.1 m/s for Oblique45, 43.4 m/s for HighSpeedOblique) is unchanged.
+  The failure occurs within 10 frames — before warm-start could contribute. Root cause is
+  the K_nt off-diagonal coupling in Phase B's `sweepOnce`: `K_inv(0,1)*vErr(1)` and
+  `K_inv(0,2)*vErr(2)` drive a non-zero normal correction `unconstrained(0)` on every frame
+  even when `vErr(0) = 0` (cube not penetrating floor). This generates upward velocity
+  via `updateVRes3` linear term `-n * dN`. This is a per-frame Phase B problem, not a
+  cross-frame warm-start problem. The design's Fix F1 (Phase B-only cache storage) is
+  not incorrect but does not address the actual root cause. **Design revision required**
+  before implementation. Recommended: investigate zeroing `unconstrained(0)` when
+  `vErr(0) >= 0` (contact not approaching) as the minimal fix candidate.
 
 ### Implementation Phase
 - **Started**:
