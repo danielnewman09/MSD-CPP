@@ -1,0 +1,56 @@
+@startuml 0084a-tilted-drop-rotation-tests
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+skinparam package {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+}
+
+package "msd-sim/test/Physics/Collision" <<new>> {
+    class TiltedDropTest <<new>> {
+        ' 9 test cases — rotation axis isolation after tilted cube drop
+        ' --
+        ' X-axis single-tilt (3 tests)
+        + TiltedDrop_X_Small_DominantAxisX()
+        + TiltedDrop_X_Medium_DominantAxisX()
+        + TiltedDrop_X_Large_DominantAxisX()
+        ' Y-axis single-tilt (3 tests)
+        + TiltedDrop_Y_Small_DominantAxisY()
+        + TiltedDrop_Y_Medium_DominantAxisY()
+        + TiltedDrop_Y_Large_DominantAxisY()
+        ' Combined X+Y tilt (3 tests)
+        + TiltedDrop_XY_Small_BothAxesActive()
+        + TiltedDrop_XY_Medium_BothAxesActive()
+        + TiltedDrop_XY_Large_BothAxesActive()
+    }
+
+    class "CMakeLists.txt" as CMake <<modified>> {
+        + TiltedDropTest.cpp added to target_sources
+    }
+}
+
+package "msd-sim/test/Replay" {
+    class ReplayEnabledTest {
+        + spawnInertial()
+        + spawnEnvironment()
+        + step()
+        + world()
+        + recordingPath()
+    }
+}
+
+TiltedDropTest --|> ReplayEnabledTest : fixture base
+TiltedDropTest ..> CMake : registered in
+
+note right of TiltedDropTest
+  Assertions per test:
+  1. No NaN in position
+  2. Energy non-increasing (10% tol)
+  3. Dominant axis matches tilt axis
+  4. Cross-axis omega < 0.5 x dominant
+end note
+
+@enduml
