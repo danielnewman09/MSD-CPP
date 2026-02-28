@@ -7,15 +7,6 @@
         "build/Debug/docs/codebase.db"
       ]
     },
-    "traceability": {
-      "command": "python/.venv/bin/python3",
-      "args": [
-        "scripts/traceability/traceability_server.py",
-        "build/Debug/docs/traceability.db",
-        "--codebase-db",
-        "build/Debug/docs/codebase.db"
-      ]
-    },
     "replay": {
       "command": "python/.venv/bin/python3",
       "args": [
@@ -33,7 +24,8 @@
       ]
     },
     "workflow": {
-      "url": "http://localhost:8081/sse"
+      "type": "http",
+      "url": "http://localhost:8081/mcp"
     }
   }
 }
