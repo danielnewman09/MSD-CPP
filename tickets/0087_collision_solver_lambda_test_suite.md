@@ -5,8 +5,8 @@
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Prototype
-- [ ] Prototype Complete — Awaiting Review
-- [ ] Ready for Implementation
+- [x] Prototype Complete — Awaiting Review
+- [x] Ready for Implementation
 - [ ] Implementation Complete — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Merged / Complete

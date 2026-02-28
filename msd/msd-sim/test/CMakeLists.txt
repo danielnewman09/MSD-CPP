@@ -12,6 +12,7 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
 add_subdirectory(DataRecorder)
 add_subdirectory(Diagnostics)
 add_subdirectory(Environment)
+add_subdirectory(Helpers)
 add_subdirectory(Physics)
 add_subdirectory(DataTypes)
 add_subdirectory(Replay)

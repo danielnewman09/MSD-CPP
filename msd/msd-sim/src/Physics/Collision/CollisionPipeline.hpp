@@ -27,6 +27,13 @@
 #include "msd-sim/src/Physics/RigidBody/AssetInertial.hpp"
 #include "msd-sim/src/Physics/RigidBody/InertialState.hpp"
 
+// Forward declaration for friend class in test helper
+// Ticket: 0087_collision_solver_lambda_test_suite
+namespace msd_sim::test
+{
+class CollisionScenario;
+}  // namespace msd_sim::test
+
 namespace msd_sim
 {
 
@@ -445,7 +452,17 @@ private:
   std::unordered_set<const Constraint*> islandConstraintSet_;
 
   // Friend declarations for unit testing
+  // NOTE: CollisionPipelineTest is a GTest suite name (TEST() macro), NOT a
+  // C++ class. This declaration is dead code — it grants access to a symbol
+  // that does not exist as a class. Cleanup is tracked separately.
   friend class CollisionPipelineTest;
+
+  // msd_sim::test::CollisionScenario is a proper C++ class
+  // (msd-sim/test/Helpers/CollisionScenario.hpp) that calls protected
+  // sub-phase methods to run isolated single-step tests and capture
+  // SolveResult for direct lambda inspection.
+  // Ticket: 0087_collision_solver_lambda_test_suite
+  friend class msd_sim::test::CollisionScenario;
 };
 
 }  // namespace msd_sim

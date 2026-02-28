@@ -14,6 +14,8 @@ target_sources(${MSD_SIM_TEST_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/RotationalEnergyTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/RotationDampingTest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TangentBasisTest.cpp
+    # Ticket: 0087_collision_solver_lambda_test_suite
+    ${CMAKE_CURRENT_SOURCE_DIR}/SolverInfrastructureTest.cpp
 )
 
 
