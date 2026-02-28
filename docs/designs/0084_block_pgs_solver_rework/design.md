@@ -807,3 +807,103 @@ into Phase A or the restitution/spin coupling mechanism.
 - RockingCube_AmplitudeDecreases: PASS (was fixed by P2's normal decoupling)
 - TimestepSensitivity_ERPAmplification: PASS (was fixed by P2's normal decoupling)
 - Zero new regressions in the full test suite
+
+---
+
+## Design Revision 4 (Post-P4: Velocity-Gated Clamp)
+
+**Trigger**: Prototype P4 (asymmetric decoupling) introduced same 3 regressions as P2 because
+`1/K(0,0)` != `K_inv(0,0)` changes the Coulomb cone bound.
+**Human decision**: See ticket feedback section "Feedback on Design Revision 4".
+**Approved approach**: Velocity-gated clamp — use full coupled K_inv solve, clamp normal
+correction to be non-positive when contact is not penetrating (vErr(0) >= 0).
+
+### The Velocity-Gated Clamp Approach
+
+Revert P4 asymmetric decoupling. Restore full coupled K_inv solve in `sweepOnce`. After the
+coupled computation, add a one-sided clamp on the normal correction row:
+
+```cpp
+Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
+// Velocity-gated clamp: when contact is not penetrating (vErr(0) >= 0),
+// normal impulse correction must not increase (push harder)
+if (vErr(0) >= 0.0) {
+    unconstrained(0) = std::min(unconstrained(0), 0.0);
+}
+```
+
+**Rationale (human)**: Preserves exact K_inv(0,0) for Coulomb cone bound (corrects the P4
+problem where `1/K(0,0)` changed the cone), while preventing K_nt coupling from growing
+lambda_n when the contact is not penetrating.
+
+**sweepOnce signature**: Reverted to pre-P2 form — only `blockKInvs` parameter (no `blockKs`).
+
+### Prototype P5 Result: NEGATIVE — worse than P4 (14 failures vs P4's 8 failures)
+
+**Total tests**: 780. Pass: 766. Fail: 14.
+
+| Test | P4 | P5 |
+|------|----|----|
+| SlidingCubeX_DeceleratesAndStops | FAIL | FAIL |
+| SlidingCubeY_DeceleratesAndStops | FAIL | FAIL |
+| FrictionProducesTippingTorque | FAIL | PASS (P5 fixed) |
+| Oblique45_Medium | PASS | FAIL (P5 re-broke) |
+| Oblique45 | PASS | FAIL (P5 re-broke) |
+| HighSpeedOblique | PASS | FAIL (P5 re-broke) |
+| FrictionWithRestitution_BounceThenSlide | PASS | PASS |
+| ERP_Amplification | PASS | FAIL (P5 re-broke) |
+| RockingCube_AmplitudeDecreases | PASS | FAIL (P5 re-broke) |
+| SlidingCube_KineticEnergyDecreases | PASS | FAIL (new regression) |
+| SlidingCube_ConeCompliantEveryFrame_HighSpeed | PASS | FAIL (new regression) |
+| InelasticBounce / PerfectlyElastic / EqualMassElastic | FAIL | FAIL (unfixed) |
+| SphereDrop_NoRotation / ZeroGravity_Rotational | FAIL | FAIL (unfixed) |
+
+P5 is definitively worse than P4: it fixes TippingTorque but re-breaks 6 tests P4 had
+fixed and adds 2 new regressions (KineticEnergyDecreases, HighSpeed).
+
+### Root Cause of P5 Failure
+
+The velocity-gated clamp condition `vErr(0) >= 0` applies identically to BOTH:
+1. Oblique contacts — where K_nt coupling injects net upward energy (the bug we want to fix)
+2. Axis-aligned corner contacts — where K_nt coupling provides CORRECT normal force
+   distribution across 4 symmetric contacts (physics we must preserve)
+
+Both cases have `vErr(0) = 0` in steady-state sliding. The clamp cannot distinguish them.
+
+For axis-aligned SlidingCubeX in steady state:
+- K_inv(0,1:2)*vErr_t provides the correct K_nt contribution to per-contact normal force
+- This term is part of the coupled physics that correctly distributes load across 4 contacts
+- By clamping it to 0 when `vErr(0) >= 0`, the clamp removes CORRECT physics
+
+For high-speed sliding (HighSpeed test): K_nt contribution maintains adequate lambda_n for
+the friction bound `mu * lambda_n`. Without it, the cube decelerates less, energy is not
+properly dissipated, and the cube fails to stop.
+
+### Critical Finding: The Velocity-Gate Condition is Insufficient
+
+The velocity-gate condition `vErr(0) >= 0` cannot separate oblique energy injection from
+axis-aligned force balance because BOTH have `vErr(0) ≈ 0` in steady-state sliding.
+
+The oblique case differs in that the K_nt contributions sum to a NET positive lambda_n growth
+across all contacts (net energy injection). The axis-aligned case has symmetric K_nt
+contributions that sum to near-zero net lambda_n change (correct force distribution).
+
+This suggests that a CONTACT-LEVEL clamp is insufficient — the distinction between oblique
+and axis-aligned is at the SYSTEM level (sum over contacts), not per-contact.
+
+### Status After Revision 4
+
+| Fix | Status | Effect |
+|-----|--------|--------|
+| Fix F2 (phaseBLambdas cache) | Implemented | Correct semantic improvement; no regressions |
+| Velocity-gated clamp (P5) | NEGATIVE | Worse than P4: re-breaks oblique tests P4 had fixed |
+| Asymmetric decoupling (P4) | NEGATIVE | Fixes oblique but regresses SlidingCubeX/Y |
+| Decoupled solve (P2) | NEGATIVE | Fixes oblique but regresses SlidingCubeX/Y + TippingTorque |
+
+All four approaches share the same structural incompatibility: the K_nt coupling in the 3x3
+block solve is simultaneously responsible for:
+1. The energy injection bug (oblique sliding)
+2. The correct force balance (axis-aligned corner contacts)
+
+A solution must find a way to separate these two effects. Current code is at P5 state
+(velocity-gated clamp, NEGATIVE). Design Revision 5 required.

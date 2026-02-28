@@ -339,3 +339,85 @@ Possible directions:
    guard: if vErr(0) >= -epsilon (contact not penetrating), zero the normal correction
    delta_lambda_n but keep full tangential correction.
 
+---
+
+## Iteration 6 — Prototype P5: Velocity-Gated Clamp
+
+**Date**: 2026-02-28
+**Phase**: Prototype (Design Revision 4)
+**Change**: Reverted P4 asymmetric decoupling. Restored full coupled K_inv solve
+(`unconstrained = blockKInvs[ci] * (-vErr)`). Added velocity-gated clamp on row 0:
+```cpp
+if (vErr(0) >= 0.0) {
+    unconstrained(0) = std::min(unconstrained(0), 0.0);
+}
+```
+Signature reverted to pre-P2: `sweepOnce(contacts, blockKInvs, lambda, ...)` (single blockKInvs parameter).
+**Goal**: Fix oblique sliding tests without regressing SlidingCubeX/TippingTorque
+
+### Result: NEGATIVE — worse than P4 (14 failures vs P4's 8 failures)
+
+**Total tests**: 780. Pass: 766. Fail: 14.
+
+**Comparison vs P4 (asymmetric decoupling)**:
+
+| Test Category | P4 Result | P5 Result |
+|---------------|-----------|-----------|
+| SlidingCubeX lateral drift | FAIL (regression) | FAIL (regression) |
+| SlidingCubeY lateral drift | FAIL (regression) | FAIL (regression) |
+| FrictionProducesTippingTorque | FAIL (regression) | PASS (fixed by P5) |
+| Oblique45_Slow | PASS (P4 fixed) | PASS |
+| Oblique45_Medium | PASS (P4 fixed) | FAIL (regression introduced by P5) |
+| Oblique45 | PASS (P4 fixed) | FAIL (regression introduced by P5) |
+| HighSpeedOblique | PASS (P4 fixed) | FAIL (regression introduced by P5) |
+| FrictionWithRestitution_BounceThenSlide | PASS (P4 fixed) | PASS |
+| ERP_Amplification | PASS (P4 fixed) | FAIL (regression introduced by P5) |
+| RockingCube_AmplitudeDecreases | PASS (P4 fixed) | FAIL (regression introduced by P5) |
+| SlidingCube_KineticEnergyDecreases | PASS (was passing) | FAIL (new regression from P5) |
+| SlidingCube_ConeCompliantEveryFrame_HighSpeed | PASS (was passing) | FAIL (new regression from P5) |
+| InelasticBounce | FAIL (unfixed) | FAIL (unfixed) |
+| PerfectlyElastic | FAIL (unfixed) | FAIL (unfixed) |
+| EqualMassElastic | FAIL (unfixed) | FAIL (unfixed) |
+| SphereDrop_NoRotation | FAIL (unfixed) | FAIL (unfixed) |
+| ZeroGravity_Rotational | FAIL (unfixed) | FAIL (unfixed) |
+
+**P5 is a net regression vs P4**: fixes TippingTorque but re-breaks 6 tests P4 had fixed, and adds 2 new regressions.
+
+### Root Cause Analysis
+
+The velocity-gated clamp has the same structural incompatibility as P2 and P4, but from a different direction:
+
+**For oblique sliding tests** (the tests P5 re-broke): The clamp `min(unconstrained(0), 0.0)` when `vErr(0) >= 0` blocks ALL positive corrections to lambda_n during steady-state sliding. For axis-aligned sliding (SlidingCubeX), K_inv(0,1:2)*vErr_t provides BOTH the spurious energy injection for oblique contacts AND the correct force balance for axis-aligned corner contacts. The clamp cannot distinguish between these two cases — it kills both.
+
+**Why P5 broke HighSpeed (axis-aligned X, high speed)**: The cube slides fast in X, contacts are near-vertical. During high-speed sliding, vErr(0) ≈ 0 on most frames. The clamp zeros the K_nt contribution to normal force on these frames. With reduced lambda_n, the friction bound `mu * lambda_n` shrinks, the cube decelerates less, and energy is not properly dissipated. The cube fails to come to rest.
+
+**Why P5 fixed TippingTorque but P4 didn't**: The tipping torque test requires the cube to tip over Y axis while sliding in X. The velocity-gated clamp does NOT zero row 0 when contact IS actively developing (`vErr(0) < 0`). During the initial contact establishment phase, the full K_inv(0,0) is preserved. P4's asymmetric decoupling always used 1/K(0,0) < K_inv(0,0), giving a smaller normal impulse from the start. P5 preserves K_inv(0,0) during penetrating frames. This distinction is what fixes TippingTorque.
+
+**The fundamental tension (reconfirmed)**: For axis-aligned sliding in steady state:
+- `vErr(0) = 0` in steady state (no penetration)
+- The K_nt coupling gives `unconstrained(0) = K_inv(0,1)*(-vErr(1)) + K_inv(0,2)*(-vErr(2))`
+- For SlidingCubeX: this term contributes CORRECTLY to the net normal force distribution across 4 contacts (it's part of the correct coupled physics)
+- For ObliqueCube: this term injects NET upward momentum (the bug)
+- Both cases have `vErr(0) = 0` — the velocity-gated condition cannot distinguish them
+
+### What P4 Got Right that P5 Lost
+
+P4's asymmetric approach zeroed the K_inv(0,1:2) coupling (same as P5) BUT also preserved the MAGNITUDE of normal response using 1/K(0,0) rather than K_inv(0,0). The difference: for the tipping torque test, 1/K(0,0) > K_inv(0,0), which gave TOO MUCH normal impulse and over-expanded the cone. For axis-aligned sliding, the problem was the same — 1/K(0,0) != K_inv(0,0) changed the cone bound.
+
+P5 correctly preserves K_inv(0,0) during penetrating frames. But during the steady-state `vErr(0) = 0` regime, P5 gives ZERO additional normal impulse from K_nt coupling, while the coupled solve gives a positive K_nt contribution. For SlidingCubeX, this K_nt contribution in steady state is part of the correct physics — removing it causes drift.
+
+### Implication for Design Revision 5
+
+The velocity-gated clamp is provably wrong for axis-aligned sliding contacts. The ONLY correct approach must either:
+1. Distinguish oblique from axis-aligned geometry (not velocity-based)
+2. Find a way to allow the CORRECT K_nt coupling while blocking the WRONG coupling
+3. Accept that oblique sliding requires a completely different algorithm than axis-aligned
+
+Key observation: The oblique case injects NET upward momentum across ALL contacts. The axis-aligned case produces self-canceling K_nt contributions across symmetric contacts (the 4 corners of a cube sliding in X have symmetric vErr vectors that sum to zero net upward impulse).
+
+**Potential Design Revision 5 direction**: Accumulated lambda_n clamping. Rather than clamping the correction `delta_lambda_n`, clamp the ACCUMULATED `lambda_n` to not exceed what the pure K_inv(0,0) path would give, computed from the warm-start. This preserves the frame-by-frame K_nt contribution structure while preventing unbounded growth.
+
+### Next Step
+
+Design Revision 5 required. Prototype P5 is definitively NEGATIVE. The velocity-gated clamp approach fails because it cannot distinguish CORRECT K_nt contributions (axis-aligned, self-canceling) from INCORRECT K_nt contributions (oblique, net energy injection).
+

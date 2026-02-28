@@ -13,6 +13,7 @@
 - [x] Implementation Blocked — Design Revision Needed (Revision 2 required)
 - [x] Design Revision 2 Complete — Fix F2 Implemented (Prototype P3 NEGATIVE — Revision 3 required)
 - [x] Design Revision 3 Complete — Asymmetric Decoupling (Prototype P4 PARTIAL — Revision 4 required)
+- [x] Design Revision 4 Complete — Velocity-Gated Clamp (Prototype P5 NEGATIVE — Revision 5 required)
 - [ ] Implementation Complete — Awaiting Test Writing
 - [ ] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
@@ -29,8 +30,8 @@
 - **Generate Tutorial**: No
 - **Requires Math Design**: No
 - **GitHub Issue**: #112
-- **Design Revision Count**: 3
-- **Previous Design Approaches**: [Warm-start contamination (Phase A bounce in cache) — refuted by Prototype P1; Full decoupled K_tt solve — fixes oblique but breaks SlidingCubeX/TippingTorque, refuted by Prototype P2; Fix F2 warm-start cache only — no test changes, refuted by Prototype P3; Asymmetric decoupling (scalar row 0, K_inv rows 1-2) — same 3 regressions as P2 because 1/K(0,0) != K_inv(0,0) changes cone bound, refuted by Prototype P4]
+- **Design Revision Count**: 4
+- **Previous Design Approaches**: [Warm-start contamination (Phase A bounce in cache) — refuted by Prototype P1; Full decoupled K_tt solve — fixes oblique but breaks SlidingCubeX/TippingTorque, refuted by Prototype P2; Fix F2 warm-start cache only — no test changes, refuted by Prototype P3; Asymmetric decoupling (scalar row 0, K_inv rows 1-2) — same 3 regressions as P2 because 1/K(0,0) != K_inv(0,0) changes cone bound, refuted by Prototype P4; Velocity-gated clamp (min(unconstrained(0), 0.0) when vErr(0)>=0) — NEGATIVE, fixes TippingTorque but re-breaks oblique tests P4 had fixed plus 2 new regressions, refuted by Prototype P5]
 
 ---
 
@@ -257,6 +258,32 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
   - `docs/designs/0084_block_pgs_solver_rework/design.md` (Revision 3 section appended)
   - `docs/designs/0084_block_pgs_solver_rework/iteration-log.md` (Iteration 5 added)
 
+### Design Revision Phase (Revision 4)
+- **Started**: 2026-02-28 21:00
+- **Completed**: 2026-02-28 22:00
+- **Revision Number**: 4
+- **Trigger**: Prototype P4 — asymmetric decoupling same 3 regressions as P2
+- **Human Gate Decision**: Approved velocity-gated clamp
+- **Prototype P5 Result**: NEGATIVE — 14 failures (vs P4's 8 failures)
+  - Fixed: FrictionProducesTippingTorque (P4 regression)
+  - Re-broke 6 tests P4 had fixed: Oblique45_Medium, Oblique45, HighSpeedOblique, ERP, RockingCube, (BounceThenSlide remains passing)
+  - New regressions: SlidingCube_KineticEnergyDecreases, SlidingCube_ConeCompliantEveryFrame_HighSpeed
+  - Still failing: InelasticBounce, PerfectlyElastic, EqualMassElastic, SphereDrop, ZeroGravity
+- **Root cause of P5 failure**: `vErr(0) >= 0` cannot distinguish CORRECT K_nt contributions
+  (axis-aligned corner contacts, self-canceling) from INCORRECT K_nt contributions (oblique,
+  net energy injection). Both have vErr(0) ≈ 0 in steady-state sliding. The clamp removes
+  correct physics needed for lambda_n maintenance in HighSpeed and KineticEnergyDecreases.
+- **Conclusion**: All 4 approaches (P2, P3, P4, P5) share the same structural incompatibility:
+  K_nt coupling provides BOTH the energy injection bug AND the correct force balance.
+  A per-contact velocity gate cannot separate them. Design Revision 5 required.
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
+- **Artifacts**:
+  - `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.cpp` (P5: velocity-gated clamp)
+  - `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.hpp` (sweepOnce signature reverted to pre-P2)
+  - `docs/designs/0084_block_pgs_solver_rework/design.md` (Design Revision 4 section appended)
+  - `docs/designs/0084_block_pgs_solver_rework/iteration-log.md` (Iteration 6 added)
+
 ### Implementation Phase
 - **Started**:
 - **Completed**:
@@ -388,6 +415,12 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
 - **Preferred approach**: Asymmetric decoupling — decouple only row 0 (normal row uses scalar K_nn, severing tangent→normal coupling that causes energy injection) while keeping rows 1-2 fully coupled (tangent rows use K_inv(1:2, 0:2), preserving normal→tangent coupling needed for tipping torque). This combines the best of both worlds: P2 showed oblique tests pass when row 0 is decoupled, and tipping torque only needs the rows 1-2 coupling.
 - **What to preserve**: Fix F2 (phaseBLambdas warm-start cache) stays in place as a correct semantic improvement. Two-phase architecture preserved.
 - **Prototype decision**: Yes — validate asymmetric decoupling fixes oblique sliding tests without regressing SlidingCubeX/TippingTorque
+
+### Feedback on Design Revision 4 (Post-P4)
+- **Decision**: Approve revision — velocity-gated clamp
+- **Preferred approach**: Revert P4 asymmetric decoupling back to full coupled K_inv solve. Then add velocity-gated clamping: use the full coupled `K_inv(0,:) * (-vErr)` for row 0 (preserving exact K_inv(0,0) for Coulomb cone bound), but clamp the result so normal impulse cannot increase when the contact is not penetrating (vErr(0) >= 0). Physically: a non-penetrating contact should never push harder. This preserves the cone coupling that tipping torque requires while preventing the K_nt energy injection in oblique sliding.
+- **What to preserve**: Fix F2 (phaseBLambdas warm-start cache). Full coupled K_inv for rows 1-2. Two-phase architecture.
+- **Prototype decision**: Yes — validate velocity-gated clamp fixes oblique sliding without regressing SlidingCubeX/TippingTorque
 
 ### Feedback on Tests
 {Your comments on test coverage, test quality, or missing test scenarios}

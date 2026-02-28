@@ -151,7 +151,7 @@ BlockPGSSolver::SolveResult BlockPGSSolver::solve(
   for (iter = 0; iter < maxSweeps_ && maxDelta > convergenceTolerance_; ++iter)
   {
     maxDelta = sweepOnce(
-      contacts, blockKs, blockKInvs, lambdaPhaseB, states, inverseMasses, inverseInertias);
+      contacts, blockKInvs, lambdaPhaseB, states, inverseMasses, inverseInertias);
   }
 
   result.converged = (maxDelta <= convergenceTolerance_);
@@ -480,7 +480,6 @@ void BlockPGSSolver::updateVResNormalOnly(
 
 double BlockPGSSolver::sweepOnce(
   const std::vector<ContactConstraint*>& contacts,
-  const std::vector<Eigen::Matrix3d>& blockKs,
   const std::vector<Eigen::Matrix3d>& blockKInvs,
   Eigen::VectorXd& lambda,
   const std::vector<std::reference_wrapper<const InertialState>>& states,
@@ -498,36 +497,41 @@ double BlockPGSSolver::sweepOnce(
     // v_err = J_block * (v_pre + vRes_[bodyA, bodyB])
     const Eigen::Vector3d vErr = computeBlockVelocityError(cc, states);
 
-    // Step 2: Asymmetric decoupled impulse correction.
+    // Step 2: Full coupled K_inv solve with velocity-gated normal clamp.
     //
-    // Ticket: 0084 Design Revision 3 (Prototype P4) — Asymmetric decoupling.
+    // Ticket: 0084 Design Revision 4 — Velocity-gated clamp.
     //
-    // The full 3x3 coupled solve (K_inv * (-vErr)) injects energy through the
-    // tangent→normal coupling terms K_inv(0,1) and K_inv(0,2). For a sliding
-    // contact with vErr(0)=0, these terms produce unconstrained(0) != 0, driving
-    // a spurious normal impulse that accumulates across frames (root cause of all
-    // 12 oblique/restitution/rotational failures).
+    // The full 3x3 coupled solve preserves the exact K_inv(0,0) coefficient
+    // for the Coulomb cone bound (lambda_n), which is required for correct
+    // per-contact angular impulse balance across 4 corner contacts
+    // (SlidingCubeX / FrictionProducesTippingTorque tests).
     //
-    // Fix: Decouple ONLY row 0 (normal). Use scalar K(0,0) to compute the normal
-    // impulse correction. This severs the tangent→normal path (K_inv(0,1:2)).
+    // However, the K_nt off-diagonal terms K_inv(0,1) and K_inv(0,2) drive
+    // unconstrained(0) != 0 even when vErr(0) = 0 (non-penetrating contact),
+    // causing spurious lambda_n growth and energy injection through oblique
+    // sliding and restitution coupling.
     //
-    // Keep rows 1-2 (tangent) fully coupled via K_inv.block<2,3>(1,0)*(-vErr).
-    // This preserves the normal→tangent coupling terms K_inv(1:2,0)*(-vErr(0))
-    // required for correct per-contact angular impulse balance across 4 corner
-    // contacts (SlidingCubeX / FrictionProducesTippingTorque tests).
+    // Velocity-gated clamp: after the full coupled solve, if the contact is
+    // NOT penetrating (vErr(0) >= 0), clamp the normal correction to be
+    // non-positive. Physically: a non-penetrating contact should never push
+    // harder than it already is — normal impulse correction must not increase.
     //
-    // Row 0 (normal): delta_lambda_n = (-vErr(0)) / K(0,0)
-    //   Non-penetrating contact: vErr(0) = 0 → delta_lambda_n = 0. Correct.
-    //   Penetrating contact: vErr(0) < 0 → delta_lambda_n > 0. Push apart.
+    // This preserves:
+    //   - Exact K_inv(0,0) for Coulomb cone bound (penetrating frames)
+    //   - All K_inv(1:2, 0:2) rows for correct tangential/angular coupling
     //
-    // Rows 1-2 (tangent): delta_lambda_t = K_inv.block<2,3>(1,0) * (-vErr)
-    //   Uses all 3 vErr components, including the normal component vErr(0).
-    //   The K_inv(1:2,0)*(-vErr(0)) terms provide the normal→tangent coupling
-    //   that produces correct tipping torque for corner contacts.
-    Eigen::Vector3d unconstrained;
-    const double K_nn = blockKs[ci](0, 0);
-    unconstrained(0)        = (K_nn > 1e-12) ? (-vErr(0)) / K_nn : 0.0;
-    unconstrained.tail<2>() = blockKInvs[ci].block<2, 3>(1, 0) * (-vErr);
+    // And prevents:
+    //   - K_inv(0,1:2) * vErr_t driving spurious lambda_n growth when sliding
+    //     (the oblique energy injection mechanism)
+    //
+    // Ticket: 0084 Design Revision 4 (Prototype P5)
+    Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
+    // Velocity-gated clamp: when contact is not penetrating (vErr(0) >= 0),
+    // normal impulse correction must not increase (push harder)
+    if (vErr(0) >= 0.0)
+    {
+      unconstrained(0) = std::min(unconstrained(0), 0.0);
+    }
 
     // Step 3: Accumulate
     Eigen::Vector3d lambdaOld = lambda.segment<3>(base);
