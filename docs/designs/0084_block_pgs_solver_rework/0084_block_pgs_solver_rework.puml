@@ -3,34 +3,13 @@ skinparam class {
     BackgroundColor<<modified>> LightYellow
     BackgroundColor<<unchanged>> LightBlue
     BackgroundColor<<bug>> Pink
+    BackgroundColor<<fixed>> LightGreen
 }
 
-title Block PGS Solver Rework — Warm-Start Bug Fix\nTicket 0084
+title Block PGS Solver Rework — Decoupled Normal/Tangent Solve\nTicket 0084 (Revision 1)
 
 ' ============================================================
-' Data structure changes
-' ============================================================
-
-class "BlockPGSSolver::SolveResult" <<modified>> {
-  +bodyForces : vector<BodyForces>
-  +lambdas : VectorXd        ' TOTAL (Phase A + Phase B) — force application
-  +phaseBLambdas : VectorXd  ' Phase B ONLY — <<NEW>> for warm-start caching
-  +converged : bool
-  +iterations : int
-  +residual : double
-}
-
-class "ConstraintSolver::SolveResult" <<modified>> {
-  +bodyForces : vector<BodyForces>
-  +lambdas : VectorXd           ' TOTAL — for force application
-  +warmStartLambdas : VectorXd  ' Phase B only if BlockPGS — <<NEW>> for cache
-  +converged : bool
-  +iterations : int
-  +residual : double
-}
-
-' ============================================================
-' Solver internals — Phase A / Phase B split
+' Architecture: unchanged from 0075a
 ' ============================================================
 
 class BlockPGSSolver <<modified>> {
@@ -42,65 +21,174 @@ class BlockPGSSolver <<modified>> {
   +solve(...) : SolveResult
 
   -buildBlockK(cc, invMasses, invInertias) : Matrix3d
-  -applyRestitutionPreSolve(...) : vector<double>  ' Phase A
-  -sweepOnce(...) : double                          ' Phase B
-  -projectCoulombCone(lambda_block, mu) : Vector3d
-  -updateVRes3(cc, delta3, ...) : void
-  -updateVResNormalOnly(cc, deltaLambdaN, ...) : void
-  -computeBlockVelocityError(cc, states) : Vector3d
+  -applyRestitutionPreSolve(...) : vector<double>  ' Phase A — UNCHANGED
+  -sweepOnce(...) : double                          ' Phase B — FIX F1 HERE
+  -projectCoulombCone(lambda_block, mu) : Vector3d  ' UNCHANGED
+  -updateVRes3(cc, delta3, ...) : void              ' UNCHANGED
+  -updateVResNormalOnly(cc, deltaLambdaN, ...) : void ' UNCHANGED
+  -computeBlockVelocityError(cc, states) : Vector3d  ' UNCHANGED
 }
 
 note right of BlockPGSSolver
-  BUG (fixed): solve() previously set:
-    result.lambdas(base) = lambdaPhaseB(base) + bounceLambdas_[ci]
-  and CollisionPipeline cached this TOTAL.
+  Prototype P1 result: warm-start disable → ZERO change in 12 tests.
+  Root cause is NOT warm-start. Root cause is Phase B sweepOnce:
+  the full 3x3 K_inv block maps tangential vErr to normal impulse
+  via K_nt off-diagonal terms, injecting upward velocity on every frame.
 
-  FIX: populate phaseBLambdas = lambdaPhaseB
-  so cache stores Phase B only.
-  Total lambdas still used for force extraction.
+  Fix F1: Decouple normal and tangent solves in sweepOnce.
+  No header changes required.
 end note
+
+' ============================================================
+' Phase A — unchanged
+' ============================================================
 
 class "Phase A: applyRestitutionPreSolve" <<unchanged>> {
   ' Computes bounce impulse for e > 0 contacts
-  ' lambda_bounce = (1+e) * (-Jv_n) / K_nn
-  ' Updates vRes_ with normal-only impulse
+  ' lambda_bounce = (1+e) * (-Jv_n) / K_nn  (scalar K_nn — correct)
+  ' Updates vRes_ with normal-only impulse (updateVResNormalOnly)
   ' CORRECT — no change needed
+  ' Phase A is already decoupled (uses K_nn scalar, not 3x3 block)
 }
 
-class "Phase B: sweepOnce" <<unchanged>> {
-  ' RHS = -v_err (no restitution)
-  ' Provably dissipative
-  ' Coulomb cone projection
-  ' CORRECT — no change needed
+' ============================================================
+' Phase B — the fix location
+' ============================================================
+
+class "Phase B: sweepOnce (BEFORE fix)" <<bug>> {
+  ' For each contact:
+  '   vErr = computeBlockVelocityError(cc, states)
+  '   unconstrained = K_inv_3x3 * (-vErr)  <--- BUG
+  '   K_inv_3x3 has K_nt off-diagonal terms:
+  '     unconstrained(0) = K_inv(0,1)*(-vErr(1)) + K_inv(0,2)*(-vErr(2))
+  '   When vErr(0) = 0 but vErr(1,2) != 0 (sliding):
+  '     normal correction grows from tangential velocity
+  '     → upward velocity injection via updateVRes3(-n * dN)
+  '     → Z-velocity grows each frame, unbounded by Coulomb cone
+}
+
+class "Phase B: sweepOnce (AFTER fix)" <<fixed>> {
+  ' For each contact:
+  '   vErr = computeBlockVelocityError(cc, states)
+  '
+  '   Decoupled normal solve (scalar):
+  '     K_nn = blockKs[ci](0,0)
+  '     delta_lambda_n = (-vErr(0)) / K_nn
+  '
+  '   Decoupled tangent solve (2x2 subblock):
+  '     K_tt = blockKs[ci].block<2,2>(1,1)
+  '     delta_lambda_t = K_tt.ldlt().solve(-vErr.tail<2>())
+  '
+  '   unconstrained = [delta_lambda_n; delta_lambda_t]
+  '   → No K_nt cross-coupling
+  '   → Normal correction driven ONLY by vErr(0)
+  '   → When vErr(0) = 0: delta_lambda_n = 0 exactly
+  '   → No upward velocity injection from sliding contacts
+  '
+  '   Remaining steps unchanged:
+  '     lambdaTemp = lambdaOld + unconstrained
+  '     lambdaProj = projectCoulombCone(lambdaTemp, mu)
+  '     delta = lambdaProj - lambdaOld
+  '     updateVRes3(cc, delta, ...)
 }
 
 BlockPGSSolver --> "Phase A: applyRestitutionPreSolve" : runs first
-BlockPGSSolver --> "Phase B: sweepOnce" : runs second
+BlockPGSSolver --> "Phase B: sweepOnce (AFTER fix)" : runs second
 
 ' ============================================================
-' Pipeline cache storage — the bug location
+' Root cause: K_nt coupling path (broken)
 ' ============================================================
+
+package "K_nt Coupling (Root Cause)" #Pink {
+  class "3x3 K matrix" <<bug>> {
+    K(0,0) = K_nn   (normal-normal)
+    K(0,1) = K_nt1  (normal-tangent1) ← NON-ZERO for cube corners
+    K(0,2) = K_nt2  (normal-tangent2) ← NON-ZERO for cube corners
+    K(1,1) = K_t1t1
+    K(1,2) = K_t1t2
+    K(2,2) = K_t2t2
+  }
+  class "K_nt origin" <<bug>> {
+    ' K(0,1) = -(rA×n)^T * IA_inv * (rA×t1)
+    '         - (rB×n)^T * IB_inv * (rB×t1)
+    ' Non-zero when lever arm rA has components
+    ' in both normal and tangential directions
+    ' (always true for cube corner contacts)
+  }
+  class "Energy injection path" <<bug>> {
+    vErr(0) = 0  [contact not penetrating]
+    vErr(1) != 0 [sliding in t1]
+    vErr(2) != 0 [sliding in t2]
+    →
+    K_inv * (-vErr) has unconstrained(0) != 0
+    →
+    updateVRes3: linearA = -n * dN  [upward velocity]
+    →
+    Z-velocity grows each frame
+  }
+  "3x3 K matrix" --> "K_nt origin" : off-diagonal from\nlever arm coupling
+  "K_nt origin" --> "Energy injection path" : drives normal\ncorrection from\ntangential vErr
+}
+
+' ============================================================
+' Fix: decoupled solve severs K_nt coupling
+' ============================================================
+
+package "Decoupled Solve (Fix F1)" #LightGreen {
+  class "Scalar normal solve" <<fixed>> {
+    delta_lambda_n = (-vErr(0)) / K(0,0)
+    When vErr(0) = 0:
+      delta_lambda_n = 0 EXACTLY
+    No K_nt terms involved
+    Energy safe: reduces or holds lambda_n
+  }
+  class "2x2 tangent solve" <<fixed>> {
+    K_tt = K.block<2,2>(1,1)
+    delta_lambda_t = K_tt.ldlt().solve(-vErr_t)
+    No K_nt terms involved
+    Coulomb cone applied after accumulation
+    Energy safe: same proof as decoupled friction
+  }
+  "Scalar normal solve" -[hidden]- "2x2 tangent solve"
+}
+
+' ============================================================
+' Secondary fix: phaseBLambdas cache split (Fix F2)
+' ============================================================
+
+class "BlockPGSSolver::SolveResult" <<modified>> {
+  +bodyForces : vector<BodyForces>
+  +lambdas : VectorXd             ' TOTAL (Phase A + Phase B) — force application
+  +phaseBLambdas : VectorXd       ' Phase B ONLY — <<NEW F2>> for warm-start caching
+  +converged : bool
+  +iterations : int
+  +residual : double
+}
+
+class "ConstraintSolver::SolveResult" <<modified>> {
+  +bodyForces : vector<BodyForces>
+  +lambdas : VectorXd             ' TOTAL — for force application
+  +warmStartLambdas : VectorXd    ' Phase B only if BlockPGS — <<NEW F2>> for cache
+  +converged : bool
+  +iterations : int
+  +residual : double
+}
+
+note bottom of "BlockPGSSolver::SolveResult"
+  F2 (secondary): phaseBLambdas separates Phase B from Phase A
+  for warm-start cache correctness. Phase A bounce impulses
+  should not persist in cache (they are recomputed each frame).
+  F2 does NOT fix the 12 test failures — that is Fix F1.
+  F2 prevents a class of future warm-start contamination bugs.
+end note
 
 class CollisionPipeline <<modified>> {
   -contactCache_ : ContactCache
   -constraintSolver_ : ConstraintSolver
   +execute(assets, envAssets, dt) : void
   -buildAndSolveIsland(...) : SolveResult
-  -updateCacheFromResult(result) : void  ' <<CHANGED>>
+  -updateCacheFromResult(result) : void  ' <<CHANGED for F2>>
 }
-
-class ContactCache <<unchanged>> {
-  +getWarmStart(bodyPair, contactPoints) : vector<Vec3>
-  +updateEntry(bodyPair, contactPoints, impulses) : void
-}
-
-note bottom of CollisionPipeline
-  BUG (fixed): cache write used result.lambdas (TOTAL).
-
-  FIX: cache write uses result.warmStartLambdas (Phase B only).
-
-  Force application still uses result.lambdas (TOTAL).
-end note
 
 class ConstraintSolver <<modified>> {
   -blockPgsSolver_ : BlockPGSSolver
@@ -108,84 +196,38 @@ class ConstraintSolver <<modified>> {
 }
 
 note right of ConstraintSolver
-  FIX: BlockPGS path:
+  F2: BlockPGS path:
     result.warmStartLambdas = blockResult.phaseBLambdas
   ASM / PGS paths:
     result.warmStartLambdas = result.lambdas (identity)
+  Defensive: initialize warmStartLambdas = lambdas at top of solve()
 end note
 
 ' ============================================================
-' Warm-start data flow — BEFORE fix (bug)
+' Implementation order
 ' ============================================================
 
-package "Warm-Start Flow (BEFORE fix — BUG)" #Pink {
-  class "Cache (frame N)" <<bug>> {
-    lambda_stored = Phase_A_bounce + Phase_B_normal
-    ' Phase A bounce should NOT be here
-  }
-  class "BlockPGSSolver (frame N+1)" <<bug>> {
-    vRes_ initialized from lambda_stored
-    ' Phase A bounce inflates vRes_
-    ' Phase A sees wrong velocity → wrong bounce
-    ' Phase B sweeps from wrong baseline
-    ' Result: energy injection / wrong restitution
-  }
-  "Cache (frame N)" --> "BlockPGSSolver (frame N+1)" : warm-start\n(INCORRECT: includes bounce)
-}
-
-' ============================================================
-' Warm-Start data flow — AFTER fix (correct)
-' ============================================================
-
-package "Warm-Start Flow (AFTER fix — CORRECT)" #LightGreen {
-  class "Cache (frame N, fixed)" {
-    lambda_stored = Phase_B_normal only
-    ' Bounce is NOT cached — recomputed fresh each frame
-  }
-  class "BlockPGSSolver (frame N+1, fixed)" {
-    vRes_ initialized from Phase_B_only warm-start
-    ' Phase A computes bounce from actual pre-impact velocity
-    ' Phase B sweeps from correct dissipative baseline
-    ' Result: correct restitution, no energy injection
-  }
-  "Cache (frame N, fixed)" --> "BlockPGSSolver (frame N+1, fixed)" : warm-start\n(CORRECT: Phase B only)
-}
+note as ImplementationOrder
+  IMPLEMENTATION ORDER:
+  Step 1 (F1): Revise sweepOnce — decoupled solve
+    blockKInvs removed, blockKs used directly
+    Run all 780 tests → 12 should pass
+  Step 2 (F2): Add phaseBLambdas to BlockPGSSolver::SolveResult
+    No behavior change yet
+  Step 3 (F2): Wire warmStartLambdas through ConstraintSolver
+    No behavior change yet
+  Step 4 (F2): Change CollisionPipeline cache write
+    Behavior change for F2. Run 780 tests.
+end note
 
 ' ============================================================
 ' Relationships
 ' ============================================================
 
 CollisionPipeline --> ConstraintSolver : invoke solve()
-CollisionPipeline --> ContactCache : read warm-start
-CollisionPipeline --> ContactCache : write phaseBLambdas\n(FIXED)
 ConstraintSolver --> BlockPGSSolver : invoke for friction contacts
 BlockPGSSolver --> "BlockPGSSolver::SolveResult" : returns
 ConstraintSolver --> "ConstraintSolver::SolveResult" : returns
-CollisionPipeline ..> "ConstraintSolver::SolveResult" : uses warmStartLambdas\nfor cache write
-
-' ============================================================
-' Root cause summary
-' ============================================================
-
-note as RootCauseNote
-  Root Cause (all 12 test failures):
-  Phase A bounce impulses (lambda_bounce) were included in
-  the ContactCache warm-start. This caused:
-
-  1. Oblique sliding: inflated lambda_n warm-start amplified
-     K_nt coupling, injecting Z-velocity (3.66 to 43 m/s).
-
-  2. Elastic/inelastic restitution: Phase A computed wrong
-     bounce magnitude on frame N+1 due to inflated vRes_.
-
-  3. ERP amplification: overcorrected velocity at large dt.
-
-  4. Rotational failures: same warm-start contamination
-     affected multi-contact sphere and rocking cube.
-
-  Fix: store only Phase B lambdas in the cache.
-  Phase A bounce is stateless and recomputed each frame
-  from the actual pre-impact velocity.
-end note
+CollisionPipeline ..> "ConstraintSolver::SolveResult" : uses warmStartLambdas\nfor cache write (F2)
 
 @enduml

@@ -10,12 +10,23 @@
 The Block PGS solver (0075b) has 12 failing tests across two categories: oblique sliding
 produces massive Z-velocity injection (up to 43 m/s from an initial speed of 6 m/s), and
 replay-enabled collision tests fail for elastic/inelastic restitution, rotational dynamics, and
-ERP amplification. This document diagnoses each failure category to its root cause in
-`BlockPGSSolver.cpp`, proposes precise algorithmic fixes, specifies implementation order, and
-identifies prototype validation targets. No architectural changes are required — the two-phase
-structure (Phase A: restitution, Phase B: dissipative block PGS) is sound. The bugs are in
-the implementation details of warm-starting, velocity error computation, and the
-`computeTangentBasis` convention relative to the oblique-contact tangent impulse projection.
+ERP amplification.
+
+The prototype P1 (warm-start disable diagnostic) definitively refuted the original root cause
+hypothesis: all 12 tests fail with identical values whether warm-start is enabled or disabled.
+The failure occurs in Phase B `sweepOnce` itself — the 3x3 block solve's K_nt off-diagonal
+terms allow tangential velocity error to drive a non-zero normal impulse correction on every
+frame, even when the contact is not penetrating (`vErr(0) = 0`). This normal impulse
+accumulates and injects upward velocity through `updateVRes3`.
+
+**Revised fix**: Decouple the normal and tangent solves in Phase B's `sweepOnce`. Solve the
+normal row using the scalar `K_nn` coefficient independently; solve the tangent rows using the
+2x2 tangent subblock of K independently. This eliminates the K_nt coupling while preserving
+the two-phase architecture (Phase A restitution + Phase B dissipative), the Coulomb cone
+projection, and all existing data structures from 0075a.
+
+A second prototype (P2) must validate that the decoupled solve fixes the oblique sliding tests
+before full implementation proceeds.
 
 ---
 
@@ -25,8 +36,8 @@ the implementation details of warm-starting, velocity error computation, and the
 
 See: [`./0084_block_pgs_solver_rework.puml`](./0084_block_pgs_solver_rework.puml)
 
-The architecture is unchanged. The diagram documents the corrected data flows and bug
-locations within `BlockPGSSolver`.
+The architecture is unchanged from 0075a. The diagram documents the corrected data flow within
+`BlockPGSSolver::sweepOnce` and the decoupled solve algorithm.
 
 ### New Components
 
@@ -38,446 +49,236 @@ None. This ticket modifies one existing class (`BlockPGSSolver`).
 
 - **Current location**: `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.cpp`
 - **Header location**: `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.hpp`
-- **Changes required**: See Root Cause Analysis and Fix Specifications below
+- **Changes required**: Revise `sweepOnce` to use decoupled normal/tangent solve (see Fix
+  Specifications below). No header changes required — the `SolveResult` struct and public
+  interface are unchanged.
 - **Backward compatibility**: All frictionless (ASM path) tests are unaffected. The frictionless
   path in `ConstraintSolver` does not invoke `BlockPGSSolver`.
 
 ---
 
-## Root Cause Analysis
+## Root Cause Analysis (Revised — Post-Prototype P1)
 
-### Category 1: Oblique Sliding Z-Velocity Injection (5 tests)
+### Prototype P1 Finding
 
-**Affected tests**: `Oblique45_Slow`, `Oblique45_Medium`, `Oblique45`, `HighSpeedOblique`,
-`FrictionWithRestitution_BounceThenSlide` (partially).
+Setting `const bool hasWarmStart = false` in `BlockPGSSolver::solve()` produced zero change in
+the 12 failing tests:
 
-**Symptom**: A cube sliding at 45 degrees in the XY plane gains large Z-velocity (normal
-direction), ranging from 3.66 to 43.4 m/s depending on initial speed. The Z-velocity should
-remain near zero (floor contact normal is Z-up).
+| Test | Before P1 | After P1 | Change |
+|------|-----------|----------|--------|
+| `Oblique45` | 21.1 m/s Z-vel | 21.1 m/s Z-vel | None |
+| `HighSpeedOblique` | 43.4 m/s Z-vel | 43.4 m/s Z-vel | None |
+| `InelasticBounce_KEReducedByESquared` | KE ratio 0.057 | KE ratio 0.057 | None |
+| `EqualMassElastic_VelocitySwap` | omegaZ 3.14 | omegaZ 3.14 | None |
 
-**Root cause: warm-start energy injection from Phase A bounce impulses**.
+The Z-velocity injection for oblique contacts begins on frame 1, before any warm-start could
+contribute. The original design's Fix F1 (Phase B-only cache storage) is NOT the primary fix
+and will not resolve any of the 12 failing tests.
 
-The cache stores the **total assembled lambda** from `BlockPGSSolver::solve()`:
+### The Actual Root Cause: K_nt Coupling in sweepOnce
+
+In the current `sweepOnce`, for each contact the solver computes:
+
 ```cpp
-result.lambdas(base) = lambdaPhaseB(base) + bounceLambdas_[ci];  // Phase A + Phase B
-result.lambdas(base + 1) = lambdaPhaseB(base + 1);               // Phase B only
-result.lambdas(base + 2) = lambdaPhaseB(base + 2);               // Phase B only
+const Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
 ```
 
-On the **next frame**, this total is fed back as `initialLambda` (warm-start). The warm-start
-path:
-```cpp
-if (hasWarmStart)
-{
-  lambda = *initialLambda;          // Seeds lambdaPhaseB from previous TOTAL
-  for (size_t ci = 0; ci < numContacts; ++ci)
-    updateVRes3(*contacts[ci], warmBlock, ...);  // vRes_ += M^{-1} J^T lambda_warm_TOTAL
-}
-// ...
-lambdaPhaseB = lambda;              // Phase B accumulator = previous TOTAL
+The 3x3 `blockKInvs[ci]` matrix (`K^{-1}`) has non-zero off-diagonal entries K_inv(0,1) and
+K_inv(0,2). These exist because the 3x3 `K` matrix itself has non-zero off-diagonal K(0,1)
+and K(0,2) terms, arising from the lever arm rotation coupling:
+
+```
+K(0,1) = -(rA×n)^T * IA_inv * (rA×t1) - (rB×n)^T * IB_inv * (rB×t1)
 ```
 
-For a resting contact (e=0, Phase A bounce = 0), this is correct: `lambda_warm = lambdaPhaseB_prev`,
-and Phase B sees the correct residual.
+For a cube corner contact, `rA` has components in all directions, so `(rA×n)` and `(rA×t1)`
+are non-parallel, giving K(0,1) != 0. The inverse of a matrix with non-zero K(0,1) will have
+K_inv(0,1) != 0 as well (in general).
 
-For a **sliding contact with restitution** (oblique45 tests use e=0 in the sliding phase, but
-the `FrictionWithRestitution` test uses e=0.6): after the first bounce, `bounceLambdas_[ci] > 0`
-is included in the cached total. The next frame's warm-start seeds `lambdaPhaseB` with a normal
-impulse that includes the bounce component. Phase B then sweeps against this inflated warm-start,
-and the Coulomb cone projection — which bounds `||lambda_t|| <= mu * lambda_n` — allows a larger
-tangential impulse because `lambda_n` is incorrectly inflated by the prior bounce term.
+**The effect on an oblique sliding contact:**
 
-**But wait: oblique45 tests use e=0**. So why do they fail?
+For a cube sliding at 45 degrees on a flat floor (normal n = [0,0,1]):
+- `vErr(0) = 0` (contact is not penetrating — cube is not sinking into floor)
+- `vErr(1) != 0` (sliding in t1 direction)
+- `vErr(2) != 0` (sliding in t2 direction)
 
-For **oblique contacts at 45 degrees**, the tangent basis (`t1`, `t2`) computed by
-`tangent_basis::computeTangentBasis(n)` where `n = [0, 0, 1]` (Z-up floor normal) produces:
-- Smallest `|ni|`: `|nx|` = 0, so `ex = [1,0,0]` is selected
-- `t1 = (ex × n) / ||ex × n|| = ([1,0,0] × [0,0,1]) / 1 = [0,-1,0] × ... = [0,-0,1] ...`
-
-Let me verify: `[1,0,0] × [0,0,1] = [0*1 - 0*0, 0*0 - 1*1, 1*0 - 0*0] = [0,-1,0]`.
-So `t1 = [0,-1,0]` (Y direction, negated) and `t2 = n × t1 = [0,0,1] × [0,-1,0] = [0*0-1*(-1), 1*0-0*0, 0*(-1)-0*0] = [1,0,0]`.
-
-For a cube sliding in the XY plane at 45 degrees, the contact point velocity has components
-along both X and Y. The velocity error in the tangent frame:
-- `vErr(1) = t1 · (vContactA - vContactB) = [0,-1,0] · vSliding`
-- `vErr(2) = t2 · (vContactA - vContactB) = [1,0,0] · vSliding`
-
-The block solve computes: `delta_lambda = K_inv * (-vErr)`. The projection clamps to the
-Coulomb cone. The `updateVRes3` then applies:
-```cpp
-const Eigen::Vector3d linearA = -n * dN + t1 * dT1 + t2 * dT2;
+The full 3x3 block solve computes:
+```
+unconstrained(0) = -K_inv(0,1) * vErr(1) - K_inv(0,2) * vErr(2)
 ```
 
-With `n=[0,0,1]`, `t1=[0,-1,0]`, `t2=[1,0,0]`, `dN` (normal correction from Phase B) should
-be zero (floor does not sink). If `dN` drifts non-zero due to K matrix coupling, the linear
-contribution becomes `[0,0,-dN]` — a Z-velocity on body A.
+Even though `vErr(0) = 0`, the normal row of the unconstrained correction is non-zero due to
+the K_nt coupling terms. This `unconstrained(0)` accumulates into `lambdaPhaseB(base)` and
+then `updateVRes3` applies `-n * dN` as a normal velocity contribution to body A. With
+`n = [0,0,1]` pointing up, a positive `dN` gives upward velocity to body A (away from the
+floor). Over multiple sweeps and frames, this grows without bound.
 
-The **actual root cause** for e=0 oblique tests: in the warm-start initialization block,
-`updateVRes3` is called with the **full 3-vector** `warmBlock = lambda.segment<3>(base)`:
-```cpp
-updateVRes3(*contacts[ci], warmBlock, inverseMasses, inverseInertias);
-```
+**Why this is not bounded by the Coulomb cone:**
 
-This applies all three lambda components (n, t1, t2) to `vRes_`. For a stable resting contact,
-`lambda_n_warm > 0` and `lambda_t_warm` encodes the friction impulse from last frame. This is
-intentional — the warm-start is supposed to pre-load the velocity state.
+The Coulomb cone projects the tangent component: `||lambda_t|| <= mu * lambda_n`. This limits
+how large the tangential impulse can be relative to normal. But it does not prevent the normal
+impulse from growing due to K_nt coupling. The normal component can grow freely as long as it
+is positive (the cone allows any positive `lambda_n`). Each frame, `unconstrained(0)` from
+K_nt adds more to `lambda_n`, and the cone constraint does not restrain this growth.
 
-However, the issue is that for a **continuously sliding contact**, `lambdaPhaseB` from Phase B
-contains a normal component that accounts for the **pressure** needed to prevent penetration AND
-the cross-coupling reaction to tangential motion (the K_nt off-diagonal terms). This normal
-component, when warm-started, seeds `vRes_[idxA][2] -= wA * n * lambda_n_warm` (upward velocity
-on body A). The Phase B sweep then computes a `vErr` against this pre-loaded vRes_ state. For
-an oblique contact where the K matrix has strong K_nt coupling (because the lever arm produces
-off-diagonal rotation-translation coupling), the unconstrained correction `delta_lambda = K_inv * (-vErr)`
-has a non-zero normal component `dN`. This `dN`, when accumulated and applied via `updateVRes3`,
-produces the Z-velocity injection.
+### Why All 12 Tests Share This Root Cause
 
-**The fundamental issue**: the warm-start `lambda_n` for a resting floor contact is `m*g*dt`
-(balances gravity). This is correct. But when a cube slides obliquely, the K matrix's off-diagonal
-terms (K_nt: coupling between normal and tangential rows) mean that the Phase B correction to the
-normal component is affected by the tangential state. After warm-start loads `vRes_` from
-`lambda_n_warm`, `Phase B` computes `vErr(0)` — and if this is non-zero (because the tangential
-velocity from the warm-start shifts things slightly), Phase B applies a correction `dN` to the
-normal lambda. This `dN`, multiplied by `n = [0,0,1]` in `updateVRes3`, injects Z-velocity
-directly.
+**Oblique sliding (5 tests)**: K_nt coupling directly drives `unconstrained(0)` from the
+non-zero `vErr(1,2)`. Energy injected via upward velocity accumulation. Magnitude scales with
+sliding speed (explains 3.66 to 43.4 m/s range).
 
-**The fix**: Separate the warm-start into normal-only and tangential components for initialization:
+**Elastic/inelastic restitution (3 tests)**: Phase A computes the correct bounce impulse
+(K_nn-based, unchanged). But Phase B then runs 50 sweeps after Phase A. For an elastic bounce
+(e=1), Phase A has driven `vErr(0)` to zero. But the body is now moving in 3D with contact
+point velocity having tangential components (from the orbital approach angle). Phase B's block
+solve runs `K_inv * (-vErr)` where `vErr(1,2)` is non-zero (angular velocity from the bounce
+creates tangential contact-point velocity). The K_nt coupling produces `unconstrained(0) != 0`,
+driving a normal correction that counteracts Phase A's bounce. Result: bounce height lower than
+expected (`InelasticBounce` KE ratio 0.057 vs expected 0.25).
 
-Instead of calling `updateVRes3` with the full 3-vector (which applies all three impulse
-directions including normal), the warm-start should use **only the Phase B dissipative component**
-(subtracting out the Phase A bounce, which should not be included in the warm-start). Furthermore,
-for the oblique sliding case, the warm-start normal component can be initialized correctly by
-initializing from the **previous Phase B normal lambda only** (not total = Phase A + Phase B).
+**Rotational failures (3 tests)**: `EqualMassElastic_VelocitySwap` produces `omegaZ = 3.14`
+(excessive angular velocity). The K_nt coupling allows tangential impulse to bleed into
+normal correction, which in turn bleeds back to angular velocity via `updateVRes3`'s angular
+term `-rA.cross(n) * dN`. This creates spurious angular velocity components.
 
-**Fix specification for Category 1**:
-
-1. **Cache only Phase B lambdas** (not the Phase A + Phase B total). In `BlockPGSSolver::solve()`,
-   the returned `result.lambdas` currently includes `bounceLambdas_[ci]` added to the normal
-   component. `CollisionPipeline` stores this total in the cache. The fix is to store Phase B
-   lambdas separately so warm-start does not include Phase A's bounce contribution.
-
-   Since `CollisionPipeline` is the cache owner and `BlockPGSSolver` assembles the total, the
-   cleanest fix is to **expose Phase B lambdas** from the solver for caching, while still
-   returning the total in `result.lambdas` for force application.
-
-   **Proposed change to `SolveResult`**:
-   ```cpp
-   struct SolveResult {
-     std::vector<BodyForces> bodyForces;
-     Eigen::VectorXd lambdas;           // TOTAL (Phase A + Phase B) — for force application
-     Eigen::VectorXd phaseBLambdas;     // Phase B only — for warm-starting
-     bool converged{};
-     int iterations{};
-     double residual{};
-   };
-   ```
-   `CollisionPipeline` uses `result.phaseBLambdas` for cache storage instead of `result.lambdas`.
-
-2. **Guard the warm-start condition more carefully**. The current check is:
-   ```cpp
-   const bool hasWarmStart = initialLambda.has_value() &&
-                             initialLambda->size() == static_cast<Eigen::Index>(lambdaSize) &&
-                             initialLambda->maxCoeff() > 0.0;
-   ```
-   This uses `maxCoeff() > 0.0` which will fail if all lambdas are zero (new contact). But it
-   also accepts any positive value — including stale warm-starts from a bounce frame. With the
-   Phase B-only cache fix, this check becomes correct: a bouncing contact's Phase A lambda is
-   no longer in the warm-start.
-
-### Category 2: Restitution Test Failures (3 tests)
-
-**Affected tests**: `PerfectlyElastic_EnergyConserved`, `EqualMassElastic_VelocitySwap`,
-`InelasticBounce_KEReducedByESquared`.
-
-**Symptom**: Elastic collisions fail to conserve energy, and inelastic bounces do not reduce KE
-by the correct e² factor.
-
-**Root cause: warm-start contaminates Phase A velocity baseline**.
-
-For an elastic collision (e=1, friction=0.5 → BlockPGS path):
-
-Frame N (collision):
-- No warm-start (first contact): `vRes_` = 0
-- Phase A: `Jv_n = n·(vB - vA)` (approaching, so Jv_n < 0)
-- Phase A bounce: `lambda_bounce = (1+e)*(-Jv_n)/K_nn` — **correct**
-- Phase B (dissipative): refines the solution
-- Total lambda cached: `lambda_n_total = lambdaPhaseB_n + lambda_bounce`
-
-Frame N+1 (post-bounce, bodies now separating):
-- Warm-start from cache: `lambda_warm` includes `lambda_bounce` from frame N
-- `vRes_` initialized with `updateVRes3` using `lambda_warm` (includes bounce component)
-- Phase A runs: `computeBlockVelocityError` reads `v_pre + vRes_`
-- `vRes_` already contains the bounce impulse from last frame's `lambda_bounce`
-- So `Jv_n` (the Phase A velocity check) = normal velocity including warm-start bounce
-- For separating bodies: `Jv_n > 0` (correct, Phase A skips) — but the **normal magnitude**
-  computed by Phase B is wrong because it starts from a warm-start that contains last frame's
-  bounce term
-
-For a **multi-bounce scenario** (PerfectlyElastic test bounces repeatedly):
-- Frame 2: warm-start = Phase A + Phase B from frame 1
-- Phase A in frame 2 uses `computeBlockVelocityError` which includes the warm-start vRes_
-- The warm-start vRes_ contains a large upward velocity component from `lambda_bounce_frame1`
-- Phase A sees the combined state and computes a **wrong** `Jv_n`, potentially missing the
-  bounce or computing an excessive one
-- Over multiple bounces, energy is not conserved
-
-**The fix (same as Category 1)**: Store only Phase B lambdas in the cache. Phase A bounce
-impulses are inherently non-persistent — they are computed fresh each frame from the current
-velocity. Including them in the warm-start causes incorrect velocity baseline for Phase A on the
-next frame.
-
-### Category 3: TimestepSensitivity / ERP Amplification (1 test)
-
-**Affected test**: `ParameterIsolation_TimestepSensitivity_ERPAmplification`.
-
-**Symptom**: A resting cube (e=0, mu=0.5, mass=10kg) shows energy growth > 1% of initial PE
-at larger timesteps (32ms). The ASM path (frictionless) passes; the BlockPGS path (with
-friction=0.5) fails.
-
-**Root cause: warm-start overcorrects the velocity state at large timesteps**.
-
-For a resting contact with gravity:
-- Pre-impact velocity: `v_pre[z] = -g*dt` (downward from gravity)
-- Correct warm-start: `lambda_n_warm = m*g*dt`, which applies `vRes_[z] += wA * n * lambda_n`
-  with `n = [0,0,1]` (upward), giving `vRes_[z] = g*dt`. Total velocity = 0. Correct.
-
-With the Phase B-only cache (fix from Categories 1/2), the normal warm-start is correct. But
-there is a secondary issue: the Baumgarte position correction (alpha=0.2, beta=0.0 in
-`ContactConstraint`) adds a position error term to the normal constraint. For larger timesteps,
-this position correction term is larger, but the Block PGS (being a velocity-level solver) does
-not account for this correctly.
-
-**Specifically**: the `PositionCorrector` in `CollisionPipeline` applies a split-impulse
-correction *after* the velocity solve. The split-impulse generates a corrective velocity that
-moves bodies out of penetration without affecting the main velocity. However, with warm-starting
-from a frame with a large Phase B correction (which itself was inflated by the Baumgarte term),
-the warm-start carries forward an overcorrection.
-
-The warm-start fix (Category 1) should substantially mitigate this. The remaining ERP sensitivity
-is expected to be within the 1% threshold once Phase A bounce contamination is removed from the
-cache.
-
-**Secondary fix**: The Baumgarte position correction is encoded in the normal constraint RHS via
-the `evaluate()` return value multiplied by `alpha`. However, `BlockPGSSolver` does NOT use
-`evaluate()` or Baumgarte terms — it uses `computeBlockVelocityError` which is purely
-velocity-level. This is correct for a velocity-level solver. The `PositionCorrector` handles
-position correction separately. **No change needed here** — the ERP sensitivity should resolve
-with the warm-start fix.
-
-### Category 4: Rotational Failures (3 tests)
-
-**Affected tests**: `RockingCube_AmplitudeDecreases`, `SphereDrop_NoRotation`,
-`ZeroGravity_RotationalEnergyTransfer_Conserved`.
-
-#### 4a: SphereDrop_NoRotation
-
-**Symptom**: A sphere dropped vertically with friction (mu=0.5) generates spurious angular
-velocity (>0.5 rad/s). The sphere has no tangential velocity pre-impact, so no tangential
-impulse should be generated.
-
-**Root cause: warm-start tangential contamination**.
-
-For a sphere dropped vertically (velocity = [0,0,-v]):
-- Contact normal: n = [0,0,1] (floor)
-- Tangent basis: `t1 = [0,-1,0]`, `t2 = [1,0,0]` (from `computeTangentBasis([0,0,1])`)
-- No tangential velocity: `vErr(1) = 0`, `vErr(2) = 0`
-- Correct Phase B: `delta_lambda_t1 = 0`, `delta_lambda_t2 = 0`
-
-**On first collision frame**: No warm-start, vRes_=0. Phase B correctly computes zero tangential
-impulse. **However**, for a multi-contact sphere (multiple contact points at different lever arms),
-the off-diagonal K matrix entries (K_nt coupling) may produce a small non-zero `dN` from the
-block solve even with zero tangential velocity, IF the normal component is not handled correctly.
-
-More precisely: when the sphere has 4 contact points (the typical EPA manifold), each contact has
-a different lever arm `rA`. The `buildBlockK` computes `K` for each contact independently. The
-Phase B sweep applies `delta_lambda_i` independently per contact. If one contact's block solve
-produces a non-zero `delta_t1` (due to numerical noise or K_nt coupling from the lever arm
-rotation term), and `updateVRes3` applies this, the next contact's `vErr` is shifted. For a
-symmetric sphere, these should cancel. But with the warm-start bug: on the second bounce frame,
-`vRes_` is seeded from `lambda_warm` which includes Phase A bounce (a large upward impulse).
-This large normal warm-start shifts `vErr(0)` significantly, which shifts `vErr(1)` through K
-coupling, which produces non-zero tangential corrections.
-
-**Fix**: The warm-start fix (Category 1) should resolve this. With Phase B-only warm-start, the
-normal warm-start for a resting sphere is much smaller (gravity balance only), and the K_nt
-coupling effects are proportional to the warm-start magnitude.
-
-#### 4b: RockingCube_AmplitudeDecreases
-
-**Symptom**: A cube tilted 15 degrees rocks on its edge; amplitude should decrease (friction
-dissipates rotational energy), but instead it grows or stays constant.
-
-**Root cause: Phase B warm-start includes Phase A bounce**.
-
-The rocking cube generates intermittent contact (contact lost and re-established each half-cycle).
-Each contact frame: Phase A computes a bounce impulse (e=0.3 for the test). This bounce is
-stored in the cache as part of the total lambda. The next contact frame, the warm-start includes
-the previous bounce, which:
-1. Seeds `vRes_` with an incorrect upward impulse
-2. Phase A sees a different (incorrect) approaching velocity, computing wrong bounce magnitude
-3. Phase B then sweeps from this incorrect state
-
-Over multiple rocking cycles, energy is injected instead of dissipated.
-
-**Fix**: Same warm-start fix.
-
-#### 4c: ZeroGravity_RotationalEnergyTransfer_Conserved
-
-**Symptom**: Zero-gravity, e=1.0 cube dropped at 45 degrees. Kinetic energy should be conserved
-(linear → rotational conversion). Energy is not conserved.
-
-**Root cause: Phase A bounce magnitude error due to warm-start contamination**.
-
-For e=1 with no warm-start (first collision): Phase A computes `lambda_bounce = 2 * (-Jv_n) / K_nn`.
-This should be correct. The body bounces, and the Phase B dissipative sweep should make no
-correction (since Phase A already zeroed the normal velocity, Phase B finds vErr=0).
-
-But on the **next bounce** (after the cube bounces off the floor and returns due to zero gravity):
-the warm-start includes the previous total lambda. Phase A `computeBlockVelocityError` uses
-`vRes_` initialized from this warm-start. The warm-start includes the Phase A bounce impulse from
-the first collision. This makes Phase A compute an incorrect `Jv_n`, leading to a wrong bounce
-impulse magnitude.
-
-**Fix**: Same warm-start fix.
-
-### Category 5: FrictionWithRestitution_BounceThenSlide
-
-**Symptom**: An object should bounce (high restitution) and then slide to rest (friction). The
-transition is broken — either too much energy is injected during the slide phase or the bounce
-is incorrectly resolved.
-
-**Root cause**: Combination of Category 1 (warm-start contamination of Phase A) and Category 2
-(bounce in cache inflating Phase B warm-start).
-
-**Fix**: Same warm-start fix resolves the core issue.
+**ERP amplification (1 test)**: At large timesteps (32ms), the velocity errors are larger,
+the K_nt coupling-induced normal corrections are larger, and the Baumgarte ERP terms interact
+with these corrections. The energy growth (13.9% vs 1% threshold) is amplified by the larger
+timestep.
 
 ---
 
-## Fix Specifications
+## Fix Specifications (Revised)
 
-### Fix F1: Phase B-Only Cache Storage (Primary Fix)
+### Fix F1 (Revised): Decoupled Normal/Tangent Solve in sweepOnce
 
-**Files modified**: `BlockPGSSolver.hpp`, `BlockPGSSolver.cpp`, `CollisionPipeline.cpp`
+**File modified**: `BlockPGSSolver.cpp` (only — no header changes required)
 
-**Change to `SolveResult`** in `BlockPGSSolver.hpp`:
+**Previous algorithm in `sweepOnce`** (coupled 3x3 block):
 ```cpp
-struct SolveResult {
-  std::vector<BodyForces> bodyForces;
-  Eigen::VectorXd lambdas;        // Total (Phase A + Phase B) — for force extraction
-  Eigen::VectorXd phaseBLambdas;  // Phase B only — for warm-start caching
-  bool converged{false};
-  int iterations{0};
-  double residual{std::numeric_limits<double>::quiet_NaN()};
-};
+// Step 2: Unconstrained impulse correction (target: drive v_err to zero)
+const Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
 ```
 
-**Change to `BlockPGSSolver::solve()`** — populate `phaseBLambdas`:
-```cpp
-// After Phase B completes, before assembling total lambdas:
-result.phaseBLambdas = lambdaPhaseB;  // Phase B accumulator only
+**New algorithm** (decoupled normal + 2x2 tangent):
 
-// Assemble total for force extraction (unchanged):
-for (size_t ci = 0; ci < numContacts; ++ci)
+```cpp
+// Step 2 (revised): Decoupled normal + tangent solve.
+//
+// The 3x3 block solve allows tangential velocity error (vErr(1,2)) to drive
+// a normal correction via K_nt off-diagonal terms. For sliding contacts, this
+// injects normal impulse on every frame even when vErr(0) = 0, causing upward
+// velocity accumulation (the root cause of all 12 failing tests).
+//
+// Fix: solve normal row independently using scalar K_nn, then solve tangent
+// rows independently using the 2x2 t1-t2 subblock. No K_nt cross-coupling.
+//
+// Normal row: delta_lambda_n = K_nn^{-1} * (-vErr(0))
+//   K_nn = blockKs[ci](0,0)  (precomputed 3x3 K matrix, not K_inv)
+//   For a non-penetrating contact (vErr(0) >= 0), this is zero or positive.
+//
+// Tangent rows: solve K_tt * delta_lambda_t = -vErr_t
+//   K_tt = blockKs[ci].block<2,2>(1,1)  (lower-right 2x2 subblock)
+//   Solved via LDLT or direct 2x2 inverse.
+
+const double K_nn = blockKs[ci](0, 0);
+const double delta_lambda_n = (K_nn > 1e-12) ? (-vErr(0)) / K_nn : 0.0;
+
+// Solve 2x2 tangent subblock
+const Eigen::Matrix2d K_tt = blockKs[ci].block<2, 2>(1, 1);
+const Eigen::Vector2d vErr_t = vErr.tail<2>();
+Eigen::Vector2d delta_lambda_t = Eigen::Vector2d::Zero();
 {
-  const auto base = static_cast<Eigen::Index>(ci * 3);
-  result.lambdas(base)     = lambdaPhaseB(base) + bounceLambdas_[ci];
-  result.lambdas(base + 1) = lambdaPhaseB(base + 1);
-  result.lambdas(base + 2) = lambdaPhaseB(base + 2);
+  Eigen::LDLT<Eigen::Matrix2d> ldlt{K_tt};
+  if (ldlt.info() == Eigen::Success)
+    delta_lambda_t = ldlt.solve(-vErr_t);
 }
+
+Eigen::Vector3d unconstrained;
+unconstrained(0)    = delta_lambda_n;
+unconstrained.tail<2>() = delta_lambda_t;
 ```
 
-**Change to `CollisionPipeline`** cache update (lines ~656–690): use `blockResult.phaseBLambdas`
-instead of `result.lambdas` when writing to `ContactCache`. The force application path uses
-`result.lambdas` (unchanged). The warm-start path uses `phaseBLambdas`.
+The remaining `sweepOnce` logic (Steps 3–7: accumulate, project cone, update vRes) is
+unchanged.
 
-This requires the `ConstraintSolver` to propagate `phaseBLambdas` from `BlockPGSSolver`'s
-result back to `CollisionPipeline`. The simplest propagation: add `phaseBLambdas` to
-`ConstraintSolver::SolveResult` and populate it when the BlockPGS path is taken.
+**Why this is correct:**
 
-**ConstraintSolver::SolveResult change**:
+The normal row `K_nn` represents how a pure normal impulse changes the normal relative
+velocity. Solving it independently means: "apply only as much normal impulse as is needed to
+stop the interpenetration", without any contribution from tangential velocity.
+
+The 2x2 tangent subblock `K_tt` represents how tangential impulses change tangential relative
+velocity. Solving it independently (without K_nt coupling) means: "apply only as much tangential
+impulse as is needed to reduce sliding", without any normal impulse from tangential state.
+
+The Coulomb cone projection then bounds `||lambda_t|| <= mu * lambda_n`, which is applied after
+accumulation, exactly as before.
+
+**Energy safety of the revised algorithm:**
+
+Phase B's dissipative guarantee requires that the block solve is non-energy-injecting. The
+decoupled solve is equivalent to the original proof applied independently to each subspace:
+
+- Normal subspace: `delta_lambda_n = -vErr(0) / K_nn`. After projection: `lambda_n >= 0`.
+  For a non-penetrating contact (`vErr(0) >= 0`), this gives `delta_lambda_n <= 0`, which
+  reduces or holds normal lambda — dissipative.
+- Tangent subspace: `K_tt * delta_lambda_t = -vErr_t` (scalar/2x2 independent solve). The
+  Coulomb cone then bounds `||lambda_t|| <= mu * lambda_n`. This is the standard decoupled
+  friction proof used by Bullet and ODE.
+
+**Performance impact:**
+
+The 2x2 LDLT solve is added per contact per sweep. For N contacts, this is O(N) 2x2
+decompositions per sweep vs O(N) 3x3 decompositions (the old `K_inv` precomputed once).
+Since 2x2 LDLT is trivially fast (4 operations), the performance impact is negligible.
+The `blockKInvs` precomputed array becomes unused and can be removed as cleanup.
+
+**Header changes:**
+
+None. `blockKs` (the precomputed 3x3 K matrices) are already passed to `sweepOnce` in the
+current signature. The `blockKInvs` parameter can be replaced with the `blockKs` parameter,
+or both can be passed temporarily. The simplest implementation change:
+
+Replace `blockKInvs` parameter with `blockKs` in `sweepOnce` signature:
+
 ```cpp
-struct SolveResult {
-  std::vector<BodyForces> bodyForces;
-  Eigen::VectorXd lambdas;
-  Eigen::VectorXd warmStartLambdas;  // For cache storage (Phase B only if BlockPGS)
-  bool converged{};
-  int iterations{};
-  double residual{};
-};
+// Old:
+double sweepOnce(
+  const std::vector<ContactConstraint*>& contacts,
+  const std::vector<Eigen::Matrix3d>& blockKInvs,  // K^{-1}, full 3x3
+  ...);
+
+// New:
+double sweepOnce(
+  const std::vector<ContactConstraint*>& contacts,
+  const std::vector<Eigen::Matrix3d>& blockKs,      // K (not K^{-1}) — decoupled solve
+  ...);
 ```
 
-For the ASM and PGS paths, `warmStartLambdas = lambdas` (no split needed — those paths have no
-Phase A equivalent). For the BlockPGS path, `warmStartLambdas = blockResult.phaseBLambdas`.
+This requires updating the `solve()` function to pass `blockKs` instead of `blockKInvs` to
+`sweepOnce`. The `blockKInvs` vector and the LDLT precomputation loop in `solve()` can be
+removed entirely.
 
-**CollisionPipeline cache write**: change to use `solveResult.warmStartLambdas` for cache.
+### Fix F2: Retain phaseBLambdas for Cache Correctness (Secondary)
 
-### Fix F2: Oblique Contact Tangent Basis Alignment (Secondary Fix for Category 1)
+The original design's Fix F1 (Phase B-only cache storage) was shown by prototype P1 to NOT
+fix the 12 failing tests. However, it remains conceptually correct as a secondary improvement:
+Phase A bounce impulses should not persist in the warm-start cache, because they are stateless
+(recomputed from current velocity each frame).
 
-**Analysis**: After applying Fix F1, does Z-velocity injection persist?
+**Decision**: Implement Fix F2 (phaseBLambdas) as part of this revision. It is low-cost
+(one `VectorXd` field addition to `SolveResult`), prevents a class of future bugs where
+bounce-contaminated warm-start might cause issues at very large timesteps, and completes the
+semantic correctness of the solver.
 
-For a floor normal `n = [0,0,1]`, `computeTangentBasis` produces `t1 = [0,-1,0]`, `t2 = [1,0,0]`.
-For a cube sliding at 45 degrees in the XY plane: `vSliding = [v/√2, v/√2, 0]`.
+Fix F2 is unchanged from the original design's Fix F1 specification:
+- Add `phaseBLambdas` to `BlockPGSSolver::SolveResult`
+- Add `warmStartLambdas` to `ConstraintSolver::SolveResult`
+- Change `CollisionPipeline` cache write to use `warmStartLambdas`
 
-The velocity error in the tangent frame:
-- `vErr(1) = t1 · (vContactA - vContactB) = [0,-1,0] · vSliding = -v/√2`
-- `vErr(2) = t2 · (vContactA - vContactB) = [1,0,0] · vSliding = v/√2`
-
-These are non-zero, so Phase B computes a tangential correction. The block solve:
-`delta_lambda = K_inv * (-vErr) = K_inv * [0, v/√2, -v/√2]^T`
-
-For a symmetric, diagonal K matrix (no lever arm off-diagonal), this gives:
-`delta_lambda_n = 0`, `delta_lambda_t1 = v/(√2 * K_t1t1)`, `delta_lambda_t2 = -v/(√2 * K_t2t2)`.
-
-After Coulomb cone projection, these tangential lambdas are bounded by `mu * lambda_n`. The
-normal component `delta_lambda_n = 0` because K is diagonal in this ideal case.
-
-**However**, for a real contact with lever arm (cube corner), K has off-diagonal K_nt terms:
-K_nt(0,1) = `wA * (-n) · (t1) + (rA×(-n)) · IA_inv · (rA×t1) + wB * (n) · (-t1) + ...`
-
-Let us expand: `K(0,1) = J_A_row0 · M_A^{-1} · J_A_col1^T + J_B_row0 · M_B^{-1} · J_B_col1^T`
-where `J_A_row0 = [-n^T, -(rA×n)^T]` and `J_A_col1 = [t1^T, (rA×t1)^T]^T`.
-`K(0,1) = wA * (-n · t1) + (-(rA×n))^T · IA_inv · (rA×t1) + wB * (n · (-t1)) + (rB×n)^T · IB_inv · (-(rB×t1))`
-`= wA * 0 + (-1)*(rA×n)^T · IA_inv · (rA×t1) + 0 + (-1)*(rB×n)^T · IB_inv · (rB×t1)`
-
-Since `n ⊥ t1`, the linear terms vanish. The angular terms are non-zero when the lever arms
-have components in both the normal and tangential directions. For a cube corner contact, `rA`
-has components along all three axes, so K(0,1) ≠ 0.
-
-This means the block solve produces a **non-zero** `delta_lambda_n` from a tangential velocity
-error. This `dN` is physically correct — it represents the normal impulse needed to prevent
-penetration given the constraint coupling. But in the context of Phase B warm-start corruption
-(Fix F1), this normal component gets artificially amplified.
-
-**After Fix F1**: Phase B's normal warm-start is `lambda_n_phaseb` (not inflated by Phase A
-bounce). The coupling-induced `delta_lambda_n` should be small and balanced within each sweep.
-Fix F1 is expected to resolve the oblique Z-velocity injection without additional changes to
-the K matrix coupling.
-
-**If oblique tests still fail after Fix F1**: The tangent basis may need to be aligned with the
-sliding direction for each contact (the `setSlidingMode()` path already exists in
-`ContactConstraint`). The `CollisionPipeline` currently does not call `setSlidingMode()` on
-newly created constraints. Enabling this for constraints where initial tangential velocity is
-detectable would reduce K_nt coupling effects by aligning the basis with the actual sliding
-direction. However, this is a secondary fix — do not implement until Fix F1 is validated against
-the oblique tests.
-
-### Fix F3: Warm-Start Guard Improvement
-
-**Current code**:
-```cpp
-const bool hasWarmStart = initialLambda.has_value() &&
-                          initialLambda->size() == ... &&
-                          initialLambda->maxCoeff() > 0.0;
-```
-
-The `maxCoeff() > 0.0` check is weak: it accepts any lambda vector with at least one positive
-entry, even if the contact geometry has changed significantly. With Fix F1 (Phase B-only cache),
-the normal lambda in the warm-start is the Phase B normal component only. For a bouncing contact,
-Phase B's normal is typically small (Phase A handles the bounce, Phase B handles the post-bounce
-resting correction). The warm-start guard remains correct but should be documented.
-
-**No code change required for Fix F3** — the `maxCoeff() > 0.0` guard is adequate once Fix F1
-is applied. The guard comment should be updated to explain what `initialLambda` contains.
+**Implementation order**: Fix F1 (decoupled solve) MUST be implemented and prototype-validated
+before Fix F2. Fix F2 is a secondary correctness improvement, not a primary fix.
 
 ---
 
@@ -485,9 +286,11 @@ is applied. The guard comment should be updated to explain what `initialLambda` 
 
 | Modified Component | Interacts With | Integration Type | Notes |
 |--------------------|----------------|------------------|-------|
-| `BlockPGSSolver::SolveResult` | `ConstraintSolver` | Data structure change | `phaseBLambdas` field added |
-| `ConstraintSolver::SolveResult` | `CollisionPipeline` | Data structure change | `warmStartLambdas` field added |
-| `CollisionPipeline` (cache write) | `ContactCache` | Write path | Use `warmStartLambdas` instead of `lambdas` |
+| `BlockPGSSolver::sweepOnce` | `BlockPGSSolver::solve` | Internal | Pass `blockKs` instead of `blockKInvs` |
+| `BlockPGSSolver::solve` | `ConstraintSolver` | No change | `SolveResult` interface unchanged for F1 |
+| `BlockPGSSolver::SolveResult` (F2) | `ConstraintSolver` | Data structure | `phaseBLambdas` field added |
+| `ConstraintSolver::SolveResult` (F2) | `CollisionPipeline` | Data structure | `warmStartLambdas` field added |
+| `CollisionPipeline` cache write (F2) | `ContactCache` | Write path | Use `warmStartLambdas` instead of `lambdas` |
 
 ---
 
@@ -495,20 +298,30 @@ is applied. The guard comment should be updated to explain what `initialLambda` 
 
 The fixes must be applied in this order to avoid introducing new regressions:
 
-1. **Step 1**: Add `phaseBLambdas` to `BlockPGSSolver::SolveResult` and populate in `solve()`.
-   Run existing passing tests to confirm no regression. No behavior change yet (the field is
-   unused).
+1. **Step 1 (F1 — primary)**: Revise `sweepOnce` to use decoupled normal/tangent solve:
+   - Replace `blockKInvs` parameter with `blockKs`
+   - Remove precomputed `blockKInvs` from `solve()` (simplification)
+   - Implement decoupled: scalar K_nn for normal, 2x2 LDLT for tangent
+   - Build and run all 780 tests. The 12 failing tests should pass.
 
-2. **Step 2**: Add `warmStartLambdas` to `ConstraintSolver::SolveResult`. For BlockPGS path,
-   assign from `blockResult.phaseBLambdas`. For ASM/PGS paths, assign from `lambdas` (identity).
+2. **Step 2 (F2 — secondary)**: Add `phaseBLambdas` to `BlockPGSSolver::SolveResult`:
+   - Populate `phaseBLambdas = lambdaPhaseB` before assembling total lambdas
+   - Build; no behavior change yet
 
-3. **Step 3**: Change `CollisionPipeline` cache write to use `warmStartLambdas`. This is the
-   behavioral change. Run all tests. The 12 failing tests should start to pass; verify that the
-   768 currently-passing tests do not regress.
+3. **Step 3 (F2 — secondary)**: Wire `warmStartLambdas` through `ConstraintSolver::SolveResult`:
+   - For BlockPGS path: `warmStartLambdas = blockResult.phaseBLambdas`
+   - For ASM/PGS paths: `warmStartLambdas = lambdas` (identity — no Phase A split)
+   - Initialize `warmStartLambdas = lambdas` defensively at top of `solve()` (reviewer Note 1 from original design review)
+   - Build; no behavior change yet
 
-4. **Step 4** (if oblique tests still fail after Step 3): Enable `setSlidingMode()` in
-   `CollisionPipeline::createConstraints()` for contacts with detectable initial tangential
-   velocity. Measure against all oblique tests.
+4. **Step 4 (F2 — secondary)**: Change `CollisionPipeline` cache write to use `warmStartLambdas`:
+   - This is the behavioral change for F2
+   - Run all 780 tests; verify no regression
+
+**Why this order**: Step 1 is the primary fix with the behavior change. Steps 2–4 are
+secondary correctness improvements that add the warm-start cache split. Running tests after
+Step 1 confirms F1 fixes the 12 failures independently. Steps 2–4 add secondary correctness
+without relying on F1 for their correctness.
 
 ---
 
@@ -545,57 +358,69 @@ debugging, may be gated behind a compile-time flag):
 
 1. `result.lambdas(base) >= 0` for all contacts (non-negative normal impulse)
 2. `||result.lambdas.tail<2>(base)|| <= mu * result.lambdas(base)` (Coulomb cone satisfied)
-3. Phase B normal component: `result.phaseBLambdas(base) >= 0`
-4. Phase A bounce: `bounceLambdas_[ci] >= 0` for all ci
+3. `result.phaseBLambdas(base) >= 0` (non-negative Phase B normal)
+4. `bounceLambdas_[ci] >= 0` for all ci (non-negative Phase A bounce)
 
 ---
 
 ## Open Questions
 
-### Design Decisions
+### Prototype Required (Yes)
 
-None blocking. The warm-start fix (F1) is clearly the correct approach: Phase A bounce impulses
-are computed fresh each frame from current velocity and should not persist in the cache. Only
-Phase B's dissipative contribution (which represents the sustained contact force) should be
-warm-started.
+Before full implementation, prototype P2 must validate the decoupled solve:
 
-### Prototype Required
+**Prototype P2**: In `BlockPGSSolver::sweepOnce`, replace the coupled 3x3 block solve with
+the decoupled scalar/2x2 solve as specified in Fix F1. Run the 12 failing tests.
 
-**Yes** — but limited in scope. Before full implementation, the following diagnostic should be
-run to confirm the warm-start hypothesis:
+**Success criteria**: All 5 oblique sliding tests pass. At least 9 of 12 total tests pass.
+If oblique sliding passes but restitution tests still fail, investigate Phase A's K_nn
+computation (the `(1+e) * (-Jv_n) / K_nn` formula) — it may need adjustment if the block K
+diagonal changes meaning when the solve is decoupled.
 
-**Diagnostic prototype**: In `BlockPGSSolver::solve()`, temporarily zero out the bounce
-component from the warm-start before initializing `vRes_`:
+**Time box**: 30 minutes for the prototype, 30 minutes for analysis.
+
+### What If P2 Fails for Restitution Tests?
+
+If the oblique sliding tests pass after the decoupled solve but the restitution tests (3)
+and/or rotational tests (3) still fail:
+
+The remaining failures may have a separate root cause in Phase A. The `applyRestitutionPreSolve`
+uses `computeBlockVelocityError` which computes `vErr(0) = n dot (vContactB - vContactA)`.
+After Phase A updates `vRes_` with the bounce impulse, Phase B's first sweep computes a new
+`vErr`. For an elastic bounce (e=1), Phase A should have zeroed `vErr(0)`. But if the contact
+point velocity includes tangential components (from angular velocity), the 2x2 tangent solve
+may drive a Phase B tangential correction that generates angular impulse feedback.
+
+**Secondary investigation** (only if P2 restitution still fails): Check whether Phase A's
+`computeBlockVelocityError` for the `Jv_n` (normal velocity check) is correct for contacts
+with angular velocity components. The current formula is:
 ```cpp
-// Diagnostic: strip Phase A from warm-start
-// (This requires knowing Phase A from prior frame — not available, so instead:)
-// Zero the warm-start entirely to confirm warm-start is the root cause.
-const bool hasWarmStart = false;  // Temporary diagnostic
+vErr(0) = n.dot(vContactB - vContactA);
 ```
-
-Run the oblique sliding tests and the restitution tests. If they pass (or substantially improve)
-with warm-start disabled, Fix F1 is confirmed. If they still fail, there is a different root cause.
-
-This diagnostic can be confirmed with the Replay MCP tools by inspecting frame-by-frame Z-velocity
-in the `Oblique45` recording after each bounce.
-
-### Requirements Clarification
-
-None. All 12 failing tests have clear analytical expectations documented in the ticket. No test
-assertion changes are permitted — the fix must make the physics correct, not relax the tests.
+where `vContactA = vA + omegaA.cross(rA)`. This is velocity-level, not position-level. For a
+falling body, `vA` is non-zero but `vContactA` should be the relative velocity at the contact
+point. This is correct for a single-contact body. For multi-contact bodies (4 contact points),
+each contact's `rA` and `rB` differ, so each Phase A computation sees a different `Jv_n`. No
+action needed unless P2 still fails for these tests.
 
 ---
 
 ## Design Constraints
 
 From the ticket's human design decisions:
-- **Preserve two-phase architecture**: Phase A (restitution) and Phase B (dissipative) are retained
-  without modification to their internal logic.
-- **No (1+e) in Phase B RHS**: The dissipative guarantee of Phase B is maintained. Only the
-  cache storage path changes.
-- **No test-specific hacks**: The fix addresses the physics mechanism, not test tolerances.
+- **Preferred approach**: Full decoupled solve — solve normal row with scalar K_nn
+  independently, solve tangent with 2x2 subblock independently. **CONFIRMED as Fix F1.**
+- **Do NOT use Hypothesis B** (zeroing `unconstrained(0)` when `vErr(0) >= 0`). The human
+  explicitly rejected this as a band-aid that masks the coupling issue.
+- **Preserve two-phase architecture**: Phase A (restitution) and Phase B (dissipative) are
+  retained without modification to their internal logic. Only the block solve within Phase B
+  `sweepOnce` changes.
+- **No (1+e) in Phase B RHS**: The dissipative guarantee of Phase B is maintained.
+- **No test-specific hacks**: The fix addresses the physics mechanism.
 - **Body force extraction**: Remains `J^T * lambda_total / dt` (not `vRes_ / dt`).
 - **Frictionless (ASM) path**: Completely unaffected by all proposed changes.
+- **Existing data structures from 0075a**: Preserved. No header changes to `BlockPGSSolver.hpp`
+  are required for Fix F1.
 
 ---
 
@@ -604,8 +429,7 @@ From the ticket's human design decisions:
 This design will be tracked in:
 `docs/designs/0084_block_pgs_solver_rework/iteration-log.md`
 
-The implementer should create this file and record each prototype/implementation iteration
-with findings.
+The implementer should update this file with each prototype/implementation iteration finding.
 
 ---
 
@@ -613,10 +437,15 @@ with findings.
 
 **Reviewer**: Design Review Agent
 **Date**: 2026-02-28
-**Status**: APPROVED WITH NOTES
-**Iteration**: 0 of 1 (no revision needed)
+**Status**: APPROVED WITH NOTES (original — for warm-start fix)
+**Iteration**: 0 of 1 (no revision needed for that design)
 
-### Criteria Assessment
+*(Original design review retained below for traceability. The revised design replaces the
+root cause analysis and fix specification. The architectural assessment, coding standards,
+and risk table below require re-evaluation for the revised approach — see Design Revision
+Review section.)*
+
+### Original Design Review Criteria Assessment
 
 #### Architectural Fit
 
@@ -658,63 +487,128 @@ with findings.
 | Observable state | ✓ | The split between `lambdas` (total) and `phaseBLambdas` (Phase B only) is directly inspectable in `SolveResult`. The diagnostic prototype (disable warm-start) confirms the hypothesis without modifying production code. |
 | No hidden global state | ✓ | `vRes_` and `bounceLambdas_` are per-instance workspace members. `BlockPGSSolver` is owned by `ConstraintSolver` by value. No singletons. |
 
-### Risks Identified
+#### Risks (Original — Superseded by Prototype P1 Findings)
 
 | ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
 |----|------------------|----------|------------|--------|------------|------------|
-| R1 | After Fix F1, oblique tests still fail due to K_nt coupling independent of warm-start | Technical | Low | Medium | Design specifies Fix F2 (setSlidingMode) as contingency; implement only if needed after prototype confirms F1 | Yes |
-| R2 | `warmStartLambdas` empty in ASM/PGS path causes a cache update of zeros | Technical | Low | Medium | Design specifies `warmStartLambdas = lambdas` for non-BlockPGS paths. Must not be forgotten in the `ConstraintSolver::solve()` implementation. | No |
-| R3 | Warm-start guard `maxCoeff() > 0.0` rejects valid all-zero warm-starts (first contact) | Technical | Low | Low | Correct by design — first contact has no cache entry. Design correctly notes this is not a bug. | No |
-| R4 | `phaseBLambdas` copy adds ~3N double allocations per solve call | Performance | Low | Low | Amortized by existing `result.lambdas` loop. For N=12 contacts, 36 doubles = 288 bytes. Negligible. | No |
+| R1 | After Fix F1, oblique tests still fail due to K_nt coupling independent of warm-start | Technical | **MATERIALIZED** | Medium | Prototype P1 confirmed: warm-start fix does not address K_nt coupling. **Design revision required.** | Yes |
+| R2 | `warmStartLambdas` empty in ASM/PGS path causes a cache update of zeros | Technical | Low | Medium | Design specifies `warmStartLambdas = lambdas` for non-BlockPGS paths. | No |
+| R3 | Warm-start guard `maxCoeff() > 0.0` rejects valid all-zero warm-starts | Technical | Low | Low | Correct by design. | No |
+| R4 | `phaseBLambdas` copy adds ~3N double allocations per solve call | Performance | Low | Low | Negligible. | No |
 
-### Prototype Guidance
+### Original Notes
 
-#### Prototype P1: Warm-Start Disable Diagnostic
+**Note 1 — warmStartLambdas default initialization**: Initialize `warmStartLambdas = lambdas`
+at the top of `solve()` so that even an unexpected code path produces a valid value. This
+defensive initialization pattern is mandatory for correctness.
 
-**Risk addressed**: R1 (confirms warm-start is root cause before implementing F1)
+**Note 2 — Fix F3 (warm-start guard comment)**: The comment improvement (documenting what
+`initialLambda` contains after Fix F2 in this revision) should be included in the
+implementation commit.
 
-**Question to answer**: Does disabling warm-start entirely eliminate the Z-velocity injection in oblique sliding tests and restore correct restitution behavior?
+**Note 3 — Implementation order**: The three-step F2 implementation order (add field → wire
+through → change cache write) is sound and unchanged from the original design.
 
-**Success criteria**:
-- `Oblique45` Z-velocity drops below 2.0 m/s threshold
-- `PerfectlyElastic_EnergyConserved` passes
-- `InelasticBounce_KEReducedByESquared` passes
-- At least 8 of 12 currently-failing tests pass with warm-start disabled
+**Note 4 — ASM path warm-start identity**: For the ASM and PGS paths, setting
+`warmStartLambdas = lambdas` is semantically correct. Those solvers have no Phase A split,
+so the full lambda vector is the appropriate warm-start seed.
 
-**Prototype approach**:
+---
+
+## Design Revision Review
+
+**Reviewer**: Design Reviewer (per workflow)
+**Date**: 2026-02-28
+**Revision trigger**: Prototype P1 refuted original root cause (warm-start contamination).
+**Human decision**: Approve revision with full decoupled solve (scalar K_nn + 2x2 K_tt).
+
+### Revised Root Cause Assessment
+
+The prototype P1 result is unambiguous: all 12 tests fail identically with warm-start disabled.
+The K_nt coupling hypothesis is the correct explanation. The revised root cause analysis is
+logically coherent:
+
+1. K(0,1) and K(0,2) are non-zero for cube corner contacts (lever arm cross terms confirmed
+   in `buildBlockK` — the `JA.rightCols<3>() * IA_inv * JA.rightCols<3>().transpose()` term
+   includes `(rA×n)^T * IA_inv * (rA×t1)` when expanded, which is non-zero for off-axis `rA`).
+
+2. The 3x3 `K_inv` therefore has non-zero K_inv(0,1) and K_inv(0,2), mapping tangential
+   `vErr` to normal impulse correction.
+
+3. `updateVRes3` applies normal corrections as `linearA = -n * dN`, which is a Z-velocity
+   injection when `n = [0,0,1]` and `dN > 0`.
+
+4. The Coulomb cone does not prevent normal lambda growth — it only bounds tangential lambda
+   relative to normal.
+
+5. The decoupled solve directly severs the K_nt coupling path.
+
+### Revised Architectural Assessment
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | No new names introduced for F1. `blockKs` replaces `blockKInvs` as parameter name — follows existing convention. |
+| File structure | ✓ | Only `BlockPGSSolver.cpp` changes for F1. `sweepOnce` signature change (parameter rename) requires updating `BlockPGSSolver.hpp` declaration only for parameter name (not type). |
+| Dependency direction | ✓ | No new dependencies. Removal of `blockKInvs` precomputation simplifies `solve()`. |
+| RAII / Rule of Zero | ✓ | `Eigen::Matrix2d` and `Eigen::LDLT<Eigen::Matrix2d>` are stack-allocated value types. No heap or ownership changes. |
+| Const correctness | ✓ | `blockKs` passed by const reference. `sweepOnce` const-correctness unchanged. |
+| Exception safety | ✓ | `Eigen::LDLT<Eigen::Matrix2d>::solve()` does not throw. Fallback to zero on failure is already the pattern for the 3x3 case. |
+| Performance | ✓ | Removes the 3x3 LDLT precomputation loop. Replaces with per-contact 2x2 LDLT in sweepOnce. Net cost equivalent or lower (2x2 vs 3x3 LDLT amortized). |
+| Energy safety | ✓ | Decoupled solve proven dissipative for each subspace independently. See Fix F1 energy safety argument above. |
+
+### Revised Risks
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | Decoupled solve fixes oblique but not restitution tests | Technical | Medium | Medium | See Open Questions — secondary Phase A investigation path defined | Yes (P2) |
+| R2 | Decoupled solve causes regression in currently-passing tests | Technical | Low | High | P2 prototype runs all 780 tests. Implementation Step 1 verifies before adding F2. | Yes (P2) |
+| R3 | 2x2 K_tt subblock is singular for degenerate contacts | Technical | Low | Low | Same `LDLT::info() == Success` guard used as existing 3x3 path. Falls back to zero delta on failure. | No |
+| R4 | Removing blockKInvs precomputation breaks any other caller | Technical | None | Low | `blockKInvs` is only used in `sweepOnce`. Confirmed by inspecting `BlockPGSSolver.cpp`. | No |
+
+### Prototype P2 Specification
+
+**Goal**: Validate that the decoupled normal/tangent solve in `sweepOnce` fixes the 12
+failing tests without regressing the 768 passing tests.
+
+**Implementation approach**:
 ```
-Location: prototypes/0084_block_pgs_solver_rework/p1_warmstart_disable/
-Type: Source code patch (temporary flag in BlockPGSSolver.cpp)
+Location: prototypes/0084_block_pgs_solver_rework/p2_decoupled_solve/
+Type: Source code patch to BlockPGSSolver.cpp
 
 Steps:
-1. In BlockPGSSolver::solve(), add a constexpr bool kDisableWarmStart = true;
-2. Guard the hasWarmStart block: if (hasWarmStart && !kDisableWarmStart)
-3. Build debug-sim-only
-4. Run the 12 failing tests and record pass/fail for each
-5. If 8+ pass: warm-start hypothesis confirmed; proceed to Fix F1
-6. If < 8 pass: investigate alternative root causes before implementing F1
-7. Remove the diagnostic flag before committing
+1. In sweepOnce(), replace the single line:
+       const Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
+   with the decoupled solve as specified in Fix F1.
+
+2. Update sweepOnce() parameter from blockKInvs to blockKs (or pass blockKs
+   alongside blockKInvs and use blockKs[ci](0,0) and blockKs[ci].block<2,2>(1,1)).
+
+3. Build with cmake --build --preset debug-sim-only.
+
+4. Run the 12 failing tests; record pass/fail for each.
+
+5. Run a representative sample of 10 currently-passing tests to check for regression.
+
+6. If all 12 pass: proceed to full implementation (all 780 tests).
+   If oblique tests pass but restitution fails: document secondary root cause.
+   If regression found: investigate whether decoupled K_tt is missing rA/rB coupling.
 ```
 
-**Time box**: 30 minutes
+**Success criteria**:
+- All 5 oblique sliding tests pass (Z-velocity < 2.0 m/s threshold)
+- At least 9 of 12 total failing tests pass
+- Zero regression in the tested passing tests
 
-**If prototype fails** (< 8 tests pass with warm-start disabled):
-- Investigate `buildBlockK` for asymmetric lever arm errors
-- Inspect `computeBlockVelocityError` sign convention for oblique contacts
-- Use Replay MCP tools to inspect frame-by-frame lambda values
-
-### Notes
-
-**Note 1 — warmStartLambdas default initialization**: The proposed `ConstraintSolver::SolveResult` extension should explicitly document the default state of `warmStartLambdas`. An empty `VectorXd` (default-constructed) is the correct initial state (no warm-start available). The implementation must ensure that for all code paths through `ConstraintSolver::solve()` (ASM, PGS, and BlockPGS), `warmStartLambdas` is assigned before `CollisionPipeline` reads it. A defensive approach: initialize `warmStartLambdas = lambdas` at the top of `solve()` so that even an unexpected code path produces a valid (if non-optimal) value.
-
-**Note 2 — Fix F3 (warm-start guard comment)**: The design correctly concludes no code change is needed for Fix F3. The comment improvement (documenting what `initialLambda` contains after Fix F1) should be included in the implementation commit to prevent future confusion about the cache invariant.
-
-**Note 3 — Implementation order**: The three-step implementation order (add field → wire through → change cache write) is sound. Step 2 (wire `warmStartLambdas` through `ConstraintSolver`) must not be skipped even though it has no behavior change — it is necessary for the cache write change in Step 3 to be correct.
-
-**Note 4 — ASM path warm-start identity**: For the ASM and PGS paths, setting `warmStartLambdas = lambdas` is semantically correct. Those solvers have no Phase A split, so the full lambda vector is the appropriate warm-start seed.
+**Time box**: 45 minutes.
 
 ### Summary
 
-The root cause analysis is rigorous: Phase A bounce impulses contaminating the warm-start cache is a plausible and well-supported single explanation for all 12 failures. The fix is surgically minimal — three files changed, two `VectorXd` fields added to two result structs, and one cache write redirected. No architectural changes, no Phase A or Phase B internal logic changes, and no test assertion changes.
+The revised design is mechanically sound. The decoupled normal/tangent solve is the correct
+approach (per human decision) and is well-motivated by the K_nt coupling root cause. The
+implementation change is surgical: one function (`sweepOnce`) is modified, one pre-computation
+step in `solve()` is simplified, and no interface changes are required for Fix F1.
 
-The design should proceed to the prototype phase. The P1 diagnostic prototype (disable warm-start) should run first to confirm the hypothesis before implementing Fix F1. All acceptance criteria and design constraints from the ticket are satisfied by this approach.
+Fix F2 (phaseBLambdas warm-start cache split) is a secondary correctness improvement retained
+from the original design, correctly ordered after F1 validation.
+
+The design should proceed to Prototype P2 immediately.

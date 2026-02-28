@@ -6,8 +6,8 @@
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Prototype
 - [x] Prototype Complete — Awaiting Review
-- [ ] Ready for Implementation
-- [ ] Implementation Blocked — Design Revision Needed
+- [x] Ready for Implementation
+- [x] Implementation Blocked — Design Revision Needed
 - [ ] Implementation Complete — Awaiting Test Writing
 - [ ] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
@@ -24,8 +24,8 @@
 - **Generate Tutorial**: No
 - **Requires Math Design**: No
 - **GitHub Issue**: #112
-- **Design Revision Count**: 0
-- **Previous Design Approaches**: []
+- **Design Revision Count**: 1
+- **Previous Design Approaches**: [Warm-start contamination (Phase A bounce in cache) — refuted by Prototype P1]
 
 ---
 
@@ -218,18 +218,41 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
   - `docs/designs/0084_block_pgs_solver_rework/implementation-notes.md`
 - **Notes**:
 
-### Design Revision Phase (if escalated from Implementation Blocked)
-- **Revision Number**: {N of 2 maximum}
-- **Trigger**: {Circle Detection / 3rd Quality Gate Failure / 3rd CHANGES REQUESTED}
-- **Findings Artifact**: `docs/designs/0084_block_pgs_solver_rework/implementation-findings.md`
-- **Human Gate Decision**: {Approved / Closed}
-- **Approach Ruled Out**: {description of the prior approach now in Previous Design Approaches}
+### Design Revision Phase (Revision 1)
+- **Started**: 2026-02-28 14:00
+- **Completed**: 2026-02-28 14:30
+- **Revision Number**: 1 of 2 maximum
+- **Trigger**: Prototype P1 — warm-start disable produced zero change in all 12 failing tests
+- **Findings Artifact**: `docs/designs/0084_block_pgs_solver_rework/prototype-results.md`
+- **Human Gate Decision**: Approved — full decoupled solve preferred
+- **Approach Ruled Out**: Fix F1 (Phase B-only cache storage) as primary fix — does not address
+  actual root cause (K_nt coupling in 3x3 block solve)
+- **Approach Also Ruled Out**: Hypothesis B (zero unconstrained(0) when vErr(0) >= 0) —
+  rejected by human as band-aid masking the coupling issue
 - **Delta Design Changes**:
-  - {list design decisions that changed}
-- **Warm-Start Preserved**:
-  - {list files/modules preserved from prior implementation}
-- **Prototype Required**: Yes / No
-- **Notes**:
+  - Primary fix changed from "Phase B-only cache storage" to "decoupled normal/tangent solve in sweepOnce"
+  - Root cause revised: K_nt off-diagonal coupling in 3x3 block solve (not warm-start contamination)
+  - phaseBLambdas cache split retained as secondary correctness improvement (Fix F2)
+  - blockKInvs precomputation removed from solve(); blockKs used directly in sweepOnce
+  - sweepOnce parameter changed from blockKInvs to blockKs
+- **What to Preserve**:
+  - All existing data structures from 0075a (no header changes for Fix F1)
+  - Two-phase architecture (Phase A restitution + Phase B dissipative) — both phases unchanged internally
+  - Phase A applyRestitutionPreSolve — no change needed
+  - Coulomb cone projectCoulombCone — no change needed
+  - updateVRes3 and updateVResNormalOnly — no change needed
+  - computeBlockVelocityError — no change needed
+  - CollisionPipeline, ConstraintSolver — no changes for Fix F1 (only for secondary Fix F2)
+- **Prototype Required**: Yes — Prototype P2 (decoupled solve validation)
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
+- **Artifacts**:
+  - `docs/designs/0084_block_pgs_solver_rework/design.md` (revised — root cause + fix updated)
+  - `docs/designs/0084_block_pgs_solver_rework/0084_block_pgs_solver_rework.puml` (revised)
+  - `docs/designs/0084_block_pgs_solver_rework/iteration-log.md` (Iteration 2 added)
+- **Notes**: Design revision approved by human. Next step is Prototype P2 (decoupled solve)
+  to validate the fix before proceeding to full implementation. The prototype is a
+  one-function change to sweepOnce in BlockPGSSolver.cpp.
 
 ### Test Writing Phase
 - **Started**:
@@ -268,9 +291,10 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
 {Your comments on the implementation}
 
 ### Feedback on Design Revision (if Implementation Blocked)
-{Your decision at the human gate: approve revision OR close ticket}
-{Notes on scope of revision — what to change, what to preserve}
-{Prototype decision for this revision: Yes / No}
+- **Decision**: Approve revision
+- **Preferred approach**: Full decoupled solve — solve normal row with scalar K_nn independently, solve tangent with 2x2 subblock independently. Do NOT use Hypothesis B (zeroing unconstrained(0) when vErr(0) >= 0) as it's a band-aid that masks the coupling issue.
+- **What to preserve**: Two-phase architecture (Phase A restitution + Phase B dissipative), existing data structures from 0075a
+- **Prototype decision**: Yes — validate the decoupled solve fixes the oblique sliding tests before full implementation
 
 ### Feedback on Tests
 {Your comments on test coverage, test quality, or missing test scenarios}
