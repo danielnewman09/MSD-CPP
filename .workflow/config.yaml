@@ -1,0 +1,119 @@
+# Workflow engine configuration for MSD-CPP
+# Ticket: 0083_database_agent_orchestration
+#
+# Stale timeout is 30 minutes (not 10) per design review note:
+# agents may have long reasoning passes without MCP tool calls.
+
+database:
+  path: "build/Debug/docs/workflow.db"  # gitignored, derived state
+
+tickets:
+  directory: "tickets/"
+  pattern: "*.md"
+  id_regex: "^(\\d{4}[a-z]?)_"  # extracts ticket ID from filename
+
+agents:
+  stale_timeout_minutes: 30
+  heartbeat_implicit: true  # any MCP tool call updates heartbeat
+
+  # Maps workflow agent types to Claude Code agent commands.
+  # Used by the supervisor script (cli/supervisor.py) to spawn agents.
+  registry:
+    math-designer:
+      command: "claude"
+      args: ["--agent", "math-designer"]
+      max_concurrent: 1
+
+    math-reviewer:
+      command: "claude"
+      args: ["--agent", "math-reviewer"]
+      max_concurrent: 1
+
+    cpp-architect:
+      command: "claude"
+      args: ["--agent", "cpp-architect"]
+      max_concurrent: 1
+
+    design-reviewer:
+      command: "claude"
+      args: ["--agent", "design-reviewer"]
+      max_concurrent: 1
+
+    integration-designer:
+      command: "claude"
+      args: ["--agent", "integration-designer"]
+      max_concurrent: 1
+
+    integration-reviewer:
+      command: "claude"
+      args: ["--agent", "integration-reviewer"]
+      max_concurrent: 1
+
+    python-architect:
+      command: "claude"
+      args: ["--agent", "python-architect"]
+      max_concurrent: 1
+
+    frontend-architect:
+      command: "claude"
+      args: ["--agent", "frontend-architect"]
+      max_concurrent: 1
+
+    cpp-prototyper:
+      command: "claude"
+      args: ["--agent", "cpp-prototyper"]
+      max_concurrent: 1
+
+    cpp-implementer:
+      command: "claude"
+      args: ["--agent", "cpp-implementer"]
+      max_concurrent: 3
+
+    python-implementer:
+      command: "claude"
+      args: ["--agent", "python-implementer"]
+      max_concurrent: 2
+
+    frontend-implementer:
+      command: "claude"
+      args: ["--agent", "frontend-implementer"]
+      max_concurrent: 2
+
+    cpp-test-writer:
+      command: "claude"
+      args: ["--agent", "cpp-test-writer"]
+      max_concurrent: 2
+
+    python-test-writer:
+      command: "claude"
+      args: ["--agent", "python-test-writer"]
+      max_concurrent: 2
+
+    code-quality-gate:
+      command: "claude"
+      args: ["--agent", "code-quality-gate"]
+      max_concurrent: 2
+
+    implementation-reviewer:
+      command: "claude"
+      args: ["--agent", "implementation-reviewer"]
+      max_concurrent: 1
+
+    docs-updater:
+      command: "claude"
+      args: ["--agent", "docs-updater"]
+      max_concurrent: 1
+
+    cpp-tutorial-generator:
+      command: "claude"
+      args: ["--agent", "cpp-tutorial-generator"]
+      max_concurrent: 1
+
+file_conflicts:
+  mode: "advisory"  # "advisory" (warn) or "blocking" (prevent)
+
+markdown_sync:
+  status_update: "realtime"     # update checkboxes immediately on phase completion
+  workflow_log_update: "batch"  # update workflow log section on CLI command
+
+priority_order: ["Critical", "High", "Medium", "Low"]

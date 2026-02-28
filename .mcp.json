@@ -31,6 +31,15 @@
         "scripts/guidelines/guidelines_server.py",
         "build/Debug/docs/guidelines.db"
       ]
+    },
+    "workflow": {
+      "command": "python/.venv/bin/python3",
+      "args": [
+        "scripts/workflow/server/server.py",
+        "build/Debug/docs/workflow.db",
+        "--project-root",
+        "."
+      ]
     }
   }
 }

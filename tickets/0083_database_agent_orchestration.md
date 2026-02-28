@@ -6,8 +6,8 @@
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Prototype
 - [x] Prototype Complete — Awaiting Review
-- [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Test Writing
+- [x] Ready for Implementation
+- [x] Implementation Complete — Awaiting Test Writing
 - [ ] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
@@ -187,21 +187,47 @@ Additionally, the workflow engine is not specific to MSD-CPP — any project usi
 - **Notes**: P1 validates that BEGIN IMMEDIATE + UPDATE...WHERE claimed_by IS NULL RETURNING * correctly serializes concurrent claims from 2 Python threads on WAL-mode SQLite. Tested in fast-drain (20 trials) and adversarial-interleaving (20 trials) scenarios. No application-level threading.Lock is required. Implementation may proceed.
 
 ### Implementation Phase
-- **Started**:
-- **Completed**:
-- **Files Created**:
-- **Files Modified**:
+- **Started**: 2026-02-27
+- **Completed**: 2026-02-27
+- **Branch**: 0083-database-agent-orchestration
+- **PR**: #111 (draft)
 - **Artifacts**:
-  - `docs/designs/0083_database_agent_orchestration/implementation-notes.md`
-- **Notes**:
+  - `scripts/workflow/__init__.py`
+  - `scripts/workflow/engine/__init__.py`
+  - `scripts/workflow/engine/schema.py`
+  - `scripts/workflow/engine/models.py`
+  - `scripts/workflow/engine/config.py`
+  - `scripts/workflow/engine/state_machine.py`
+  - `scripts/workflow/engine/audit.py`
+  - `scripts/workflow/engine/claim.py`
+  - `scripts/workflow/engine/scheduler.py`
+  - `scripts/workflow/engine/markdown_sync.py`
+  - `scripts/workflow/server/__init__.py`
+  - `scripts/workflow/server/server.py`
+  - `scripts/workflow/cli/__init__.py`
+  - `scripts/workflow/cli/cli.py`
+  - `.workflow/phases.yaml`
+  - `.workflow/config.yaml`
+  - `.mcp.json` (workflow server registered)
+- **Notes**: Implemented in scripts/workflow/ per human guidance (standalone extraction as follow-up). All prototype findings incorporated: BEGIN IMMEDIATE for write transactions, PRAGMA busy_timeout=5000, WAL mode, WHERE claimed_by IS NULL in claim query. Human gate phases (agent_type=null) create human_gates records. Stale timeout set to 30 minutes per design review note.
 
 ### Test Writing Phase
-- **Started**:
-- **Completed**:
+- **Started**: 2026-02-27
+- **Completed**: 2026-02-27
+- **Branch**: 0083-database-agent-orchestration
+- **PR**: #111 (draft)
 - **Test Files Created**:
-- **Test Coverage Summary**:
-- **Test Failures Documented for Implementer**:
-- **Notes**:
+  - `scripts/workflow/tests/__init__.py`
+  - `scripts/workflow/tests/conftest.py`
+  - `scripts/workflow/tests/test_schema.py`
+  - `scripts/workflow/tests/test_claim.py`
+  - `scripts/workflow/tests/test_state_machine.py`
+  - `scripts/workflow/tests/test_scheduler.py`
+  - `scripts/workflow/tests/test_markdown_sync.py`
+  - `scripts/workflow/tests/test_config.py`
+  - `scripts/workflow/tests/test_audit.py`
+- **Test Coverage Summary**: 140 tests, 100% pass rate. Covers schema creation/migration, atomic claim correctness (including concurrent thread test mirroring P1 prototype), state machine transitions, scheduler (import/seed/resolve/stale/gates), markdown sync, config parsing with condition evaluation, and audit log.
+- **Notes**: Concurrent claim test (test_concurrent_claim_no_duplicates) runs 2 threads on the same DB with 10 available phases — validates the P1 prototype finding under real pytest conditions.
 
 ### Implementation Review Phase
 - **Started**:
