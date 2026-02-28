@@ -5,9 +5,12 @@
 - [x] Ready for Design
 - [x] Design Complete — Awaiting Review
 - [x] Design Approved — Ready for Prototype
-- [x] Prototype Complete — Awaiting Review
+- [x] Prototype Complete — Awaiting Review (P1: warm-start disable — NEGATIVE)
 - [x] Ready for Implementation
-- [x] Implementation Blocked — Design Revision Needed
+- [x] Implementation Blocked — Design Revision Needed (Revision 1: decoupled solve)
+- [x] Design Approved — Ready for Prototype (P2)
+- [x] Prototype Complete — Awaiting Review (P2: decoupled K_tt — NEGATIVE, new regressions)
+- [x] Implementation Blocked — Design Revision Needed (Revision 2 required)
 - [ ] Implementation Complete — Awaiting Test Writing
 - [ ] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
@@ -25,7 +28,7 @@
 - **Requires Math Design**: No
 - **GitHub Issue**: #112
 - **Design Revision Count**: 1
-- **Previous Design Approaches**: [Warm-start contamination (Phase A bounce in cache) — refuted by Prototype P1]
+- **Previous Design Approaches**: [Warm-start contamination (Phase A bounce in cache) — refuted by Prototype P1; Full decoupled K_tt solve — fixes oblique but breaks SlidingCubeX/TippingTorque, refuted by Prototype P2]
 
 ---
 
@@ -185,7 +188,7 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
   - `docs/designs/0084_block_pgs_solver_rework/design.md` (review appended)
 - **Reviewer Notes**: Root cause analysis accepted as rigorous and well-supported. Fix F1 (Phase B-only cache storage) is the correct surgical fix. Notes: (1) `warmStartLambdas` in `ConstraintSolver::SolveResult` should be defensively initialized to `lambdas` at top of solve() to cover all code paths; (2) Fix F3 comment update should be included in impl commit; (3) three-step implementation order is mandatory. Prototype P1 (warm-start disable diagnostic) must run before implementing Fix F1.
 
-### Prototype Phase
+### Prototype Phase (P1)
 - **Started**: 2026-02-28 06:00
 - **Completed**: 2026-02-28 06:30
 - **Branch**: 0084-block-pgs-solver-rework
@@ -197,17 +200,31 @@ The 0082-series tickets added comprehensive test coverage that the original 0075
   - `docs/designs/0084_block_pgs_solver_rework/iteration-log.md`
   - `prototypes/0084_block_pgs_solver_rework/p1_warmstart_disable/patch.diff`
 - **Notes**: P1 result is definitive: setting `hasWarmStart = false` in `BlockPGSSolver::solve()`
-  produces identical failure values for all 12 tests. The Z-velocity injection for oblique
-  sliding contacts (21.1 m/s for Oblique45, 43.4 m/s for HighSpeedOblique) is unchanged.
-  The failure occurs within 10 frames — before warm-start could contribute. Root cause is
-  the K_nt off-diagonal coupling in Phase B's `sweepOnce`: `K_inv(0,1)*vErr(1)` and
-  `K_inv(0,2)*vErr(2)` drive a non-zero normal correction `unconstrained(0)` on every frame
-  even when `vErr(0) = 0` (cube not penetrating floor). This generates upward velocity
-  via `updateVRes3` linear term `-n * dN`. This is a per-frame Phase B problem, not a
-  cross-frame warm-start problem. The design's Fix F1 (Phase B-only cache storage) is
-  not incorrect but does not address the actual root cause. **Design revision required**
-  before implementation. Recommended: investigate zeroing `unconstrained(0)` when
-  `vErr(0) >= 0` (contact not approaching) as the minimal fix candidate.
+  produces identical failure values for all 12 tests. Root cause is the K_nt off-diagonal coupling
+  in Phase B's `sweepOnce`. Design revision required before implementation.
+
+### Prototype Phase (P2)
+- **Started**: 2026-02-28 15:00
+- **Completed**: 2026-02-28 16:00
+- **Branch**: 0084-block-pgs-solver-rework
+- **PR**: #113 (draft)
+- **Prototypes**:
+  - P2: Decoupled normal/tangent solve — NEGATIVE (new regressions introduced)
+- **Artifacts**:
+  - `docs/designs/0084_block_pgs_solver_rework/iteration-log.md` (Iteration 3 added)
+  - `msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.cpp` (prototype in place)
+- **Notes**: P2 implemented the design-specified decoupled solve:
+  `delta_lambda_n = (-vErr(0)) / K_nn` and `delta_lambda_t = K_tt.ldlt().solve(-vErr_t)`.
+  Result: 6 of 12 original failures fixed (all 4 oblique variants, ERP, RockingCube).
+  6 of 12 still fail (InelasticBounce, PerfectlyElastic, EqualMassElastic, SphereDrop,
+  ZeroGravity, BounceThenSlide). NEW REGRESSIONS: SlidingCubeX, SlidingCubeY,
+  SlidingCube_FrictionProducesTippingTorque (correct tipping torque is now Z-spin instead
+  of Y-tipping — physically wrong).
+  Root cause: K_tt^{-1} tangent solve loses the K_inv(1:2, 0) normal→tangent coupling terms
+  that are required for correct per-contact angular impulse balance across 4 corner contacts.
+  Additional finding: InelasticBounce/PerfectlyElastic/EqualMassElastic pass when warm-start
+  is disabled — Fix F2 (phaseBLambdas cache) would likely address these 3.
+  **Design revision required** to address coupling incompatibility in tangent solve.
 
 ### Implementation Phase
 - **Started**:

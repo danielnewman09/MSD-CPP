@@ -64,28 +64,17 @@ BlockPGSSolver::SolveResult BlockPGSSolver::solve(
   vRes_.resize(static_cast<Eigen::Index>(kBodyDof * numBodies));
   vRes_.setZero();
 
-  // ===== Pre-compute 3x3 block K matrices and their inverses =====
+  // ===== Pre-compute 3x3 block K matrices =====
+  // blockKs used by:
+  //   - applyRestitutionPreSolve: scalar K_nn = blockKs[ci](0,0) for bounce impulse
+  //   - sweepOnce: K_nn = blockKs[ci](0,0) for decoupled normal row;
+  //                K_tt = blockKs[ci].block<2,2>(1,1) for tangent 2x2 LDLT solve
   std::vector<Eigen::Matrix3d> blockKs;
   blockKs.reserve(numContacts);
-  std::vector<Eigen::Matrix3d> blockKInvs;
-  blockKInvs.reserve(numContacts);
 
   for (const ContactConstraint* cc : contacts)
   {
-    Eigen::Matrix3d K = buildBlockK(*cc, inverseMasses, inverseInertias);
-    blockKs.push_back(K);
-
-    // Invert via LDLT (symmetric positive definite; falls back gracefully)
-    Eigen::LDLT<Eigen::Matrix3d> ldlt{K};
-    if (ldlt.info() == Eigen::Success)
-    {
-      blockKInvs.push_back(ldlt.solve(Eigen::Matrix3d::Identity()));
-    }
-    else
-    {
-      // Singular or ill-conditioned: use zero inverse (no correction for this contact)
-      blockKInvs.push_back(Eigen::Matrix3d::Zero());
-    }
+    blockKs.push_back(buildBlockK(*cc, inverseMasses, inverseInertias));
   }
 
   // ===== Warm-start: initialize accumulated lambda from previous frame =====
@@ -151,7 +140,7 @@ BlockPGSSolver::SolveResult BlockPGSSolver::solve(
   for (iter = 0; iter < maxSweeps_ && maxDelta > convergenceTolerance_; ++iter)
   {
     maxDelta = sweepOnce(
-      contacts, blockKInvs, lambdaPhaseB, states, inverseMasses, inverseInertias);
+      contacts, blockKs, lambdaPhaseB, states, inverseMasses, inverseInertias);
   }
 
   result.converged = (maxDelta <= convergenceTolerance_);
@@ -468,7 +457,7 @@ void BlockPGSSolver::updateVResNormalOnly(
 
 double BlockPGSSolver::sweepOnce(
   const std::vector<ContactConstraint*>& contacts,
-  const std::vector<Eigen::Matrix3d>& blockKInvs,
+  const std::vector<Eigen::Matrix3d>& blockKs,
   Eigen::VectorXd& lambda,
   const std::vector<std::reference_wrapper<const InertialState>>& states,
   const std::vector<double>& inverseMasses,
@@ -485,10 +474,38 @@ double BlockPGSSolver::sweepOnce(
     // v_err = J_block * (v_pre + vRes_[bodyA, bodyB])
     const Eigen::Vector3d vErr = computeBlockVelocityError(cc, states);
 
-    // Step 2: Unconstrained impulse correction (target: drive v_err to zero)
-    // delta_lambda = K_inv * (-v_err)
-    // No restitution term — Phase B is purely dissipative
-    const Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
+    // Step 2: Decoupled normal + tangent impulse correction (target: drive v_err to zero)
+    // No restitution term — Phase B is purely dissipative.
+    //
+    // Ticket: 0084 Revision 1 — replaced coupled 3x3 block solve with decoupled solve.
+    // Root cause of oblique sliding failures: the 3x3 K_inv block had non-zero K_inv(0,1)
+    // and K_inv(0,2) off-diagonal entries, causing tangential vErr to drive a non-zero
+    // normal correction unconstrained(0) even when vErr(0) = 0 (contact not penetrating).
+    // This injected upward velocity via updateVRes3 on every sliding-contact frame.
+    //
+    // Normal row: delta_lambda_n = (-vErr(0)) / K_nn (severs K_nt coupling).
+    //   When vErr(0) = 0: delta_lambda_n = 0 exactly.
+    //
+    // Tangent rows: delta_lambda_t = K_tt.ldlt().solve(-vErr_t)
+    //   Uses the 2x2 tangent-tangent subblock of K (not K_inv.block<2,2>(1,1)).
+    //   Design specification from docs/designs/0084_block_pgs_solver_rework/design.md.
+    const double K_nn = blockKs[ci](0, 0);
+    const double delta_lambda_n = (K_nn > 1e-12) ? (-vErr(0)) / K_nn : 0.0;
+
+    const Eigen::Matrix2d K_tt = blockKs[ci].block<2, 2>(1, 1);
+    const Eigen::Vector2d vErr_t = vErr.tail<2>();
+    Eigen::Vector2d delta_lambda_t = Eigen::Vector2d::Zero();
+    {
+      const Eigen::LDLT<Eigen::Matrix2d> ldlt{K_tt};
+      if (ldlt.info() == Eigen::Success)
+      {
+        delta_lambda_t = ldlt.solve(-vErr_t);
+      }
+    }
+
+    Eigen::Vector3d unconstrained;
+    unconstrained(0) = delta_lambda_n;
+    unconstrained.tail<2>() = delta_lambda_t;
 
     // Step 3: Accumulate
     Eigen::Vector3d lambdaOld = lambda.segment<3>(base);

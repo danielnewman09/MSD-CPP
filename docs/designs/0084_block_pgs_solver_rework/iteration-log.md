@@ -75,3 +75,101 @@ Before full implementation, prototype P2 must validate:
 - All 5 oblique sliding tests must pass (Z-velocity < 2.0 m/s)
 - At least 9 of 12 total failing tests must pass
 - Zero regression in a sample of currently-passing tests
+
+---
+
+## Iteration 3 — Prototype P2: Decoupled Solve Validation
+
+**Date**: 2026-02-28
+**Phase**: Prototype
+**Change**: Implemented decoupled solve in `sweepOnce` as specified in design revision:
+  `delta_lambda_n = (-vErr(0)) / K_nn`  (scalar normal)
+  `delta_lambda_t = K_tt.ldlt().solve(-vErr_t)`  (2x2 tangent)
+**Goal**: Validate decoupled solve fixes oblique sliding without regressions
+
+### Variants Tested
+
+| Variant | Normal row | Tangent rows | SlidingCubeX | Oblique45 | SlidingCube_TippingTorque |
+|---------|-----------|--------------|--------------|-----------|---------------------------|
+| Original (coupled) | K_inv(0,:)*(-vErr) | K_inv(1:2,:)*(-vErr) | PASS | FAIL | PASS |
+| P2-V1: K_tt.ldlt() | (-vErr(0))/K_nn | K_tt^{-1}*(-vErr_t) | FAIL | PASS | FAIL |
+| P2-V2: K_inv.block<2,2>(1,1) | (-vErr(0))/K_nn | K_inv.block<2,2>(1,1)*(-vErr_t) | FAIL | PASS | FAIL |
+| P2-V3: K_inv(0,0)*(-vErr(0)) | K_inv(0,0)*(-vErr(0)) | K_inv(1:2,:)*(-vErr) | FAIL | PASS | FAIL |
+
+### Result: NEGATIVE — new regressions introduced
+
+**Tests fixed (6 of original 12 failures now pass):**
+- SlidingCube_ConeCompliantEveryFrame_Oblique45_Slow: PASS
+- SlidingCube_ConeCompliantEveryFrame_Oblique45_Medium: PASS
+- SlidingCube_ConeCompliantEveryFrame_Oblique45: PASS
+- SlidingCube_ConeCompliantEveryFrame_HighSpeedOblique: PASS
+- ParameterIsolation_TimestepSensitivity_ERPAmplification: PASS
+- RotationDampingTest_RockingCube_AmplitudeDecreases: PASS
+
+**Tests still failing (6 of original 12):**
+- FrictionWithRestitution_BounceThenSlide: FAIL
+- InelasticBounce_KEReducedByESquared: FAIL
+- PerfectlyElastic_EnergyConserved: FAIL
+- EqualMassElastic_VelocitySwap: FAIL
+- SphereDrop_NoRotation: FAIL
+- ZeroGravity_RotationalEnergyTransfer_Conserved: FAIL
+
+**New regressions (originally passing, now failing):**
+- SlidingCubeX_DeceleratesAndStops: FAIL (lateral drift 0.019m vs 0.002m threshold)
+- SlidingCubeY_DeceleratesAndStops: FAIL (lateral drift 0.022m vs 0.002m)
+- SlidingCube_FrictionProducesTippingTorque: FAIL (omega_Z=0.066 dominates instead of omega_Y)
+
+### Root Cause of Regressions
+
+The K_tt^{-1} tangent solve loses the Schur complement correction:
+  `K_tt^{-1}` is the inverse of the diagonal block only.
+  `K_inv.block<2,2>(1,1)` = `(K_tt - K_nt * K_nn^{-1} * K_nt^T)^{-1}` (Schur complement).
+
+Both variants of tangent solve produce wrong friction torques for corner contacts because
+they omit the K_inv(1:2, 0)*(-vErr(0)) normal-to-tangent coupling terms. For a cube sliding
+in X on a flat floor, these cross-terms provide per-contact force balance that ensures correct
+tipping torque (omega_Y >> omega_Z). Without them, Z-rotation dominates instead.
+
+Specifically: `FrictionProducesTippingTorque` requires omega_Y > omega_Z.
+With decoupled tangent: omega_Z = 0.066 >> omega_Y ≈ 0 — complete torque inversion.
+With original code: omega_Y >> omega_Z — correct physics.
+
+The coupling terms K_inv(1,0)*(-vErr(0)) and K_inv(2,0)*(-vErr(0)) are REQUIRED
+for correct per-contact angular impulse balance across the 4 corner contacts.
+These are the same terms the design revision intended to KEEP (rows 1-2 coupling preserved),
+but even keeping full rows 1-2 doesn't fix it — the scalar K_inv(0,0) in the normal row
+changes the Coulomb cone bound, which changes what tangent impulses get through,
+which causes wrong angular impulse balance.
+
+### Additional Finding: Restitution Failures Are Warm-Start Related
+
+Testing with warm-start disabled reveals:
+- InelasticBounce: PASS (with warm-start disabled)
+- PerfectlyElastic: PASS (with warm-start disabled)
+- EqualMassElastic: PASS (with warm-start disabled)
+- SphereDrop_FlatContact_MinimalTorque: FAIL (new failure without warm-start)
+
+This means the 3 restitution failures (InelasticBounce, PerfectlyElastic, EqualMassElastic)
+are caused by warm-start interfering with bounce frame dynamics. Fix F2 (phaseBLambdas —
+cache only Phase B lambdas) would likely address these 3 remaining failures.
+
+### Conclusion
+
+The decoupled solve as specified fixes oblique sliding (primary fix) but introduces
+wrong-torque-axis failures for axis-aligned corner contacts. The full K_inv rows are
+needed for correct per-contact angular impulse balance. Design revision required to
+address the coupling incompatibility.
+
+Possible directions for Design Revision 2:
+1. Apply decoupled normal row ONLY for contacts where K_nt is large (oblique geometry
+   detector based on off-diagonal K magnitude)
+2. Keep full K_inv coupled solve but normalize the normal row contribution to prevent
+   unbounded growth — e.g., cap lambda_n growth per frame
+3. Investigate whether the Coulomb cone projection itself can be modified to prevent
+   normal lambda from growing via coupling (cone clamping at warm-start level)
+
+### Next Step
+
+Design revision required before proceeding to implementation. The decoupled solve
+does not satisfy the zero-regression requirement.
+
