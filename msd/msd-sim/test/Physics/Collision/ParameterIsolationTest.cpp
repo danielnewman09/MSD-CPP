@@ -99,7 +99,7 @@ EnergyTracker::SystemEnergy computeSystemEnergyNoGravity(
 // Baumgarte term (ERP/dt * penetration) is independent of restitution.
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, ParameterIsolation_H1_DisableRestitution_RestingCube)
+TEST_F(ReplayEnabledTest, ParameterIsolation_DisableRestitution_RestingCube)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
   // Ticket: 0062e_replay_diagnostic_parameter_tests
@@ -203,7 +203,7 @@ TEST_F(ReplayEnabledTest, ParameterIsolation_H1_DisableRestitution_RestingCube)
 // as the energy source.
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, ParameterIsolation_H2_MinimalPenetration_NoEnergyGrowth)
+TEST_F(ReplayEnabledTest, ParameterIsolation_MinimalPenetration_NoEnergyGrowth)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
   // Ticket: 0062e_replay_diagnostic_parameter_tests
@@ -297,7 +297,7 @@ TEST_F(ReplayEnabledTest, ParameterIsolation_H2_MinimalPenetration_NoEnergyGrowt
 // conserved regardless of timestep size.
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, ParameterIsolation_H3_TimestepSensitivity_ERPAmplification)
+TEST_F(ReplayEnabledTest, ParameterIsolation_TimestepSensitivity_ERPAmplification)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
   // Ticket: 0062e_replay_diagnostic_parameter_tests
@@ -374,7 +374,7 @@ TEST_F(ReplayEnabledTest, ParameterIsolation_H3_TimestepSensitivity_ERPAmplifica
 // NOTE: This is a single-step geometric check - kept as TEST() not TEST_F()
 // ============================================================================
 
-TEST(ParameterIsolation, H4_SingleContactPoint_TorqueDiagnostic)
+TEST(ParameterIsolation, SingleContactPoint_TorqueDiagnostic)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
   // Ticket: 0062e_replay_diagnostic_parameter_tests (NOT converted - single-step)
@@ -480,7 +480,7 @@ TEST(ParameterIsolation, H4_SingleContactPoint_TorqueDiagnostic)
 // rotation, position drift, or energy growth over 100 frames.
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, ParameterIsolation_H5_ContactPointCount_EvolutionDiagnostic)
+TEST_F(ReplayEnabledTest, ParameterIsolation_ContactPointCount_EvolutionDiagnostic)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
   // Ticket: 0062e_replay_diagnostic_parameter_tests
@@ -539,7 +539,7 @@ TEST_F(ReplayEnabledTest, ParameterIsolation_H5_ContactPointCount_EvolutionDiagn
 // correction generates torque.
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, ParameterIsolation_H6_ZeroGravity_RestingContact_Stable)
+TEST_F(ReplayEnabledTest, ParameterIsolation_ZeroGravity_RestingContact_Stable)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
   // Ticket: 0062e_replay_diagnostic_parameter_tests
@@ -620,7 +620,7 @@ TEST_F(ReplayEnabledTest, ParameterIsolation_H6_ZeroGravity_RestingContact_Stabl
 // should show dramatically more energy growth.
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, ParameterIsolation_H7_GravityComparison_BaumgarteAmplification)
+TEST_F(ReplayEnabledTest, ParameterIsolation_GravityComparison_BaumgarteAmplification)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
   // Ticket: 0062e_replay_diagnostic_parameter_tests
@@ -714,7 +714,7 @@ TEST_F(ReplayEnabledTest, ParameterIsolation_H7_GravityComparison_BaumgarteAmpli
 // more tilt), this confirms the single-contact feedback hypothesis.
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, ParameterIsolation_H8_TiltedCube_FeedbackLoop)
+TEST_F(ReplayEnabledTest, ParameterIsolation_TiltedCube_FeedbackLoop)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
   // Ticket: 0062e_replay_diagnostic_parameter_tests
@@ -825,7 +825,7 @@ TEST_F(ReplayEnabledTest, ParameterIsolation_H8_TiltedCube_FeedbackLoop)
 // NOTE: This is a purely analytical calculation - kept as TEST() not TEST_F()
 // ============================================================================
 
-TEST(ParameterIsolation, H9_BaumgarteEnergyInjectionAnalysis)
+TEST(ParameterIsolation, BaumgarteEnergyInjectionAnalysis)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
   // Ticket: 0062e_replay_diagnostic_parameter_tests (NOT converted - analytical)
@@ -912,7 +912,7 @@ TEST(ParameterIsolation, H9_BaumgarteEnergyInjectionAnalysis)
 // has reasonable behavior (doesn't fall through floor or explode).
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, ParameterIsolation_H10_IntegrationOrder_ConsistencyCheck)
+TEST_F(ReplayEnabledTest, ParameterIsolation_IntegrationOrder_ConsistencyCheck)
 {
   // Ticket: 0039d_parameter_isolation_root_cause
   // Ticket: 0062e_replay_diagnostic_parameter_tests

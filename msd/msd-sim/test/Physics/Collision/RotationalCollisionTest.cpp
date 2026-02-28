@@ -53,7 +53,7 @@ double computeSystemEnergy(const WorldModel& world)
 // Validates: Lever arm coupling -- rotation should initiate from off-center impact
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, RotationalCollisionTest_B1_CubeCornerImpact_RotationInitiated)
+TEST_F(ReplayEnabledTest, RotationalCollisionTest_CubeCornerImpact_RotationInitiated)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests
@@ -150,7 +150,7 @@ TEST_F(ReplayEnabledTest, RotationalCollisionTest_B1_CubeCornerImpact_RotationIn
 // of the edge hits first, generating net torque.
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, RotationalCollisionTest_B2_CubeEdgeImpact_PredictableRotationAxis)
+TEST_F(ReplayEnabledTest, RotationalCollisionTest_CubeEdgeImpact_PredictableRotationAxis)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests
@@ -246,7 +246,7 @@ TEST_F(ReplayEnabledTest, RotationalCollisionTest_B2_CubeEdgeImpact_PredictableR
 // term, no spurious torque → sphere does not rotate ✅
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, RotationalCollisionTest_B3_SphereDrop_NoRotation)
+TEST_F(ReplayEnabledTest, RotationalCollisionTest_SphereDrop_NoRotation)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests
@@ -302,7 +302,7 @@ TEST_F(ReplayEnabledTest, RotationalCollisionTest_B3_SphereDrop_NoRotation)
 // a "rod" asset (2m x 0.2m x 0.2m).
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, DISABLED_RotationalCollisionTest_B4_RodFallsFlat_NoRotation)
+TEST_F(ReplayEnabledTest, DISABLED_RotationalCollisionTest_RodFallsFlat_NoRotation)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests
@@ -359,7 +359,7 @@ TEST_F(ReplayEnabledTest, DISABLED_RotationalCollisionTest_B4_RodFallsFlat_NoRot
 // geometric center), the L-shape should rotate upon flat-face impact.
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, DISABLED_RotationalCollisionTest_B5_LShapeDrop_RotationFromAsymmetricCOM)
+TEST_F(ReplayEnabledTest, DISABLED_RotationalCollisionTest_LShapeDrop_RotationFromAsymmetricCOM)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests

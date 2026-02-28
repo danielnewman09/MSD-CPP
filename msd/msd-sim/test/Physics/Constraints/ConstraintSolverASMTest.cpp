@@ -53,7 +53,7 @@ Eigen::Matrix3d createIdentityInertia()
 // 1. ActiveSetResult Default Construction
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, ActiveSetResult_DefaultConstruction_Zeroed_0034)
+TEST(ConstraintSolverASMTest, ActiveSetResult_DefaultConstruction_Zeroed)
 {
   // Verify ActiveSetResult default constructor initializes all fields
   // correctly. active_set_size defaults to 0 (empty active set), not an
@@ -79,7 +79,7 @@ TEST(ConstraintSolverASMTest, ActiveSetResult_DefaultConstruction_Zeroed_0034)
 // ============================================================================
 
 TEST(ConstraintSolverASMTest,
-     SingleContact_ExactSolution_MatchesAnalytical_0034)
+     SingleContact_ExactSolution_MatchesAnalytical)
 {
   // For a single contact, lambda = b / A (scalar).
   // ASM should match this analytical result within 1e-12.
@@ -122,7 +122,7 @@ TEST(ConstraintSolverASMTest,
 // ============================================================================
 
 TEST(ConstraintSolverASMTest,
-     OrderIndependence_ShuffledContacts_IdenticalLambdas_0034)
+     OrderIndependence_ShuffledContacts_IdenticalLambdas)
 {
   // Two different orderings of the same contacts must produce identical
   // lambdas. ASM is deterministic and order-independent (unlike PGS).
@@ -211,7 +211,7 @@ TEST(ConstraintSolverASMTest,
 // 4. High Mass Ratio
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, HighMassRatio_1e6_Converges_0034)
+TEST(ConstraintSolverASMTest, HighMassRatio_1e6_Converges)
 {
   // ASM should converge for mass ratio 1e6:1 (LLT handles this easily).
   ConstraintSolver solver;
@@ -249,7 +249,7 @@ TEST(ConstraintSolverASMTest, HighMassRatio_1e6_Converges_0034)
 // 5. All Separating — Empty Active Set
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, AllSeparating_EmptyActiveSet_0034)
+TEST(ConstraintSolverASMTest, AllSeparating_EmptyActiveSet)
 {
   // All contacts separating: all lambdas should be zero.
   ConstraintSolver solver;
@@ -306,7 +306,7 @@ TEST(ConstraintSolverASMTest, AllSeparating_EmptyActiveSet_0034)
 // 6. All Compressive — Full Active Set
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, AllCompressive_FullActiveSet_0034)
+TEST(ConstraintSolverASMTest, AllCompressive_FullActiveSet)
 {
   // All contacts compressive: all lambdas should be positive.
   ConstraintSolver solver;
@@ -366,7 +366,7 @@ TEST(ConstraintSolverASMTest, AllCompressive_FullActiveSet_0034)
 // 7. Mixed Active/Inactive — Correct Partition
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, MixedActiveInactive_CorrectPartition_0034)
+TEST(ConstraintSolverASMTest, MixedActiveInactive_CorrectPartition)
 {
   // Ticket: 0040b — Updated for split impulse (no Baumgarte in velocity RHS).
   // One contact compressive (approaching bodies), one separating
@@ -435,7 +435,7 @@ TEST(ConstraintSolverASMTest, MixedActiveInactive_CorrectPartition_0034)
 // ============================================================================
 
 TEST(ConstraintSolverASMTest,
-     RedundantContacts_RegularizationPreventsFailure_0034)
+     RedundantContacts_RegularizationPreventsFailure)
 {
   // Two contacts at the exact same point with same normal.
   // Without regularization, A_W would be singular. With kRegularizationEpsilon,
@@ -481,7 +481,7 @@ TEST(ConstraintSolverASMTest,
 // 9. Safety Cap Reached — Reports Not Converged
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, SafetyCapReached_ReportsNotConverged_0034)
+TEST(ConstraintSolverASMTest, SafetyCapReached_ReportsNotConverged)
 {
   // Force the safety cap to be reached by setting max_safety_iterations = 1
   // on a scenario requiring multiple active set changes.
@@ -541,7 +541,7 @@ TEST(ConstraintSolverASMTest, SafetyCapReached_ReportsNotConverged_0034)
 // 10. KKT Conditions Verified Post-Solve
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, KKTConditions_VerifiedPostSolve_0034)
+TEST(ConstraintSolverASMTest, KKTConditions_VerifiedPostSolve)
 {
   // After a converged solve, explicitly verify all three KKT conditions:
   // 1. Primal feasibility: lambda >= 0
@@ -616,7 +616,7 @@ TEST(ConstraintSolverASMTest, KKTConditions_VerifiedPostSolve_0034)
 // 11. Iteration Count Within 2C Bound
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, IterationCount_WithinTwoCBound_0034)
+TEST(ConstraintSolverASMTest, IterationCount_WithinTwoCBound)
 {
   // For non-degenerate systems, ASM should converge within 2*C iterations.
   // Ticket: 0040b — stateA approaching stateB so contacts produce positive
@@ -692,7 +692,7 @@ TEST(ConstraintSolverASMTest, IterationCount_WithinTwoCBound_0034)
 // 12. Active Set Size Reported Correctly
 // ============================================================================
 
-TEST(ConstraintSolverASMTest, ActiveSetSize_ReportedCorrectly_0034)
+TEST(ConstraintSolverASMTest, ActiveSetSize_ReportedCorrectly)
 {
   // Verify that the number of non-zero lambdas matches expectations.
   // For all-compressive contacts, all lambdas should be positive.

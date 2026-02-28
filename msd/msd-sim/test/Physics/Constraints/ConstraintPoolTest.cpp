@@ -62,21 +62,21 @@ FrictionConstraint* allocateTestFriction(ConstraintPool& pool,
 
 // ===== ConstraintPool Unit Tests =====
 
-TEST(ConstraintPoolTest, InitialState_CountsAreZero_0071g)
+TEST(ConstraintPoolTest, InitialState_CountsAreZero)
 {
   ConstraintPool pool;
   EXPECT_EQ(pool.contactCount(), 0u);
   EXPECT_EQ(pool.frictionCount(), 0u);
 }
 
-TEST(ConstraintPoolTest, AllocateContact_ReturnsNonNullPointer_0071g)
+TEST(ConstraintPoolTest, AllocateContact_ReturnsNonNullPointer)
 {
   ConstraintPool pool;
   ContactConstraint* cc = allocateTestContact(pool);
   ASSERT_NE(cc, nullptr);
 }
 
-TEST(ConstraintPoolTest, AllocateContact_IncreasesContactCount_0071g)
+TEST(ConstraintPoolTest, AllocateContact_IncreasesContactCount)
 {
   ConstraintPool pool;
   allocateTestContact(pool);
@@ -87,14 +87,14 @@ TEST(ConstraintPoolTest, AllocateContact_IncreasesContactCount_0071g)
   EXPECT_EQ(pool.contactCount(), 2u);
 }
 
-TEST(ConstraintPoolTest, AllocateFriction_ReturnNonNullPointer_0071g)
+TEST(ConstraintPoolTest, AllocateFriction_ReturnNonNullPointer)
 {
   ConstraintPool pool;
   FrictionConstraint* fc = allocateTestFriction(pool);
   ASSERT_NE(fc, nullptr);
 }
 
-TEST(ConstraintPoolTest, AllocateFriction_IncreasesFrictionCount_0071g)
+TEST(ConstraintPoolTest, AllocateFriction_IncreasesFrictionCount)
 {
   ConstraintPool pool;
   allocateTestFriction(pool);
@@ -105,7 +105,7 @@ TEST(ConstraintPoolTest, AllocateFriction_IncreasesFrictionCount_0071g)
   EXPECT_EQ(pool.frictionCount(), 2u);
 }
 
-TEST(ConstraintPoolTest, AllocateContact_ConstraintHasCorrectNormal_0071g)
+TEST(ConstraintPoolTest, AllocateContact_ConstraintHasCorrectNormal)
 {
   ConstraintPool pool;
   ContactConstraint* cc = allocateTestContact(pool);
@@ -115,7 +115,7 @@ TEST(ConstraintPoolTest, AllocateContact_ConstraintHasCorrectNormal_0071g)
   EXPECT_NEAR(cc->getContactNormal().z(), kNormal.z(), 1e-10);
 }
 
-TEST(ConstraintPoolTest, AllocateContact_ConstraintHasPenetrationDepth_0071g)
+TEST(ConstraintPoolTest, AllocateContact_ConstraintHasPenetrationDepth)
 {
   ConstraintPool pool;
   ContactConstraint* cc = allocateTestContact(pool);
@@ -123,7 +123,7 @@ TEST(ConstraintPoolTest, AllocateContact_ConstraintHasPenetrationDepth_0071g)
   EXPECT_NEAR(cc->getPenetrationDepth(), kPenetrationDepth, 1e-10);
 }
 
-TEST(ConstraintPoolTest, AllocateContact_ConstraintHasBodyIndices_0071g)
+TEST(ConstraintPoolTest, AllocateContact_ConstraintHasBodyIndices)
 {
   ConstraintPool pool;
   ContactConstraint* cc = allocateTestContact(pool, 3, 7);
@@ -132,7 +132,7 @@ TEST(ConstraintPoolTest, AllocateContact_ConstraintHasBodyIndices_0071g)
   EXPECT_EQ(cc->bodyBIndex(), 7u);
 }
 
-TEST(ConstraintPoolTest, Reset_CountsBecomeZero_0071g)
+TEST(ConstraintPoolTest, Reset_CountsBecomeZero)
 {
   ConstraintPool pool;
   allocateTestContact(pool);
@@ -147,7 +147,7 @@ TEST(ConstraintPoolTest, Reset_CountsBecomeZero_0071g)
   EXPECT_EQ(pool.frictionCount(), 0u);
 }
 
-TEST(ConstraintPoolTest, Reset_ThenReallocate_ProducesValidConstraints_0071g)
+TEST(ConstraintPoolTest, Reset_ThenReallocate_ProducesValidConstraints)
 {
   // This tests the steady-state behavior: reset clears counts, capacity is
   // retained, and the next allocation batch produces valid constraints.
@@ -177,7 +177,7 @@ TEST(ConstraintPoolTest, Reset_ThenReallocate_ProducesValidConstraints_0071g)
   EXPECT_NEAR(fc->getFrictionCoefficient(), kFrictionCoeff, 1e-10);
 }
 
-TEST(ConstraintPoolTest, PointerStability_WithReserve_PointersRemainValid_0071g)
+TEST(ConstraintPoolTest, PointerStability_WithReserve_PointersRemainValid)
 {
   // After reserveContacts(n) and reserveFriction(n), all emplace_back calls
   // within n elements must not invalidate previously returned pointers.
@@ -211,7 +211,7 @@ TEST(ConstraintPoolTest, PointerStability_WithReserve_PointersRemainValid_0071g)
   }
 }
 
-TEST(ConstraintPoolTest, MultipleResetCycles_NoHeapGrowthAfterHighWaterMark_0071g)
+TEST(ConstraintPoolTest, MultipleResetCycles_NoHeapGrowthAfterHighWaterMark)
 {
   // Simulate multiple frames: allocate, reset, allocate.
   // After the first allocation, capacity is retained; counts return to zero on reset.
@@ -232,7 +232,7 @@ TEST(ConstraintPoolTest, MultipleResetCycles_NoHeapGrowthAfterHighWaterMark_0071
   }
 }
 
-TEST(ConstraintPoolTest, AllocateManyContacts_CountsCorrect_0071g)
+TEST(ConstraintPoolTest, AllocateManyContacts_CountsCorrect)
 {
   ConstraintPool pool;
   pool.reserveContacts(200);
@@ -248,7 +248,7 @@ TEST(ConstraintPoolTest, AllocateManyContacts_CountsCorrect_0071g)
   EXPECT_EQ(pool.frictionCount(), 200u);
 }
 
-TEST(ConstraintPoolTest, ReserveContacts_DoesNotAllocateConstraints_0071g)
+TEST(ConstraintPoolTest, ReserveContacts_DoesNotAllocateConstraints)
 {
   // reserveContacts() changes capacity but not count
   ConstraintPool pool;
@@ -258,7 +258,7 @@ TEST(ConstraintPoolTest, ReserveContacts_DoesNotAllocateConstraints_0071g)
   EXPECT_EQ(pool.frictionCount(), 0u);
 }
 
-TEST(ConstraintPoolTest, ReserveFriction_DoesNotAllocateConstraints_0071g)
+TEST(ConstraintPoolTest, ReserveFriction_DoesNotAllocateConstraints)
 {
   ConstraintPool pool;
   pool.reserveFriction(50);

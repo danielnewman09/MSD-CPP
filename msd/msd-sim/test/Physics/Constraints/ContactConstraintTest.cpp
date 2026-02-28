@@ -117,7 +117,7 @@ InertialState createDefaultState(const Coordinate& position = Coordinate{0.0,
 // ContactConstraint Tests
 // ============================================================================
 
-TEST(ContactConstraintTest, Dimension_ReturnsOne_0032a)
+TEST(ContactConstraintTest, Dimension_ReturnsOne)
 {
   // Test: ContactConstraint has dimension = 1 (single scalar constraint)
   Coordinate normal{0, 0, 1};
@@ -133,7 +133,7 @@ TEST(ContactConstraintTest, Dimension_ReturnsOne_0032a)
 }
 
 TEST(ContactConstraintTest,
-     EvaluateTwoBody_PenetratingBodies_ReturnsNegative_0032a)
+     EvaluateTwoBody_PenetratingBodies_ReturnsNegative)
 {
   // Test: C(q) < 0 for penetrating bodies (constraint violated)
   Coordinate normal{0, 0, 1};      // A → B
@@ -157,7 +157,7 @@ TEST(ContactConstraintTest,
 }
 
 TEST(ContactConstraintTest,
-     EvaluateTwoBody_SeparatedBodies_ReturnsPositive_0032a)
+     EvaluateTwoBody_SeparatedBodies_ReturnsPositive)
 {
   // Test: C(q) > 0 for separated bodies (constraint satisfied)
   Coordinate normal{0, 0, 1};
@@ -180,7 +180,7 @@ TEST(ContactConstraintTest,
   EXPECT_NEAR(0.2, C(0), 1e-10);
 }
 
-TEST(ContactConstraintTest, JacobianTwoBody_LinearComponents_0032a)
+TEST(ContactConstraintTest, JacobianTwoBody_LinearComponents)
 {
   // Test: Jacobian linear components are -n^T for A and +n^T for B
   Coordinate normal{0, 0, 1};
@@ -211,7 +211,7 @@ TEST(ContactConstraintTest, JacobianTwoBody_LinearComponents_0032a)
   EXPECT_NEAR(1.0, J(0, 8), 1e-10);  // n_z
 }
 
-TEST(ContactConstraintTest, JacobianTwoBody_AngularComponents_0032a)
+TEST(ContactConstraintTest, JacobianTwoBody_AngularComponents)
 {
   // Test: Jacobian angular components are -(r_A × n)^T and +(r_B × n)^T
   Coordinate normal{0, 0, 1};
@@ -243,7 +243,7 @@ TEST(ContactConstraintTest, JacobianTwoBody_AngularComponents_0032a)
   EXPECT_NEAR(0.0, J(0, 11), 1e-10);  // (r_B × n)_z
 }
 
-TEST(ContactConstraintTest, JacobianTwoBody_NumericalVerification_0032a)
+TEST(ContactConstraintTest, JacobianTwoBody_NumericalVerification)
 {
   // Test: Analytical Jacobian matches finite-difference numerical Jacobian
   Coordinate normal{
@@ -299,7 +299,7 @@ TEST(ContactConstraintTest, JacobianTwoBody_NumericalVerification_0032a)
   EXPECT_NEAR(rB_cross_n.z(), J_analytical(0, 11), 1e-10);
 }
 
-TEST(ContactConstraintTest, IsActiveTwoBody_PenetratingPair_ReturnsTrue_0032a)
+TEST(ContactConstraintTest, IsActiveTwoBody_PenetratingPair_ReturnsTrue)
 {
   // Test: isActive returns true for penetrating bodies
   Coordinate normal{0, 0, 1};
@@ -317,7 +317,7 @@ TEST(ContactConstraintTest, IsActiveTwoBody_PenetratingPair_ReturnsTrue_0032a)
   EXPECT_TRUE(constraint.isActive(stateA, stateB, 0.0));
 }
 
-TEST(ContactConstraintTest, IsActiveTwoBody_SeparatedPair_ReturnsFalse_0032a)
+TEST(ContactConstraintTest, IsActiveTwoBody_SeparatedPair_ReturnsFalse)
 {
   // Test: isActive returns false for clearly separated bodies
   Coordinate normal{0, 0, 1};
@@ -335,7 +335,7 @@ TEST(ContactConstraintTest, IsActiveTwoBody_SeparatedPair_ReturnsFalse_0032a)
   EXPECT_FALSE(constraint.isActive(stateA, stateB, 0.0));
 }
 
-TEST(ContactConstraintTest, BaumgarteParameters_DefaultERP_0032a)
+TEST(ContactConstraintTest, BaumgarteParameters_DefaultERP)
 {
   // Test: alpha() returns default ERP value (0.2)
   Coordinate normal{0, 0, 1};
@@ -351,7 +351,7 @@ TEST(ContactConstraintTest, BaumgarteParameters_DefaultERP_0032a)
   EXPECT_NEAR(0.0, constraint.beta(), 1e-10);
 }
 
-TEST(ContactConstraintTest, TypeName_ReturnsContactConstraint_0032a)
+TEST(ContactConstraintTest, TypeName_ReturnsContactConstraint)
 {
   // Test: typeName() returns "ContactConstraint"
   Coordinate normal{0, 0, 1};
@@ -367,7 +367,7 @@ TEST(ContactConstraintTest, TypeName_ReturnsContactConstraint_0032a)
 }
 
 TEST(ContactConstraintTest,
-     Constructor_InvalidNormal_ThrowsInvalidArgument_0032a)
+     Constructor_InvalidNormal_ThrowsInvalidArgument)
 {
   // Test: Constructor validates normal is unit length
   Coordinate normal{0, 0, 2.0};  // Not unit length
@@ -382,7 +382,7 @@ TEST(ContactConstraintTest,
 }
 
 TEST(ContactConstraintTest,
-     Constructor_NegativePenetration_ThrowsInvalidArgument_0032a)
+     Constructor_NegativePenetration_ThrowsInvalidArgument)
 {
   // Test: Constructor validates penetration depth >= 0
   Coordinate normal{0, 0, 1};
@@ -397,7 +397,7 @@ TEST(ContactConstraintTest,
 }
 
 TEST(ContactConstraintTest,
-     Constructor_InvalidRestitution_ThrowsInvalidArgument_0032a)
+     Constructor_InvalidRestitution_ThrowsInvalidArgument)
 {
   // Test: Constructor validates restitution in [0, 1]
   Coordinate normal{0, 0, 1};
@@ -415,7 +415,7 @@ TEST(ContactConstraintTest,
                std::invalid_argument);
 }
 
-TEST(ContactConstraintTest, Accessors_ReturnCorrectValues_0032a)
+TEST(ContactConstraintTest, Accessors_ReturnCorrectValues)
 {
   // Test: Accessor methods return construction values
   Coordinate normal{0, 0, 1};

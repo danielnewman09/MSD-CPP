@@ -266,15 +266,15 @@ TEST(WorldModelContactIntegrationTest,
     << "Glancing collision should affect linear velocities. "
     << "finalVxA=" << finalVxA << ", finalVxB=" << finalVxB;
 
-  // NOTE: Angular velocity test skipped due to missing friction constraints.
-  // When friction is implemented, uncomment this:
-  //
-  // double finalOmegaA =
-  // world.getObject(idA).getInertialState().getAngularVelocity().norm(); double
-  // finalOmegaB =
-  // world.getObject(idB).getInertialState().getAngularVelocity().norm(); double
-  // maxOmega = std::max(finalOmegaA, finalOmegaB); EXPECT_GT(maxOmega, 0.01) <<
-  // "Glancing collision with friction should produce angular velocity";
+  // Friction is now implemented (Block PGS, Ticket: 0075b).
+  // Glancing collision with friction should produce angular velocity.
+  double finalOmegaA =
+    world.getObject(idA).getInertialState().getAngularVelocity().norm();
+  double finalOmegaB =
+    world.getObject(idB).getInertialState().getAngularVelocity().norm();
+  double maxOmega = std::max(finalOmegaA, finalOmegaB);
+  EXPECT_GT(maxOmega, 0.01)
+    << "Glancing collision with friction should produce angular velocity";
 }
 
 /**

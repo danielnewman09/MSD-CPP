@@ -66,7 +66,7 @@ double computeSystemEnergy(const WorldModel& world)
 // ============================================================================
 
 TEST_F(ReplayEnabledTest,
-       RotationalEnergyTest_F4_RotationEnergyTransfer_EnergyConserved)
+       RotationalEnergyTest_RotationEnergyTransfer_EnergyConserved)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests
@@ -211,7 +211,7 @@ TEST_F(ReplayEnabledTest,
 // ============================================================================
 
 TEST_F(ReplayEnabledTest,
-       RotationalEnergyTest_F4b_ZeroGravity_RotationalEnergyTransfer_Conserved)
+       RotationalEnergyTest_ZeroGravity_RotationalEnergyTransfer_Conserved)
 {
   // Ticket: 0039c_rotational_coupling_test_suite
   // Ticket: 0062c_replay_rotational_collision_tests

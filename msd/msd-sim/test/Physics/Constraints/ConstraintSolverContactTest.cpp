@@ -49,7 +49,7 @@ Eigen::Matrix3d createIdentityInertia()
 // 1. Basic PGS Convergence Tests
 // ============================================================================
 
-TEST(ConstraintSolverContactTest, EmptyContactSet_ReturnsConverged_0033)
+TEST(ConstraintSolverContactTest, EmptyContactSet_ReturnsConverged)
 {
   // Test: Zero contacts returns converged with empty forces
   ConstraintSolver solver;
@@ -67,7 +67,7 @@ TEST(ConstraintSolverContactTest, EmptyContactSet_ReturnsConverged_0033)
   EXPECT_EQ(0, result.iterations);
 }
 
-TEST(ConstraintSolverContactTest, SingleContact_Converges_0033)
+TEST(ConstraintSolverContactTest, SingleContact_Converges)
 {
   // Test: One penetrating contact produces converged result
   ConstraintSolver solver;
@@ -105,7 +105,7 @@ TEST(ConstraintSolverContactTest, SingleContact_Converges_0033)
   EXPECT_NEAR(0., result.bodyForces[1].angularTorque.norm(), 1e-9);
 }
 
-TEST(ConstraintSolverContactTest, MultipleContacts_Converges_0033)
+TEST(ConstraintSolverContactTest, MultipleContacts_Converges)
 {
   // Test: 2-4 simultaneous contacts converge
   ConstraintSolver solver;
@@ -183,7 +183,7 @@ TEST(ConstraintSolverContactTest, MultipleContacts_Converges_0033)
   EXPECT_NEAR(0., result.bodyForces[1].angularTorque.norm(), 1e-9);
 }
 
-TEST(ConstraintSolverContactTest, MaxIterationsReached_ReportsNotConverged_0033)
+TEST(ConstraintSolverContactTest, MaxIterationsReached_ReportsNotConverged)
 {
   // Test: Set max_safety_iterations=1 on a scenario requiring multiple active
   // set changes. With ASM, a mixed compressive/separating contact configuration
@@ -252,7 +252,7 @@ TEST(ConstraintSolverContactTest, MaxIterationsReached_ReportsNotConverged_0033)
 // 2. Lambda Non-Negativity (Unilateral Enforcement) Tests
 // ============================================================================
 
-TEST(ConstraintSolverContactTest, SeparatingBodies_LambdaZero_0033)
+TEST(ConstraintSolverContactTest, SeparatingBodies_LambdaZero)
 {
   // Test: Bodies moving apart produce lambda=0 (no adhesion)
   ConstraintSolver solver;
@@ -295,7 +295,7 @@ TEST(ConstraintSolverContactTest, SeparatingBodies_LambdaZero_0033)
   EXPECT_NEAR(0.0, result.lambdas(0), 1e-6);  // Lambda clamped to zero
 }
 
-TEST(ConstraintSolverContactTest, ApproachingBodies_LambdaPositive_0033)
+TEST(ConstraintSolverContactTest, ApproachingBodies_LambdaPositive)
 {
   // Test: Bodies approaching produce lambda>0 (repulsive force)
   ConstraintSolver solver;
@@ -340,7 +340,7 @@ TEST(ConstraintSolverContactTest, ApproachingBodies_LambdaPositive_0033)
   EXPECT_NEAR(0., result.bodyForces[1].angularTorque.norm(), 1e-9);
 }
 
-TEST(ConstraintSolverContactTest, RestingContact_LambdaNonNegative_0033)
+TEST(ConstraintSolverContactTest, RestingContact_LambdaNonNegative)
 {
   // Test: Bodies at rest on surface produce lambda>=0
   ConstraintSolver solver;
@@ -381,7 +381,7 @@ TEST(ConstraintSolverContactTest, RestingContact_LambdaNonNegative_0033)
 // 3. Per-Body Force Correctness Tests
 // ============================================================================
 
-TEST(ConstraintSolverContactTest, EqualMass_SymmetricForces_0033)
+TEST(ConstraintSolverContactTest, EqualMass_SymmetricForces)
 {
   // Test: Two equal-mass bodies receive equal and opposite forces
   ConstraintSolver solver;
@@ -423,7 +423,7 @@ TEST(ConstraintSolverContactTest, EqualMass_SymmetricForces_0033)
               1e-6);
 }
 
-TEST(ConstraintSolverContactTest, StaticBody_ZeroForceOnStatic_0033)
+TEST(ConstraintSolverContactTest, StaticBody_ZeroForceOnStatic)
 {
   // Test: Body with inverseMass=0 receives zero velocity change
   // Ticket: 0040b — stateA approaching stateB so contact produces positive
@@ -462,7 +462,7 @@ TEST(ConstraintSolverContactTest, StaticBody_ZeroForceOnStatic_0033)
   EXPECT_GT(result.bodyForces[1].linearForce.norm(), 0.0);
 }
 
-TEST(ConstraintSolverContactTest, ForceDirection_AlongContactNormal_0033)
+TEST(ConstraintSolverContactTest, ForceDirection_AlongContactNormal)
 {
   // Test: Constraint force is along the contact normal direction
   // Ticket: 0040b — stateA approaching stateB so contact produces positive
@@ -505,7 +505,7 @@ TEST(ConstraintSolverContactTest, ForceDirection_AlongContactNormal_0033)
   EXPECT_GT(fz, 1e-6);  // Significant Z component
 }
 
-TEST(ConstraintSolverContactTest, AngularForces_LeverArmProducesTorque_0033)
+TEST(ConstraintSolverContactTest, AngularForces_LeverArmProducesTorque)
 {
   // Test: Off-center contact produces angular constraint torque
   // Ticket: 0040b — stateA approaching stateB so contact produces positive
@@ -551,7 +551,7 @@ TEST(ConstraintSolverContactTest, AngularForces_LeverArmProducesTorque_0033)
 // ============================================================================
 
 TEST(ConstraintSolverContactTest,
-     HeadOnCollision_EqualMass_VelocityExchange_0033)
+     HeadOnCollision_EqualMass_VelocityExchange)
 {
   // Test: Two equal-mass bodies approaching head-on exchange velocities (e=1)
   ConstraintSolver solver;
@@ -590,7 +590,7 @@ TEST(ConstraintSolverContactTest,
 // Slop correction was removed from velocity-level RHS as it injected energy.
 // Penetration correction now handled exclusively by PositionCorrector.
 
-TEST(ConstraintSolverContactTest, Restitution_ZeroBounce_0033)
+TEST(ConstraintSolverContactTest, Restitution_ZeroBounce)
 {
   // Test: e=0 contact produces zero rebound (bodies stick)
   ConstraintSolver solver;
@@ -623,7 +623,7 @@ TEST(ConstraintSolverContactTest, Restitution_ZeroBounce_0033)
   EXPECT_GT(result.lambdas(0), 0.0);  // Contact force applied
 }
 
-TEST(ConstraintSolverContactTest, Restitution_FullBounce_0033)
+TEST(ConstraintSolverContactTest, Restitution_FullBounce)
 {
   // Test: e=1 contact produces full velocity reversal
   ConstraintSolver solver;
@@ -657,7 +657,7 @@ TEST(ConstraintSolverContactTest, Restitution_FullBounce_0033)
 }
 
 TEST(ConstraintSolverContactTest,
-     RestVelocityThreshold_DisablesRestitution_0033)
+     RestVelocityThreshold_DisablesRestitution)
 {
   // Test: Slow contact (below 0.5 m/s) disables restitution to prevent jitter
   ConstraintSolver solver;
@@ -697,7 +697,7 @@ TEST(ConstraintSolverContactTest,
 // 5. Edge Cases Tests
 // ============================================================================
 
-TEST(ConstraintSolverContactTest, BothBodiesStatic_AllLambdasZero_0033)
+TEST(ConstraintSolverContactTest, BothBodiesStatic_AllLambdasZero)
 {
   // Test: Two infinite-mass bodies: degenerate but should not crash
   ConstraintSolver solver;
@@ -733,7 +733,7 @@ TEST(ConstraintSolverContactTest, BothBodiesStatic_AllLambdasZero_0033)
   // inverseMass = 0
 }
 
-TEST(ConstraintSolverContactTest, ParallelContacts_SameNormal_0033)
+TEST(ConstraintSolverContactTest, ParallelContacts_SameNormal)
 {
   // Test: Multiple contacts with same normal converge correctly
   // Ticket: 0040b — stateA approaching stateB so contacts produce positive
@@ -787,7 +787,7 @@ TEST(ConstraintSolverContactTest, ParallelContacts_SameNormal_0033)
   EXPECT_GT(result.lambdas(1), 0.0);
 }
 
-TEST(ConstraintSolverContactTest, OrthogonalContacts_IndependentResolution_0033)
+TEST(ConstraintSolverContactTest, OrthogonalContacts_IndependentResolution)
 {
   // Test: Contacts on perpendicular faces resolve independently
   ConstraintSolver solver;
@@ -835,7 +835,7 @@ TEST(ConstraintSolverContactTest, OrthogonalContacts_IndependentResolution_0033)
   EXPECT_EQ(2, result.lambdas.size());
 }
 
-TEST(ConstraintSolverContactTest, HighMassRatio_Converges_0033)
+TEST(ConstraintSolverContactTest, HighMassRatio_Converges)
 {
   // Test: Mass ratio of 1000:1 still converges
   // Ticket: 0040b — stateA approaching stateB so contact produces positive
@@ -869,7 +869,7 @@ TEST(ConstraintSolverContactTest, HighMassRatio_Converges_0033)
   EXPECT_GT(result.lambdas(0), 0.0);
 }
 
-TEST(ConstraintSolverContactTest, ZeroPenetration_NoBias_0033)
+TEST(ConstraintSolverContactTest, ZeroPenetration_NoBias)
 {
   // Test: Contact at surface (penetration=0) produces no Baumgarte bias
   ConstraintSolver solver;
@@ -913,7 +913,7 @@ TEST(ConstraintSolverContactTest, ZeroPenetration_NoBias_0033)
 // 6. Solver Configuration Tests
 // ============================================================================
 
-TEST(ConstraintSolverContactTest, SetMaxIterations_Respected_0033)
+TEST(ConstraintSolverContactTest, SetMaxIterations_Respected)
 {
   // Test: setMaxIterations() limits PGS iteration count
   ConstraintSolver solver;
@@ -944,7 +944,7 @@ TEST(ConstraintSolverContactTest, SetMaxIterations_Respected_0033)
   EXPECT_LE(result.iterations, 5);  // Should not exceed max iterations
 }
 
-TEST(ConstraintSolverContactTest, SetConvergenceTolerance_EarlyExit_0033)
+TEST(ConstraintSolverContactTest, SetConvergenceTolerance_EarlyExit)
 {
   // Test: Tight tolerance requires more iterations; loose tolerance exits early
   ConstraintSolver solverTight;
@@ -984,7 +984,7 @@ TEST(ConstraintSolverContactTest, SetConvergenceTolerance_EarlyExit_0033)
   EXPECT_GE(resultTight.iterations, resultLoose.iterations);
 }
 
-TEST(ConstraintSolverContactTest, DefaultConfiguration_ReasonableDefaults_0033)
+TEST(ConstraintSolverContactTest, DefaultConfiguration_ReasonableDefaults)
 {
   // Test: Default max_iterations=10, tolerance=1e-4
   ConstraintSolver solver;

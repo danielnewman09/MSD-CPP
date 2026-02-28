@@ -75,7 +75,7 @@ std::vector<Coordinate> createRegularTetrahedronPoints(double edgeLength)
 
 }  // anonymous namespace
 
-TEST(InertialCalculationsTest, UnitCubeAnalytical_Ticket0026)
+TEST(InertialCalculationsTest, UnitCubeAnalytical)
 {
   // Arrange: Unit cube (side = 1, density = 1, centered at origin)
   auto points = createUnitCubePoints();
@@ -107,7 +107,7 @@ TEST(InertialCalculationsTest, UnitCubeAnalytical_Ticket0026)
   EXPECT_NEAR(I(2, 1), I(1, 2), 1e-10);
 }
 
-TEST(InertialCalculationsTest, RectangularBoxAnalytical_Ticket0026)
+TEST(InertialCalculationsTest, RectangularBoxAnalytical)
 {
   // Arrange: Rectangular box (2x3x4, density = 1, centered at origin)
   double a = 2.0, b = 3.0, c = 4.0;
@@ -145,7 +145,7 @@ TEST(InertialCalculationsTest, RectangularBoxAnalytical_Ticket0026)
   EXPECT_NEAR(I(2, 1), I(1, 2), 1e-10);
 }
 
-TEST(InertialCalculationsTest, RegularTetrahedronAnalytical_Ticket0026)
+TEST(InertialCalculationsTest, RegularTetrahedronAnalytical)
 {
   // Arrange: Regular tetrahedron (edge = 2.0, density = 1)
   double edgeLength = 2.0;
@@ -178,7 +178,7 @@ TEST(InertialCalculationsTest, RegularTetrahedronAnalytical_Ticket0026)
   EXPECT_NEAR(I(2, 1), I(1, 2), 1e-10);
 }
 
-TEST(InertialCalculationsTest, VolumeByproduct_Ticket0026)
+TEST(InertialCalculationsTest, VolumeByproduct)
 {
   // Arrange: Unit cube
   auto points = createUnitCubePoints();
@@ -196,7 +196,7 @@ TEST(InertialCalculationsTest, VolumeByproduct_Ticket0026)
     inertial_calculations::computeInertiaTensorAboutCentroid(hull, density));
 }
 
-TEST(InertialCalculationsTest, CentroidByproduct_Ticket0026)
+TEST(InertialCalculationsTest, CentroidByproduct)
 {
   // Arrange: Rectangular box centered at origin
   double a = 2.0, b = 3.0, c = 4.0;
@@ -215,7 +215,7 @@ TEST(InertialCalculationsTest, CentroidByproduct_Ticket0026)
     inertial_calculations::computeInertiaTensorAboutCentroid(hull, density));
 }
 
-TEST(InertialCalculationsTest, SymmetryProperty_Ticket0026)
+TEST(InertialCalculationsTest, SymmetryProperty)
 {
   // Arrange: Unit cube
   auto points = createUnitCubePoints();
@@ -232,7 +232,7 @@ TEST(InertialCalculationsTest, SymmetryProperty_Ticket0026)
   EXPECT_NEAR(I(1, 2), I(2, 1), 1e-10);
 }
 
-TEST(InertialCalculationsTest, PositiveDefinite_Ticket0026)
+TEST(InertialCalculationsTest, PositiveDefinite)
 {
   // Arrange: Unit cube
   auto points = createUnitCubePoints();
@@ -252,7 +252,7 @@ TEST(InertialCalculationsTest, PositiveDefinite_Ticket0026)
   EXPECT_GT(eigenvalues(2), 0.0);
 }
 
-TEST(InertialCalculationsTest, LargeCoordinateOffset_Ticket0026)
+TEST(InertialCalculationsTest, LargeCoordinateOffset)
 {
   // Arrange: Unit cube offset far from origin
   auto points = createUnitCubePoints();
@@ -281,7 +281,7 @@ TEST(InertialCalculationsTest, LargeCoordinateOffset_Ticket0026)
   EXPECT_NEAR(I(2, 2), expected_diagonal, 1e-8);
 }
 
-TEST(InertialCalculationsTest, ExtremeAspectRatio_Ticket0026)
+TEST(InertialCalculationsTest, ExtremeAspectRatio)
 {
   // Arrange: Very thin rectangular box (1:100:100 aspect ratio)
   double a = 0.01, b = 1.0, c = 1.0;
@@ -305,7 +305,7 @@ TEST(InertialCalculationsTest, ExtremeAspectRatio_Ticket0026)
   EXPECT_NEAR(I(2, 2), expected_zz, 1e-9);
 }
 
-TEST(InertialCalculationsTest, SingleTetrahedron_Ticket0026)
+TEST(InertialCalculationsTest, SingleTetrahedron)
 {
   // Arrange: Regular tetrahedron (minimum convex hull)
   double edgeLength = 1.0;
@@ -333,7 +333,7 @@ TEST(InertialCalculationsTest, SingleTetrahedron_Ticket0026)
   EXPECT_GT(eigenvalues(2), 0.0);
 }
 
-TEST(InertialCalculationsTest, Invaliddensity_Ticket0026)
+TEST(InertialCalculationsTest, Invaliddensity)
 {
   // Arrange: Unit cube
   auto points = createUnitCubePoints();
@@ -350,7 +350,7 @@ TEST(InertialCalculationsTest, Invaliddensity_Ticket0026)
     std::invalid_argument);
 }
 
-TEST(InertialCalculationsTest, InvalidHull_Ticket0026)
+TEST(InertialCalculationsTest, InvalidHull)
 {
   // Arrange: Empty hull
   ConvexHull hull;
@@ -362,7 +362,7 @@ TEST(InertialCalculationsTest, InvalidHull_Ticket0026)
     std::runtime_error);
 }
 
-TEST(InertialCalculationsTest, densityScaling_Ticket0026)
+TEST(InertialCalculationsTest, densityScaling)
 {
   // Arrange: Unit cube with two different densityes
   auto points = createUnitCubePoints();

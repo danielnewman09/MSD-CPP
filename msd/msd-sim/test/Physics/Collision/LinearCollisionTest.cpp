@@ -17,10 +17,10 @@
 using namespace msd_sim;
 
 // ============================================================================
-// A1: Sphere drops vertically onto horizontal plane (settling)
+// Sphere drops vertically onto horizontal plane (settling)
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, LinearCollisionTest_A1_SphereDrop_SettlesToRest)
+TEST_F(ReplayEnabledTest, LinearCollisionTest_SphereDrop_SettlesToRest)
 {
   // NOTE: No friction parameter currently exposed. Tests proceed without
   // setting mu=0; contact-normal-only constraints provide equivalent behavior.
@@ -52,10 +52,10 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A1_SphereDrop_SettlesToRest)
 }
 
 // ============================================================================
-// A2: Perfectly inelastic (e=0) sphere drops vertically
+// Perfectly inelastic (e=0) sphere drops vertically
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, LinearCollisionTest_A2_PerfectlyInelastic_QuickStop)
+TEST_F(ReplayEnabledTest, LinearCollisionTest_PerfectlyInelastic_QuickStop)
 {
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
@@ -81,10 +81,10 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A2_PerfectlyInelastic_QuickStop)
 }
 
 // ============================================================================
-// A3: Perfectly elastic (e=1) sphere — perpetual bouncing
+// Perfectly elastic (e=1) sphere — perpetual bouncing
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, LinearCollisionTest_A3_PerfectlyElastic_EnergyConserved)
+TEST_F(ReplayEnabledTest, LinearCollisionTest_PerfectlyElastic_EnergyConserved)
 {
   spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
@@ -114,10 +114,10 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A3_PerfectlyElastic_EnergyConserve
 }
 
 // ============================================================================
-// A4: Two spheres, equal mass, head-on elastic — velocity swap
+// Two spheres, equal mass, head-on elastic — velocity swap
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, LinearCollisionTest_A4_EqualMassElastic_VelocitySwap)
+TEST_F(ReplayEnabledTest, LinearCollisionTest_EqualMassElastic_VelocitySwap)
 {
   // Remove gravity for clean 1D collision
   disableGravity();
@@ -211,10 +211,10 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A4_EqualMassElastic_VelocitySwap)
 }
 
 // ============================================================================
-// A5: Two spheres, unequal mass (10:1), elastic
+// Two spheres, unequal mass (10:1), elastic
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, LinearCollisionTest_A5_UnequalMassElastic_ClassicalFormulas)
+TEST_F(ReplayEnabledTest, LinearCollisionTest_UnequalMassElastic_ClassicalFormulas)
 {
   // Remove gravity for clean 1D collision
   disableGravity();
@@ -281,10 +281,10 @@ TEST_F(ReplayEnabledTest, LinearCollisionTest_A5_UnequalMassElastic_ClassicalFor
 }
 
 // ============================================================================
-// A6: Glancing collision at offset — impulse along contact normal
+// Glancing collision at offset — impulse along contact normal
 // ============================================================================
 
-TEST_F(ReplayEnabledTest, LinearCollisionTest_A6_GlancingCollision_MomentumAndEnergyConserved)
+TEST_F(ReplayEnabledTest, LinearCollisionTest_GlancingCollision_MomentumAndEnergyConserved)
 {
   // Remove gravity for clean collision
   disableGravity();
