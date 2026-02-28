@@ -19,15 +19,16 @@ title 0087: Collision Solver Lambda Test Suite\nArchitecture Overview
 package "msd-sim/test/Helpers (new)" {
 
   class CollisionScenario <<new>> {
-    + inertials : std::vector<AssetInertial>
-    + environments : std::vector<AssetEnvironment>
-    + pipeline : CollisionPipeline
-    + dt : double
+    - inertials_ : std::vector<AssetInertial>
+    - environments_ : std::vector<AssetEnvironment>
+    - pipeline_ : std::unique_ptr<CollisionPipeline>
+    - dt_ : double
+    - lastResult_ : ConstraintSolver::SolveResult
     ..
-    + stepOnce() : ConstraintSolver::SolveResult
-    + stepOnceRaw() : ConstraintSolver::SolveResult
+    + stepOnce(applyForces, correctPositions) : ConstraintSolver::SolveResult
     + getLastSolveResult() const : const ConstraintSolver::SolveResult&
     + getInertialState(size_t idx) const : const InertialState&
+    + hadCollisions() const : bool
   }
 
   class CollisionScenarioBuilder <<new>> {
@@ -70,8 +71,9 @@ package "msd-sim/src" {
     # applyForces(...)
     # correctPositions(...)
     ..
-    ' friend class CollisionPipelineTest (existing)
-    ' friend class SolverLambdaTestFixture (new - added here)
+    ' friend class CollisionPipelineTest (existing — dead code; GTest suite names
+    '   are not C++ classes, so this declaration has no effect)
+    ' friend class CollisionScenario (new — CollisionScenario IS a real C++ class)
   }
 
   class ConstraintSolver {
@@ -200,20 +202,27 @@ CollisionScenario ..> CollisionPipeline : friend access for SolveResult capture
 
 note bottom of CollisionScenario
   stepOnce() calls:
-  1. pipeline.detectCollisions()
-  2. pipeline.createConstraints()
-  3. pipeline.assembleSolverInput()
-  4. solveResult = pipeline.solveConstraintsWithWarmStart(dt)
-  5. Stores solveResult_ for inspection
-  6. pipeline.applyForces() [optional]
-  7. pipeline.correctPositions() [optional]
+  1. pipeline_->detectCollisions()
+  2. pipeline_->createConstraints()
+  3. pipeline_->assembleSolverInput()
+  4. lastResult_ = pipeline_->solveConstraintsWithWarmStart(dt)
+  5. pipeline_->applyForces() [if applyForces=true]
+  6. pipeline_->correctPositions() [if correctPositions=true]
+  Returns lastResult_ by value; getLastSolveResult() returns const ref.
+
+  Owned via unique_ptr<CollisionPipeline> because CollisionPipeline
+  deletes all copy and move — unique_ptr makes CollisionScenario movable.
 end note
 
 note right of CollisionPipeline
   Only change: add
   "friend class CollisionScenario"
-  to existing friend declarations.
+  after existing friend declarations.
   No logic changes.
+
+  Note: the existing "friend class CollisionPipelineTest"
+  is dead code (TEST() macros are not C++ classes).
+  Cleanup is out of scope for this ticket.
 end note
 
 note bottom of LambdaAssertions

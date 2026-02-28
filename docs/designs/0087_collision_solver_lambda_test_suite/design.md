@@ -39,6 +39,9 @@ See: [`./0087_collision_solver_lambda_test_suite.puml`](./0087_collision_solver_
   public:
     explicit CollisionScenario(double dt = 0.016);
 
+    // CollisionPipeline deletes all copy and move, so CollisionScenario
+    // owns it via unique_ptr. This makes CollisionScenario movable (the
+    // unique_ptr transfers ownership) and non-copyable.
     CollisionScenario(const CollisionScenario&) = delete;
     CollisionScenario& operator=(const CollisionScenario&) = delete;
     CollisionScenario(CollisionScenario&&) noexcept = default;
@@ -59,8 +62,13 @@ See: [`./0087_collision_solver_lambda_test_suite.puml`](./0087_collision_solver_
     // Run one pipeline step and capture the SolveResult.
     // applyForces: if true, also calls applyForces() after solving
     // correctPositions: if true, also calls correctPositions() after solving
+    // Returns the SolveResult for direct lambda inspection.
     ConstraintSolver::SolveResult stepOnce(bool applyForces = true,
                                            bool correctPositions = false);
+
+    // Re-fetch the SolveResult from the most recent stepOnce() call
+    // (for tests that want to inspect after additional state queries)
+    const ConstraintSolver::SolveResult& getLastSolveResult() const;
 
     // State access for post-step verification
     const InertialState& getInertialState(size_t idx) const;
@@ -71,7 +79,7 @@ See: [`./0087_collision_solver_lambda_test_suite.puml`](./0087_collision_solver_
     double dt_;
     std::vector<AssetInertial> inertials_;
     std::vector<AssetEnvironment> environments_;
-    CollisionPipeline pipeline_;
+    std::unique_ptr<CollisionPipeline> pipeline_;  // non-movable; owned via unique_ptr
     ConstraintSolver::SolveResult lastResult_;
   };
 
@@ -81,13 +89,17 @@ See: [`./0087_collision_solver_lambda_test_suite.puml`](./0087_collision_solver_
 - **Thread safety**: Not thread-safe; single-threaded test use only
 - **Error handling**: Assertions on invalid indices; pipeline errors propagate normally
 
-**Design rationale**: `CollisionScenario` is a lightweight value-type test fixture that owns its state. The `stepOnce()` method calls the protected pipeline sub-phases in sequence (via `friend` access) and captures the `SolveResult` before it would otherwise be discarded. This is the minimal surface needed to expose lambdas without making `CollisionPipeline` broadly public.
+**Design rationale**: `CollisionScenario` owns its `CollisionPipeline` via `std::unique_ptr<CollisionPipeline>` because `CollisionPipeline` deletes all copy and move constructors (see `CollisionPipeline.hpp` lines 218–221). Owning via `unique_ptr` makes `CollisionScenario` movable (the pointer transfers ownership) while keeping the pipeline itself non-movable at the type level. `CollisionScenarioBuilder` factory methods return `CollisionScenario` by value; NRVO applies, and if a move is needed, the `unique_ptr` member enables it.
+
+The `stepOnce()` method calls the protected pipeline sub-phases in sequence (via `friend` access) and captures the `SolveResult` before it would otherwise be discarded. `getLastSolveResult()` provides a const reference to the stored result for tests that wish to re-inspect without re-running the pipeline. This is the minimal surface needed to expose lambdas without making `CollisionPipeline` broadly public.
+
+**Note on friend declaration correctness**: The existing `friend class CollisionPipelineTest` declaration in `CollisionPipeline.hpp` grants access to a GTest suite name (which is not a C++ class), making it functionally dead code. The new `friend class CollisionScenario` declaration will work correctly because `CollisionScenario` is a proper C++ class defined in `msd-sim/test/Helpers/CollisionScenario.hpp`. Cleanup of the dead `CollisionPipelineTest` friend declaration is out of scope for this ticket.
 
 #### CollisionScenarioBuilder
 
 - **Purpose**: Static factory methods that construct common collision setups, eliminating copy-paste boilerplate across the many individual lambda tests.
 - **Header location**: `msd-sim/test/Helpers/CollisionScenarioBuilder.hpp`
-- **Source location**: header-only (all methods return by value, simple enough)
+- **Source location**: header-only (all methods return `CollisionScenario` by value; move is valid because `CollisionScenario` owns its pipeline via `std::unique_ptr`)
 - **Key interface**:
   ```cpp
   namespace msd_sim::test
@@ -209,7 +221,7 @@ See: [`./0087_collision_solver_lambda_test_suite.puml`](./0087_collision_solver_
 
 | New Component | Existing Component | Integration Type | Notes |
 |---|---|---|---|
-| `CollisionScenario` | `CollisionPipeline` | `friend` access for protected sub-phases | One line change to production header |
+| `CollisionScenario` | `CollisionPipeline` | `friend` access for protected sub-phases; owned via `unique_ptr` | One line change to production header |
 | `CollisionScenario` | `ConstraintSolver::SolveResult` | Returns by value | Read-only inspection; no ownership issues |
 | `CollisionScenarioBuilder` | `CollisionScenario` | Factory creates scenario | All geometry is hardcoded (no DB dependency) |
 | `LambdaAssertions` | `ConstraintSolver::SolveResult` | Const-ref inspection | Only uses `result.lambdas`, `result.converged` |
@@ -426,10 +438,187 @@ Per ticket requirements:
 The following project guidelines apply to this design:
 
 - Brace initialization throughout (`CollisionScenario` members initialized with `{}`).
-- Rule of Zero/Five: `CollisionScenario` deletes copy operations (owns `CollisionPipeline` which is non-copyable) and defaults move operations.
+- Rule of Five: `CollisionScenario` deletes copy constructor and copy assignment (pipeline is non-copyable); defaults move constructor and move assignment (enabled by `std::unique_ptr<CollisionPipeline>` member). `CollisionPipeline` itself deletes all four — `unique_ptr` ownership is the bridge that makes `CollisionScenario` movable.
 - `NaN` initialization: floating-point members (e.g., `dt_`) initialized from constructor arguments, not left uninitialized.
 - `snake_case_` for member variables in `CollisionScenario`.
 - `PascalCase` for class names.
 - Headers in `src/` for production code; `test/Helpers/` for test-only shared utilities.
-- No `shared_ptr` — `CollisionScenario` owns assets by value in vectors.
+- No `shared_ptr` — `CollisionScenario` owns the pipeline via `unique_ptr` and assets by value in vectors.
 - `std::span` for non-owning views passed to `CollisionPipeline::execute()`.
+
+---
+
+## Design Revision Notes (Autonomous Iteration 1)
+
+**Date**: 2026-02-28
+**Triggered by**: Design Review Initial Assessment (REVISION_REQUESTED)
+
+### Changes Made
+
+#### I1 — CollisionScenario move semantics (BLOCKING — fixed)
+
+Changed `pipeline_` member from `CollisionPipeline pipeline_` (by value, non-movable) to `std::unique_ptr<CollisionPipeline> pipeline_` (owned via pointer, movable).
+
+`CollisionPipeline` deletes all copy and move constructors (`= delete` for all four in `CollisionPipeline.hpp` lines 218–221). Owning via `std::unique_ptr` transfers ownership through pointer during move, enabling `CollisionScenario` to declare `CollisionScenario(CollisionScenario&&) noexcept = default` and `operator=(CollisionScenario&&) noexcept = default` with correct semantics.
+
+`CollisionScenarioBuilder` return-by-value semantics are unchanged — NRVO or move via `unique_ptr` member applies.
+
+Updated:
+- Interface block in `CollisionScenario` section (private member `pipeline_` type)
+- Design rationale paragraph (explains the `unique_ptr` bridge)
+- Coding Standards section (Rule of Five explanation updated)
+- Integration points table
+- PUML diagram (member type, stepOnce() note)
+
+#### I2 — Friend declaration correctness (MAJOR — clarified)
+
+Added a note in the `CollisionScenario` design rationale acknowledging that the existing `friend class CollisionPipelineTest` in `CollisionPipeline.hpp` is dead code (GTest `TEST()` suite names are not C++ classes). Confirmed that `friend class CollisionScenario` will be functional because `CollisionScenario` IS a proper C++ class. Cleanup of the dead declaration is deferred as out of scope. Updated the PUML diagram comment accordingly.
+
+#### I3 — Interface reconciliation (MINOR — resolved)
+
+Added `getLastSolveResult()` to the design document's public interface block (`CollisionScenario`), matching what was already shown in the PUML. Removed `stepOnceRaw()` from the PUML (it was not in the design doc and has no defined purpose). The final interface is:
+- `stepOnce(bool, bool) : ConstraintSolver::SolveResult` — runs pipeline, stores result, returns by value
+- `getLastSolveResult() const : const ConstraintSolver::SolveResult&` — returns const ref to stored result
+
+### Parts NOT Modified (Passing Criteria)
+
+Per the reviewer's instruction, the following were not modified:
+- Five-stage verification chain (A–E structure, stage dependencies)
+- Analytical expected lambda values and tolerance guidance
+- `LambdaAssertions` design (EXPECT_* over ASSERT_*)
+- `CollisionScenarioBuilder` geometry (hardcoded unit cube, no DB dependency)
+- Position correction test approach (through pipeline, not PositionCorrector directly)
+- Namespace `msd_sim::test`
+- Test file naming and directory structure
+- CMakeLists.txt plan
+
+---
+
+## Design Review — Initial Assessment
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-28
+**Status**: REVISION_REQUESTED
+**Iteration**: 0 of 1
+
+### Issues Requiring Revision
+
+| ID | Issue | Category | Required Change |
+|----|-------|----------|-----------------|
+| I1 | `CollisionScenario` declares `CollisionScenario(CollisionScenario&&) noexcept = default` but owns `CollisionPipeline pipeline_` which has ALL move and copy operations explicitly `= delete`. A defaulted move constructor cannot be synthesized when a member is non-movable — this will produce a compile error. | C++ Design Quality / Feasibility | Remove the defaulted move constructor and move-assign operator; declare `CollisionScenario(CollisionScenario&&) = delete` and `CollisionScenario& operator=(CollisionScenario&&) = delete`. Update `CollisionScenarioBuilder` factory methods to return by `std::unique_ptr<CollisionScenario>` (heap-allocated) or restructure `CollisionScenario` to own `std::unique_ptr<CollisionPipeline>` (then move of the owning pointer is valid). |
+| I2 | The design claims to follow the "existing pattern established by `friend class CollisionPipelineTest`" — but inspection of `CollisionPipeline.hpp` shows `friend class CollisionPipelineTest;` while the actual test file uses `TEST(CollisionPipelineTest, ...)` macros, which define free functions, NOT a C++ class named `CollisionPipelineTest`. The friend declaration in the existing code is dead code granting access to a non-existent class. The new design should not perpetuate this error — it must define a real C++ class for the friend declaration to be meaningful. | Architectural Fit / Feasibility | Define a real helper class that will hold the protected-phase access and is declared as `friend`. The cleanest approach for `0087` is: define `CollisionScenario` (or an inner `Accessor` class) as the friend target, and ensure a C++ class with that exact name is defined in the test binary. Alternatively, make `CollisionScenario` a nested class of a `friend` wrapper. |
+| I3 | The PUML diagram shows `stepOnceRaw()` and `getLastSolveResult()` as distinct public methods on `CollisionScenario`, but the design document's interface block shows only `stepOnce(bool, bool)`. The discrepancy leaves implementers with ambiguous API surface. | Architectural Fit | Reconcile: choose one authoritative interface. If `getLastSolveResult()` is retained as a separate accessor, add it to the design document's interface block. If it is removed in favor of `stepOnce()` returning `SolveResult` directly, remove it from the PUML. |
+
+### Revision Instructions for Architect
+
+The following changes must be made before final review:
+
+1. **I1 — CollisionScenario move semantics**: `CollisionPipeline` is non-movable (all special members `= delete` in `CollisionPipeline.hpp` lines 218–221). The design proposes `CollisionScenario` to be movable (`CollisionScenario(CollisionScenario&&) noexcept = default`) while owning a `CollisionPipeline` by value — this is a compile-time contradiction. Two valid resolutions exist:
+
+   **Option A (preferred)**: Own `CollisionPipeline` via `std::unique_ptr<CollisionPipeline>`. The `unique_ptr` itself is movable, so `CollisionScenario` can be move-constructed. `CollisionScenarioBuilder` factory methods return `CollisionScenario` by value (move eligible). Update the Rule of Zero/Five section: copy deleted, move defaulted via the `unique_ptr` member.
+
+   **Option B**: Make `CollisionScenario` non-movable and non-copyable (delete all), and have `CollisionScenarioBuilder` return `std::unique_ptr<CollisionScenario>`. Tests hold unique_ptr and call via pointer. More verbose in test code but avoids indirection in the scenario itself.
+
+   The design document must update the interface block, the Rule of Zero/Five commentary in the Coding Standards section, and the builder return types accordingly.
+
+2. **I2 — Friend declaration correctness**: Before adding `friend class CollisionScenario` to `CollisionPipeline`, confirm that `CollisionScenario` will be defined in the same translation unit as the code that calls protected methods. GTest `TEST()` suite names are not C++ classes; only `TEST_F()` fixtures backed by a `::testing::Test` subclass exist as real classes. The existing `friend class CollisionPipelineTest` is non-functional. For `0087`, the friend declaration `friend class CollisionScenario;` will work correctly IF `CollisionScenario` is a proper C++ class (which the design intends). Update the design document to: (a) acknowledge that the existing `CollisionPipelineTest` friend is dead code; (b) confirm that `CollisionScenario` as designed IS a real C++ class and thus a valid friend target; (c) note that future cleanup of the dead `CollisionPipelineTest` friend is out of scope for this ticket.
+
+3. **I3 — Interface reconciliation**: Decide between these two options and update both `design.md` and the PUML to be consistent:
+   - Option A: `stepOnce()` returns `SolveResult` directly; no `getLastSolveResult()` accessor needed.
+   - Option B: `stepOnce()` stores internally; `getLastSolveResult()` fetches it. Add `getLastSolveResult()` to the design doc's public interface block.
+
+### Items Passing Review (No Changes Needed)
+
+The following criteria pass and should NOT be modified during revision:
+
+- **Overall architecture decomposition**: The five-stage bottom-up verification chain (A through E) is well-structured. Stage dependencies (B/C/D all depend on A, E depends on B/C/D) are correct and clearly stated.
+- **Analytical expected values**: The lambda derivations in the "Analytical Expected Lambda Values" section are physically correct. The ±10–15% tolerance guidance is appropriate for the Baumgarte-augmented solver RHS.
+- **`LambdaAssertions` design**: Using `EXPECT_*` over `ASSERT_*` to report all cone violations in a single run is the correct choice.
+- **`CollisionScenarioBuilder` geometry**: Hardcoded unit cube vertices (no DB dependency) is exactly right for isolated unit tests — fast, deterministic, no file I/O.
+- **Position correction test approach**: Routing through `CollisionPipeline` rather than `PositionCorrector` directly exercises the production code path. Correct decision.
+- **Namespace `msd_sim::test`**: Consistent with project conventions for test-shared utilities.
+- **Stage D: split-impulse guarantee test**: The `PositionCorrection_DoesNotInjectVelocity` test is a valuable correctness check for the invariant that `correctPositions()` never modifies `InertialState::velocity`.
+- **No solver code modification**: The constraint that `ConstraintSolver`, `BlockPGSSolver`, and `PositionCorrector` are not modified is correctly enforced.
+- **Test file naming and locations**: `SolverLambdaTest.cpp`, `FrictionLambdaTest.cpp`, `PositionCorrectionTest.cpp`, `PipelineIntegrationTest.cpp` under `test/Physics/Collision/` — consistent with existing test structure.
+- **CMakeLists.txt plan**: `msd-sim/test/Helpers/CMakeLists.txt` for shared helpers is the right build system pattern.
+
+---
+
+## Design Review — Final Assessment
+
+**Reviewer**: Design Review Agent
+**Date**: 2026-02-28
+**Status**: APPROVED WITH NOTES
+**Iteration**: 1 of 1
+
+### Criteria Assessment
+
+#### Architectural Fit
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Naming conventions | ✓ | `CollisionScenario`, `CollisionScenarioBuilder`, `LambdaAssertions` — PascalCase; `stepOnce()`, `getLastSolveResult()` — camelCase; `pipeline_`, `dt_` — snake_case_ |
+| Namespace organization | ✓ | `msd_sim::test` for test-only shared utilities; test files use `using namespace msd_sim` consistent with existing pattern |
+| File structure | ✓ | `msd-sim/test/Helpers/` for shared test infrastructure; test files under `test/Physics/Collision/` matching existing structure |
+| Dependency direction | ✓ | All new components depend only on existing production types; no circular headers. `CollisionScenario` depends on `CollisionPipeline`, `AssetInertial`, `AssetEnvironment`, `ConstraintSolver::SolveResult` — all valid |
+
+#### C++ Design Quality
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| RAII | ✓ | `std::unique_ptr<CollisionPipeline>` ensures pipeline cleanup; assets owned by value in vectors |
+| Smart pointer appropriateness | ✓ | `unique_ptr` for exclusive ownership of non-movable `CollisionPipeline`; no `shared_ptr` used anywhere |
+| Value/reference semantics | ✓ | `CollisionScenario` movable via `unique_ptr` member; `LambdaAssertions` takes `const SolveResult&` |
+| Rule of 0/3/5 | ✓ | `CollisionScenario` explicitly declares all five: copy deleted, move defaulted (both ctor and assign), dtor defaulted |
+| Const correctness | ✓ | `getLastSolveResult() const`, `getInertialState(size_t) const`, `hadCollisions() const` all correct |
+| Exception safety | ✓ | No throwing operations in test code; pipeline errors propagate normally |
+| Initialization | ✓ | Brace initialization throughout; `dt_` initialized from constructor parameter |
+| Return values | ✓ | `stepOnce()` returns `SolveResult` by value; `getLastSolveResult()` returns const ref for zero-copy re-inspection |
+
+#### Feasibility
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Header dependencies | ✓ | `CollisionScenario.hpp` includes `CollisionPipeline.hpp` via forward-declare-compatible unique_ptr pattern |
+| Template complexity | ✓ | No templates introduced; header-only builders use only concrete types |
+| Memory strategy | ✓ | Pipeline on heap (unique_ptr), assets in vectors (value), lambdas by value — deterministic ownership |
+| Thread safety | ✓ | Single-threaded test use only; explicitly documented |
+| Build integration | ✓ | New `test/Helpers/CMakeLists.txt` plus additions to `test/Physics/Collision/CMakeLists.txt` — straightforward |
+
+#### Testability
+
+| Criterion | Pass/Fail | Notes |
+|-----------|-----------|-------|
+| Isolation possible | ✓ | `CollisionScenarioBuilder` creates scenarios without DB or Engine dependencies |
+| Mockable dependencies | ✓ | `LambdaAssertions` takes const-ref SolveResult — easily tested in isolation |
+| Observable state | ✓ | `getLastSolveResult()`, `getInertialState()`, `hadCollisions()` provide full post-step inspection |
+
+### Risks Identified
+
+| ID | Risk Description | Category | Likelihood | Impact | Mitigation | Prototype? |
+|----|------------------|----------|------------|--------|------------|------------|
+| R1 | Tolerance calibration for lambda assertions: ±10–15% analytical guidance may not match solver's Baumgarte-augmented RHS for all test cases, requiring empirical tuning during Stage B | Technical | Med | Low | Design explicitly notes this; implementer calibrates against known-good builds. Tolerances documented per-test. | No |
+| R2 | `unique_ptr<CollisionPipeline>` indirection adds one heap allocation per scenario creation. For unit tests this is negligible, but worth noting if many hundreds of scenarios are created in tight loops | Performance | Low | Low | Test scenarios are created once per TEST_F case; allocation is not in a hot path | No |
+| R3 | `CollisionScenario::stepOnce()` calls protected pipeline sub-phases via friend access. If sub-phase method signatures change in future pipeline refactors, this will be a compilation break point | Maintenance | Low | Med | `CollisionScenario` is in test code only; breakage at compilation is immediately visible and caught by CI | No |
+
+### Resolved Issues
+
+All three issues from the Initial Assessment have been addressed:
+
+- **I1 (BLOCKING — resolved)**: `CollisionPipeline` is now owned via `std::unique_ptr<CollisionPipeline>`, resolving the compile-time conflict between defaulted move semantics and a non-movable by-value member.
+- **I2 (MAJOR — resolved)**: Design document now explicitly documents the dead `friend class CollisionPipelineTest` declaration and confirms that `friend class CollisionScenario` will be functional.
+- **I3 (MINOR — resolved)**: Both `stepOnce()` and `getLastSolveResult()` are present and consistent between `design.md` and the PUML. `stepOnceRaw()` removed from PUML.
+
+### Notes for Human Review
+
+1. **Prototype phase**: This ticket skips the Prototype phase (ticket status goes directly to Ready for Implementation) per the original workflow — the five stages are self-contained test-only work, and Stage A's acceptance gate (3 existing tests rewritten using builder) serves as the proof-of-concept validation.
+
+2. **Dead friend cleanup**: The dead `friend class CollisionPipelineTest` declaration in `CollisionPipeline.hpp` is a latent technical debt item. Recommend filing a follow-up ticket to clean it up and convert the `CollisionPipelineTest` test suite to use `TEST_F()` with a real fixture class if sub-phase access is ever needed.
+
+3. **Stage E multi-frame energy test**: The `Pipeline_MultiFrame_EnergyDissipation` test (5-frame sequence, KE accounting) is the most complex test in the suite. Implementer should treat tolerance calibration for this test as empirical — the analytical bound is `|sum(λ·v) per frame - ΔKE| < ε` where ε depends on integration step size.
+
+### Summary
+
+The design is architecturally sound, well-scoped, and directly addresses the motivation of building a bottom-up verification chain for the collision pipeline. The three issues from the initial review have all been resolved in the autonomous revision. The design is ready for implementation beginning with Stage A (0087a).
+
+---
