@@ -88,12 +88,14 @@ Each file is a **direct move** with minimal changes:
 ### 5.1 Separate Files, ATTACHed at Runtime
 
 ```
-/data/workflow.db          # Workflow state (ephemeral coordination)
-/data/traceability.db      # Traceability history (accumulated, rebuildable)
-/project/build/.../codebase.db  # Doxygen symbols (optional ATTACH)
+/data/workflow.db          # Docker volume — workflow coordination state
+/data/traceability.db      # Docker volume — accumulated traceability history
+/project/build/.../codebase.db  # Bind mount — Doxygen symbols (optional ATTACH)
 ```
 
-**Rationale:** Different lifecycles. `workflow.db` is coordination state that resets. `traceability.db` is accumulated history that can be rebuilt from the repo. Merging them would complicate backup, migration, and rebuild.
+Both `workflow.db` and `traceability.db` live on the Docker `workflow-data` volume (`/data/`), **not** in the project repository. They persist across container restarts but are not committed to git. The `db_path` in `.workflow/config.yaml` is resolved relative to the container's project root — in Docker, this becomes `/data/traceability.db` via the `DB_PATH`-style env var pattern.
+
+**Rationale:** Different lifecycles. `workflow.db` is coordination state that resets. `traceability.db` is accumulated history that can be rebuilt from the repo. Merging them would complicate backup, migration, and rebuild. Neither belongs in the git repo.
 
 ### 5.2 ATTACH Pattern
 
@@ -197,9 +199,12 @@ No naming conflicts.
 
 ### 7.1 Trigger Point
 
-When `complete_phase()` is called and the phase is the **last non-terminal phase** for a ticket (i.e., the ticket is now fully complete), trigger incremental indexing.
+Incremental indexing runs in `commit_and_push()` after a successful push. Every commit creates indexable artifacts (new git history, potentially new design decisions, changed symbols), so indexing at commit time keeps traceability data current throughout development — not just at ticket completion.
 
-More specifically: when any phase reaches a terminal status (`completed`, `failed`, `skipped`) via `complete_phase()`, check if all phases for that ticket are now terminal. If so, run incremental indexing for that ticket.
+The indexing flow inside `commit_and_push`:
+1. Stage, commit, push (existing logic)
+2. Post PlantUML comments (existing logic)
+3. Run incremental indexing for the just-pushed commit SHA
 
 ### 7.2 Indexing Scope
 
@@ -234,24 +239,20 @@ def run_full(conn: sqlite3.Connection, project_root: Path) -> dict:
     return results
 ```
 
-### 7.3 Symbol Indexing: HEAD-Only Mode
+### 7.3 Symbol Indexing at Commit Time
 
-For incremental indexing, `index_symbols.py` gets a new `index_head_only()` function:
+Symbol indexing runs **after each commit**, not at ticket completion. Since `commit_and_push` just created a new commit, the SHA exists and the working tree matches it exactly — no git worktree needed.
 
 ```python
-def index_head_only(conn, project_root):
-    """Snapshot symbols at HEAD without git worktree juggling."""
-    head_sha = _get_head_sha(project_root)
+def index_at_commit(conn, project_root, commit_sha):
+    """Snapshot symbols for the commit that was just made."""
+    # The commit was just created — look it up in snapshots (git indexer ran first)
+    row = conn.execute("SELECT id FROM trace.snapshots WHERE sha = ?", (commit_sha,)).fetchone()
+    if row is None:
+        return {"skipped": True, "reason": "commit not in snapshots"}
+    snapshot_id = row[0]
 
-    # Skip if already indexed
-    existing = conn.execute("SELECT id FROM trace.snapshots WHERE sha = ?", (head_sha,)).fetchone()
-    if existing:
-        snapshot_id = existing[0]
-    else:
-        # HEAD commit should already be in snapshots from git indexer
-        return {"skipped": True, "reason": "HEAD not in snapshots"}
-
-    # Parse files directly from working tree (no worktree needed)
+    # Parse files directly from working tree (matches commit exactly)
     symbols = extract_symbols_from_directory(parser, project_root / "msd")
 
     # Store and compute changes vs previous snapshot
@@ -261,24 +262,20 @@ def index_head_only(conn, project_root):
     return {"snapshot_id": snapshot_id, "symbols": len(symbols)}
 ```
 
-This avoids the expensive git-worktree-per-commit approach used in full rebuilds.
+The full-history mode (worktree per commit) remains available via `run_full()` for CMake batch rebuilds.
 
 ### 7.4 Synchronous Execution
 
-Incremental indexing runs **synchronously** in `complete_phase()`. Expected latency: <5 seconds for a typical ticket (a few new commits, one design doc, one HEAD symbol snapshot).
+Incremental indexing runs **synchronously** in `commit_and_push()`, after a successful push. Expected latency: <5 seconds (one git log update, one tree-sitter parse of HEAD, one decision scan).
 
 ```python
-# In workflow_engine/engine/state_machine.py (or wherever complete_phase lives)
+# In workflow_engine/engine/github.py — after successful commit_and_push
 
-def complete_phase(self, agent_id, phase_id, result_summary, artifacts):
-    # ... existing completion logic ...
-
-    # Check if ticket is now fully complete
-    if self._ticket_fully_complete(ticket_id):
-        if self.has_traceability:
-            from ..traceability.reindex import run_incremental
-            run_incremental(self.conn, self.project_root, ticket_id)
+from workflow_engine.traceability.reindex import run_incremental
+run_incremental(conn, project_root, ticket_id)
 ```
+
+**Import convention:** All cross-package imports use absolute paths (`from workflow_engine.traceability.reindex import ...`), never relative imports (`from ..traceability`). The traceability module is a proper subpackage of `workflow_engine`, installed via pip, so absolute imports work everywhere.
 
 ## 8. Configuration
 
@@ -288,8 +285,8 @@ Add to `.workflow/config.yaml`:
 
 ```yaml
 traceability:
-  db_path: "build/Debug/docs/traceability.db"  # Relative to project root
-  codebase_db_path: "build/Debug/docs/codebase.db"  # Optional, for cross-ref
+  db_path: "/data/traceability.db"  # Docker volume (or relative to project root for local dev)
+  codebase_db_path: "build/Debug/docs/codebase.db"  # Optional, for cross-ref (bind mount)
   source_directories:
     - "msd/"            # C++ sources for symbol indexing
   design_directories:
