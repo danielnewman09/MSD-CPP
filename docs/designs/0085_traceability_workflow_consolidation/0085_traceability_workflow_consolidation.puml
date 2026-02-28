@@ -1,6 +1,6 @@
 @startuml 0085_traceability_workflow_consolidation
 
-title Traceability Consolidation into Workflow Engine
+title Consolidate Traceability into Workflow Engine
 skinparam packageStyle rectangle
 skinparam componentStyle rectangle
 
