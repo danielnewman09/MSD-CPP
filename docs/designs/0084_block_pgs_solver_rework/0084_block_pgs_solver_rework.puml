@@ -1,0 +1,157 @@
+@startuml 0084_block_pgs_solver_rework
+skinparam class {
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<removed>> Pink
+}
+
+title Block PGS Solver Rework — 0084\nTwo-Phase Architecture Fix
+
+' ===== Existing unchanged classes =====
+
+class Constraint {
+    +bodyAIndex(): size_t
+    +bodyBIndex(): size_t
+    +jacobian(stateA, stateB, time): MatrixXd
+    +dimension(): int
+    +lambdaBounds(): LambdaBounds
+}
+
+class ContactConstraint {
+    +getRestitution(): double
+    +getPreImpactRelVelNormal(): double
+    +getPenetrationDepth(): double
+    +getLeverArmA(): Coordinate
+    +getLeverArmB(): Coordinate
+}
+
+class FrictionConstraint {
+    +getFrictionCoefficient(): double
+}
+
+class CollisionPipeline {
+    +createConstraints(...)
+    +solve(...)
+}
+
+' ===== Modified class =====
+
+class ConstraintSolver <<modified>> {
+    ' --- Existing (unchanged) ---
+    +solve(contactConstraints, states, inverseMasses,\n  inverseInertias, numBodies, dt,\n  initialLambda): SolveResult
+    +flattenConstraints(...): FlattenedConstraints
+    +buildFrictionSpec(...): FrictionSpec
+    -solveActiveSet(A, b, numContacts, initialLambda): ActiveSetResult
+    -populateFlatConstraints_(...)
+    -assembleFlatEffectiveMassInPlace_(...)
+    -assembleFlatRHS(...): VectorXd
+    -extractBodyForcesFlat(...): vector<BodyForces>
+    ' --- Modified ---
+    -solveFrictionPath_(contactConstraints, states,\n  inverseMasses, inverseInertias, numBodies,\n  dt, initialLambda): SolveResult
+    ' --- Previously: decoupled normal-then-friction ---
+    ' --- Now: BlockPGSSolver two-phase ---
+}
+
+' ===== New class =====
+
+class BlockPGSSolver <<new>> {
+    ' Two-phase solver replacing decoupled normal-then-friction
+    '
+    ' Phase A (Restitution Pre-Solve):
+    '   Solve normals-only LCP with (1+e)*v_pre RHS
+    '   Apply normal impulse to update velocities
+    '   Record post-bounce velocity as warm-start for Phase B
+    '
+    ' Phase B (Dissipative Block PGS):
+    '   RHS uses post-bounce velocity (NOT (1+e)*v)
+    '   3x3 block solve per contact: [n, t1, t2] coupled
+    '   Coulomb cone projection: ||lambda_t|| <= mu*lambda_n
+    '   Velocity residual tracks M^{-1} J^T lambda
+    '
+    +solve(flat, states, inverseMasses, inverseInertias,\n  numBodies, dt, warmStartA): SolveResult
+    +setMaxSweeps(n: int): void
+    +setConvergenceTolerance(tol: double): void
+    ' --- Phase A ---
+    -solvePhaseA_(flat, b_full, normalIndices,\n  aNormal): PhaseAResult
+    ' --- Phase B ---
+    -initVelocityResidual_(flat, lambdaInit,\n  inverseMasses, inverseInertias): void
+    -sweepOnce_(flat, b_phaseB, diag3x3,\n  lambda, mu, inverseMasses, inverseInertias): double
+    -updateVRes_(rowIdx, dLambdaA, dLambdaT1, dLambdaT2,\n  flat, inverseMasses, inverseInertias): void
+    -ballProject_(lt1, lt2, lambdaN, mu): pair<double,double>
+    ' --- Result struct ---
+    +{field} struct SolveResult
+    +{field} struct PhaseAResult
+    ' --- Workspace members ---
+    -vRes_: VectorXd
+    -diag_: VectorXd
+    -b_: VectorXd
+    -lambda_: VectorXd
+    -maxSweeps_: int
+    -convergenceTolerance_: double
+}
+
+note right of BlockPGSSolver
+  **Key Design Changes from Decoupled Solver:**
+
+  1. Phase A RHS uses stored pre_impact_rel_vel_normal
+     directly (not reconstructed from current velocities)
+     — eliminates integration-order sensitivity
+
+  2. Phase B RHS: b_i = -(J_i * v_postBounce)
+     where v_postBounce = v_pre + M^{-1} J^T lambda_A
+     — Phase B sees zero for normal (already bounced)
+     — tangent sees sliding velocity only
+
+  3. Block 3x3 solve per contact:
+     [lambda_n, lambda_t1, lambda_t2] coupled in one
+     PGS update — eliminates K_nt cross-term injection
+
+  4. vRes_ initialized from Phase A contributions
+     — warm-start accounts for bounce impulse
+end note
+
+' ===== Struct types =====
+
+class "BlockPGSSolver::PhaseAResult" <<new>> {
+    lambdaNormal: VectorXd
+    vPostBounce: VectorXd
+    converged: bool
+}
+
+class "BlockPGSSolver::SolveResult" <<new>> {
+    bodyForces: vector<BodyForces>
+    lambdas: VectorXd
+    converged: bool
+    iterations: int
+    residual: double
+}
+
+class "ConstraintSolver::FlattenedConstraints" {
+    jacobianRows: vector<Matrix<1,12>>
+    bodyAIndices: vector<size_t>
+    bodyBIndices: vector<size_t>
+    rowTypes: vector<RowType>
+    restitutions: vector<double>
+    numContacts: int
+}
+
+' ===== Relationships =====
+
+Constraint <|-- ContactConstraint
+Constraint <|-- FrictionConstraint
+
+CollisionPipeline --> ConstraintSolver : uses
+ConstraintSolver --> BlockPGSSolver : "dispatches friction path to"
+BlockPGSSolver ..> "ConstraintSolver::FlattenedConstraints" : "reads"
+BlockPGSSolver --> "BlockPGSSolver::PhaseAResult" : produces
+BlockPGSSolver --> "BlockPGSSolver::SolveResult" : produces
+
+note bottom of ConstraintSolver
+  **Dispatch Logic (unchanged structure):**
+  - numRows <= kASMThreshold && no friction → ASM path (unchanged)
+  - numRows > kASMThreshold → PGS path (ProjectedGaussSeidel, unchanged)
+  - numRows <= kASMThreshold && has friction →
+      BlockPGSSolver path (REPLACES decoupled normal-then-friction)
+end note
+
+@enduml
