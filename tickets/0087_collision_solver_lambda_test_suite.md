@@ -22,7 +22,7 @@
 - **Requires Math Design**: No
 - **GitHub Issue**: #117
 - **Branch**: 0087-collision-solver-lambda-test-suite
-- **PR**: TBD
+- **PR**: #118
 - **Design Revision Count**: 0
 - **Previous Design Approaches**: []
 
@@ -244,7 +244,7 @@ Stages B, C, D can proceed in parallel once Stage A is complete.
 - **Started**: 2026-02-28 (automated)
 - **Completed**: 2026-02-28
 - **Branch**: 0087-collision-solver-lambda-test-suite
-- **PR**: TBD (draft — to be created after push)
+- **PR**: #118 (draft)
 - **Artifacts**:
   - `docs/designs/0087_collision_solver_lambda_test_suite/design.md`
   - `docs/designs/0087_collision_solver_lambda_test_suite/0087_collision_solver_lambda_test_suite.puml`
