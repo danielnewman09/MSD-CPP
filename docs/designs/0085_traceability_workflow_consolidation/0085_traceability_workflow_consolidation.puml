@@ -1,0 +1,80 @@
+@startuml 0085_traceability_workflow_consolidation
+
+title Consolidate Traceability into Workflow Engine
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+
+package "Docker Container (workflow-engine)" {
+
+    package "workflow_engine.server" {
+        component [FastMCP Server\n(streamable-http :8080)] as MCP
+    }
+
+    package "workflow_engine.engine" {
+        component [WorkflowServer] as WS
+        database "workflow.db" as WDB
+        WS --> WDB
+    }
+
+    package "workflow_engine.traceability" <<new>> {
+        component [TraceabilityServer\n(query tools)] as TS
+        component [Indexers] as IDX
+
+        component [index_git] as IG
+        component [index_symbols] as IS
+        component [index_decisions] as ID
+        component [index_records] as IR
+
+        IDX --> IG
+        IDX --> IS
+        IDX --> ID
+        IDX --> IR
+
+        database "traceability.db\n(ATTACHed as 'trace')" as TDB
+        TS --> TDB
+        IDX --> TDB
+    }
+
+    MCP --> WS : 30+ workflow tools
+    MCP --> TS : 9 traceability tools
+
+    WS ..> TDB : ATTACH DATABASE\nat startup
+    WS ..> IDX : trigger on\nticket completion
+}
+
+package "Host / Project Root" {
+    folder ".git/" as GIT
+    folder "msd/" as SRC
+    folder "docs/designs/" as DESIGNS
+    folder "tickets/" as TICKETS
+    folder "replay/replay/models.py" as MODELS
+}
+
+IG --> GIT : git log
+IS --> SRC : tree-sitter parse
+ID --> DESIGNS : extract decisions
+ID --> TICKETS : extract decisions
+IR --> MODELS : parse Pydantic
+
+package "Separate MCP Server (unchanged)" {
+    component [codebase server] as CS
+    database "codebase.db" as CDB
+    CS --> CDB
+}
+
+TDB ..> CDB : optional ATTACH\nfor cross-ref
+
+note right of IDX
+  **Incremental mode**: triggered on ticket completion
+  - Git: skip existing SHAs
+  - Symbols: HEAD only (no worktree)
+  - Decisions: scoped to ticket
+  - Records: cheap full rebuild
+end note
+
+note bottom of WDB
+  Separate DB files:
+  different lifecycles
+end note
+
+@enduml

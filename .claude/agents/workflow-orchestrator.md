@@ -1,6 +1,6 @@
 ---
 name: workflow-orchestrator
-description: Use this agent when you need to process feature tickets through a structured development workflow. This agent reads tickets from the `tickets/` directory, determines the current phase based on ticket status, executes the appropriate specialized agent (designer, reviewer, prototyper, implementer, doc-updater), and updates the ticket with results. Invoke this agent when:\n\n- A human says 'Process ticket: {feature-name}' to advance a ticket through its workflow\n- A human says 'Status: {feature-name}' to check current ticket status\n- A human says 'List tickets' to see all tickets and their statuses\n- A human says 'New ticket: {feature-name}' to create a new ticket from template\n\n**Examples:**\n\n<example>\nContext: User wants to process a feature ticket through the development workflow.\nuser: "Process ticket: cache-layer"\nassistant: "I'll use the workflow-orchestrator agent to read the ticket and execute the appropriate workflow phase."\n<commentary>\nSince the user wants to process a ticket, use the Task tool to launch the workflow-orchestrator agent to read the ticket, determine the current phase, and execute the appropriate specialized agent.\n</commentary>\n</example>\n\n<example>\nContext: User wants to check the status of a ticket without executing any phase.\nuser: "Status: async-loader"\nassistant: "I'll use the workflow-orchestrator agent to check the current status of the async-loader ticket."\n<commentary>\nSince the user wants to check ticket status, use the Task tool to launch the workflow-orchestrator agent to read and report the ticket's current status without advancing the workflow.\n</commentary>\n</example>\n\n<example>\nContext: User wants to see all tickets in the project.\nuser: "List tickets"\nassistant: "I'll use the workflow-orchestrator agent to list all tickets and their current statuses."\n<commentary>\nSince the user wants to see all tickets, use the Task tool to launch the workflow-orchestrator agent to enumerate and report on all tickets in the tickets/ directory.\n</commentary>\n</example>\n\n<example>\nContext: User has completed some work and mentions a ticket needs to move forward.\nuser: "I've reviewed the design for the physics-engine ticket and added my feedback. Let's continue."\nassistant: "I'll use the workflow-orchestrator agent to process the physics-engine ticket and incorporate your feedback into the next phase."\n<commentary>\nSince the user has provided feedback and wants to continue the workflow, use the Task tool to launch the workflow-orchestrator agent to read the ticket, incorporate the feedback, and execute the next appropriate phase.\n</commentary>\n</example>
+description: Use this agent when you need to process feature tickets through a structured development workflow. This agent reads tickets from the `tickets/` directory, determines the current phase based on ticket status, executes the appropriate specialized agent (skeleton designer, reviewer, test writer, implementer, doc-updater), and updates the ticket with results. The workflow follows a TDD pattern: skeleton design → review → test writing (against stubs) → implementation (test-blind) → quality gate (first test execution). Invoke this agent when:\n\n- A human says 'Process ticket: {feature-name}' to advance a ticket through its workflow\n- A human says 'Status: {feature-name}' to check current ticket status\n- A human says 'List tickets' to see all tickets and their statuses\n- A human says 'New ticket: {feature-name}' to create a new ticket from template\n\n**Examples:**\n\n<example>\nContext: User wants to process a feature ticket through the development workflow.\nuser: "Process ticket: cache-layer"\nassistant: "I'll use the workflow-orchestrator agent to read the ticket and execute the appropriate workflow phase."\n<commentary>\nSince the user wants to process a ticket, use the Task tool to launch the workflow-orchestrator agent to read the ticket, determine the current phase, and execute the appropriate specialized agent.\n</commentary>\n</example>\n\n<example>\nContext: User wants to check the status of a ticket without executing any phase.\nuser: "Status: async-loader"\nassistant: "I'll use the workflow-orchestrator agent to check the current status of the async-loader ticket."\n<commentary>\nSince the user wants to check ticket status, use the Task tool to launch the workflow-orchestrator agent to read and report the ticket's current status without advancing the workflow.\n</commentary>\n</example>\n\n<example>\nContext: User wants to see all tickets in the project.\nuser: "List tickets"\nassistant: "I'll use the workflow-orchestrator agent to list all tickets and their current statuses."\n<commentary>\nSince the user wants to see all tickets, use the Task tool to launch the workflow-orchestrator agent to enumerate and report on all tickets in the tickets/ directory.\n</commentary>\n</example>\n\n<example>\nContext: User has completed some work and mentions a ticket needs to move forward.\nuser: "I've reviewed the design for the physics-engine ticket and added my feedback. Let's continue."\nassistant: "I'll use the workflow-orchestrator agent to process the physics-engine ticket and incorporate your feedback into the next phase."\n<commentary>\nSince the user has provided feedback and wants to continue the workflow, use the Task tool to launch the workflow-orchestrator agent to read the ticket, incorporate the feedback, and execute the next appropriate phase.\n</commentary>\n</example>
 model: sonnet
 ---
 
@@ -63,45 +63,46 @@ If `Languages: C++` (the default), the **existing 16-phase pipeline runs unchang
 
 | Current Status | Action | Agent File |
 |----------------|--------|------------|
-| Design Approved — Ready for Prototype | Execute Prototyper | `.claude/agents/cpp-prototyper.md` |
-| Prototype Complete — Awaiting Review | Inform human review needed | None |
+| Design Approved — Ready for Test Writing | Fan out per language test writers | Per-language test writers |
+| Test Writing Complete — Ready for Implementation | Fan out per language (see below) | Per-language implementers |
 | Ready for Implementation | Fan out per language (see below) | Per-language implementers |
 | Implementation Blocked — Design Revision Needed | Execute Design Revision Loop (human gate required) | See Design Revision Loop section |
-| Implementation Complete — Awaiting Test Writing | Fan out per language (see below) | Per-language test writers |
-| Test Writing Complete — Awaiting Quality Gate | Execute Quality Gate | `.claude/agents/code-quality-gate.md` |
+| Implementation Complete — Awaiting Quality Gate | Execute Quality Gate | `.claude/agents/code-quality-gate.md` |
 | Quality Gate Passed — Awaiting Review | Fan out per language reviews | Per-language reviewers |
 | Approved — Ready to Merge | Execute Doc Updater, check tutorial | `.claude/agents/docs-updater.md` |
 | Documentation Complete — Awaiting Tutorial | Execute Tutorial Generator | `.claude/agents/cpp-tutorial-generator.md` |
 | Tutorial Complete — Ready to Merge | Complete workflow | None |
 | Merged / Complete | Inform human workflow is complete | None |
 
-### Implementation Fan-Out
+### Test Writing Fan-Out (BEFORE Implementation)
 
-When status reaches "Ready for Implementation":
-
-**For C++-only tickets** (Languages: C++):
-- Execute `.claude/agents/cpp-implementer.md` (production code only, no tests)
-
-**For multi-language tickets**:
-- Execute language-specific implementers in parallel where possible:
-  - C++: `.claude/agents/cpp-implementer.md` (if C++ in Languages)
-  - Python: `.claude/agents/python-implementer.md` (if Python in Languages)
-  - Frontend: `.claude/agents/frontend-implementer.md` (if Frontend in Languages)
-- All implementations must complete before advancing to test writing
-
-### Test Writing Fan-Out
-
-When status reaches "Implementation Complete — Awaiting Test Writing":
+When status reaches "Design Approved — Ready for Test Writing":
 
 **For C++-only tickets** (Languages: C++):
-- Execute `.claude/agents/cpp-test-writer.md`
+- Execute `.claude/agents/cpp-test-writer.md` against skeleton stubs
+- Tests must compile and FAIL against stubs
 
 **For multi-language tickets**:
 - Execute language-specific test writers in parallel where possible:
   - C++: `.claude/agents/cpp-test-writer.md` (if C++ in Languages)
   - Python: `.claude/agents/python-test-writer.md` (if Python in Languages)
   - Frontend: Skip — no automated test framework exists
-- All test writing must complete before advancing to quality gate
+- All test writing must complete before advancing to implementation
+
+### Implementation Fan-Out (Test-Blind)
+
+When status reaches "Test Writing Complete — Ready for Implementation":
+
+**For C++-only tickets** (Languages: C++):
+- Execute `.claude/agents/cpp-implementer.md` (fills in skeleton stubs, build-only, NO test access)
+
+**For multi-language tickets**:
+- Execute language-specific implementers in parallel where possible:
+  - C++: `.claude/agents/cpp-implementer.md` (if C++ in Languages)
+  - Python: `.claude/agents/python-implementer.md` (if Python in Languages)
+  - Frontend: `.claude/agents/frontend-implementer.md` (if Frontend in Languages)
+- All implementations must complete before advancing to quality gate
+- **C++ implementer is test-blind** — cannot read test/ directories or run ctest
 
 ### Review Fan-Out
 
@@ -121,18 +122,17 @@ When status reaches "Quality Gate Passed — Awaiting Review":
 
 For tickets with 2+ languages, phases execute in this order:
 
-1. **C++ design** (if C++ in Languages — may be needed before integration design)
-2. **C++ design review**
+1. **C++ skeleton design** (if C++ in Languages — produces compilable stubs)
+2. **C++ skeleton review**
 3. **Integration design** (defines cross-language contracts)
 4. **Integration design review**
 5. **Python + Frontend design** (parallel, each reads integration-design.md)
 6. **Language-specific design reviews** (human review)
-7. **Prototype** (if applicable)
-8. **All implementations** (can be parallel — production code only, no tests)
-9. **All test writing** (can be parallel — cpp-test-writer, python-test-writer; skip Frontend)
-10. **Quality gate**
-11. **All reviews** (can be parallel)
-12. **Documentation, tutorial, merge**
+7. **All test writing** (can be parallel — tests written against stubs BEFORE implementation)
+8. **All implementations** (can be parallel — implementers are test-blind, build-only)
+9. **Quality gate** (first test execution in the pipeline)
+10. **All reviews** (can be parallel)
+11. **Documentation, tutorial, merge**
 
 ### Tutorial Generation (Conditional Phase)
 
@@ -180,19 +180,19 @@ The math-reviewer agent validates:
 
 ### Quality Gate Loop
 
-The Quality Gate phase operates as an automated loop:
+The Quality Gate phase is the **first point where tests are executed** — the implementer works test-blind.
 
 1. **On PASSED**: Advance to "Quality Gate Passed — Awaiting Review"
 2. **On FAILED** (build or test failures):
    - Do NOT advance status
-   - Re-invoke the **implementer** (not test writer) with specific failures from quality gate report — the implementer fixes production code
+   - Re-invoke the **implementer** with the quality gate report — the report contains test names and assertion messages but NOT test source code (preserving test blindness)
    - After implementer fixes, re-run quality gate
    - Track iteration count in Workflow Log
 3. **On 3rd consecutive failure**: Quality gate agent produces implementation-findings.md
    and advances ticket to "Implementation Blocked — Design Revision Needed". The Design
    Revision Loop then handles routing through the human gate.
 
-**Test writer re-invocation**: The test writer is only re-invoked if the implementation reviewer (Phase: Review) returns "CHANGES REQUESTED (Test Coverage)" — indicating inadequate coverage. In that case, the workflow returns to "Implementation Complete — Awaiting Test Writing" and the test writer runs again with reviewer feedback.
+**Test writer re-invocation**: The test writer is only re-invoked if the implementation reviewer (Phase: Review) returns "CHANGES REQUESTED (Test Coverage)" — indicating inadequate coverage. In that case, the test writer runs again with reviewer feedback.
 
 ### Design Revision Loop
 
@@ -226,26 +226,26 @@ When ticket status is "Implementation Blocked — Design Revision Needed":
 **Step 4: Execute Designer (Mode 3)**
 - Invoke cpp-architect with Mode 3 context:
   - Path to `docs/designs/{feature-name}/implementation-findings.md`
-  - Current `docs/designs/{feature-name}/design.md`
+  - Current skeleton headers and `docs/designs/{feature-name}/skeleton-manifest.md`
   - Previous Design Approaches list (for oscillation guard)
-  - Instruction: delta design, not full redesign
+  - Instruction: delta skeleton revision, not full redesign
 
 **Step 5: Execute Design Reviewer (Revision-Aware)**
 - Invoke design-reviewer with Mode 3 context:
   - Path to `docs/designs/{feature-name}/implementation-findings.md`
   - Instruction to apply revision-aware criteria from the Revision-Aware Context section
 
-**Step 6: Optional Prototype**
-- Human decides whether a prototype is required for this revision (recorded at the human gate)
-- If YES: invoke cpp-prototyper before re-entering implementation
-- If NO: proceed directly to implementation re-entry
+**Step 6: Test Writing Re-entry**
+- Tests may need updating if the skeleton changed
+- Re-invoke cpp-test-writer against the revised skeleton
 
 **Step 7: Implementation Re-entry**
 - Update ticket status to "Ready for Implementation"
 - Invoke cpp-implementer with:
-  - Updated `docs/designs/{feature-name}/design.md`
+  - Updated skeleton headers and `docs/designs/{feature-name}/skeleton-manifest.md`
   - Warm-start hints from the findings artifact (which files can be preserved)
   - Full iteration log from previous implementation attempts
+  - Implementer remains test-blind
 
 ### Tutorial Generation Handling
 
@@ -393,8 +393,9 @@ project/
 │   │   └── contracts.yaml
 │   ├── designs/                # Design artifacts
 │   │   └── {feature-name}/
-│   │       ├── design.md               # C++ design
+│   │       ├── skeleton-manifest.md    # Skeleton design manifest (replaces design.md)
 │   │       ├── {feature-name}.puml     # C++ architecture diagram
+│   │       ├── test-expectations.md    # Test expectations (from test writer)
 │   │       ├── integration-design.md   # Cross-language contracts (multi-lang)
 │   │       ├── {feature-name}-sequence.puml  # Sequence diagram (multi-lang)
 │   │       ├── python/
@@ -404,8 +405,6 @@ project/
 │   └── tutorials/              # Tutorial documentation (if generated)
 │       ├── TUTORIAL_STATE.md   # Continuation state for tutorial agent
 │       └── {feature-name}/     # Feature-specific tutorials
-├── prototypes/                 # Prototype code
-│   └── {feature-name}/
 └── .claude/
     ├── agents/                 # Agent definitions
     ├── skills/                 # User-invocable skills
@@ -483,10 +482,10 @@ Use the workflow MCP tools (`setup_branch`, `commit_and_push`, `create_or_update
 
 ### Commit Message Prefixes
 The `commit_and_push` tool auto-generates phase-appropriate prefixes:
-- `design:` — Design documents, PlantUML diagrams
-- `review:` — Review summaries appended to documents
-- `prototype:` — Prototype code and results
-- `impl:` — Production code, tests, build system changes
+- `design:` — Skeleton code, PlantUML diagrams, skeleton manifests
+- `review:` — Review summaries appended to skeleton manifests
+- `test:` — Test files written against skeleton stubs
+- `impl:` — Production code (filled-in stubs), build system changes
 - `docs:` — Documentation updates (CLAUDE.md, tutorials)
 
 ### PlantUML Rendering in PRs
