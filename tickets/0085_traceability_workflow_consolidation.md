@@ -2,13 +2,13 @@
 
 ## Status
 - [x] Draft
-- [ ] Ready for Design
-- [ ] Design Complete — Awaiting Review
-- [ ] Design Approved — Ready for Prototype
-- [ ] Prototype Complete — Awaiting Review
-- [ ] Ready for Implementation
-- [ ] Implementation Complete — Awaiting Test Writing
-- [ ] Test Writing Complete — Awaiting Quality Gate
+- [x] Ready for Design
+- [x] Design Complete — Awaiting Review
+- [x] Design Approved — Ready for Prototype
+- [x] Prototype Complete — Awaiting Review
+- [x] Ready for Implementation
+- [x] Implementation Complete — Awaiting Test Writing
+- [x] Test Writing Complete — Awaiting Quality Gate
 - [ ] Quality Gate Passed — Awaiting Review
 - [ ] Approved — Ready to Merge
 - [ ] Merged / Complete
@@ -128,14 +128,64 @@ Move the traceability MCP server and its indexers into the workflow engine as a 
 
 ## Workflow Log
 
-{This section is automatically updated as the workflow progresses}
-
 ### Design Phase
-- **Started**:
-- **Completed**:
-- **Branch**:
-- **PR**:
-- **Notes**:
+- **Started**: 2026-02-28 15:21
+- **Completed**: 2026-02-28 15:34
+- **Branch**: 0085-traceability-workflow-consolidation
+- **PR**: N/A (workflow-engine repo, works on main)
+- **Artifacts**:
+  - `docs/designs/0085_traceability_workflow_consolidation/design.md`
+  - `docs/designs/0085_traceability_workflow_consolidation/0085_traceability_workflow_consolidation.puml`
+- **Notes**: Design covers module structure, ATTACH pattern, incremental indexing on commit, tool registration, Docker changes.
+
+### Design Review Phase
+- **Started**: 2026-02-28 16:07
+- **Completed**: 2026-02-28 16:08
+- **Branch**: 0085-traceability-workflow-consolidation
+- **PR**: N/A
+- **Notes**: Approved. Implementation plan: 5 sequential phases on single branch.
+
+### Python Design Phase
+- **Started**: 2026-02-28 16:10
+- **Completed**: 2026-02-28 16:15
+- **Branch**: 0085-traceability-workflow-consolidation
+- **PR**: N/A
+- **Notes**: Python design covered in main design doc. No additional Python-specific design document needed.
+
+### Python Design Review Phase
+- **Started**: 2026-02-28 18:41
+- **Completed**: 2026-02-28 18:41
+- **Notes**: Approved after one revision round. Three comments addressed: DB location (Docker volume), absolute imports, indexing trigger moved to commit_and_push.
+
+### Prototype Phase
+- **Completed**: 2026-02-28 18:42
+- **Notes**: Prototype skipped — direct migration of existing working code, no new algorithms.
+
+### Implementation Phase
+- **Started**: 2026-02-28 18:55
+- **Completed**: 2026-02-28 19:42
+- **Artifacts**:
+  - `workflow_engine/traceability/__init__.py`
+  - `workflow_engine/traceability/schema.py`
+  - `workflow_engine/traceability/server.py`
+  - `workflow_engine/traceability/index_git.py`
+  - `workflow_engine/traceability/index_decisions.py`
+  - `workflow_engine/traceability/index_symbols.py`
+  - `workflow_engine/traceability/index_records.py`
+  - `workflow_engine/traceability/reindex.py`
+  - `.workflow/config.yaml` (traceability section added)
+  - `.mcp.json` (standalone traceability entry removed)
+- **Notes**: Full migration complete. 9 traceability MCP tools registered in workflow server. Incremental reindex triggered after commit_and_push. tree-sitter extras added to Dockerfile.
+
+### Test Writing Phase
+- **Started**: 2026-02-28 19:49
+- **Completed**: 2026-02-28 (orchestrator session)
+- **Artifacts**:
+  - `tests/test_traceability_schema.py` (21 tests)
+  - `tests/test_traceability_server.py` (53 tests)
+  - `tests/test_traceability_indexers.py` (36 tests)
+  - `tests/test_traceability_reindex.py` (9 tests)
+- **Notes**: 119 tests, all passing. Previous test-writer agent stalled (no heartbeat after claim); cleaned up stale claim and re-ran. Documented a SQLite executescript() limitation: ensure_schema(prefix='trace.') is not supported; the production ATTACH workflow correctly calls create_schema() on standalone DB before ATTACHing (per design Section 5.3).
 
 ---
 
