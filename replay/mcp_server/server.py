@@ -515,10 +515,10 @@ class ReplayMCPServer:
         recordings = [
             {
                 "path": str(db_file),
-                "name": db_file.name,
+                "name": str(db_file.relative_to(search_dir).with_suffix("")),
                 "size_bytes": db_file.stat().st_size
             }
-            for db_file in search_dir.glob("*.db")
+            for db_file in search_dir.rglob("*.db")
         ]
 
         return {

@@ -15,12 +15,12 @@ router = APIRouter(prefix="/simulations", tags=["simulations"])
 
 @router.get("", response_model=list[SimulationInfo])
 async def list_simulations():
-    """List available recording databases."""
+    """List available recording databases (including subdirectories)."""
     databases = config.list_databases()
     return [
         SimulationInfo(
-            id=db.stem,  # Filename without extension
-            name=db.stem,
+            id=config.make_database_id(db),
+            name=config.make_database_name(db),
             path=str(db),
         )
         for db in databases

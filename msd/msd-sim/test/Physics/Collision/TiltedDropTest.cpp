@@ -86,8 +86,23 @@ constexpr double kCrossAxisAccumulationMargin = 0.05;
 /// penetration inject Z-axis rotation that the general kCrossAxisRatio misses.
 constexpr double kXYZAxisRatio = 0.02;
 
+/// For equal-angle XY tilts, omega_x and omega_y should be nearly equal.
+/// Asymmetry beyond this fraction of omega_norm indicates solver bias.
+constexpr double kXYSymmetryTolerance = 0.15;
+
 /// Minimum number of contact events expected in the simulation
 constexpr int kMinBounces = 2;
+
+// --- Regime-specific constants ---
+
+/// Frictionless: no friction torques → tighter cross-axis threshold
+constexpr double kFrictionlessCrossAxisRatio = 0.02;
+
+/// Elastic: energy must be conserved within tight tolerance
+constexpr double kElasticEnergyTolerance = 1.02;
+
+/// Inelastic: only 1 contact event required (no rebound)
+constexpr int kInelasticMinBounces = 1;
 
 /// Maximum number of contact events to capture before stopping.
 /// Increased to capture sub-bounce pairs (initial corner + follow-on).
@@ -199,7 +214,8 @@ class TiltedDropTest : public ReplayEnabledTest
 {
 protected:
   /// Set up a tilted drop scene: floor + cube with given tilt config
-  SceneSetup setupScene(const TiltConfig& config)
+  SceneSetup setupScene(const TiltConfig& config,
+                        double restitution = 0.5, double friction = 0.5)
   {
     spawnEnvironment("floor_slab", Coordinate{0.0, 0.0, -50.0});
 
@@ -228,7 +244,7 @@ protected:
     }
 
     const Coordinate spawnPos{0.0, 0.0, centerZ};
-    const auto& cube = spawnInertial("unit_cube", spawnPos, 1.0, 0.5, 0.5);
+    const auto& cube = spawnInertial("unit_cube", spawnPos, 1.0, restitution, friction);
     const uint32_t cubeId = cube.getInstanceId();
     world().getObject(cubeId).getInertialState().orientation = q;
 
@@ -428,6 +444,14 @@ protected:
       << ": Y-axis should be active for XY tilt. omegaY=" << snap.omegaY
       << " norm=" << snap.omegaNorm;
 
+    // Equal-angle XY tilt should produce symmetric omega_x ≈ omega_y
+    const double omegaAsymmetry = std::abs(snap.omegaX - snap.omegaY);
+    EXPECT_LE(omegaAsymmetry, snap.omegaNorm * kXYSymmetryTolerance)
+      << label << " bounce " << bounceIndex
+      << ": omega_x and omega_y should be nearly equal for equal-angle XY tilt. "
+      << "omegaX=" << snap.omegaX << " omegaY=" << snap.omegaY
+      << " asymmetry=" << omegaAsymmetry << " norm=" << snap.omegaNorm;
+
     // Tighter Z threshold: wrong-corner contacts from excessive penetration
     // inject Z-axis rotation that the general cross-axis threshold misses
     EXPECT_LE(snap.omegaZ, snap.omegaNorm * kXYZAxisRatio)
@@ -440,6 +464,108 @@ protected:
       << label << " bounce " << bounceIndex
       << ": energy growth beyond tolerance. E=" << snap.energy
       << " initial=" << initialEnergy;
+  }
+
+  /// Assert frictionless single-axis bounce: tighter cross-axis since no friction torques
+  static void assertFrictionlessSingleAxisBounce(const BounceSnapshot& snap,
+                                                  int bounceIndex, TiltAxis axis,
+                                                  double initialEnergy,
+                                                  const std::string& label)
+  {
+    ASSERT_GT(snap.omegaNorm, 1e-6)
+      << label << " bounce " << bounceIndex
+      << ": omega norm too small to analyze";
+
+    double dominant{};
+    double cross1{};
+    double cross2{};
+    std::string dominantName;
+    std::string cross1Name;
+    std::string cross2Name;
+
+    if (axis == TiltAxis::X)
+    {
+      dominant = snap.omegaX;  dominantName = "X";
+      cross1 = snap.omegaY;   cross1Name = "Y";
+      cross2 = snap.omegaZ;   cross2Name = "Z";
+    }
+    else
+    {
+      dominant = snap.omegaY;  dominantName = "Y";
+      cross1 = snap.omegaX;   cross1Name = "X";
+      cross2 = snap.omegaZ;   cross2Name = "Z";
+    }
+
+    EXPECT_GE(dominant, snap.omegaNorm * kFrictionlessCrossAxisRatio)
+      << label << " bounce " << bounceIndex
+      << ": " << dominantName << "-tilt should produce dominant rotation about "
+      << dominantName;
+
+    EXPECT_LE(cross1, snap.omegaNorm * kFrictionlessCrossAxisRatio)
+      << label << " bounce " << bounceIndex
+      << ": spurious " << cross1Name << " rotation (frictionless). omega"
+      << cross1Name << "=" << cross1 << " norm=" << snap.omegaNorm;
+
+    EXPECT_LE(cross2, snap.omegaNorm * kFrictionlessCrossAxisRatio)
+      << label << " bounce " << bounceIndex
+      << ": spurious " << cross2Name << " rotation (frictionless). omega"
+      << cross2Name << "=" << cross2 << " norm=" << snap.omegaNorm;
+
+    // Near-zero lateral displacement without friction
+    EXPECT_LT(std::abs(snap.displacementX), 0.05)
+      << label << " bounce " << bounceIndex
+      << ": lateral X displacement should be near-zero without friction";
+    EXPECT_LT(std::abs(snap.displacementY), 0.05)
+      << label << " bounce " << bounceIndex
+      << ": lateral Y displacement should be near-zero without friction";
+
+    EXPECT_LE(snap.energy, initialEnergy * kEnergyGrowthTolerance)
+      << label << " bounce " << bounceIndex
+      << ": energy growth beyond tolerance";
+  }
+
+  /// Assert frictionless combined-axis bounce: both axes active, tight Z suppression
+  static void assertFrictionlessCombinedAxisBounce(const BounceSnapshot& snap,
+                                                    int bounceIndex,
+                                                    double initialEnergy,
+                                                    const std::string& label)
+  {
+    ASSERT_GT(snap.omegaNorm, 1e-6)
+      << label << " bounce " << bounceIndex
+      << ": omega norm too small to analyze";
+
+    EXPECT_GE(snap.omegaX, snap.omegaNorm * kBothActiveRatio)
+      << label << " bounce " << bounceIndex
+      << ": X-axis should be active for XY tilt (frictionless)";
+
+    EXPECT_GE(snap.omegaY, snap.omegaNorm * kBothActiveRatio)
+      << label << " bounce " << bounceIndex
+      << ": Y-axis should be active for XY tilt (frictionless)";
+
+    // Equal-angle XY tilt should produce symmetric omega_x ≈ omega_y
+    const double omegaAsymmetry = std::abs(snap.omegaX - snap.omegaY);
+    EXPECT_LE(omegaAsymmetry, snap.omegaNorm * kXYSymmetryTolerance)
+      << label << " bounce " << bounceIndex
+      << ": omega_x and omega_y should be nearly equal for equal-angle XY tilt. "
+      << "omegaX=" << snap.omegaX << " omegaY=" << snap.omegaY
+      << " asymmetry=" << omegaAsymmetry << " norm=" << snap.omegaNorm;
+
+    EXPECT_LE(snap.omegaZ, snap.omegaNorm * kFrictionlessCrossAxisRatio)
+      << label << " bounce " << bounceIndex
+      << ": spurious Z rotation for XY tilt (frictionless, tight threshold). omegaZ="
+      << snap.omegaZ << " norm=" << snap.omegaNorm;
+
+    // Near-zero lateral displacement without friction
+    EXPECT_LT(std::abs(snap.displacementX), 0.05)
+      << label << " bounce " << bounceIndex
+      << ": lateral X displacement should be near-zero without friction";
+    EXPECT_LT(std::abs(snap.displacementY), 0.05)
+      << label << " bounce " << bounceIndex
+      << ": lateral Y displacement should be near-zero without friction";
+
+    EXPECT_LE(snap.energy, initialEnergy * kEnergyGrowthTolerance)
+      << label << " bounce " << bounceIndex
+      << ": energy growth beyond tolerance (frictionless)";
   }
 
   /// Assert omega sign consistency across bounces for XY tests.
@@ -527,6 +653,83 @@ TEST_P(TiltedDropSingleAxisTest, BounceIsolation)
     << config.label << ": cross-axis ratio grew between bounces";
 }
 
+TEST_P(TiltedDropSingleAxisTest, Frictionless_BounceIsolation)
+{
+  auto config = GetParam();
+  auto scene = setupScene(config, /*restitution=*/0.5, /*friction=*/0.0);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
+
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << " (frictionless): expected at least " << kMinBounces
+    << " bounces";
+
+  printBounces(result.bounces, config.label + " [frictionless]");
+
+  for (size_t i = 0; i < result.bounces.size(); ++i)
+  {
+    assertFrictionlessSingleAxisBounce(
+      result.bounces[i], static_cast<int>(i),
+      config.axis, scene.initialEnergy, config.label + " [frictionless]");
+  }
+}
+
+TEST_P(TiltedDropSingleAxisTest, Elastic_BounceIsolation)
+{
+  auto config = GetParam();
+  auto scene = setupScene(config, /*restitution=*/1.0, /*friction=*/0.5);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
+
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << " (elastic): expected at least " << kMinBounces
+    << " bounces";
+
+  printBounces(result.bounces, config.label + " [elastic]");
+
+  for (size_t i = 0; i < result.bounces.size(); ++i)
+  {
+    assertSingleAxisBounce(
+      result.bounces[i], static_cast<int>(i),
+      config.axis, scene.initialEnergy, config.label + " [elastic]");
+
+    // Tight energy conservation for elastic regime
+    EXPECT_LE(result.bounces[i].energy,
+              scene.initialEnergy * kElasticEnergyTolerance)
+      << config.label << " [elastic] bounce " << i
+      << ": energy not conserved within elastic tolerance. E="
+      << result.bounces[i].energy << " initial=" << scene.initialEnergy;
+  }
+}
+
+TEST_P(TiltedDropSingleAxisTest, Inelastic_ContactResponse)
+{
+  auto config = GetParam();
+  auto scene = setupScene(config, /*restitution=*/0.0, /*friction=*/0.5);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
+
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kInelasticMinBounces))
+    << config.label << " (inelastic): expected at least " << kInelasticMinBounces
+    << " contact event";
+
+  printBounces(result.bounces, config.label + " [inelastic]");
+
+  // Energy should drop after contact (inelastic)
+  const auto& firstBounce = result.bounces.front();
+  EXPECT_LT(firstBounce.energy, scene.initialEnergy)
+    << config.label << " [inelastic]: energy should decrease after inelastic contact";
+
+  // No energy growth across any contact
+  for (size_t i = 0; i < result.bounces.size(); ++i)
+  {
+    EXPECT_LE(result.bounces[i].energy,
+              scene.initialEnergy * kEnergyGrowthTolerance)
+      << config.label << " [inelastic] bounce " << i
+      << ": energy growth beyond tolerance";
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   TiltedDrop, TiltedDropSingleAxisTest,
   ::testing::Values(
@@ -566,6 +769,93 @@ TEST_P(TiltedDropCombinedAxisTest, BounceIsolation)
   }
 
   assertOmegaSignConsistency(result.bounces, config.label);
+}
+
+TEST_P(TiltedDropCombinedAxisTest, Frictionless_BounceIsolation)
+{
+  auto config = GetParam();
+  auto scene = setupScene(config, /*restitution=*/0.5, /*friction=*/0.0);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
+
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << " (frictionless): expected at least " << kMinBounces
+    << " bounces";
+
+  printBounces(result.bounces, config.label + " [frictionless]");
+
+  for (size_t i = 0; i < result.bounces.size(); ++i)
+  {
+    assertFrictionlessCombinedAxisBounce(
+      result.bounces[i], static_cast<int>(i),
+      scene.initialEnergy, config.label + " [frictionless]");
+  }
+}
+
+TEST_P(TiltedDropCombinedAxisTest, Elastic_BounceIsolation)
+{
+  auto config = GetParam();
+  auto scene = setupScene(config, /*restitution=*/1.0, /*friction=*/0.5);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
+
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
+    << config.label << " (elastic): expected at least " << kMinBounces
+    << " bounces";
+
+  printBounces(result.bounces, config.label + " [elastic]");
+
+  for (size_t i = 0; i < result.bounces.size(); ++i)
+  {
+    assertCombinedAxisBounce(
+      result.bounces[i], static_cast<int>(i),
+      scene.initialEnergy, config.label + " [elastic]");
+
+    // Tight energy conservation for elastic regime
+    EXPECT_LE(result.bounces[i].energy,
+              scene.initialEnergy * kElasticEnergyTolerance)
+      << config.label << " [elastic] bounce " << i
+      << ": energy not conserved within elastic tolerance. E="
+      << result.bounces[i].energy << " initial=" << scene.initialEnergy;
+  }
+
+  assertOmegaSignConsistency(result.bounces, config.label + " [elastic]");
+}
+
+TEST_P(TiltedDropCombinedAxisTest, Inelastic_ContactResponse)
+{
+  auto config = GetParam();
+  auto scene = setupScene(config, /*restitution=*/0.0, /*friction=*/0.5);
+  auto result = detectBounces(scene.cubeId, scene.initialPosition);
+
+  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
+  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kInelasticMinBounces))
+    << config.label << " (inelastic): expected at least " << kInelasticMinBounces
+    << " contact event";
+
+  printBounces(result.bounces, config.label + " [inelastic]");
+
+  // Energy should drop after contact (inelastic)
+  const auto& firstBounce = result.bounces.front();
+  EXPECT_LT(firstBounce.energy, scene.initialEnergy)
+    << config.label << " [inelastic]: energy should decrease after inelastic contact";
+
+  // Z-axis suppression on first contact
+  if (firstBounce.omegaNorm > 1e-6)
+  {
+    EXPECT_LE(firstBounce.omegaZ, firstBounce.omegaNorm * kXYZAxisRatio)
+      << config.label << " [inelastic]: spurious Z rotation. omegaZ="
+      << firstBounce.omegaZ << " norm=" << firstBounce.omegaNorm;
+  }
+
+  // No energy growth across any contact
+  for (size_t i = 0; i < result.bounces.size(); ++i)
+  {
+    EXPECT_LE(result.bounces[i].energy,
+              scene.initialEnergy * kEnergyGrowthTolerance)
+      << config.label << " [inelastic] bounce " << i
+      << ": energy growth beyond tolerance";
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(
