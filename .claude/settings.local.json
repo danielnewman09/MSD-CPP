@@ -54,14 +54,16 @@
       "Bash(conan build:*)",
       "Bash(echo:*)",
       "Bash(gh issue create:*)",
-      "Bash(python/.venv/bin/python3:*)"
+      "Bash(tail:*)",
+      "mcp__replay__find_energy_anomalies",
+      "mcp__replay__get_metadata",
+      "mcp__replay__get_body_state"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "codebase",
     "traceability",
-    "replay",
-    "guidelines"
+    "replay"
   ]
 }

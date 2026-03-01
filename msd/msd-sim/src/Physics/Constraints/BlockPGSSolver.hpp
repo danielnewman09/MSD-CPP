@@ -1,5 +1,5 @@
-// Ticket: 0075b_block_pgs_solver
-// Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 2)
+// Ticket: 0075b_block_pgs_solver, 0086_split_step_block_pgs
+// Design: docs/designs/0086_split_step_block_pgs/design.md
 
 #ifndef MSD_SIM_PHYSICS_CONSTRAINTS_BLOCK_PGS_SOLVER_HPP
 #define MSD_SIM_PHYSICS_CONSTRAINTS_BLOCK_PGS_SOLVER_HPP
@@ -40,7 +40,7 @@ namespace msd_sim
  * **Phase B — Dissipative Block PGS Sweeps** (iterative):
  *   For each sweep, for each contact c (3x3 block):
  *   1. v_err = J_block * (v_pre + vRes_[bodyA, bodyB])
- *   2. delta_lambda = K_inv * (-v_err)  [no restitution term]
+ *   2. delta_lambda = K^{-1} * (-v_err)  [no restitution term]
  *   3. lambda_acc += delta_lambda, then project onto Coulomb cone
  *   4. vRes_ += M^{-1} * J_block^T * (lambda_proj - lambda_acc_old)
  *
@@ -87,6 +87,9 @@ public:
   {
     std::vector<BodyForces> bodyForces;  ///< Per-body force/torque (size = numBodies)
     Eigen::VectorXd lambdas;            ///< 3 per contact: [lambda_n, lambda_t1, lambda_t2]
+                                        ///< = Phase A bounce + Phase B
+    Eigen::VectorXd phaseBLambdas;      ///< Phase B lambdas only (no bounce) — used as
+                                        ///< warm-start for next frame. Ticket: 0084 Fix F2.
     bool converged{false};
     int iterations{0};
     double residual{std::numeric_limits<double>::quiet_NaN()};
@@ -205,32 +208,62 @@ private:
   /**
    * @brief Phase B: Execute one complete sweep over all contacts.
    *
-   * For each contact: solve the 3x3 block, accumulate, project onto Coulomb
-   * cone, update velocity residual. Returns max ||delta|| for convergence check.
+   * Implements the split-step two-pass algorithm (Ticket: 0086_split_step_block_pgs).
+   * Each sweep consists of two sequential passes:
    *
-   * Algorithm per contact c:
+   * **Pass 1 — Normal-only**:
+   *   For each contact c:
    *   1. v_err = J_block * (v_pre + vRes_[bodyA, bodyB])
-   *   2. delta_lambda = K_inv * (-v_err)     [purely dissipative RHS]
-   *   3. lambda_temp = lambda_acc[c] + delta_lambda
-   *   4. lambda_proj = projectCoulombCone(lambda_temp, mu)
-   *   5. delta = lambda_proj - lambda_acc[c]
-   *   6. vRes_ += M^{-1} * J_block^T * delta
-   *   7. lambda_acc[c] = lambda_proj
+   *   2. delta_n = (-v_err(0)) / K(0,0)  [scalar solve, no tangent coupling]
+   *   3. lambda_n_new = max(0, lambda_n + delta_n)  [non-negativity clamp]
+   *   4. updateVResNormalOnly(c, lambda_n_new - lambda_n)
+   *   5. lambda(base) = lambda_n_new
+   *
+   * **Pass 2 — Tangent-only**:
+   *   For each contact c:
+   *   1. v_err = J_block * (v_pre + vRes_)  [reflects ALL Pass 1 normal updates]
+   *   2. delta_t = tangentKInvs[c] * (-v_err.tail<2>())  [2x2 K_tt solve]
+   *   3. lambda_t_new = lambda_t + delta_t
+   *   4. Coulomb cone: ||lambda_t_new|| <= mu * lambda_n  [lambda_n FIXED from Pass 1]
+   *   5. updateVResTangentOnly(c, lambda_t_new - lambda_t)
+   *   6. lambda.segment<2>(base+1) = lambda_t_new
+   *
+   * The split-step eliminates K_nt energy injection: Pass 2 sees velocity
+   * errors computed AFTER Pass 1 has updated vRes_ for all contacts, so
+   * normal→tangent coupling enters through sequential velocity state updates
+   * rather than K matrix algebra (DD-0086-001).
    *
    * @param contacts ContactConstraint pointers
-   * @param blockKs Pre-computed 3x3 K matrices per contact (K_inv from LDLT)
-   * @param blockKInvs Pre-computed K^{-1} per contact
+   * @param blockKs Pre-computed K per contact (for K(0,0) normal scalar)
+   * @param tangentKInvs Pre-computed 2x2 K_tt^{-1} per contact (tangent sub-block)
    * @param lambda In/out accumulated 3D impulses (3*numContacts)
    * @param states Per-body kinematic state
    * @param inverseMasses Per-body inverse mass
    * @param inverseInertias Per-body inverse inertia tensor
-   * @return max ||delta|| across all contacts (convergence metric)
+   * @return max delta across all contacts from both passes (convergence metric)
    */
   double sweepOnce(
     const std::vector<ContactConstraint*>& contacts,
-    const std::vector<Eigen::Matrix3d>& blockKInvs,
+    const std::vector<Eigen::Matrix3d>& blockKs,
+    const std::vector<Eigen::Matrix2d>& tangentKInvs,
     Eigen::VectorXd& lambda,
     const std::vector<std::reference_wrapper<const InertialState>>& states,
+    const std::vector<double>& inverseMasses,
+    const std::vector<Eigen::Matrix3d>& inverseInertias);
+
+  /**
+   * @brief Update vRes_ for tangent rows only (Pass 2 helper).
+   *
+   * Equivalent to updateVRes3({0, dT1, dT2}), but named explicitly so
+   * the reader understands that the normal vRes_ component is not touched.
+   *
+   * vRes_ += M^{-1} * J_t^T * deltaLambdaTangent
+   *
+   * @ticket 0086_split_step_block_pgs (DD-0086-002)
+   */
+  void updateVResTangentOnly(
+    const ContactConstraint& c,
+    const Eigen::Vector2d& deltaLambdaTangent,
     const std::vector<double>& inverseMasses,
     const std::vector<Eigen::Matrix3d>& inverseInertias);
 

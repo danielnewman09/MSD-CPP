@@ -59,11 +59,18 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
     numBodies,
     BodyForces{Coordinate{0.0, 0.0, 0.0}, Coordinate{0.0, 0.0, 0.0}});
 
+  // Ticket 0084 Fix F2: warmStartLambdas defaults to lambdas (same as total lambda
+  // for non-BlockPGS paths). The BlockPGS path overrides this with phaseBLambdas
+  // (Phase B only, no bounce). Defensive initialization ensures any unexpected
+  // code path produces a valid warm-start value.
+  // This initialization is overwritten below for the non-empty constraint case.
+
   if (contactConstraints.empty())
   {
     result.converged = true;
     result.iterations = 0;
     result.lambdas = Eigen::VectorXd{};
+    result.warmStartLambdas = Eigen::VectorXd{};
     result.residual = 0.0;
     return result;
   }
@@ -88,6 +95,8 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
 
       // Convert ProjectedGaussSeidel::SolveResult to ConstraintSolver::SolveResult
       result.lambdas = std::move(pgsResult.lambdas);
+      // Ticket 0084 Fix F2: PGS has no Phase A split — warm-start = total lambdas.
+      result.warmStartLambdas = result.lambdas;
       result.converged = pgsResult.converged;
       result.iterations = pgsResult.iterations;
       result.residual = pgsResult.residual;
@@ -136,6 +145,14 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
 
     // Convert BlockPGSSolver::SolveResult to ConstraintSolver::SolveResult
     result.lambdas = std::move(blockResult.lambdas);
+    // Ticket 0084 Fix F2: BlockPGS has Phase A bounce + Phase B split.
+    // The warm-start for the next frame should be Phase B lambdas only:
+    //   - Phase A bounce impulses are stateless (recomputed from current velocity
+    //     each frame), so caching them would cause Phase A to see an inflated
+    //     velocity baseline and produce incorrect bounce magnitudes.
+    //   - Phase B lambdas represent the dissipative friction/contact state that
+    //     should persist across frames for correct warm-starting.
+    result.warmStartLambdas = std::move(blockResult.phaseBLambdas);
     result.converged = blockResult.converged;
     result.iterations = blockResult.iterations;
     result.residual = blockResult.residual;
@@ -175,6 +192,8 @@ ConstraintSolver::SolveResult ConstraintSolver::solve(
       contactConstraints, jacobians, asmResult.lambda, numBodies, dt);
 
     result.lambdas = asmResult.lambda;
+    // Ticket 0084 Fix F2: ASM has no Phase A split — warm-start = total lambdas.
+    result.warmStartLambdas = result.lambdas;
     result.converged = asmResult.converged;
     result.iterations = asmResult.iterations;
 

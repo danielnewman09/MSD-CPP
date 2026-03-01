@@ -1,5 +1,5 @@
-// Ticket: 0075b_block_pgs_solver
-// Design: docs/designs/0075_unified_contact_constraint/design.md (Phase 2)
+// Ticket: 0075b_block_pgs_solver, 0086_split_step_block_pgs
+// Design: docs/designs/0086_split_step_block_pgs/design.md
 
 #include "msd-sim/src/Physics/Constraints/BlockPGSSolver.hpp"
 
@@ -64,27 +64,37 @@ BlockPGSSolver::SolveResult BlockPGSSolver::solve(
   vRes_.resize(static_cast<Eigen::Index>(kBodyDof * numBodies));
   vRes_.setZero();
 
-  // ===== Pre-compute 3x3 block K matrices and their inverses =====
+  // ===== Pre-compute 3x3 block K matrices and 2x2 tangent sub-block inverses =====
+  //
+  // Ticket: 0086_split_step_block_pgs — Replace the full 3x3 K^{-1} with a 2x2
+  // K_tt^{-1} (tangent sub-block only). The split-step uses:
+  //   - blockKs[ci](0,0) — scalar K_nn for Pass 1 (normal-only solve)
+  //   - tangentKInvs[ci] — 2x2 K_tt^{-1} for Pass 2 (tangent-only solve)
+  // K_nt off-diagonal coupling is eliminated from the algebra; it enters
+  // through sequential vRes_ updates (DD-0086-001).
   std::vector<Eigen::Matrix3d> blockKs;
   blockKs.reserve(numContacts);
-  std::vector<Eigen::Matrix3d> blockKInvs;
-  blockKInvs.reserve(numContacts);
+  std::vector<Eigen::Matrix2d> tangentKInvs;
+  tangentKInvs.reserve(numContacts);
 
   for (const ContactConstraint* cc : contacts)
   {
     Eigen::Matrix3d K = buildBlockK(*cc, inverseMasses, inverseInertias);
     blockKs.push_back(K);
 
-    // Invert via LDLT (symmetric positive definite; falls back gracefully)
-    Eigen::LDLT<Eigen::Matrix3d> ldlt{K};
+    // Invert the 2x2 tangent sub-block K_tt = K.block<2,2>(1,1) via LDLT.
+    // K_tt captures tangent-to-tangent effective mass (including t1-t2 angular
+    // coupling from shared rotational DOFs). Falls back to zero on failure.
+    Eigen::Matrix2d K_tt = K.block<2, 2>(1, 1);
+    Eigen::LDLT<Eigen::Matrix2d> ldlt{K_tt};
     if (ldlt.info() == Eigen::Success)
     {
-      blockKInvs.push_back(ldlt.solve(Eigen::Matrix3d::Identity()));
+      tangentKInvs.push_back(ldlt.solve(Eigen::Matrix2d::Identity()));
     }
     else
     {
-      // Singular or ill-conditioned: use zero inverse (no correction for this contact)
-      blockKInvs.push_back(Eigen::Matrix3d::Zero());
+      // Singular or ill-conditioned: use zero inverse (no tangent correction)
+      tangentKInvs.push_back(Eigen::Matrix2d::Zero());
     }
   }
 
@@ -151,7 +161,7 @@ BlockPGSSolver::SolveResult BlockPGSSolver::solve(
   for (iter = 0; iter < maxSweeps_ && maxDelta > convergenceTolerance_; ++iter)
   {
     maxDelta = sweepOnce(
-      contacts, blockKInvs, lambdaPhaseB, states, inverseMasses, inverseInertias);
+      contacts, blockKs, tangentKInvs, lambdaPhaseB, states, inverseMasses, inverseInertias);
   }
 
   result.converged = (maxDelta <= convergenceTolerance_);
@@ -160,6 +170,18 @@ BlockPGSSolver::SolveResult BlockPGSSolver::solve(
 
   // ===== Assemble final lambdas =====
   // Final normal lambda = Phase A bounce + Phase B correction
+  //
+  // phaseBLambdas: Phase B lambdas only (no bounce contribution).
+  // These are the correct warm-start seed for the next frame:
+  //   - Phase A bounce impulses are stateless (recomputed each frame from
+  //     current velocity) — including them in the warm-start would cause
+  //     Phase A to see an inflated warm-start baseline and compute
+  //     incorrect bounce magnitudes on the next bounce frame.
+  //   - Phase B lambdas represent the dissipative friction state that
+  //     should persist as warm-start.
+  // Ticket: 0084 Fix F2
+  result.phaseBLambdas = lambdaPhaseB;  // Phase B only (no bounce)
+
   result.lambdas.resize(static_cast<Eigen::Index>(lambdaSize));
   for (size_t ci = 0; ci < numContacts; ++ci)
   {
@@ -463,55 +485,142 @@ void BlockPGSSolver::updateVResNormalOnly(
 }
 
 // ============================================================================
-// Phase B: sweepOnce
+// updateVResTangentOnly (Pass 2 helper)
+// Ticket: 0086_split_step_block_pgs (DD-0086-002)
+// ============================================================================
+
+void BlockPGSSolver::updateVResTangentOnly(
+  const ContactConstraint& c,
+  const Eigen::Vector2d& deltaLambdaTangent,
+  const std::vector<double>& inverseMasses,
+  const std::vector<Eigen::Matrix3d>& inverseInertias)
+{
+  // Delegate to updateVRes3 with dN=0: only tangent components applied.
+  // With dN=0, updateVRes3 computes:
+  //   linearA  = t1*dT1 + t2*dT2   (no normal term)
+  //   angularA = rA×t1*dT1 + rA×t2*dT2
+  // This correctly applies the full tangent Jacobian columns without
+  // duplicating the lever-arm cross-product arithmetic (DD-0086-002).
+  updateVRes3(c,
+              Eigen::Vector3d{0.0, deltaLambdaTangent(0), deltaLambdaTangent(1)},
+              inverseMasses,
+              inverseInertias);
+}
+
+// ============================================================================
+// Phase B: sweepOnce — Split-Step Two-Pass Algorithm
+// Ticket: 0086_split_step_block_pgs
+// Design: docs/designs/0086_split_step_block_pgs/design.md
 // ============================================================================
 
 double BlockPGSSolver::sweepOnce(
   const std::vector<ContactConstraint*>& contacts,
-  const std::vector<Eigen::Matrix3d>& blockKInvs,
+  const std::vector<Eigen::Matrix3d>& blockKs,
+  const std::vector<Eigen::Matrix2d>& tangentKInvs,
   Eigen::VectorXd& lambda,
   const std::vector<std::reference_wrapper<const InertialState>>& states,
   const std::vector<double>& inverseMasses,
   const std::vector<Eigen::Matrix3d>& inverseInertias)
 {
   double maxDelta = 0.0;
+  const size_t numContacts = contacts.size();
 
-  for (size_t ci = 0; ci < contacts.size(); ++ci)
+  // =========================================================================
+  // Pass 1 — Normal-only solve
+  //
+  // For each contact: compute the normal velocity error, apply a scalar
+  // K_nn correction, clamp lambda_n >= 0, and update vRes_ for the normal
+  // direction. This completes before any tangent corrections, so Pass 2 sees
+  // a velocity state that already reflects all normal impulses (DD-0086-001).
+  // =========================================================================
+  for (size_t ci = 0; ci < numContacts; ++ci)
   {
     const ContactConstraint& cc = *contacts[ci];
     const auto base = static_cast<Eigen::Index>(ci * 3);
 
-    // Step 1: Compute constraint-space velocity error
-    // v_err = J_block * (v_pre + vRes_[bodyA, bodyB])
+    // Compute constraint-space velocity error
     const Eigen::Vector3d vErr = computeBlockVelocityError(cc, states);
 
-    // Step 2: Unconstrained impulse correction (target: drive v_err to zero)
-    // delta_lambda = K_inv * (-v_err)
-    // No restitution term — Phase B is purely dissipative
-    const Eigen::Vector3d unconstrained = blockKInvs[ci] * (-vErr);
+    // Normal correction: scalar K_nn solve (severs tangent→normal K_nt coupling)
+    const double K_nn = blockKs[ci](0, 0);
+    const double delta_n_unconstrained = (K_nn > 1e-12) ? (-vErr(0)) / K_nn : 0.0;
 
-    // Step 3: Accumulate
-    Eigen::Vector3d lambdaOld = lambda.segment<3>(base);
-    Eigen::Vector3d lambdaTemp = lambdaOld + unconstrained;
+    // Accumulate and clamp: lambda_n >= 0 (contact can only push, not pull)
+    const double lambda_n_old = lambda(base);
+    const double lambda_n_new = std::max(0.0, lambda_n_old + delta_n_unconstrained);
+    const double delta_n_applied = lambda_n_new - lambda_n_old;
 
-    // Step 4: Project onto Coulomb cone
-    const double mu = cc.getFrictionCoefficient();
-    const Eigen::Vector3d lambdaProj = projectCoulombCone(lambdaTemp, mu);
-
-    // Step 5: Actual change after projection
-    const Eigen::Vector3d delta = lambdaProj - lambdaOld;
-
-    // Step 6: Update velocity residual
-    if (delta.squaredNorm() > 1e-24)
+    // Update velocity residual for normal direction only
+    if (delta_n_applied * delta_n_applied > 1e-24)
     {
-      updateVRes3(cc, delta, inverseMasses, inverseInertias);
+      updateVResNormalOnly(cc, delta_n_applied, inverseMasses, inverseInertias);
     }
 
-    // Step 7: Update accumulator
-    lambda.segment<3>(base) = lambdaProj;
+    lambda(base) = lambda_n_new;
 
-    // Track convergence metric
-    maxDelta = std::max(maxDelta, delta.norm());
+    // Track convergence metric (normal pass contribution)
+    maxDelta = std::max(maxDelta, std::abs(delta_n_applied));
+  }
+
+  // =========================================================================
+  // Pass 2 — Tangent-only solve
+  //
+  // For each contact: recompute velocity error (now reflects ALL Pass 1 normal
+  // updates), apply 2x2 K_tt^{-1} solve on the tangent sub-space, project
+  // onto Coulomb cone using the FIXED lambda_n from Pass 1, and update vRes_
+  // for tangent directions only (DD-0086-002, DD-0086-003).
+  // =========================================================================
+  for (size_t ci = 0; ci < numContacts; ++ci)
+  {
+    const ContactConstraint& cc = *contacts[ci];
+    const auto base = static_cast<Eigen::Index>(ci * 3);
+
+    // Recompute velocity error: reflects ALL Pass 1 normal vRes_ updates.
+    // vErr.tail<2>() is the tangential velocity error at the contact point.
+    const Eigen::Vector3d vErr = computeBlockVelocityError(cc, states);
+
+    // 2x2 K_tt^{-1} solve: tangent correction with no K_nt coupling
+    const Eigen::Vector2d delta_t = tangentKInvs[ci] * (-vErr.tail<2>());
+
+    // Accumulate tangent impulse
+    const Eigen::Vector2d lambda_t_old = lambda.segment<2>(base + 1);
+    Eigen::Vector2d lambda_t_new = lambda_t_old + delta_t;
+
+    // Coulomb cone projection: ||lambda_t|| <= mu * lambda_n
+    // lambda_n is FIXED from Pass 1 (DD-0086-003)
+    const double lambda_n = lambda(base);
+    const double mu = cc.getFrictionCoefficient();
+
+    if (lambda_n <= 0.0)
+    {
+      // Separating contact: no friction
+      lambda_t_new = Eigen::Vector2d::Zero();
+    }
+    else
+    {
+      const double maxTangent = mu * lambda_n;
+      const double tangentNorm = lambda_t_new.norm();
+      if (tangentNorm > maxTangent)
+      {
+        // Sliding: project tangent impulse onto cone surface
+        lambda_t_new *= maxTangent / tangentNorm;
+      }
+      // Static friction: inside cone, no projection needed
+    }
+
+    // Actual tangent change after cone projection
+    const Eigen::Vector2d delta_t_applied = lambda_t_new - lambda_t_old;
+
+    // Update velocity residual for tangent directions only
+    if (delta_t_applied.squaredNorm() > 1e-24)
+    {
+      updateVResTangentOnly(cc, delta_t_applied, inverseMasses, inverseInertias);
+    }
+
+    lambda.segment<2>(base + 1) = lambda_t_new;
+
+    // Track convergence metric (tangent pass contribution — DD-0086-004)
+    maxDelta = std::max(maxDelta, delta_t_applied.norm());
   }
 
   return maxDelta;

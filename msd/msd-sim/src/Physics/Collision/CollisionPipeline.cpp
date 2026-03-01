@@ -515,8 +515,15 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
   // globalLambdas: flattened lambda vector for all contacts (global ordering).
   // After all islands are solved, this is used by propagateSolvedLambdas()
   // and the cache update path.
+  //
+  // globalWarmStartLambdas: Phase B-only lambdas for cache write (Ticket 0084 Fix F2).
+  // For BlockPGS path: excludes Phase A bounce lambdas so warm-start does not
+  // contaminate Phase A on the next bounce frame.
+  // For ASM/PGS paths: equals globalLambdas (no Phase A split).
   size_t const totalContacts = constraintPtrs.size();
   Eigen::VectorXd globalLambdas = Eigen::VectorXd::Zero(
+    static_cast<Eigen::Index>(totalContacts * lambdasPerContact));
+  Eigen::VectorXd globalWarmStartLambdas = Eigen::VectorXd::Zero(
     static_cast<Eigen::Index>(totalContacts * lambdasPerContact));
 
   for (const auto& island : islands)
@@ -619,6 +626,7 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
     // constraintToGlobalGroup map (design R3 integration note).
     // Iterate the island's CC list in order to determine island-local group
     // offsets.
+    // Also map warmStartLambdas to globalWarmStartLambdas (Ticket 0084 Fix F2).
     size_t islandLocalGroup = 0;
     for (size_t i = 0; i < islandConstraints.size(); ++i)
     {
@@ -646,6 +654,21 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
             islandResult.lambdas(islandBase + static_cast<Eigen::Index>(k));
         }
       }
+
+      // Ticket 0084 Fix F2: map warmStartLambdas to global warm-start vector.
+      // warmStartLambdas has the same size as islandResult.lambdas (3 per contact).
+      if (islandBase + static_cast<Eigen::Index>(lambdasPerContact) <=
+            islandResult.warmStartLambdas.size() &&
+          globalBase + static_cast<Eigen::Index>(lambdasPerContact) <=
+            globalWarmStartLambdas.size())
+      {
+        for (size_t k = 0; k < lambdasPerContact; ++k)
+        {
+          globalWarmStartLambdas(globalBase + static_cast<Eigen::Index>(k)) =
+            islandResult.warmStartLambdas(islandBase + static_cast<Eigen::Index>(k));
+        }
+      }
+
       ++islandLocalGroup;
     }
   }
@@ -653,9 +676,15 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
   globalResult.lambdas = globalLambdas;
 
   // ===== Phase 4.5: Update Contact Cache =====
-  // Write solved impulses back to cache for next frame's warm-start.
+  // Write warm-start impulses back to cache for next frame's warm-start.
   // Cache writes happen after all islands are solved (design: avoid intra-frame
   // cross-island contamination).
+  //
+  // Ticket: 0084 Fix F2: use globalWarmStartLambdas (Phase B-only for BlockPGS,
+  // total lambdas for ASM/PGS). This prevents Phase A bounce impulses from
+  // contaminating the warm-start and causing incorrect bounce magnitudes on the
+  // next bounce frame.
+  //
   // Ticket: 0075a_unified_constraint_data_structure — use Vec3 impulse storage
   for (const auto& range : pairRanges_)
   {
@@ -673,14 +702,16 @@ ConstraintSolver::SolveResult CollisionPipeline::solveConstraintsWithWarmStart(
       auto const flatBase =
         static_cast<Eigen::Index>(contactGroupIdx * lambdasPerContact);
 
-      const double lambdaN = globalResult.lambdas(flatBase);
+      // Ticket 0084 Fix F2: read from globalWarmStartLambdas (Phase B-only)
+      // instead of globalResult.lambdas (total = Phase A + Phase B).
+      const double lambdaN = globalWarmStartLambdas(flatBase);
       const double lambdaT1 =
-        (lambdasPerContact >= 2 && flatBase + 1 < globalResult.lambdas.size())
-          ? globalResult.lambdas(flatBase + 1)
+        (lambdasPerContact >= 2 && flatBase + 1 < globalWarmStartLambdas.size())
+          ? globalWarmStartLambdas(flatBase + 1)
           : 0.0;
       const double lambdaT2 =
-        (lambdasPerContact >= 3 && flatBase + 2 < globalResult.lambdas.size())
-          ? globalResult.lambdas(flatBase + 2)
+        (lambdasPerContact >= 3 && flatBase + 2 < globalWarmStartLambdas.size())
+          ? globalWarmStartLambdas(flatBase + 2)
           : 0.0;
 
       solvedImpulses_.push_back(Eigen::Vector3d{lambdaN, lambdaT1, lambdaT2});

@@ -1,0 +1,17 @@
+--- a/msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.cpp
++++ b/msd/msd-sim/src/Physics/Constraints/BlockPGSSolver.cpp
+@@ -112,7 +112,10 @@
+
+-  const bool hasWarmStart = initialLambda.has_value() &&
+-                            initialLambda->size() == static_cast<Eigen::Index>(lambdaSize) &&
+-                            initialLambda->maxCoeff() > 0.0;
++  // Prototype P1 (0084): Diagnostic — disable warm-start to confirm hypothesis.
++  // Remove this line and restore original expression before implementing Fix F1.
++  const bool hasWarmStart = false;  // PROTOTYPE P1 DIAGNOSTIC — disable warm-start
++  // Original expression (restore for Fix F1 implementation):
++  // const bool hasWarmStart = initialLambda.has_value() &&
++  //                           initialLambda->size() == static_cast<Eigen::Index>(lambdaSize) &&
++  //                           initialLambda->maxCoeff() > 0.0;
+
+Result: NEGATIVE — All 12 tests still fail with identical values.
+Warm-start hypothesis REFUTED. Root cause is in Phase B K_nt coupling.

@@ -1,0 +1,88 @@
+@startuml 0086_split_step_block_pgs
+
+skinparam class {
+    BackgroundColor<<modified>> LightYellow
+    BackgroundColor<<new>> LightGreen
+    BackgroundColor<<removed>> Pink
+}
+
+skinparam note {
+    BackgroundColor LightBlue
+}
+
+' ─── Modified class ───────────────────────────────────────────────────────────
+class BlockPGSSolver <<modified>> {
+    ' --- Public interface: UNCHANGED ---
+    +solve(constraints, states, inverseMasses,\n       inverseInertias, numBodies, dt,\n       initialLambda) : SolveResult
+    +setMaxSweeps(n : int) : void
+    +setConvergenceTolerance(tol : double) : void
+    +getMaxSweeps() : int
+    +getConvergenceTolerance() : double
+
+    ' --- Private helpers: sweepOnce signature UNCHANGED ---
+    -buildBlockK(...) : Matrix3d
+    -projectCoulombCone(lambda_block, mu) : Vector3d
+    -applyRestitutionPreSolve(...) : vector<double>
+    -sweepOnce(...) : double            [REWRITTEN — split-step]
+    -updateVRes3(...) : void
+    -updateVResNormalOnly(...) : void
+    -updateVResTangentOnly(...) : void  [NEW helper]
+    -computeBlockVelocityError(...) : Vector3d
+
+    ' --- Members: tangentKInvs replaces blockKInvs ---
+    -maxSweeps_ : int = 50
+    -convergenceTolerance_ : double = 1e-6
+    -kCFMEpsilon : double = 1e-8       {static constexpr}
+    -vRes_ : VectorXd
+    -bounceLambdas_ : vector<double>
+    -tangentKInvs_ : vector<Matrix2d>  [REPLACES blockKInvs (Matrix3d)]
+}
+
+note right of BlockPGSSolver
+  **Split-Step Algorithm (sweepOnce)**
+
+  Pass 1 — Normal-only (all contacts):
+    vErr = computeBlockVelocityError(ci)
+    delta_n = -vErr(0) / K(0,0)
+    lambda_n = max(0, lambda_n_old + delta_n)
+    updateVResNormalOnly(ci, lambda_n - lambda_n_old)
+
+  Pass 2 — Tangent-only (all contacts):
+    vErr = computeBlockVelocityError(ci)
+    delta_t = tangentKInvs_[ci] * (-vErr.tail<2>())
+    lambda_t = lambda_t_old + delta_t
+    project: ||lambda_t|| <= mu * lambda_n  [FIXED from Pass 1]
+    updateVResTangentOnly(ci, lambda_t - lambda_t_old)
+
+  **Pre-computation change (solve)**
+    tangentKInvs_[ci] = LDLT(K.block<2,2>(1,1))^{-1}
+    (replaces full 3x3 K^{-1})
+end note
+
+' ─── Unchanged context classes ────────────────────────────────────────────────
+class ContactConstraint {
+    +getContactNormal() : Vector3d
+    +getTangent1() : Vector3d
+    +getTangent2() : Vector3d
+    +getLeverArmA() : Vector3d
+    +getLeverArmB() : Vector3d
+    +getFrictionCoefficient() : double
+    +getRestitution() : double
+    +bodyAIndex() : size_t
+    +bodyBIndex() : size_t
+}
+
+class CollisionPipeline {
+    +solve(contacts, states, ...) : SolveResult
+}
+
+class ConstraintSolver {
+    +solve(...) : void
+}
+
+' ─── Relationships ─────────────────────────────────────────────────────────────
+CollisionPipeline --> BlockPGSSolver : uses (friction contacts)
+CollisionPipeline --> ConstraintSolver : uses (frictionless contacts)
+BlockPGSSolver --> ContactConstraint : operates on
+
+@enduml
