@@ -63,17 +63,11 @@ phases:
       field: "languages"
       contains: "Frontend"
 
-  - name: "Prototype"
-    agent_type: "cpp-prototyper"
-
-  - name: "Prototype Review"
-    agent_type: null  # human gate
+  - name: "Test Writing"
+    agent_type: "cpp-test-writer"
 
   - name: "Implementation"
     agent_type: "cpp-implementer"
-
-  - name: "Test Writing"
-    agent_type: "cpp-test-writer"
 
   - name: "Quality Gate"
     agent_type: "code-quality-gate"
@@ -94,9 +88,25 @@ phases:
 # All phases in a group must complete before the next sequential phase.
 # These override the sequential phases above for multi-language tickets.
 parallel_groups:
+  tests:
+    after: "Integration Review"   # tests written first against skeleton stubs
+    before: "Quality Gate"
+    phases:
+      - name: "C++ Test Writing"
+        agent_type: "cpp-test-writer"
+        condition:
+          field: "languages"
+          contains: "C++"
+
+      - name: "Python Test Writing"
+        agent_type: "python-test-writer"
+        condition:
+          field: "languages"
+          contains: "Python"
+
   impl:
-    after: "Integration Review"  # becomes available after this phase completes
-    before: "Quality Gate"       # this phase waits for all group members
+    after: "C++ Test Writing"    # implementation starts after tests are written
+    before: "Quality Gate"       # quality gate waits for all group members
     phases:
       - name: "C++ Implementation"
         agent_type: "cpp-implementer"
@@ -115,22 +125,6 @@ parallel_groups:
         condition:
           field: "languages"
           contains: "Frontend"
-
-  tests:
-    after: "C++ Implementation"   # after impl group completes
-    before: "Quality Gate"
-    phases:
-      - name: "C++ Test Writing"
-        agent_type: "cpp-test-writer"
-        condition:
-          field: "languages"
-          contains: "C++"
-
-      - name: "Python Test Writing"
-        agent_type: "python-test-writer"
-        condition:
-          field: "languages"
-          contains: "Python"
 
 # Metadata fields to extract from ticket markdown for condition evaluation
 # and DB storage. The engine uses these to evaluate phase conditions.

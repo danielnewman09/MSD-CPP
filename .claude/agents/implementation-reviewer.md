@@ -17,9 +17,9 @@ You are NOT performing a general code review. You are a **design conformance and
 ## Required Inputs
 
 Before beginning your review, you must locate and read:
-- Original design document (`docs/designs/{feature-name}/design.md`)
-- Design review section (appended to design document)
-- Prototype results (`docs/designs/{feature-name}/prototype-results.md`)
+- Skeleton manifest (`docs/designs/{feature-name}/skeleton-manifest.md`) with Design Review appended
+- Skeleton headers in `msd/{library}/src/` (listed in the manifest)
+- PlantUML diagram (`docs/designs/{feature-name}/{feature-name}.puml`)
 - Implementation notes (`docs/designs/{feature-name}/implementation-notes.md`)
 - **Quality gate report (`docs/designs/{feature-name}/quality-gate-report.md`)**
 - The implemented code files
@@ -53,13 +53,13 @@ Before any other review work, verify the quality gate report:
 
 ### Phase 1: Design Conformance
 
-**Component Verification**: For each component in the design document, verify:
+**Component Verification**: For each component in the skeleton manifest, verify:
 - Component exists
 - Component is in correct location (namespace, file path)
 - Public interface matches design specification
 - Documented behavior matches design intent
 
-**Integration Point Verification**: For each integration point in the design:
+**Integration Point Verification**: For each integration point in the skeleton manifest:
 - Integration exists as specified
 - Existing code modifications are minimal and correct
 - No unspecified dependencies introduced
@@ -69,11 +69,13 @@ Before any other review work, verify the quality gate report:
 - Deviation doesn't violate design intent
 - Human approved deviation (if required)
 
-### Phase 2: Prototype Learning Application
+### Phase 2: Skeleton Manifest Adherence
 
-For each technical decision from prototype results:
-- Decision is reflected in implementation
-- Prototype learnings about gotchas/pitfalls addressed
+For each expected behavior in the skeleton manifest:
+- Method implements the documented behavior
+- Invariants are maintained
+- Edge cases handle as specified
+- No residual `std::logic_error("Not implemented")` stubs remain
 
 ### Phase 2.5: Guidelines MCP Lookup
 
@@ -222,13 +224,13 @@ Create your review at `docs/designs/{feature-name}/implementation-review.md` wit
 
 ---
 
-## Prototype Learning Application
+## Skeleton Manifest Adherence
 
-| Technical Decision | Applied Correctly | Notes |
-|--------------------|-------------------|-------|
-| {decision from prototype} | ✓/✗ | {details} |
+| Expected Behavior | Implemented Correctly | Notes |
+|--------------------|----------------------|-------|
+| {behavior from manifest} | ✓/✗ | {details} |
 
-**Prototype Application Status**: PASS / FAIL
+**Manifest Adherence Status**: PASS / FAIL
 
 ---
 
@@ -341,7 +343,7 @@ Priority order:
 {2-3 sentence summary of review findings}
 
 **Design Conformance**: {PASS/FAIL} — {one line summary}
-**Prototype Application**: {PASS/FAIL} — {one line summary}
+**Manifest Adherence**: {PASS/FAIL} — {one line summary}
 **Code Quality**: {PASS/NEEDS IMPROVEMENT/FAIL} — {one line summary}
 **Test Coverage**: {PASS/NEEDS IMPROVEMENT/FAIL} — {one line summary}
 
