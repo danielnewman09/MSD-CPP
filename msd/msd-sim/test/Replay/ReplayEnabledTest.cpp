@@ -27,8 +27,8 @@ void ReplayEnabledTest::SetUp()
   const std::string dbFilename = testSuite + "_" + testName + ".db";
   dbPath_ = recordingsDir / dbFilename;
 
-  // Create recordings directory if it doesn't exist
-  std::filesystem::create_directories(recordingsDir);
+  // Create recordings directory (and any subdirectories for parameterized tests)
+  std::filesystem::create_directories(dbPath_.parent_path());
 
   // Copy pre-built test asset database to per-test recording path
   const std::filesystem::path sourceDb{MSD_TEST_ASSETS_DB};

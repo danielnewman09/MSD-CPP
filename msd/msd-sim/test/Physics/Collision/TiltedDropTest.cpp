@@ -487,191 +487,75 @@ protected:
 };
 
 // ============================================================================
-// Single-axis X tilts
+// Parameterized fixtures
 // ============================================================================
 
-TEST_F(TiltedDropTest, TiltedDrop_X_Small_BounceIsolation)
-{
-  // Ticket: 0084a_tilted_drop_rotation_tests
-  TiltConfig config{TiltAxis::X, 5.0, "X_5deg"};
-  auto scene = setupScene(config);
-  auto result = detectBounces(scene.cubeId, scene.initialPosition);
+class TiltedDropSingleAxisTest : public TiltedDropTest,
+                                  public ::testing::WithParamInterface<TiltConfig>
+{};
 
-  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
-  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
-    << config.label << ": expected at least " << kMinBounces << " bounces, got "
-    << result.bounces.size();
-
-  printBounces(result.bounces, config.label);
-
-  for (size_t i = 0; i < result.bounces.size(); ++i)
-  {
-    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
-                           TiltAxis::X, scene.initialEnergy, config.label);
-  }
-
-  // Cross-bounce accumulation check (ASSERT_GE above guarantees >= 2 bounces)
-  const double firstRatioX = crossAxisRatio(result.bounces.front(), TiltAxis::X);
-  const double lastRatioX = crossAxisRatio(result.bounces.back(), TiltAxis::X);
-  EXPECT_LE(lastRatioX, firstRatioX + kCrossAxisAccumulationMargin)
-    << config.label << ": cross-axis ratio grew between bounces. first="
-    << firstRatioX << " last=" << lastRatioX;
-}
-
-TEST_F(TiltedDropTest, TiltedDrop_X_Medium_BounceIsolation)
-{
-  // Ticket: 0084a_tilted_drop_rotation_tests
-  TiltConfig config{TiltAxis::X, 15.0, "X_15deg"};
-  auto scene = setupScene(config);
-  auto result = detectBounces(scene.cubeId, scene.initialPosition);
-
-  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
-  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
-    << config.label << ": expected at least " << kMinBounces << " bounces, got "
-    << result.bounces.size();
-
-  printBounces(result.bounces, config.label);
-
-  for (size_t i = 0; i < result.bounces.size(); ++i)
-  {
-    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
-                           TiltAxis::X, scene.initialEnergy, config.label);
-  }
-
-  const double firstRatioXM = crossAxisRatio(result.bounces.front(), TiltAxis::X);
-  const double lastRatioXM = crossAxisRatio(result.bounces.back(), TiltAxis::X);
-  EXPECT_LE(lastRatioXM, firstRatioXM + kCrossAxisAccumulationMargin)
-    << config.label << ": cross-axis ratio grew between bounces. first="
-    << firstRatioXM << " last=" << lastRatioXM;
-}
-
-TEST_F(TiltedDropTest, TiltedDrop_X_Large_BounceIsolation)
-{
-  // Ticket: 0084a_tilted_drop_rotation_tests
-  TiltConfig config{TiltAxis::X, 30.0, "X_30deg"};
-  auto scene = setupScene(config);
-  auto result = detectBounces(scene.cubeId, scene.initialPosition);
-
-  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
-  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
-    << config.label << ": expected at least " << kMinBounces << " bounces, got "
-    << result.bounces.size();
-
-  printBounces(result.bounces, config.label);
-
-  for (size_t i = 0; i < result.bounces.size(); ++i)
-  {
-    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
-                           TiltAxis::X, scene.initialEnergy, config.label);
-  }
-
-  const double firstRatioXL = crossAxisRatio(result.bounces.front(), TiltAxis::X);
-  const double lastRatioXL = crossAxisRatio(result.bounces.back(), TiltAxis::X);
-  EXPECT_LE(lastRatioXL, firstRatioXL + kCrossAxisAccumulationMargin)
-    << config.label << ": cross-axis ratio grew between bounces. first="
-    << firstRatioXL << " last=" << lastRatioXL;
-}
+class TiltedDropCombinedAxisTest : public TiltedDropTest,
+                                    public ::testing::WithParamInterface<TiltConfig>
+{};
 
 // ============================================================================
-// Single-axis Y tilts
+// Single-axis tests (X and Y tilts)
 // ============================================================================
 
-TEST_F(TiltedDropTest, TiltedDrop_Y_Small_BounceIsolation)
+TEST_P(TiltedDropSingleAxisTest, BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  TiltConfig config{TiltAxis::Y, 5.0, "Y_5deg"};
+  auto config = GetParam();
   auto scene = setupScene(config);
   auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
   ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
   ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
-    << config.label << ": expected at least " << kMinBounces << " bounces, got "
-    << result.bounces.size();
+    << config.label << ": expected at least " << kMinBounces << " bounces";
 
   printBounces(result.bounces, config.label);
 
   for (size_t i = 0; i < result.bounces.size(); ++i)
   {
     assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
-                           TiltAxis::Y, scene.initialEnergy, config.label);
+                           config.axis, scene.initialEnergy, config.label);
   }
 
-  const double firstRatioYS = crossAxisRatio(result.bounces.front(), TiltAxis::Y);
-  const double lastRatioYS = crossAxisRatio(result.bounces.back(), TiltAxis::Y);
-  EXPECT_LE(lastRatioYS, firstRatioYS + kCrossAxisAccumulationMargin)
-    << config.label << ": cross-axis ratio grew between bounces. first="
-    << firstRatioYS << " last=" << lastRatioYS;
+  const double firstRatio = crossAxisRatio(result.bounces.front(), config.axis);
+  const double lastRatio = crossAxisRatio(result.bounces.back(), config.axis);
+  EXPECT_LE(lastRatio, firstRatio + kCrossAxisAccumulationMargin)
+    << config.label << ": cross-axis ratio grew between bounces";
 }
 
-TEST_F(TiltedDropTest, TiltedDrop_Y_Medium_BounceIsolation)
-{
-  // Ticket: 0084a_tilted_drop_rotation_tests
-  TiltConfig config{TiltAxis::Y, 15.0, "Y_15deg"};
-  auto scene = setupScene(config);
-  auto result = detectBounces(scene.cubeId, scene.initialPosition);
-
-  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
-  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
-    << config.label << ": expected at least " << kMinBounces << " bounces, got "
-    << result.bounces.size();
-
-  printBounces(result.bounces, config.label);
-
-  for (size_t i = 0; i < result.bounces.size(); ++i)
-  {
-    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
-                           TiltAxis::Y, scene.initialEnergy, config.label);
+INSTANTIATE_TEST_SUITE_P(
+  TiltedDrop, TiltedDropSingleAxisTest,
+  ::testing::Values(
+    TiltConfig{TiltAxis::X, 5.0, "X_5deg"},
+    TiltConfig{TiltAxis::X, 15.0, "X_15deg"},
+    TiltConfig{TiltAxis::X, 30.0, "X_30deg"},
+    TiltConfig{TiltAxis::Y, 5.0, "Y_5deg"},
+    TiltConfig{TiltAxis::Y, 15.0, "Y_15deg"},
+    TiltConfig{TiltAxis::Y, 30.0, "Y_30deg"}
+  ),
+  [](const ::testing::TestParamInfo<TiltConfig>& info) {
+    return info.param.label;
   }
-
-  const double firstRatioYM = crossAxisRatio(result.bounces.front(), TiltAxis::Y);
-  const double lastRatioYM = crossAxisRatio(result.bounces.back(), TiltAxis::Y);
-  EXPECT_LE(lastRatioYM, firstRatioYM + kCrossAxisAccumulationMargin)
-    << config.label << ": cross-axis ratio grew between bounces. first="
-    << firstRatioYM << " last=" << lastRatioYM;
-}
-
-TEST_F(TiltedDropTest, TiltedDrop_Y_Large_BounceIsolation)
-{
-  // Ticket: 0084a_tilted_drop_rotation_tests
-  TiltConfig config{TiltAxis::Y, 30.0, "Y_30deg"};
-  auto scene = setupScene(config);
-  auto result = detectBounces(scene.cubeId, scene.initialPosition);
-
-  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
-  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
-    << config.label << ": expected at least " << kMinBounces << " bounces, got "
-    << result.bounces.size();
-
-  printBounces(result.bounces, config.label);
-
-  for (size_t i = 0; i < result.bounces.size(); ++i)
-  {
-    assertSingleAxisBounce(result.bounces[i], static_cast<int>(i),
-                           TiltAxis::Y, scene.initialEnergy, config.label);
-  }
-
-  const double firstRatioYL = crossAxisRatio(result.bounces.front(), TiltAxis::Y);
-  const double lastRatioYL = crossAxisRatio(result.bounces.back(), TiltAxis::Y);
-  EXPECT_LE(lastRatioYL, firstRatioYL + kCrossAxisAccumulationMargin)
-    << config.label << ": cross-axis ratio grew between bounces. first="
-    << firstRatioYL << " last=" << lastRatioYL;
-}
+);
 
 // ============================================================================
-// Combined X+Y tilts
+// Combined X+Y axis tests
 // ============================================================================
 
-TEST_F(TiltedDropTest, TiltedDrop_XY_Small_BounceIsolation)
+TEST_P(TiltedDropCombinedAxisTest, BounceIsolation)
 {
   // Ticket: 0084a_tilted_drop_rotation_tests
-  TiltConfig config{TiltAxis::XY, 5.0, "XY_5deg"};
+  auto config = GetParam();
   auto scene = setupScene(config);
   auto result = detectBounces(scene.cubeId, scene.initialPosition);
 
   ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
   ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
-    << config.label << ": expected at least " << kMinBounces << " bounces, got "
-    << result.bounces.size();
+    << config.label << ": expected at least " << kMinBounces << " bounces";
 
   printBounces(result.bounces, config.label);
 
@@ -684,48 +568,14 @@ TEST_F(TiltedDropTest, TiltedDrop_XY_Small_BounceIsolation)
   assertOmegaSignConsistency(result.bounces, config.label);
 }
 
-TEST_F(TiltedDropTest, TiltedDrop_XY_Medium_BounceIsolation)
-{
-  // Ticket: 0084a_tilted_drop_rotation_tests
-  TiltConfig config{TiltAxis::XY, 15.0, "XY_15deg"};
-  auto scene = setupScene(config);
-  auto result = detectBounces(scene.cubeId, scene.initialPosition);
-
-  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
-  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
-    << config.label << ": expected at least " << kMinBounces << " bounces, got "
-    << result.bounces.size();
-
-  printBounces(result.bounces, config.label);
-
-  for (size_t i = 0; i < result.bounces.size(); ++i)
-  {
-    assertCombinedAxisBounce(result.bounces[i], static_cast<int>(i),
-                             scene.initialEnergy, config.label);
+INSTANTIATE_TEST_SUITE_P(
+  TiltedDrop, TiltedDropCombinedAxisTest,
+  ::testing::Values(
+    TiltConfig{TiltAxis::XY, 5.0, "XY_5deg"},
+    TiltConfig{TiltAxis::XY, 15.0, "XY_15deg"},
+    TiltConfig{TiltAxis::XY, 30.0, "XY_30deg"}
+  ),
+  [](const ::testing::TestParamInfo<TiltConfig>& info) {
+    return info.param.label;
   }
-
-  assertOmegaSignConsistency(result.bounces, config.label);
-}
-
-TEST_F(TiltedDropTest, TiltedDrop_XY_Large_BounceIsolation)
-{
-  // Ticket: 0084a_tilted_drop_rotation_tests
-  TiltConfig config{TiltAxis::XY, 30.0, "XY_30deg"};
-  auto scene = setupScene(config);
-  auto result = detectBounces(scene.cubeId, scene.initialPosition);
-
-  ASSERT_FALSE(result.nanDetected) << "NaN detected in position";
-  ASSERT_GE(result.bounces.size(), static_cast<size_t>(kMinBounces))
-    << config.label << ": expected at least " << kMinBounces << " bounces, got "
-    << result.bounces.size();
-
-  printBounces(result.bounces, config.label);
-
-  for (size_t i = 0; i < result.bounces.size(); ++i)
-  {
-    assertCombinedAxisBounce(result.bounces[i], static_cast<int>(i),
-                             scene.initialEnergy, config.label);
-  }
-
-  assertOmegaSignConsistency(result.bounces, config.label);
-}
+);
