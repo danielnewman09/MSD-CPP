@@ -33,3 +33,5 @@ prototypes/**/p2_newton_solver
 **/profile_*.json
 **/baseline-profile*.json
 CMakeUserPresets.json
+
+*.log
