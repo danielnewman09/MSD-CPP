@@ -32,6 +32,9 @@ pydantic==2.12.5
 # Extracted from scripts/workflow/ to a standalone package
 workflow-engine @ git+https://github.com/danielnewman09/workflow-engine.git@v0.1.0
 
+# --- Neo4j Graph Database ---
+neo4j==5.28.1
+
 # --- Testing ---
 pytest==8.3.4
 httpx==0.28.1

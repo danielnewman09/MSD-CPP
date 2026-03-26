@@ -207,6 +207,32 @@ if(DOXYGEN_FOUND)
   add_custom_target(codebase-db DEPENDS python-db)
   message(STATUS "  Run 'cmake --build <build-dir> --target codebase-db' to generate codebase SQLite database")
   
+  # Neo4j ingestion: Doxygen XML -> Neo4j graph database
+  add_custom_target(doxygen-neo4j
+    COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/doxygen_to_neo4j.py
+            ${CMAKE_BINARY_DIR}/docs/xml
+            --project-root ${CMAKE_SOURCE_DIR}
+    DEPENDS doxygen
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Ingesting Doxygen XML into Neo4j graph database"
+    VERBATIM
+  )
+  # Neo4j ingestion: Python AST -> Neo4j graph database
+  add_custom_target(python-neo4j
+    COMMAND ${PROJECT_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/python_to_neo4j.py
+            ${CMAKE_SOURCE_DIR}/replay/replay
+            --project-root ${CMAKE_SOURCE_DIR}
+    DEPENDS doxygen-neo4j
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Adding Python symbols to Neo4j graph database"
+    VERBATIM
+  )
+
+  # Public target: complete Neo4j codebase graph (C++ + Python)
+  add_custom_target(codebase-neo4j DEPENDS python-neo4j)
+  message(STATUS "  Run 'cmake --build <build-dir> --target doxygen-neo4j' to ingest C++ into Neo4j")
+  message(STATUS "  Run 'cmake --build <build-dir> --target codebase-neo4j' to ingest C++ + Python into Neo4j")
+
   message(STATUS "Doxygen found: ${DOXYGEN_EXECUTABLE}")
   message(STATUS "  Run 'cmake --build <build-dir> --target doxygen' to generate documentation")
   message(STATUS "  Output will be in ${CMAKE_BINARY_DIR}/docs/")

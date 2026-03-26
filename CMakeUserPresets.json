@@ -278,6 +278,8 @@
                 "generate_multibody_recording",
                 "msd_reader",
                 "codebase-db",
+                "doxygen-neo4j",
+                "python-neo4j",
                 "traceability"
             ]
         }
