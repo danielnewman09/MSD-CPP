@@ -280,6 +280,7 @@
                 "codebase-db",
                 "doxygen-neo4j",
                 "python-neo4j",
+                "codebase-full-neo4j",
                 "traceability"
             ]
         }

@@ -233,9 +233,58 @@ if(DOXYGEN_FOUND)
   message(STATUS "  Run 'cmake --build <build-dir> --target doxygen-neo4j' to ingest C++ into Neo4j")
   message(STATUS "  Run 'cmake --build <build-dir> --target codebase-neo4j' to ingest C++ + Python into Neo4j")
 
+  # Dependency documentation: Doxygen XML for Conan dependencies
+  # Uses the doxygen-index package (packages/doxygen-index)
+  set(DEPS_OUTPUT_DIR ${CMAKE_BINARY_DIR}/docs/deps)
+
+  # Generate Doxygen XML for all Conan dependencies
+  add_custom_target(doxygen-deps
+    COMMAND ${PROJECT_PYTHON} -m doxygen_index.cli generate
+            --output-dir ${DEPS_OUTPUT_DIR}
+            --project-dir ${CMAKE_SOURCE_DIR}
+            --build-type ${CMAKE_BUILD_TYPE}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Generating Doxygen XML for Conan dependencies"
+    VERBATIM
+  )
+
+  # Ingest dependency docs into SQLite (appends to existing codebase.db)
+  add_custom_target(deps-db
+    COMMAND ${PROJECT_PYTHON} -m doxygen_index.cli ingest
+            --output-dir ${DEPS_OUTPUT_DIR}
+            --project-dir ${CMAKE_SOURCE_DIR}
+            --build-type ${CMAKE_BUILD_TYPE}
+            --sqlite ${DOXYGEN_DB}
+    DEPENDS doxygen-deps doxygen-db
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Ingesting Conan dependency docs into SQLite codebase database"
+    VERBATIM
+  )
+
+  # Ingest dependency docs into Neo4j (appends to existing graph)
+  add_custom_target(deps-neo4j
+    COMMAND ${PROJECT_PYTHON} -m doxygen_index.cli ingest
+            --output-dir ${DEPS_OUTPUT_DIR}
+            --project-dir ${CMAKE_SOURCE_DIR}
+            --build-type ${CMAKE_BUILD_TYPE}
+            --neo4j
+    DEPENDS doxygen-deps doxygen-neo4j
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Ingesting Conan dependency docs into Neo4j graph database"
+    VERBATIM
+  )
+
+  # Full codebase + dependencies: SQLite
+  add_custom_target(codebase-full-db DEPENDS codebase-db deps-db)
+
+  # Full codebase + dependencies: Neo4j
+  add_custom_target(codebase-full-neo4j DEPENDS codebase-neo4j deps-neo4j)
+
   message(STATUS "Doxygen found: ${DOXYGEN_EXECUTABLE}")
   message(STATUS "  Run 'cmake --build <build-dir> --target doxygen' to generate documentation")
   message(STATUS "  Output will be in ${CMAKE_BINARY_DIR}/docs/")
+  message(STATUS "  Run 'cmake --build <build-dir> --target codebase-full-db' for codebase + deps (SQLite)")
+  message(STATUS "  Run 'cmake --build <build-dir> --target codebase-full-neo4j' for codebase + deps (Neo4j)")
 else()
   message(STATUS "Doxygen not found - documentation target will not be available")
 endif()

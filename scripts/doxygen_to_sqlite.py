@@ -31,19 +31,23 @@ def create_schema(conn: sqlite3.Connection) -> None:
             refid TEXT UNIQUE NOT NULL,
             name TEXT NOT NULL,
             path TEXT,
-            language TEXT
+            language TEXT,
+            source TEXT DEFAULT 'msd'
         );
         CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
         CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
+        CREATE INDEX IF NOT EXISTS idx_files_source ON files(source);
 
         -- Namespaces table
         CREATE TABLE IF NOT EXISTS namespaces (
             id INTEGER PRIMARY KEY,
             refid TEXT UNIQUE NOT NULL,
             name TEXT NOT NULL,
-            qualified_name TEXT NOT NULL
+            qualified_name TEXT NOT NULL,
+            source TEXT DEFAULT 'msd'
         );
         CREATE INDEX IF NOT EXISTS idx_namespaces_name ON namespaces(name);
+        CREATE INDEX IF NOT EXISTS idx_namespaces_source ON namespaces(source);
 
         -- Compounds table: classes, structs, unions, enums
         CREATE TABLE IF NOT EXISTS compounds (
@@ -58,12 +62,14 @@ def create_schema(conn: sqlite3.Connection) -> None:
             detailed_description TEXT,
             base_classes TEXT,  -- JSON array of base class names
             is_final INTEGER DEFAULT 0,
-            is_abstract INTEGER DEFAULT 0
+            is_abstract INTEGER DEFAULT 0,
+            source TEXT DEFAULT 'msd'
         );
         CREATE INDEX IF NOT EXISTS idx_compounds_name ON compounds(name);
         CREATE INDEX IF NOT EXISTS idx_compounds_qualified_name ON compounds(qualified_name);
         CREATE INDEX IF NOT EXISTS idx_compounds_kind ON compounds(kind);
         CREATE INDEX IF NOT EXISTS idx_compounds_file_id ON compounds(file_id);
+        CREATE INDEX IF NOT EXISTS idx_compounds_source ON compounds(source);
 
         -- Members table: functions, variables, typedefs, enums
         CREATE TABLE IF NOT EXISTS members (
@@ -86,13 +92,15 @@ def create_schema(conn: sqlite3.Connection) -> None:
             is_constexpr INTEGER DEFAULT 0,
             is_virtual INTEGER DEFAULT 0,
             is_inline INTEGER DEFAULT 0,
-            is_explicit INTEGER DEFAULT 0
+            is_explicit INTEGER DEFAULT 0,
+            source TEXT DEFAULT 'msd'
         );
         CREATE INDEX IF NOT EXISTS idx_members_name ON members(name);
         CREATE INDEX IF NOT EXISTS idx_members_qualified_name ON members(qualified_name);
         CREATE INDEX IF NOT EXISTS idx_members_kind ON members(kind);
         CREATE INDEX IF NOT EXISTS idx_members_compound_id ON members(compound_id);
         CREATE INDEX IF NOT EXISTS idx_members_file_id ON members(file_id);
+        CREATE INDEX IF NOT EXISTS idx_members_source ON members(source);
 
         -- Parameters table: function parameters
         CREATE TABLE IF NOT EXISTS parameters (
@@ -181,7 +189,7 @@ def parse_location(loc_elem: Optional[ET.Element]) -> tuple[Optional[str], Optio
     return file_path, int(line) if line else None
 
 
-def parse_compound_file(conn: sqlite3.Connection, xml_path: Path, file_cache: dict, compound_cache: dict) -> None:
+def parse_compound_file(conn: sqlite3.Connection, xml_path: Path, file_cache: dict, compound_cache: dict, source: str = "msd") -> None:
     """Parse a compound (class/struct/file) XML file."""
     try:
         tree = ET.parse(xml_path)
@@ -203,8 +211,8 @@ def parse_compound_file(conn: sqlite3.Connection, xml_path: Path, file_cache: di
             file_path = loc.get("file") if loc is not None else None
 
             cursor = conn.execute(
-                "INSERT OR IGNORE INTO files (refid, name, path, language) VALUES (?, ?, ?, ?)",
-                (refid, compoundname, file_path, language)
+                "INSERT OR IGNORE INTO files (refid, name, path, language, source) VALUES (?, ?, ?, ?, ?)",
+                (refid, compoundname, file_path, language, source)
             )
             if cursor.lastrowid:
                 file_cache[refid] = cursor.lastrowid
@@ -230,8 +238,8 @@ def parse_compound_file(conn: sqlite3.Connection, xml_path: Path, file_cache: di
         if kind == "namespace":
             name = compoundname.split("::")[-1] if "::" in compoundname else compoundname
             conn.execute(
-                "INSERT OR IGNORE INTO namespaces (refid, name, qualified_name) VALUES (?, ?, ?)",
-                (refid, name, compoundname)
+                "INSERT OR IGNORE INTO namespaces (refid, name, qualified_name, source) VALUES (?, ?, ?, ?)",
+                (refid, name, compoundname, source)
             )
             continue
 
@@ -267,10 +275,10 @@ def parse_compound_file(conn: sqlite3.Connection, xml_path: Path, file_cache: di
             cursor = conn.execute(
                 """INSERT OR REPLACE INTO compounds
                    (refid, kind, name, qualified_name, file_id, line_number,
-                    brief_description, detailed_description, base_classes, is_final, is_abstract)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    brief_description, detailed_description, base_classes, is_final, is_abstract, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (refid, kind, name, compoundname, file_id, line_number,
-                 brief, detailed, base_classes_json, is_final, is_abstract)
+                 brief, detailed, base_classes_json, is_final, is_abstract, source)
             )
             compound_id = cursor.lastrowid
             compound_cache[refid] = compound_id
@@ -286,10 +294,10 @@ def parse_compound_file(conn: sqlite3.Connection, xml_path: Path, file_cache: di
             # Parse members
             for sectiondef in compounddef.findall("sectiondef"):
                 for memberdef in sectiondef.findall("memberdef"):
-                    parse_member(conn, memberdef, compound_id, file_cache)
+                    parse_member(conn, memberdef, compound_id, file_cache, source)
 
 
-def parse_member(conn: sqlite3.Connection, memberdef: ET.Element, compound_id: Optional[int], file_cache: dict) -> None:
+def parse_member(conn: sqlite3.Connection, memberdef: ET.Element, compound_id: Optional[int], file_cache: dict, source: str = "msd") -> None:
     """Parse a member definition element."""
     refid = memberdef.get("id", "")
     kind = memberdef.get("kind", "")
@@ -328,11 +336,11 @@ def parse_member(conn: sqlite3.Connection, memberdef: ET.Element, compound_id: O
         """INSERT OR REPLACE INTO members
            (refid, compound_id, kind, name, qualified_name, type, definition, argsstring,
             file_id, line_number, brief_description, detailed_description, protection,
-            is_static, is_const, is_constexpr, is_virtual, is_inline, is_explicit)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            is_static, is_const, is_constexpr, is_virtual, is_inline, is_explicit, source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (refid, compound_id, kind, name, qualified_name, type_str, definition, argsstring,
          file_id, line_number, brief, detailed, prot,
-         is_static, is_const, is_constexpr, is_virtual, is_inline, is_explicit)
+         is_static, is_const, is_constexpr, is_virtual, is_inline, is_explicit, source)
     )
     member_id = cursor.lastrowid
 
@@ -393,6 +401,10 @@ def main():
     parser.add_argument("xml_dir", help="Directory containing Doxygen XML output")
     parser.add_argument("output_db", help="Output SQLite database path")
     parser.add_argument("--project-root", help="Project root path to make paths relative", default=None)
+    parser.add_argument("--source", default="msd",
+                        help="Source label for provenance tracking (default: msd)")
+    parser.add_argument("--append", action="store_true",
+                        help="Append to existing database instead of recreating it")
     args = parser.parse_args()
 
     xml_dir = Path(args.xml_dir)
@@ -407,11 +419,11 @@ def main():
         print(f"Error: index.xml not found in {xml_dir}", file=sys.stderr)
         sys.exit(1)
 
-    # Remove existing database
-    if output_db.exists():
-        output_db.unlink()
+    if not args.append:
+        # Remove existing database for a clean start
+        if output_db.exists():
+            output_db.unlink()
 
-    # Create database
     conn = sqlite3.connect(str(output_db))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
@@ -419,11 +431,23 @@ def main():
     print(f"Creating database schema...")
     create_schema(conn)
 
+    if args.append:
+        # Delete existing data for this source before re-ingesting
+        conn.execute("DELETE FROM symbol_refs WHERE from_member_id IN (SELECT id FROM members WHERE source = ?)", (args.source,))
+        conn.execute("DELETE FROM parameters WHERE member_id IN (SELECT id FROM members WHERE source = ?)", (args.source,))
+        conn.execute("DELETE FROM includes WHERE file_id IN (SELECT id FROM files WHERE source = ?)", (args.source,))
+        conn.execute("DELETE FROM members WHERE source = ?", (args.source,))
+        conn.execute("DELETE FROM compounds WHERE source = ?", (args.source,))
+        conn.execute("DELETE FROM namespaces WHERE source = ?", (args.source,))
+        conn.execute("DELETE FROM files WHERE source = ?", (args.source,))
+        conn.commit()
+        print(f"Cleared existing '{args.source}' data from database.")
+
     # Store metadata
-    conn.execute("INSERT INTO metadata (key, value) VALUES (?, ?)",
+    conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
                  ("xml_dir", str(xml_dir.absolute())))
     if args.project_root:
-        conn.execute("INSERT INTO metadata (key, value) VALUES (?, ?)",
+        conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
                      ("project_root", args.project_root))
 
     # Parse index to get all compounds
@@ -438,7 +462,7 @@ def main():
     for i, (refid, kind) in enumerate(compounds):
         xml_file = xml_dir / f"{refid}.xml"
         if xml_file.exists():
-            parse_compound_file(conn, xml_file, file_cache, compound_cache)
+            parse_compound_file(conn, xml_file, file_cache, compound_cache, args.source)
 
         if (i + 1) % 50 == 0:
             print(f"Processed {i + 1}/{len(compounds)} compounds...")

@@ -35,6 +35,9 @@ workflow-engine @ git+https://github.com/danielnewman09/workflow-engine.git@v0.1
 # --- Neo4j Graph Database ---
 neo4j==5.28.1
 
+# --- Doxygen Index (Conan dependency documentation indexer) ---
+-e packages/doxygen-index
+
 # --- Testing ---
 pytest==8.3.4
 httpx==0.28.1

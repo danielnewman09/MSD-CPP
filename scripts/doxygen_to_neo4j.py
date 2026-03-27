@@ -46,6 +46,11 @@ CONSTRAINTS_AND_INDEXES = [
     "CREATE INDEX member_name IF NOT EXISTS FOR (m:Member) ON (m.name)",
     "CREATE INDEX member_qualified IF NOT EXISTS FOR (m:Member) ON (m.qualified_name)",
     "CREATE INDEX member_kind IF NOT EXISTS FOR (m:Member) ON (m.kind)",
+    # Source provenance index (msd, eigen, boost, sdl, etc.)
+    "CREATE INDEX file_source IF NOT EXISTS FOR (f:File) ON (f.source)",
+    "CREATE INDEX compound_source IF NOT EXISTS FOR (c:Compound) ON (c.source)",
+    "CREATE INDEX member_source IF NOT EXISTS FOR (m:Member) ON (m.source)",
+    "CREATE INDEX namespace_source IF NOT EXISTS FOR (n:Namespace) ON (n.source)",
     # Full-text index for documentation search
     "CREATE FULLTEXT INDEX doc_search IF NOT EXISTS FOR (n:Compound|Member) ON EACH [n.name, n.qualified_name, n.brief_description, n.detailed_description]",
 ]
@@ -94,9 +99,10 @@ def parse_location(loc_elem: Optional[ET.Element]) -> tuple[Optional[str], Optio
 class Neo4jBatchWriter:
     """Collects parsed Doxygen data and writes to Neo4j in batches."""
 
-    def __init__(self, driver, database: str = "neo4j"):
+    def __init__(self, driver, database: str = "neo4j", source: str = "msd"):
         self.driver = driver
         self.database = database
+        self.source = source
 
         # Collected data for batch writing
         self.files: list[dict] = []
@@ -118,17 +124,31 @@ class Neo4jBatchWriter:
             for stmt in CONSTRAINTS_AND_INDEXES:
                 session.run(stmt)
 
-    def clear_codebase_data(self):
-        """Remove all existing codebase nodes and relationships."""
+    def clear_codebase_data(self, source_filter: Optional[str] = None):
+        """Remove existing codebase nodes and relationships.
+
+        Args:
+            source_filter: If provided, only delete nodes with this source label.
+                           If None, delete all codebase nodes.
+        """
         with self.driver.session(database=self.database) as session:
-            # Delete in dependency order to avoid constraint violations
-            session.run("MATCH (p:Parameter) DETACH DELETE p")
-            session.run("MATCH (m:Member) DETACH DELETE m")
-            session.run("MATCH (c:Compound) DETACH DELETE c")
-            session.run("MATCH (n:Namespace) DETACH DELETE n")
-            session.run("MATCH (f:File) DETACH DELETE f")
-            session.run("MATCH (md:Metadata) DETACH DELETE md")
-        print("Cleared existing codebase data from Neo4j.")
+            if source_filter:
+                # Delete only nodes from a specific source
+                session.run("MATCH (p:Parameter)<-[:HAS_PARAMETER]-(m:Member {source: $src}) DETACH DELETE p", src=source_filter)
+                session.run("MATCH (m:Member {source: $src}) DETACH DELETE m", src=source_filter)
+                session.run("MATCH (c:Compound {source: $src}) DETACH DELETE c", src=source_filter)
+                session.run("MATCH (n:Namespace {source: $src}) DETACH DELETE n", src=source_filter)
+                session.run("MATCH (f:File {source: $src}) DETACH DELETE f", src=source_filter)
+                print(f"Cleared existing '{source_filter}' data from Neo4j.")
+            else:
+                # Delete in dependency order to avoid constraint violations
+                session.run("MATCH (p:Parameter) DETACH DELETE p")
+                session.run("MATCH (m:Member) DETACH DELETE m")
+                session.run("MATCH (c:Compound) DETACH DELETE c")
+                session.run("MATCH (n:Namespace) DETACH DELETE n")
+                session.run("MATCH (f:File) DETACH DELETE f")
+                session.run("MATCH (md:Metadata) DETACH DELETE md")
+                print("Cleared existing codebase data from Neo4j.")
 
     # ---- Collection methods (called during XML parsing) ----
 
@@ -138,6 +158,7 @@ class Neo4jBatchWriter:
             "name": name,
             "path": path or "",
             "language": language,
+            "source": self.source,
         })
         self.file_refid_set.add(refid)
         if path:
@@ -148,6 +169,7 @@ class Neo4jBatchWriter:
             "refid": refid,
             "name": name,
             "qualified_name": qualified_name,
+            "source": self.source,
         })
 
     def add_compound(self, refid: str, kind: str, name: str, qualified_name: str,
@@ -166,6 +188,7 @@ class Neo4jBatchWriter:
             "base_classes": base_classes,
             "is_final": is_final,
             "is_abstract": is_abstract,
+            "source": self.source,
         })
 
     def add_member(self, refid: str, compound_refid: Optional[str], kind: str,
@@ -194,6 +217,7 @@ class Neo4jBatchWriter:
             "is_virtual": is_virtual,
             "is_inline": is_inline,
             "is_explicit": is_explicit,
+            "source": self.source,
         })
 
     def add_parameter(self, member_refid: str, position: int, name: str,
@@ -252,12 +276,11 @@ class Neo4jBatchWriter:
         session.run(
             """
             UNWIND $batch AS row
-            CREATE (f:File {
-                refid: row.refid,
-                name: row.name,
-                path: row.path,
-                language: row.language
-            })
+            MERGE (f:File {refid: row.refid})
+            ON CREATE SET f.name = row.name, f.path = row.path,
+                          f.language = row.language, f.source = row.source
+            ON MATCH SET f.source = CASE WHEN f.source = row.source THEN f.source
+                                         ELSE f.source + ',' + row.source END
             """,
             batch=self.files,
         )
@@ -269,11 +292,11 @@ class Neo4jBatchWriter:
         session.run(
             """
             UNWIND $batch AS row
-            CREATE (n:Namespace {
-                refid: row.refid,
-                name: row.name,
-                qualified_name: row.qualified_name
-            })
+            MERGE (n:Namespace {refid: row.refid})
+            ON CREATE SET n.name = row.name, n.qualified_name = row.qualified_name,
+                          n.source = row.source
+            ON MATCH SET n.source = CASE WHEN n.source CONTAINS row.source THEN n.source
+                                         ELSE n.source + ',' + row.source END
             """,
             batch=self.namespaces,
         )
@@ -285,19 +308,17 @@ class Neo4jBatchWriter:
         session.run(
             """
             UNWIND $batch AS row
-            CREATE (c:Compound {
-                refid: row.refid,
-                kind: row.kind,
-                name: row.name,
-                qualified_name: row.qualified_name,
-                file_path: row.file_path,
-                line_number: row.line_number,
-                brief_description: row.brief_description,
-                detailed_description: row.detailed_description,
-                base_classes: row.base_classes,
-                is_final: row.is_final,
-                is_abstract: row.is_abstract
-            })
+            MERGE (c:Compound {refid: row.refid})
+            ON CREATE SET c.kind = row.kind, c.name = row.name,
+                          c.qualified_name = row.qualified_name,
+                          c.file_path = row.file_path, c.line_number = row.line_number,
+                          c.brief_description = row.brief_description,
+                          c.detailed_description = row.detailed_description,
+                          c.base_classes = row.base_classes,
+                          c.is_final = row.is_final, c.is_abstract = row.is_abstract,
+                          c.source = row.source
+            ON MATCH SET c.source = CASE WHEN c.source CONTAINS row.source THEN c.source
+                                         ELSE c.source + ',' + row.source END
             """,
             batch=self.compounds,
         )
@@ -313,27 +334,22 @@ class Neo4jBatchWriter:
             session.run(
                 """
                 UNWIND $batch AS row
-                CREATE (m:Member {
-                    refid: row.refid,
-                    compound_refid: row.compound_refid,
-                    kind: row.kind,
-                    name: row.name,
-                    qualified_name: row.qualified_name,
-                    type: row.type,
-                    definition: row.definition,
-                    argsstring: row.argsstring,
-                    file_path: row.file_path,
-                    line_number: row.line_number,
-                    brief_description: row.brief_description,
-                    detailed_description: row.detailed_description,
-                    protection: row.protection,
-                    is_static: row.is_static,
-                    is_const: row.is_const,
-                    is_constexpr: row.is_constexpr,
-                    is_virtual: row.is_virtual,
-                    is_inline: row.is_inline,
-                    is_explicit: row.is_explicit
-                })
+                MERGE (m:Member {refid: row.refid})
+                ON CREATE SET m.compound_refid = row.compound_refid,
+                              m.kind = row.kind, m.name = row.name,
+                              m.qualified_name = row.qualified_name,
+                              m.type = row.type, m.definition = row.definition,
+                              m.argsstring = row.argsstring,
+                              m.file_path = row.file_path, m.line_number = row.line_number,
+                              m.brief_description = row.brief_description,
+                              m.detailed_description = row.detailed_description,
+                              m.protection = row.protection,
+                              m.is_static = row.is_static, m.is_const = row.is_const,
+                              m.is_constexpr = row.is_constexpr,
+                              m.is_virtual = row.is_virtual, m.is_inline = row.is_inline,
+                              m.is_explicit = row.is_explicit, m.source = row.source
+                ON MATCH SET m.source = CASE WHEN m.source CONTAINS row.source THEN m.source
+                                              ELSE m.source + ',' + row.source END
                 """,
                 batch=batch,
             )
@@ -368,7 +384,7 @@ class Neo4jBatchWriter:
             """
             MATCH (c:Compound) WHERE c.file_path <> ''
             MATCH (f:File {path: c.file_path})
-            CREATE (c)-[:DEFINED_IN]->(f)
+            MERGE (c)-[:DEFINED_IN]->(f)
             """
         )
         # Member -> Compound (via compound_refid)
@@ -376,7 +392,7 @@ class Neo4jBatchWriter:
             """
             MATCH (m:Member) WHERE m.compound_refid <> ''
             MATCH (c:Compound {refid: m.compound_refid})
-            CREATE (c)-[:CONTAINS]->(m)
+            MERGE (c)-[:CONTAINS]->(m)
             """
         )
         # Member -> File (via file_path)
@@ -384,7 +400,7 @@ class Neo4jBatchWriter:
             """
             MATCH (m:Member) WHERE m.file_path <> ''
             MATCH (f:File {path: m.file_path})
-            CREATE (m)-[:DEFINED_IN]->(f)
+            MERGE (m)-[:DEFINED_IN]->(f)
             """
         )
         print("  Relationships: DEFINED_IN, CONTAINS")
@@ -404,7 +420,7 @@ class Neo4jBatchWriter:
                     UNWIND $batch AS row
                     MATCH (src:File {refid: row.file_refid})
                     MATCH (dst:File {refid: row.included_refid})
-                    CREATE (src)-[:INCLUDES {
+                    MERGE (src)-[:INCLUDES {
                         included_file: row.included_file,
                         is_local: row.is_local
                     }]->(dst)
@@ -428,7 +444,7 @@ class Neo4jBatchWriter:
             UNWIND derived.base_classes AS base_name
             MATCH (base:Compound)
             WHERE base.name = base_name OR base.qualified_name = base_name
-            CREATE (derived)-[:INHERITS_FROM]->(base)
+            MERGE (derived)-[:INHERITS_FROM]->(base)
             """
         )
         print("  Relationships: INHERITS_FROM")
@@ -447,7 +463,7 @@ class Neo4jBatchWriter:
                 UNWIND $batch AS row
                 MATCH (caller:Member {refid: row.from_refid})
                 MATCH (callee:Member {refid: row.to_refid})
-                CREATE (caller)-[:CALLS]->(callee)
+                MERGE (caller)-[:CALLS]->(callee)
                 RETURN count(*) AS cnt
                 """,
                 batch=batch,
@@ -621,6 +637,8 @@ def main():
                         help="Project root path for metadata")
     parser.add_argument("--no-clear", action="store_true",
                         help="Don't clear existing codebase data before ingesting")
+    parser.add_argument("--source", default="msd",
+                        help="Source label for provenance tracking (default: msd)")
     args = parser.parse_args()
 
     xml_dir = Path(args.xml_dir)
@@ -643,7 +661,7 @@ def main():
         print("Is Neo4j running? Try: docker compose up -d", file=sys.stderr)
         sys.exit(1)
 
-    writer = Neo4jBatchWriter(driver, database=args.database)
+    writer = Neo4jBatchWriter(driver, database=args.database, source=args.source)
 
     # Set up schema
     print("Ensuring schema (constraints + indexes)...")

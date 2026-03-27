@@ -54,7 +54,10 @@
       "Bash(conan build:*)",
       "Bash(echo:*)",
       "Bash(gh issue create:*)",
-      "Bash(python/.venv/bin/python3:*)"
+      "Bash(python/.venv/bin/python3:*)",
+      "Bash(docker run:*)",
+      "mcp__guidelines__search_guidelines",
+      "mcp__guidelines__get_rule"
     ]
   },
   "enableAllProjectMcpServers": true,
